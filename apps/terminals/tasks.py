@@ -16,12 +16,15 @@ def _has_desktop_ui() -> bool:
 
 
 def _terminal_state_dir() -> Path:
+    override = os.environ.get("ARTHEXIS_TERMINAL_STATE_DIR")
+    if override:
+        return Path(override)
     if os.name == "nt":
         local_app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
         base = Path(local_app_data) / "Arthexis"
     else:
         base = Path.home() / ".local" / "state"
-    return Path(os.environ.get("ARTHEXIS_TERMINAL_STATE_DIR", str(base / "agent-terminals")))
+    return base / "agent-terminals"
 
 
 def _terminal_pid_file(terminal_pk: int) -> Path:
@@ -31,7 +34,7 @@ def _terminal_pid_file(terminal_pk: int) -> Path:
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except OSError:
+    except (OSError, ValueError):
         return False
     return True
 
@@ -105,6 +108,11 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     pid_file = _terminal_pid_file(terminal.pk)
     executable = terminal.resolved_executable()
     startup_script = _build_startup_script(terminal)
+    if os.name == "nt":
+        raise RuntimeError(
+            "_launch_terminal does not support Windows POSIX shell launch; "
+            f"executable={executable!r}, startup_script={startup_script!r}"
+        )
     command = [*shlex.split(executable)]
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])

@@ -28,6 +28,13 @@ except Exception:  # pragma: no cover - exercised through platform fallback test
     fcntl = None  # type: ignore[assignment]
     _HAS_FCNTL = False
 
+try:
+    import msvcrt  # type: ignore[import-not-found]
+    _HAS_MSVCRT = True
+except Exception:  # pragma: no cover - exercised through platform fallback tests
+    msvcrt = None  # type: ignore[assignment]
+    _HAS_MSVCRT = False
+
 
 def _default_state_dir() -> Path:
     if os.name == "nt":
@@ -127,7 +134,17 @@ def state_lock():
     with LOCK_PATH.open("a+", encoding="utf-8") as handle:
         if _HAS_FCNTL:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)  # type: ignore[attr-defined]
-        yield
+        elif _HAS_MSVCRT:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[union-attr]
+        try:
+            yield
+        finally:
+            if _HAS_FCNTL:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)  # type: ignore[attr-defined]
+            elif _HAS_MSVCRT:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[union-attr]
 
 
 def checked_state_path(path: Path) -> Path:
@@ -158,9 +175,17 @@ def read_json(path: Path) -> dict[str, Any] | None:
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except OSError:
+    except (OSError, ValueError):
         return False
     return True
+
+
+def _use_path_based_state_io() -> bool:
+    return os.name == "nt" or not (
+        os.open in os.supports_dir_fd
+        and os.replace in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
+    )
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -170,10 +195,24 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
         raise ValueError(f"refusing unsupported turn state file path: {path}")
     content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     tmp_name = f"{WRITE_TMP_NAME}.{uuid.uuid4().hex}"
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    if _use_path_based_state_io():
+        tmp_path = path.parent / tmp_name
+        try:
+            fd = os.open(tmp_path, flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(content)
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+        return
     dir_fd = os.open(path.parent, os.O_RDONLY)
     try:
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-        flags |= getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(tmp_name, flags, 0o600, dir_fd=dir_fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(content)
@@ -196,6 +235,11 @@ def append_event(event: dict[str, Any]) -> None:
     event = {"time": now_iso(), **event}
     flags = os.O_CREAT | os.O_APPEND | os.O_WRONLY
     nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if _use_path_based_state_io():
+        fd = os.open(path, flags | nofollow, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
+        return
     dir_fd = os.open(path.parent, os.O_RDONLY)
     try:
         fd = os.open(path.name, flags | nofollow, 0o600, dir_fd=dir_fd)
@@ -292,11 +336,11 @@ def live_turn_process_records(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def process_identity_matches(snapshot: dict[str, Any]) -> bool:
-    if os.name == "nt":
-        return False
     pid = snapshot.get("pid")
     if type(pid) is not int or pid <= 1 or pid == os.getpid():
         return False
+    if os.name == "nt":
+        return _is_process_running(pid)
     identity = proc_identity(pid)
     if (
         identity is None
@@ -309,7 +353,21 @@ def process_identity_matches(snapshot: dict[str, Any]) -> bool:
 
 def live_turn_process_identities(state: dict[str, Any]) -> dict[int, dict[str, Any]]:
     if os.name == "nt":
-        return {}
+        safe: dict[int, dict[str, Any]] = {}
+        for record in state.get("registered_processes", []):
+            try:
+                pid = int(record.get("pid", 0))
+            except (TypeError, ValueError):
+                continue
+            if pid <= 1 or pid == os.getpid() or not _is_process_running(pid):
+                continue
+            safe[pid] = {
+                "pid": pid,
+                "label": record.get("label", ""),
+                "registered_at": record.get("registered_at", ""),
+                "platform": "windows",
+            }
+        return safe
     roots = {int(record["pid"]) for record in live_turn_process_records(state)}
     candidates = roots | descendant_pids(roots)
     own_uid = os.getuid()
@@ -455,7 +513,11 @@ def cmd_end_step(args: argparse.Namespace) -> int:
 
 def matching_process_identities(identities: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
     if os.name == "nt":
-        return {}
+        return {
+            pid: identity
+            for pid, identity in identities.items()
+            if process_identity_matches(identity)
+        }
     return {
         pid: identity
         for pid, identity in identities.items()
@@ -500,6 +562,9 @@ def send_signal_to_verified_process(snapshot: dict[str, Any], signum: signal.Sig
 
 def terminate_pids(identities: dict[int, dict[str, Any]], *, force_kill: bool) -> dict[str, Any]:
     result: dict[str, Any] = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
+    if os.name == "nt":
+        result["still_alive"] = sorted(identities)
+        return result
     for pid in sorted(identities, reverse=True):
         try:
             sent = send_signal_to_verified_process(identities[pid], signal.SIGTERM)

@@ -203,8 +203,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      simulated_ok: ${{ steps.simulate.outputs.simulated_ok }}
-      summary_markdown: ${{ steps.simulate.outputs.summary_markdown }}
+      simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
+      summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
     steps:
       - uses: actions/checkout@v6
         with:

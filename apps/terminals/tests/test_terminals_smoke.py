@@ -1,8 +1,10 @@
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
+import pytest
 
 from apps.groups.models import SecurityGroup
+from apps.terminals import tasks
 from apps.terminals.admin import AgentTerminalAdmin
 from apps.terminals.models import AgentTerminal
 
@@ -29,3 +31,21 @@ def test_admin_disables_add_permission(db):
     request.user = User.objects.create_superuser(username="root", password="secret")
 
     assert admin.has_add_permission(request) is False
+
+
+def test_launch_terminal_fails_fast_on_windows_before_posix_shell(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tasks.os, "name", "nt")
+    terminal = AgentTerminal(name="windows-terminal", launch_command="echo ready")
+
+    with pytest.raises(RuntimeError, match="_launch_terminal"):
+        tasks._launch_terminal(terminal)
+
+
+def test_is_process_running_handles_windows_value_error(monkeypatch):
+    def raise_value_error(pid, signal_number):
+        raise ValueError("invalid pid")
+
+    monkeypatch.setattr(tasks.os, "kill", raise_value_error)
+
+    assert tasks._is_process_running(1234) is False
