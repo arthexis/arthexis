@@ -219,6 +219,50 @@ Because MIFARE Classic is cloneable and has known weaknesses, high-trust actions
 must rely on suite registry state, reader-event proof, freshness checks, and
 operator identity. The card alone is never enough for privileged activation.
 
+## Provisioning command contract
+
+The suite provisioning boundary is the `soul_seed provision` command. It turns
+an operator prompt and a card UID into a deterministic Agent Card v1 sector map.
+By default it is a dry run and does not write database records or physical card
+sectors:
+
+```powershell
+python manage.py soul_seed provision --prompt "rfid reader problem" --card-uid AABBCCDD --json
+```
+
+Use `--write` to persist the suite registry side of the card:
+
+```powershell
+python manage.py soul_seed provision --prompt "rfid reader problem" --card-uid AABBCCDD --write --json
+```
+
+Persisted provisioning creates or updates:
+
+- The composed `SoulIntent`, `SkillBundle`, and `AgentInterfaceSpec`.
+- The matching `RFID` registry record for the card UID.
+- One active `SoulSeedCard` for the card UID, unless the previous card record
+  was revoked.
+- The card manifest fingerprint and generated sector payload under
+  `SoulSeedCard.card_payload`.
+
+The command can write the raw unpadded sector records to a JSON file for a
+future hardware writer adapter:
+
+```powershell
+python manage.py soul_seed provision --prompt "rfid reader problem" --card-uid AABBCCDD --sectors-json-out sectors.json
+```
+
+The JSON response also includes `padded_sector_records`, where every value is
+exactly 48 bytes when encoded as ASCII. A physical writer should write those
+padded payloads, read sectors 1-15 back, and pass the read-back data through
+`parse_agent_card()` before declaring success.
+
+Skill SIGILS that do not fit in one 48 byte sector, or that fail parser safety
+checks, are omitted from the card payload and reported in compatibility notes.
+They still remain in the suite-side bundle, so the operator can revise the skill
+alias or handle them through a future registry indirection instead of storing
+unsafe or oversized text on the card.
+
 ## Parser and writer contract
 
 Future implementation should expose a small service boundary rather than ad hoc

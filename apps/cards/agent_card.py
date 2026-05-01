@@ -143,6 +143,29 @@ class ActivationPlan:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class AgentCardBuildResult:
+    sector_records: dict[int, str]
+    padded_sector_records: dict[int, str]
+    manifest: AgentCardManifest
+    compatibility_notes: list[str] = field(default_factory=list)
+    omitted_skill_sigils: list[str] = field(default_factory=list)
+
+    @property
+    def fingerprint(self) -> str:
+        return self.manifest.fingerprint
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fingerprint": self.fingerprint,
+            "sector_records": self.sector_records,
+            "padded_sector_records": self.padded_sector_records,
+            "manifest": self.manifest.to_dict(),
+            "compatibility_notes": self.compatibility_notes,
+            "omitted_skill_sigils": self.omitted_skill_sigils,
+        }
+
+
 def _sector_for_slot(slot_code: str) -> int | None:
     if slot_code == "M":
         return 1
@@ -155,6 +178,38 @@ def _sector_for_slot(slot_code: str) -> int | None:
         if 1 <= value <= 10:
             return value + 5
     return None
+
+
+def _compact_digest(value: object, *, length: int = 12) -> str:
+    text = str(value or "")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:length].upper()
+
+
+def _pad_record(record: str) -> str:
+    encoded = record.encode("ascii", errors="strict")
+    if len(encoded) > SLOT_PAYLOAD_BYTES:
+        raise AgentCardError(f"Agent Card record exceeds {SLOT_PAYLOAD_BYTES} bytes.")
+    return record.ljust(SLOT_PAYLOAD_BYTES)
+
+
+def _identity_record(slot_index: int, source_value: object) -> str:
+    if not source_value:
+        return f"AC1|I{slot_index}|VOID=1"
+    source_text = str(source_value)
+    return (
+        f"AC1|I{slot_index}|NS=SOUL|"
+        f"ID={_compact_digest(f'id:{source_text}', length=8)}|"
+        f"H={_compact_digest(f'hash:{source_text}', length=12)}"
+    )
+
+
+def _empty_extension_record(slot_index: int, source_value: object = "") -> str:
+    digest_source = source_value or f"empty-extension-{slot_index}"
+    return f"AC1|F{slot_index:02d}|T=EMPTY|H={_compact_digest(digest_source, length=6)}"
+
+
+def _skill_sigil_for_slug(skill_slug: str) -> str:
+    return f"[AGENT.SKILL:{skill_slug}]"
 
 
 def _coerce_sector_payloads(
@@ -180,6 +235,70 @@ def _coerce_sector_payloads(
     if len(values) != len(APPLICATION_SECTORS):
         raise AgentCardError("Agent Card v1 requires exactly 15 application sectors.")
     return {sector: values[index] for index, sector in enumerate(APPLICATION_SECTORS)}
+
+
+def build_agent_card_sector_payloads(
+    *,
+    identity_sources: Mapping[str, object],
+    skill_slugs: Iterable[str],
+) -> AgentCardBuildResult:
+    """Build a complete Agent Card v1 sector map and validate it with the parser."""
+
+    ordered_identity_sources = [
+        identity_sources.get("intent"),
+        identity_sources.get("bundle"),
+        identity_sources.get("interface"),
+        identity_sources.get("card"),
+    ]
+    sector_records: dict[int, str] = {
+        1: "AC1|M|S=4|X=10|ALG=SHA8|POL=RDRSIG",
+    }
+    for index, source_value in enumerate(ordered_identity_sources, start=1):
+        sector_records[index + 1] = _identity_record(index, source_value)
+
+    compatibility_notes: list[str] = []
+    omitted_skill_sigils: list[str] = []
+    extension_index = 1
+    for raw_slug in skill_slugs:
+        if extension_index > len(EXTENSION_SECTORS):
+            compatibility_notes.append("Additional skill sigils were omitted because the card has ten extension slots.")
+            omitted_skill_sigils.append(str(raw_slug))
+            continue
+        slug = str(raw_slug or "").strip()
+        if not slug:
+            continue
+        sigil = _skill_sigil_for_slug(slug)
+        record = (
+            f"AC1|K{extension_index:02d}|SIG={sigil}|"
+            f"H={_compact_digest(f'skill:{slug}', length=6)}"
+        )
+        try:
+            _parse_record(extension_index + 5, record)
+        except AgentCardError:
+            compatibility_notes.append(
+                f"Skill sigil for '{slug}' does not fit Agent Card v1 sector limits."
+            )
+            omitted_skill_sigils.append(sigil)
+            continue
+        sector_records[extension_index + 5] = record
+        extension_index += 1
+
+    while extension_index <= len(EXTENSION_SECTORS):
+        sector_records[extension_index + 5] = _empty_extension_record(
+            extension_index,
+            identity_sources.get("card"),
+        )
+        extension_index += 1
+
+    manifest = parse_agent_card(sector_records)
+    padded_records = {sector: _pad_record(record) for sector, record in sector_records.items()}
+    return AgentCardBuildResult(
+        sector_records=sector_records,
+        padded_sector_records=padded_records,
+        manifest=manifest,
+        compatibility_notes=compatibility_notes,
+        omitted_skill_sigils=omitted_skill_sigils,
+    )
 
 
 def _trim_and_validate_payload(sector: int, payload: str | bytes) -> str:

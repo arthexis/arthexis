@@ -1,3 +1,4 @@
+from .card_provisioning import plan_soul_seed_card, provision_soul_seed_card
 from .card_sessions import evict_card_session
 from .checkout import attach_soul_to_order_items
 from .package import build_soul_package
@@ -11,5 +12,7 @@ __all__ = [
     "digest_normalized_answers",
     "evict_card_session",
     "normalize_survey_response",
+    "plan_soul_seed_card",
+    "provision_soul_seed_card",
     "search_agent_skills",
 ]
