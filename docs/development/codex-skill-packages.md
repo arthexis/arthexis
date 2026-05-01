@@ -1,0 +1,63 @@
+# Codex Skill Packages
+
+Arthexis stores Codex skills as portable package trees, not only as one `SKILL.md`
+document. A package may include:
+
+- `SKILL.md`
+- `agents/`
+- `assets/`
+- `references/`
+- `scripts/`
+- `templates/`
+
+Runtime state, caches, generated archives, and secrets are not portable package
+content. The package scanner records excluded files as metadata when useful, but
+does not store their sensitive payloads.
+
+## SIGILS In Portable Documents
+
+Use **SIGILS** when a suite-owned skill or document needs local customization on
+each installed device. SIGILS are bracketed suite expressions such as
+`[CONF.BASE_DIR]`, `[SYS.NODE_ROLE]`, or `[NODE.ROLE]`.
+
+Portable package storage keeps SIGILS unresolved. The suite resolves allowed
+SIGILS only when package files are materialized into a local directory. This
+lets one general skill package adapt to each node without embedding one
+operator's local paths.
+
+Default materialization allows non-secret local context roots:
+
+- `CONF`: Django settings such as `[CONF.BASE_DIR]`.
+- `SYS`: suite system metadata such as role or upgrade state.
+- `NODE`: local node records when the node sigil root is configured.
+
+Do not use `ENV` SIGILS in portable skill content for secrets. Secrets must be
+configured independently on each node and must never move through skill package
+export/import.
+
+## Workgroup State
+
+`workgroup.md` is local runtime coordination state. It must not be copied from
+one device to another as package content. The suite exposes a workgroup service
+boundary so future polling, status pages, or admin views can read the local file
+without treating it as a portable document.
+
+Use:
+
+```bash
+python manage.py codex_workgroup path
+python manage.py codex_workgroup ensure
+python manage.py codex_workgroup read
+```
+
+To materialize stored skill trees:
+
+```bash
+python manage.py codex_skill_packages materialize --target ~/.codex/skills
+```
+
+To preserve raw SIGILS for inspection instead of resolving them:
+
+```bash
+python manage.py codex_skill_packages materialize --target ~/.codex/skills --no-resolve-sigils
+```

@@ -71,6 +71,23 @@ Use cached execution for repeated automation runs:
   --context user
 ```
 
+## Portable suite documents
+
+SIGILS are also the suite's portability mechanism for skills and documents that
+are stored generally and written locally on each Arthexis device. A package can
+store `[CONF.BASE_DIR]`, `[SYS.NODE_ROLE]`, or another allowed suite SIGIL in a
+skill reference, script template, or agent instruction. The stored package keeps
+the SIGIL text. The target device resolves it only when materializing the file to
+its local directory.
+
+This keeps portable documents reusable while still allowing local behavior. It
+also sets a hard boundary: secrets and runtime state must not be moved through
+SIGILS or package files. Store secrets on each node through that node's normal
+credential path, and keep `workgroup.md` as local coordination state.
+
+See [Codex Skill Packages](codex-skill-packages.md) for package materialization
+and workgroup rules.
+
 ## Error behavior
 
 The command exits non-zero for:

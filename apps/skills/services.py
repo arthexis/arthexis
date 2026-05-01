@@ -5,8 +5,9 @@ from pathlib import Path
 from django.conf import settings
 from django.db import transaction
 
-from apps.skills.models import AgentSkill
 from apps.nodes.models import NodeRole
+from apps.skills.models import AgentSkill
+from apps.skills.package_services import materialize_codex_skill_files
 
 DEFAULT_SKILL_ROLE_MAP = {
     "cp-doctor": "Satellite",
@@ -69,22 +70,5 @@ def sync_filesystem_to_db() -> int:
 
 def sync_db_to_filesystem() -> int:
     skills_root = Path(settings.BASE_DIR) / "skills"
-    keep = set(AgentSkill.objects.values_list("slug", flat=True))
-    for child in skills_root.iterdir():
-        if child.is_dir() and child.name not in keep:
-            for nested in sorted(child.rglob("*"), reverse=True):
-                if nested.is_file() or nested.is_symlink():
-                    nested.unlink()
-                elif nested.is_dir():
-                    nested.rmdir()
-            child.rmdir()
-
-    updates = 0
-    for skill in AgentSkill.objects.all():
-        target = skills_root / skill.slug / "SKILL.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        existing = target.read_text(encoding="utf-8") if target.exists() else None
-        if existing != skill.markdown:
-            target.write_text(skill.markdown, encoding="utf-8")
-            updates += 1
-    return updates
+    summary = materialize_codex_skill_files(skills_root)
+    return summary["files_written"]

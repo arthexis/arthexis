@@ -9,12 +9,14 @@ import pytest
 from django.test import override_settings
 
 from apps.nodes.models import NodeRole
+from apps.sigils.models import SigilRoot
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import (
     PACKAGE_FORMAT,
     classify_codex_skill_file,
     export_codex_skill_package,
     import_codex_skill_package,
+    materialize_codex_skill_files,
     scan_codex_skill_directory,
 )
 from apps.skills.services import sync_filesystem_to_db
@@ -44,6 +46,13 @@ def test_classifies_portable_state_secret_and_operator_scoped_files():
     )
     assert operator_scoped.portability == AgentSkillFile.Portability.OPERATOR_SCOPED
     assert operator_scoped.included_by_default is False
+
+    sigil_scoped = classify_codex_skill_file(
+        "references/glossary.md",
+        "Use [CONF.BASE_DIR] and [SYS.NODE_ROLE] for local paths.",
+    )
+    assert sigil_scoped.portability == AgentSkillFile.Portability.PORTABLE
+    assert sigil_scoped.included_by_default is True
 
     skill_markdown = classify_codex_skill_file(
         "SKILL.md",
@@ -152,6 +161,71 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
     assert not skill.package_files.filter(
         relative_path="credentials/odoo.json"
     ).exists()
+
+
+@pytest.mark.django_db
+def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_path):
+    SigilRoot.objects.get_or_create(
+        prefix="CONF",
+        defaults={"context_type": SigilRoot.Context.CONFIG},
+    )
+    suite_root = tmp_path / "suite-root"
+    target_root = tmp_path / "codex-skills"
+    skill = AgentSkill.objects.create(
+        slug="operator-manual",
+        title="Operator Manual",
+        markdown="fallback [CONF.BASE_DIR]",
+    )
+    portable_files = [
+        ("SKILL.md", "Use suite root [CONF.BASE_DIR]"),
+        ("references/glossary.md", "Portable glossary for [CONF.BASE_DIR]"),
+        ("scripts/setup.ps1", "Write-Output '[CONF.BASE_DIR]'"),
+    ]
+    for relative_path, content in portable_files:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+    AgentSkillFile.objects.create(
+        skill=skill,
+        relative_path="credentials/token.txt",
+        content="",
+        content_sha256=hashlib.sha256(b"").hexdigest(),
+        portability=AgentSkillFile.Portability.SECRET,
+        included_by_default=False,
+        exclusion_reason="secret payload",
+    )
+    AgentSkillFile.objects.create(
+        skill=skill,
+        relative_path="workgroup.md",
+        content="",
+        content_sha256=hashlib.sha256(b"").hexdigest(),
+        portability=AgentSkillFile.Portability.STATE,
+        included_by_default=False,
+        exclusion_reason="runtime state is not portable",
+    )
+
+    with override_settings(BASE_DIR=suite_root):
+        summary = materialize_codex_skill_files(target_root)
+
+    skill_root = target_root / "operator-manual"
+    assert summary["files_written"] == 3
+    assert (skill_root / "SKILL.md").read_text(encoding="utf-8") == (
+        f"Use suite root {suite_root}"
+    )
+    assert (skill_root / "references" / "glossary.md").read_text(
+        encoding="utf-8"
+    ) == f"Portable glossary for {suite_root}"
+    assert (skill_root / "scripts" / "setup.ps1").read_text(encoding="utf-8") == (
+        f"Write-Output '{suite_root}'"
+    )
+    assert not (skill_root / "credentials" / "token.txt").exists()
+    assert not (skill_root / "workgroup.md").exists()
 
 
 @pytest.mark.django_db
