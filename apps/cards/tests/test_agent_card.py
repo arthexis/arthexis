@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -71,6 +71,14 @@ def test_parse_agent_card_rejects_script_like_payloads():
         parse_agent_card(records)
 
 
+def test_parse_agent_card_rejects_non_ascii_string_payloads():
+    records = valid_agent_card_records()
+    records[6] = "AC1|F02|T=NOTE|TXT=cafe\u0301"
+
+    with pytest.raises(AgentCardError, match="non-ASCII"):
+        parse_agent_card(records)
+
+
 def test_score_soul_identity_returns_best_candidate():
     card = parse_agent_card(valid_agent_card_records())
 
@@ -127,3 +135,24 @@ def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface(
     assert plan.accepted is True
     assert plan.status == "ready"
     assert plan.capability_sigils
+
+
+def test_plan_agent_activation_rejects_future_reader_timestamp():
+    card = parse_agent_card(valid_agent_card_records())
+
+    plan = plan_agent_activation(
+        card,
+        {
+            "reader_id": "reader-1",
+            "node_id": "node-1",
+            "trust_tier": "trusted_operator_console",
+            "observed_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+            "proof": "signed",
+        },
+        skill_bundle_id=1,
+        interface_spec_id=2,
+    )
+
+    assert plan.accepted is False
+    assert plan.status == "rejected"
+    assert "future" in plan.reason

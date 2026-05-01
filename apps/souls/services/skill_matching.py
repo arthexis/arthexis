@@ -4,7 +4,9 @@ import re
 from dataclasses import asdict, dataclass
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils.text import slugify
+from django.utils.translation import gettext as _
 
 from apps.skills.models import AgentSkill
 from apps.souls.models import AgentInterfaceSpec, SkillBundle, SoulIntent
@@ -35,9 +37,7 @@ def _tokens(value: str) -> set[str]:
 
 def _skill_search_text(skill: AgentSkill) -> str:
     parts = [skill.slug, skill.title, skill.markdown]
-    package_files = getattr(skill, "_prefetched_objects_cache", {}).get("package_files")
-    if package_files is None:
-        package_files = skill.package_files.all()
+    package_files = skill.package_files.all()
     for package_file in package_files:
         if package_file.included_by_default:
             parts.append(package_file.relative_path)
@@ -142,8 +142,8 @@ def compose_skill_bundle(
             "schema": _default_interface_schema(normalized, matches),
             "commands": ["suggest_next_action", "show_context"],
             "suggestions": [
-                "Ask for the missing input before taking action.",
-                "Prefer the highest-scoring registered skill before composing a workflow.",
+                _("Ask for the missing input before taking action."),
+                _("Prefer the highest-scoring registered skill before composing a workflow."),
             ],
             "visible_fields": ["intent", "matches", "commands", "suggestions"],
         },
@@ -154,39 +154,46 @@ def compose_skill_bundle(
     user_model = get_user_model()
     if created_by is not None and not isinstance(created_by, user_model):
         created_by = None
-    intent = SoulIntent.objects.create(
-        problem_statement=prompt,
-        normalized_intent=normalized,
-        created_by=created_by,
-    )
-    base_slug = result["bundle"]["slug"]
-    bundle_slug = base_slug
-    suffix = 1
-    while SkillBundle.objects.filter(slug=bundle_slug).exists():
-        suffix += 1
-        bundle_slug = f"{base_slug[:112]}-{suffix}"
-    primary_skill = AgentSkill.objects.filter(pk=primary_match.skill_id).first() if primary_match else None
-    bundle = SkillBundle.objects.create(
-        name=result["bundle"]["name"],
-        slug=bundle_slug,
-        intent=intent,
-        primary_skill=primary_skill,
-        match_strategy=strategy,
-        match_score=result["bundle"]["match_score"],
-        summary=summary,
-        fallback_guidance="If no exact workflow fits, ask the operator to clarify scope before acting.",
-    )
-    if matches:
-        skills = AgentSkill.objects.filter(pk__in=[match.skill_id for match in matches])
-        bundle.skills.set(skills)
-    spec = AgentInterfaceSpec.objects.create(
-        bundle=bundle,
-        mode=AgentInterfaceSpec.Mode.AUTO,
-        schema=result["interface_spec"]["schema"],
-        commands=result["interface_spec"]["commands"],
-        suggestions=result["interface_spec"]["suggestions"],
-        visible_fields=result["interface_spec"]["visible_fields"],
-    )
+    with transaction.atomic():
+        intent = SoulIntent.objects.create(
+            problem_statement=prompt,
+            normalized_intent=normalized,
+            created_by=created_by,
+        )
+        base_slug = result["bundle"]["slug"]
+        bundle_slug = base_slug
+        suffix = 1
+        while SkillBundle.objects.filter(slug=bundle_slug).exists():
+            suffix += 1
+            bundle_slug = f"{base_slug[:112]}-{suffix}"
+        primary_skill = (
+            AgentSkill.objects.filter(pk=primary_match.skill_id).first()
+            if primary_match
+            else None
+        )
+        bundle = SkillBundle.objects.create(
+            name=result["bundle"]["name"],
+            slug=bundle_slug,
+            intent=intent,
+            primary_skill=primary_skill,
+            match_strategy=strategy,
+            match_score=result["bundle"]["match_score"],
+            summary=summary,
+            fallback_guidance=_(
+                "If no exact workflow fits, ask the operator to clarify scope before acting."
+            ),
+        )
+        if matches:
+            skills = AgentSkill.objects.filter(pk__in=[match.skill_id for match in matches])
+            bundle.skills.set(skills)
+        spec = AgentInterfaceSpec.objects.create(
+            bundle=bundle,
+            mode=AgentInterfaceSpec.Mode.AUTO,
+            schema=result["interface_spec"]["schema"],
+            commands=result["interface_spec"]["commands"],
+            suggestions=result["interface_spec"]["suggestions"],
+            visible_fields=result["interface_spec"]["visible_fields"],
+        )
     result["intent"]["id"] = intent.pk
     result["bundle"]["id"] = bundle.pk
     result["bundle"]["slug"] = bundle.slug

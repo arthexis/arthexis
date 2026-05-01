@@ -15,6 +15,7 @@ SLOT_PAYLOAD_BYTES = 48
 PRINTABLE_ASCII_MIN = 32
 PRINTABLE_ASCII_MAX = 126
 FRESH_READER_EVENT_SECONDS = 300
+FUTURE_READER_EVENT_SKEW_SECONDS = 30
 
 TRUST_TIERS = {
     "unknown",
@@ -183,7 +184,10 @@ def _trim_and_validate_payload(sector: int, payload: str | bytes) -> str:
         except UnicodeDecodeError as error:
             raise AgentCardError(f"Sector {sector} contains non-ASCII data.") from error
     else:
-        encoded = str(payload).encode("ascii", errors="strict")
+        try:
+            encoded = str(payload).encode("ascii", errors="strict")
+        except UnicodeEncodeError as error:
+            raise AgentCardError(f"Sector {sector} contains non-ASCII data.") from error
         if len(encoded) > SLOT_PAYLOAD_BYTES:
             raise AgentCardError(f"Sector {sector} exceeds 48 bytes.")
         text = str(payload)
@@ -339,7 +343,11 @@ def validate_reader_event(reader_event: Mapping[str, Any]) -> ReaderTrustResult:
             return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=timezone.utc)
-        age = datetime.now(timezone.utc) - observed.astimezone(timezone.utc)
+        now = datetime.now(timezone.utc)
+        observed = observed.astimezone(timezone.utc)
+        if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
+            return ReaderTrustResult(False, trust_tier, "reader event timestamp is in the future")
+        age = now - observed
         if age > timedelta(seconds=FRESH_READER_EVENT_SECONDS):
             return ReaderTrustResult(False, trust_tier, "reader event is stale")
     if not reader_event.get("reader_id"):
