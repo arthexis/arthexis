@@ -267,10 +267,23 @@ def _import_file_spec(file_info: dict, content: str) -> dict:
     }
 
 
+def _read_package_text(package: ZipFile, archive_path: str) -> str:
+    try:
+        content = package.read(archive_path)
+    except KeyError as error:
+        raise ValueError(f"Missing package file: {archive_path}") from error
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"Invalid UTF-8 package file: {archive_path}") from error
+
+
 def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
     validated_skills = []
     for skill_entry in manifest.get("skills", []):
         slug = validate_package_skill_slug(skill_entry["slug"])
+        seen_paths = set()
+        content_by_path = {}
         validated_files = [
             {
                 **file_info,
@@ -279,12 +292,22 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
             for file_info in skill_entry.get("files", [])
         ]
         for file_info in validated_files:
+            if file_info["path"] in seen_paths:
+                raise ValueError(f"Duplicate package file path: {file_info['path']}")
+            seen_paths.add(file_info["path"])
             archive_path = f"skills/{slug}/{file_info['path']}"
-            try:
-                package.getinfo(archive_path)
-            except KeyError as error:
-                raise ValueError(f"Missing package file: {archive_path}") from error
-        validated_skills.append({**skill_entry, "slug": slug, "files": validated_files})
+            content_by_path[file_info["path"]] = _read_package_text(
+                package,
+                archive_path,
+            )
+        validated_skills.append(
+            {
+                **skill_entry,
+                "slug": slug,
+                "files": validated_files,
+                "content_by_path": content_by_path,
+            }
+        )
     return validated_skills
 
 
@@ -417,11 +440,7 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
             for skill_entry in validated_skills:
                 slug = skill_entry["slug"]
                 files = skill_entry.get("files", [])
-                content_by_path = {}
-                for file_info in files:
-                    content_by_path[file_info["path"]] = package.read(
-                        f"skills/{slug}/{file_info['path']}"
-                    ).decode("utf-8")
+                content_by_path = skill_entry["content_by_path"]
                 skill = _restore_or_create_skill(
                     slug=slug,
                     title=skill_entry.get("title", slug.replace("-", " ").title()),

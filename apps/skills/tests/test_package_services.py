@@ -258,6 +258,51 @@ def test_import_dry_run_rejects_missing_manifest_files(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_dry_run_rejects_non_utf8_package_files(tmp_path):
+    package_path = tmp_path / "invalid-encoding.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "invalid-encoding",
+                "title": "Invalid Encoding",
+                "files": [{"path": "SKILL.md", "included_by_default": True}],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/invalid-encoding/SKILL.md", b"\xff")
+
+    with pytest.raises(ValueError, match="Invalid UTF-8 package file"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
+def test_import_rejects_duplicate_manifest_paths(tmp_path):
+    package_path = tmp_path / "duplicate-path.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "duplicate-path",
+                "title": "Duplicate Path",
+                "files": [
+                    {"path": "SKILL.md", "included_by_default": True},
+                    {"path": "SKILL.md", "included_by_default": True},
+                ],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/duplicate-path/SKILL.md", "demo")
+
+    with pytest.raises(ValueError, match="Duplicate package file path"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
 def test_import_rejects_unsafe_skill_slugs(tmp_path):
     package_path = tmp_path / "unsafe-slug.zip"
     manifest = {
