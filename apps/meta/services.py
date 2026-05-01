@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
+import os
 import re
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 WHATSAPP_WEB_URL = "https://web.whatsapp.com/"
 DEFAULT_WHATSAPP_WEB_PROFILE_DIR = (
@@ -52,6 +54,7 @@ MESSAGE_COMPOSER_SELECTOR = (
 )
 SEND_BUTTON_SELECTOR = "button[aria-label*='Enviar'], button[aria-label*='Send']"
 SEND_ICON_SELECTOR = "[data-icon='send']"
+logger = logging.getLogger(__name__)
 
 
 class WhatsAppWebLoginStatus:
@@ -89,6 +92,7 @@ class WhatsAppWebSendResult:
 class WhatsAppWebMessage:
     fingerprint: str
     index: int
+    message_id: str
     direction: str
     sender: str
     timestamp_raw: str
@@ -154,6 +158,14 @@ def parse_cli_date(value: str | None) -> date | None:
 def cursor_file_for_profile(profile_dir: Path | str | None = None) -> Path:
     resolved = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
     return resolved.parent / WHATSAPP_WEB_CURSOR_FILENAME
+
+
+def _is_whatsapp_web_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https"} and parsed.hostname == "web.whatsapp.com"
 
 
 def _first_visible_locator(page, selectors: tuple[str, ...], *, timeout_ms: int) -> str:
@@ -322,16 +334,19 @@ def _with_whatsapp_page(
         with sync_playwright() as playwright:
             if cdp_url:
                 connected_browser = playwright.chromium.connect_over_cdp(cdp_url)
-                context = connected_browser.contexts[0]
-                page = next(
-                    (
-                        candidate
-                        for candidate in context.pages
-                        if "web.whatsapp.com" in candidate.url
-                    ),
-                    context.pages[0] if context.pages else context.new_page(),
-                )
-                return callback(page, resolved_profile_dir, timeout_seconds)
+                try:
+                    context = connected_browser.contexts[0]
+                    page = next(
+                        (
+                            candidate
+                            for candidate in context.pages
+                            if _is_whatsapp_web_url(candidate.url)
+                        ),
+                        context.pages[0] if context.pages else context.new_page(),
+                    )
+                    return callback(page, resolved_profile_dir, timeout_seconds)
+                finally:
+                    connected_browser.close()
 
             context = _launch_persistent_context(
                 playwright,
@@ -527,13 +542,13 @@ def _parse_whatsapp_timestamp(value: str) -> datetime | None:
 def _message_fingerprint(
     *,
     phone: str,
+    message_id: str,
     direction: str,
     sender: str,
     timestamp_raw: str,
     text: str,
-    index: int,
 ) -> str:
-    data = "\x1f".join([phone, direction, sender, timestamp_raw, text, str(index)])
+    data = "\x1f".join([phone, message_id, direction, sender, timestamp_raw, text])
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
@@ -549,20 +564,24 @@ def build_whatsapp_web_messages(
             continue
         timestamp_raw, sender = _parse_pre_plain_text(str(row.get("pre") or ""))
         parsed = _parse_whatsapp_timestamp(timestamp_raw)
+        if timestamp_raw and parsed is None:
+            logger.warning("Could not parse WhatsApp Web timestamp: %s", timestamp_raw)
         timestamp_iso = parsed.isoformat() if parsed is not None else ""
         direction = str(row.get("direction") or "unknown")
+        message_id = str(row.get("message_id") or "")
         fingerprint = _message_fingerprint(
             phone=phone,
+            message_id=message_id,
             direction=direction,
             sender=sender,
             timestamp_raw=timestamp_raw,
             text=text,
-            index=index,
         )
         messages.append(
             WhatsAppWebMessage(
                 fingerprint=fingerprint,
                 index=index,
+                message_id=message_id,
                 direction=direction,
                 sender=sender,
                 timestamp_raw=timestamp_raw,
@@ -606,6 +625,8 @@ def _read_cursor(cursor_file: Path, key: str) -> str:
         payload = json.loads(cursor_file.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return ""
+    if isinstance(payload.get("cursors"), dict):
+        return str(payload["cursors"].get(key) or "")
     return str(payload.get(key) or "")
 
 
@@ -615,8 +636,27 @@ def _write_cursor(cursor_file: Path, key: str, value: str) -> None:
         payload = json.loads(cursor_file.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         payload = {}
-    payload[key] = value
-    cursor_file.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    if isinstance(payload.get("cursors"), dict):
+        cursors = dict(payload["cursors"])
+    else:
+        cursors = {
+            existing_key: existing_value
+            for existing_key, existing_value in payload.items()
+            if isinstance(existing_value, str)
+        }
+    cursors[key] = value
+    next_payload = {
+        "updated_at": datetime.now(UTC).isoformat(),
+        "expires_at": None,
+        "cursors": cursors,
+    }
+    temp_file = cursor_file.with_name(
+        f".{cursor_file.name}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    )
+    temp_file.write_text(
+        json.dumps(next_payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    os.replace(temp_file, cursor_file)
 
 
 def read_whatsapp_web_messages(
@@ -672,6 +712,7 @@ def read_whatsapp_web_messages(
                         ? spans.map((span) => span.innerText || span.textContent || '').join('\\n')
                         : (node.innerText || node.textContent || '');
                     return {
+                        message_id: container.getAttribute('data-id') || node.getAttribute('data-id') || '',
                         pre: node.getAttribute('data-pre-plain-text') || '',
                         direction,
                         text,

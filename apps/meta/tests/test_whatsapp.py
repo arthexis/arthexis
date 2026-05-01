@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from io import StringIO
 from pathlib import Path
 
@@ -14,6 +15,9 @@ from apps.meta.services import (
     WhatsAppWebMessage,
     WhatsAppWebReadResult,
     WhatsAppWebSendResult,
+    _is_whatsapp_web_url,
+    _read_cursor,
+    _write_cursor,
     build_whatsapp_web_messages,
     cursor_file_for_profile,
     detect_whatsapp_web_login_state,
@@ -74,8 +78,16 @@ def test_detect_whatsapp_web_login_state_detects_login_required_text():
 
 
 def test_normalize_whatsapp_phone_adds_default_country_code():
-    assert normalize_whatsapp_phone("811 921 8587") == "528119218587"
+    assert normalize_whatsapp_phone("555 123 4567") == "525551234567"
     assert normalize_whatsapp_phone("+1 (555) 123-4567") == "15551234567"
+
+
+def test_is_whatsapp_web_url_requires_exact_whatsapp_host():
+    assert _is_whatsapp_web_url("https://web.whatsapp.com/")
+    assert _is_whatsapp_web_url("http://web.whatsapp.com/send?phone=525551234567")
+    assert not _is_whatsapp_web_url("https://example.com/?next=https://web.whatsapp.com/")
+    assert not _is_whatsapp_web_url("https://web.whatsapp.com.example.com/")
+    assert not _is_whatsapp_web_url("notaurl")
 
 
 def test_parse_cli_date_requires_iso_format():
@@ -95,27 +107,69 @@ def test_build_messages_from_whatsapp_rows():
         {
             "pre": "[14:30, 2026-05-01] ARTHEXIS: ",
             "direction": "in",
+            "message_id": "message-a",
             "text": "hello",
         },
         {
             "pre": "[14:31, 2026-05-01] You: ",
             "direction": "out",
+            "message_id": "message-b",
             "text": "reply",
         },
     ]
 
-    messages = build_whatsapp_web_messages(rows, phone="528119218587")
+    messages = build_whatsapp_web_messages(rows, phone="525551234567")
 
     assert [message.text for message in messages] == ["hello", "reply"]
     assert messages[0].timestamp_iso == "2026-05-01T14:30:00"
     assert messages[0].sender == "ARTHEXIS"
+    assert messages[0].message_id == "message-a"
     assert messages[0].fingerprint
+
+
+def test_build_messages_fingerprint_is_stable_across_dom_positions():
+    row = {
+        "pre": "[14:30, 2026-05-01] ARTHEXIS: ",
+        "direction": "in",
+        "message_id": "stable-message-id",
+        "text": "hello",
+    }
+    first = build_whatsapp_web_messages([row], phone="525551234567")[0]
+    second = build_whatsapp_web_messages(
+        [
+            {"pre": "", "direction": "in", "text": ""},
+            row,
+        ],
+        phone="525551234567",
+    )[0]
+
+    assert first.index == 0
+    assert second.index == 1
+    assert first.fingerprint == second.fingerprint
+
+
+def test_build_messages_logs_unparseable_timestamp(caplog):
+    rows = [
+        {
+            "pre": "[not a supported timestamp] ARTHEXIS: ",
+            "direction": "in",
+            "message_id": "message-a",
+            "text": "hello",
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING, logger="apps.meta.services"):
+        messages = build_whatsapp_web_messages(rows, phone="525551234567")
+
+    assert messages[0].timestamp_iso == ""
+    assert "Could not parse WhatsApp Web timestamp" in caplog.text
 
 
 def test_filter_messages_by_date_and_cursor():
     first = WhatsAppWebMessage(
         fingerprint="a",
         index=0,
+        message_id="a",
         direction="in",
         sender="A",
         timestamp_raw="14:30, 2026-05-01",
@@ -125,6 +179,7 @@ def test_filter_messages_by_date_and_cursor():
     second = WhatsAppWebMessage(
         fingerprint="b",
         index=1,
+        message_id="b",
         direction="in",
         sender="A",
         timestamp_raw="14:30, 2026-05-02",
@@ -140,6 +195,17 @@ def test_filter_messages_by_date_and_cursor():
     )
 
     assert filtered == [second]
+
+
+def test_cursor_file_round_trips_atomic_payload(tmp_path):
+    cursor_file = tmp_path / "message-cursors.json"
+
+    _write_cursor(cursor_file, "525551234567:default", "fingerprint-a")
+
+    payload = json.loads(cursor_file.read_text(encoding="utf-8"))
+    assert payload["expires_at"] is None
+    assert payload["cursors"]["525551234567:default"] == "fingerprint-a"
+    assert _read_cursor(cursor_file, "525551234567:default") == "fingerprint-a"
 
 
 def test_whatsapp_status_command_outputs_json(monkeypatch, tmp_path):
@@ -192,12 +258,12 @@ def test_whatsapp_status_command_outputs_json(monkeypatch, tmp_path):
 
 def test_whatsapp_send_command_outputs_json(monkeypatch, tmp_path):
     def fake_send_whatsapp_web_message(**kwargs):
-        assert kwargs["phone"] == "8119218587"
+        assert kwargs["phone"] == "5551234567"
         assert kwargs["message"] == "hello"
         assert kwargs["default_country_code"] == "52"
         return WhatsAppWebSendResult(
             status="sent",
-            phone="528119218587",
+            phone="525551234567",
             profile_dir=tmp_path,
             elapsed_seconds=1.2,
             url="https://web.whatsapp.com/",
@@ -215,7 +281,7 @@ def test_whatsapp_send_command_outputs_json(monkeypatch, tmp_path):
         "whatsapp",
         "send",
         "--to",
-        "8119218587",
+        "5551234567",
         "--message",
         "hello",
         "--profile-dir",
@@ -226,23 +292,24 @@ def test_whatsapp_send_command_outputs_json(monkeypatch, tmp_path):
 
     payload = json.loads(stdout.getvalue())
     assert payload["status"] == "sent"
-    assert payload["phone"] == "528119218587"
+    assert payload["phone"] == "525551234567"
 
 
 def test_whatsapp_read_command_outputs_messages(monkeypatch, tmp_path):
     def fake_read_whatsapp_web_messages(**kwargs):
-        assert kwargs["phone"] == "8119218587"
+        assert kwargs["phone"] == "5551234567"
         assert kwargs["since"].isoformat() == "2026-05-01"
         assert kwargs["until"].isoformat() == "2026-05-01"
         assert kwargs["only_new"] is True
         return WhatsAppWebReadResult(
             status="ok",
-            phone="528119218587",
+            phone="525551234567",
             profile_dir=tmp_path,
             messages=[
                 WhatsAppWebMessage(
                     fingerprint="abc",
                     index=1,
+                    message_id="abc",
                     direction="in",
                     sender="ARTHEXIS",
                     timestamp_raw="14:30, 2026-05-01",
@@ -265,7 +332,7 @@ def test_whatsapp_read_command_outputs_messages(monkeypatch, tmp_path):
         "whatsapp",
         "read",
         "--from",
-        "8119218587",
+        "5551234567",
         "--date",
         "2026-05-01",
         "--new",

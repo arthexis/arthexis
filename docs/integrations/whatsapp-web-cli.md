@@ -50,31 +50,31 @@ python manage.py whatsapp status --json
 Send one message:
 
 ```powershell
-python manage.py whatsapp send --to 528119218587 --message "Hello from Arthexis"
+python manage.py whatsapp send --to 525551234567 --message "Hello from Arthexis"
 ```
 
 Read messages visible in a phone-number chat:
 
 ```powershell
-python manage.py whatsapp read --from 528119218587 --json
+python manage.py whatsapp read --from 525551234567 --json
 ```
 
 Read messages from one date:
 
 ```powershell
-python manage.py whatsapp read --from 528119218587 --date 2026-05-01 --json
+python manage.py whatsapp read --from 525551234567 --date 2026-05-01 --json
 ```
 
 Read only messages after the local cursor and then advance that cursor:
 
 ```powershell
-python manage.py whatsapp read --from 528119218587 --new --json
+python manage.py whatsapp read --from 525551234567 --new --json
 ```
 
 Attach to an already-open Edge debugging session:
 
 ```powershell
-python manage.py whatsapp send --to 528119218587 --message "Hello" --cdp-url http://127.0.0.1:9223
+python manage.py whatsapp send --to 525551234567 --message "Hello" --cdp-url http://127.0.0.1:9223
 ```
 
 ## Privacy And Side Effects
