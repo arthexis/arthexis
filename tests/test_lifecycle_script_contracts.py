@@ -95,6 +95,7 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
             "--output-dir DIR",
             "--upload-url URL",
             "--dry-run",
+            "sys.version_info[0] == 3",
         ),
         "uninstall.sh": ("--service NAME", "--no-warn", "--rfid-service", "--no-rfid-service"),
     }

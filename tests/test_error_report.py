@@ -9,6 +9,11 @@ import pytest
 from scripts import error_report
 
 
+@pytest.fixture(autouse=True)
+def clear_arthexis_log_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ARTHEXIS_LOG_DIR", raising=False)
+
+
 def test_build_report_redacts_text_and_excludes_sensitive_files(tmp_path: Path) -> None:
     base_dir = tmp_path
     (base_dir / "logs").mkdir()
