@@ -7,6 +7,7 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 
+from apps.links.management.commands import qr as qr_command
 from apps.links.models import QRRedirect, Reference
 from apps.links.qr_printing import (
     QRLabelSpec,
@@ -56,6 +57,92 @@ def test_qr_print_wifi_does_not_echo_password(tmp_path) -> None:
     assert output_path.exists()
     assert "WIFI_SSID=Office WiFi" in output
     assert "do-not-print-this-secret" not in output
+
+
+def test_qr_print_wifi_password_file_preserves_secret_spaces(tmp_path) -> None:
+    password_file = tmp_path / "wifi-password.txt"
+    password_file.write_text(" leading-and-trailing-secret \r\n", encoding="utf-8")
+
+    password = qr_command.Command()._wifi_password_from_options(
+        {"wifi_password_file": str(password_file)}
+    )
+
+    assert password == " leading-and-trailing-secret "
+
+
+def test_qr_print_wifi_password_file_does_not_echo_secret(tmp_path) -> None:
+    output_path = tmp_path / "wifi-file-qr.png"
+    password_file = tmp_path / "wifi-password.txt"
+    password_file.write_text("secret from file\n", encoding="utf-8")
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--wifi-ssid",
+        "Office WiFi",
+        "--wifi-password-file",
+        str(password_file),
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "WIFI_SSID=Office WiFi" in output
+    assert "secret from file" not in output
+
+
+def test_qr_print_wifi_profile_uses_profile_lookup(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "wifi-profile-qr.png"
+    stdout = StringIO()
+
+    monkeypatch.setattr(
+        qr_command.Command,
+        "_read_windows_wifi_profile_password",
+        lambda self, profile: "profile-secret",
+    )
+
+    call_command(
+        "qr",
+        "print",
+        "--wifi-profile",
+        "Office Profile",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "SOURCE=wifi-profile" in output
+    assert "WIFI_PROFILE=Office Profile" in output
+    assert "profile-secret" not in output
+
+
+def test_qr_devices_lists_discovered_phomemo_paths(monkeypatch) -> None:
+    stdout = StringIO()
+    monkeypatch.setattr(qr_command, "resolve_phomemo_m220_usb_path", lambda path="": "USB-A")
+    monkeypatch.setattr(qr_command, "iter_phomemo_m220_usb_paths", lambda: ["USB-A", "USB-B"])
+
+    call_command("qr", "devices", stdout=stdout)
+
+    output = stdout.getvalue()
+    assert "CONFIGURED_OR_DISCOVERED=USB-A" in output
+    assert "USB-A" in output
+    assert "USB-B" in output
+
+
+def test_windows_wifi_profile_password_parser_accepts_localized_label() -> None:
+    output = "\n".join(
+        [
+            "Nombre de perfil     : Office WiFi",
+            "Contenido de la clave     : localized-secret",
+        ]
+    )
+
+    assert qr_command._extract_windows_wifi_profile_password(output) == "localized-secret"
 
 
 def test_qr_print_reference_uses_database_value(settings, tmp_path) -> None:

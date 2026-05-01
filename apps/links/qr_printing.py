@@ -352,8 +352,12 @@ def write_windows_usb(
                 raise OSError(ctypes.get_last_error(), f"WriteFile failed at offset {offset}")
             total += written.value
             if written.value != len(chunk):
-                raise RuntimeError(
-                    f"short write at offset {offset}: {written.value}/{len(chunk)}"
+                raise OSError(
+                    ctypes.get_last_error(),
+                    (
+                        f"short write at offset {offset}: "
+                        f"{written.value}/{len(chunk)}"
+                    ),
                 )
             if delay_seconds:
                 time.sleep(delay_seconds)

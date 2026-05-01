@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,6 +30,19 @@ from apps.links.qr_printing import (
     iter_phomemo_m220_usb_paths,
     resolve_phomemo_m220_usb_path,
     write_windows_usb,
+)
+
+WINDOWS_WIFI_PASSWORD_LABELS = frozenset(
+    {
+        "key content",
+        "contenido de la clave",
+        "contenido clave",
+        "clave",
+        "contenu de cle",
+        "cle",
+        "contenuto chiave",
+        "chiave",
+    }
 )
 
 
@@ -167,10 +181,17 @@ class Command(BaseCommand):
             subtitle=options.get("label_subtitle") or selection.subtitle,
             footer=options.get("footer") or selection.footer,
         )
-        image = build_qr_label_image(selection.payload, spec=spec)
+        try:
+            image = build_qr_label_image(selection.payload, spec=spec)
+        except Exception as exc:
+            raise CommandError(f"Failed to render QR label: {exc}") from exc
+
         output_path = self._resolve_output_path(options.get("output"))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        image.convert("RGB").save(output_path, format="PNG")
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            image.convert("RGB").save(output_path, format="PNG")
+        except OSError as exc:
+            raise CommandError(f"Failed to write QR preview '{output_path}': {exc}") from exc
 
         self.stdout.write(f"SOURCE={selection.source}")
         if selection.detail:
@@ -186,11 +207,15 @@ class Command(BaseCommand):
         if options["printer"] != "phomemo-m220":
             raise CommandError(f"Unsupported printer: {options['printer']}")
 
-        job = build_phomemo_m220_job(
-            image,
-            speed=options["speed"],
-            density=options["density"],
-        )
+        try:
+            job = build_phomemo_m220_job(
+                image,
+                speed=options["speed"],
+                density=options["density"],
+            )
+        except Exception as exc:
+            raise CommandError(f"Failed to build Phomemo M220 print job: {exc}") from exc
+
         self.stdout.write("PRINTER=phomemo-m220")
         self.stdout.write(f"COMMAND_BYTES={len(job)}")
         self.stdout.write(f"CHUNK_BYTES={options['chunk_bytes']}")
@@ -199,18 +224,24 @@ class Command(BaseCommand):
             self.stdout.write("DRY_RUN=1")
             return
 
-        usb_path = resolve_phomemo_m220_usb_path(options.get("usb_path"))
+        try:
+            usb_path = resolve_phomemo_m220_usb_path(options.get("usb_path"))
+        except Exception as exc:
+            raise CommandError(f"Failed to resolve Phomemo M220 USB path: {exc}") from exc
         if not usb_path:
             raise CommandError(
                 "No Phomemo M220 USB path configured. Pass --usb-path, set "
                 f"{PHOMEMO_M220_USB_PATH_ENV}, or run `python manage.py qr devices`."
             )
-        written = write_windows_usb(
-            usb_path,
-            job,
-            chunk_size=options["chunk_bytes"],
-            delay_seconds=options["chunk_delay"],
-        )
+        try:
+            written = write_windows_usb(
+                usb_path,
+                job,
+                chunk_size=options["chunk_bytes"],
+                delay_seconds=options["chunk_delay"],
+            )
+        except Exception as exc:
+            raise CommandError(f"Failed to write Phomemo M220 USB job: {exc}") from exc
         self.stdout.write(self.style.SUCCESS(f"PHOMEMO_M220_WRITE_OK bytes={written}"))
 
     def _handle_devices(self, options):
@@ -336,7 +367,7 @@ class Command(BaseCommand):
             title="WIFI",
             subtitle=profile,
             footer="Scan to join",
-            detail=f"WIFI_SSID={profile}",
+            detail=f"WIFI_PROFILE={profile}",
         )
 
     def _wifi_password_from_options(self, options) -> str:
@@ -344,7 +375,7 @@ class Command(BaseCommand):
         if password_file:
             path = Path(password_file).expanduser()
             try:
-                return path.read_text(encoding="utf-8").strip()
+                return path.read_text(encoding="utf-8").rstrip("\r\n")
             except OSError as exc:
                 raise CommandError(f"Unable to read --wifi-password-file '{path}': {exc}") from exc
         return options.get("wifi_password", "")
@@ -361,12 +392,7 @@ class Command(BaseCommand):
             )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise CommandError(f"Unable to read saved Wi-Fi profile '{profile}': {exc}") from exc
-        password = ""
-        for line in output.splitlines():
-            key, separator, value = line.partition(":")
-            if separator and key.strip().lower() == "key content":
-                password = value.strip()
-                break
+        password = _extract_windows_wifi_profile_password(output)
         if not password:
             raise CommandError(f"Saved Wi-Fi password was not available for profile '{profile}'.")
         return password
@@ -382,3 +408,21 @@ class Command(BaseCommand):
             return Path(output).expanduser().resolve()
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         return Path(tempfile.gettempdir()) / f"arthexis-qr-{stamp}.png"
+
+
+def _extract_windows_wifi_profile_password(output: str) -> str:
+    for line in output.splitlines():
+        key, separator, value = line.partition(":")
+        if not separator:
+            continue
+        if _normalize_windows_label(key) in WINDOWS_WIFI_PASSWORD_LABELS:
+            return value.strip()
+    return ""
+
+
+def _normalize_windows_label(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(
+        character for character in normalized if not unicodedata.combining(character)
+    )
+    return " ".join(without_accents.casefold().split())
