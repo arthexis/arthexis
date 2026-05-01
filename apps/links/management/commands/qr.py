@@ -391,10 +391,8 @@ class Command(BaseCommand):
             output = subprocess.check_output(
                 ["netsh", "wlan", "show", "profile", f"name={profile}", "key=clear"],
                 text=True,
-                encoding="utf-8",
-                errors="replace",
             )
-        except (OSError, subprocess.CalledProcessError) as exc:
+        except (OSError, subprocess.CalledProcessError, UnicodeDecodeError) as exc:
             raise CommandError(f"Unable to read saved Wi-Fi profile '{profile}': {exc}") from exc
         password = _extract_windows_wifi_profile_password(output)
         if not password:
