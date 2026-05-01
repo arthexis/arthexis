@@ -260,6 +260,7 @@ def iter_phomemo_m220_usb_paths() -> Iterable[str]:
     if sys.platform != "win32":
         return []
     try:
+        "optional-import"
         import winreg
     except ImportError:  # pragma: no cover - winreg is Windows-only
         return []

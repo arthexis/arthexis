@@ -22,9 +22,10 @@ from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
 from apps.screens.lcd_screen.hardware import LCDFrameWriter
 
 try:
+    "optional-import"
     import termios
     import tty
-except ImportError:
+except ImportError:  # pragma: no cover - termios/tty are POSIX-only
     termios = None
     tty = None
 
