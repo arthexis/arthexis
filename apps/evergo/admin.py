@@ -37,6 +37,29 @@ from .models import (
 )
 
 LOADED_ENTITIES_LINK_ID_LIMIT = 100
+EVERGO_CONTRACTORS_GROUP_NAME = "Evergo Contractors"
+
+
+def _has_evergo_credential_access(user) -> bool:
+    """Return whether the user may use stored Evergo contractor credentials."""
+    if getattr(user, "is_superuser", False):
+        return True
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if not getattr(user, "is_active", False):
+        return False
+    return user.groups.filter(name=EVERGO_CONTRACTORS_GROUP_NAME).exists()
+
+
+def _remove_field_from_fieldsets(fieldsets, field_name: str):
+    """Return fieldsets with one field removed from each field list."""
+    updated = []
+    for title, options in fieldsets:
+        copied_options = dict(options)
+        fields = copied_options.get("fields", ())
+        copied_options["fields"] = tuple(field for field in fields if field != field_name)
+        updated.append((title, copied_options))
+    return tuple(updated)
 
 
 def _parse_selected_ids_query_param(request) -> list[int]:
@@ -744,6 +767,34 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
             self.PROCESS_ORDER_LABEL,
         )
 
+    def get_list_display(self, request):
+        """Hide credential-backed process links from staff without Evergo access."""
+        list_display = list(super().get_list_display(request))
+        if _has_evergo_credential_access(request.user):
+            return tuple(list_display)
+        return tuple("status_name" if field == "status_name_link" else field for field in list_display)
+
+    def get_readonly_fields(self, request, obj=None):
+        """Hide credential-backed process links from staff without Evergo access."""
+        readonly_fields = tuple(super().get_readonly_fields(request, obj))
+        if _has_evergo_credential_access(request.user):
+            return readonly_fields
+        return tuple(field for field in readonly_fields if field != "evergo_flow_link")
+
+    def get_fieldsets(self, request, obj=None):
+        """Hide credential-backed process links from staff without Evergo access."""
+        fieldsets = super().get_fieldsets(request, obj)
+        if _has_evergo_credential_access(request.user):
+            return fieldsets
+        return _remove_field_from_fieldsets(fieldsets, "evergo_flow_link")
+
+    def get_change_actions(self, request, object_id, form_url):
+        """Hide credential-backed process action from staff without Evergo access."""
+        actions = tuple(super().get_change_actions(request, object_id, form_url))
+        if _has_evergo_credential_access(request.user):
+            return actions
+        return tuple(action for action in actions if action != "process_so_action")
+
     def _flow_url(self, obj):
         """Build the public order tracking flow URL for an Evergo order snapshot."""
         if not getattr(obj, "remote_id", None):
@@ -811,6 +862,8 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     def process_so_action(self, request, obj):
         """Expose a change-view tool button that opens the SO processing flow."""
+        if not _has_evergo_credential_access(request.user):
+            raise PermissionDenied
         if not getattr(obj, "remote_id", None):
             self.message_user(request, _("Order has no remote ID yet."), level=messages.WARNING)
             return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[obj.pk]))
