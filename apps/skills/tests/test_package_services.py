@@ -303,6 +303,58 @@ def test_import_rejects_duplicate_manifest_paths(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_rejects_entries_missing_skill_markdown(tmp_path):
+    package_path = tmp_path / "missing-skill-markdown.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "missing-skill-markdown",
+                "title": "Missing Skill Markdown",
+                "files": [
+                    {"path": "references/rules.md", "included_by_default": True},
+                ],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr(
+            "skills/missing-skill-markdown/references/rules.md",
+            "portable rules",
+        )
+
+    with pytest.raises(ValueError, match="Missing required SKILL.md"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
+def test_import_rejects_duplicate_skill_slugs(tmp_path):
+    package_path = tmp_path / "duplicate-slug.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "duplicate-slug",
+                "title": "Duplicate Slug",
+                "files": [{"path": "SKILL.md", "included_by_default": True}],
+            },
+            {
+                "slug": "duplicate-slug",
+                "title": "Duplicate Slug Again",
+                "files": [{"path": "SKILL.md", "included_by_default": True}],
+            },
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/duplicate-slug/SKILL.md", "demo")
+
+    with pytest.raises(ValueError, match="Duplicate package skill slug"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
 def test_import_rejects_unsafe_skill_slugs(tmp_path):
     package_path = tmp_path / "unsafe-slug.zip"
     manifest = {
@@ -333,17 +385,23 @@ def test_import_redacts_excluded_manifest_entries(tmp_path):
                 "title": "Excluded",
                 "files": [
                     {
+                        "path": "SKILL.md",
+                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "included_by_default": True,
+                    },
+                    {
                         "path": "credentials/token.txt",
                         "portability": AgentSkillFile.Portability.SECRET,
                         "included_by_default": False,
                         "exclusion_reason": "secret payload",
-                    }
+                    },
                 ],
             }
         ],
     }
     with ZipFile(package_path, "w") as package:
         package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/excluded/SKILL.md", "---\nname: excluded\n---\n")
         package.writestr("skills/excluded/credentials/token.txt", "secret")
 
     import_codex_skill_package(package_path, dry_run=False)

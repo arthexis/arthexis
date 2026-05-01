@@ -280,8 +280,12 @@ def _read_package_text(package: ZipFile, archive_path: str) -> str:
 
 def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
     validated_skills = []
+    seen_slugs = set()
     for skill_entry in manifest.get("skills", []):
         slug = validate_package_skill_slug(skill_entry["slug"])
+        if slug in seen_slugs:
+            raise ValueError(f"Duplicate package skill slug: {slug}")
+        seen_slugs.add(slug)
         seen_paths = set()
         content_by_path = {}
         validated_files = [
@@ -300,6 +304,8 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
                 package,
                 archive_path,
             )
+        if SKILL_MARKDOWN not in content_by_path:
+            raise ValueError(f"Missing required {SKILL_MARKDOWN} for skill: {slug}")
         validated_skills.append(
             {
                 **skill_entry,
