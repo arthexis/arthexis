@@ -227,12 +227,15 @@ def _restore_or_create_skill(*, slug: str, title: str, markdown: str) -> AgentSk
             markdown=markdown,
             is_seed_data=False,
         )
+    was_deleted = skill.is_deleted
     skill.title = title
     skill.markdown = markdown
     skill.is_deleted = False
     skill.save(update_fields=["title", "markdown", "is_deleted"])
     AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=False)
     skill.is_seed_data = False
+    if was_deleted:
+        skill.node_roles.clear()
     return skill
 
 
@@ -308,6 +311,11 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
         for file_info in validated_files:
             if file_info["path"] in seen_paths:
                 raise ValueError(f"Duplicate package file path: {file_info['path']}")
+            if (
+                file_info["path"] == SKILL_MARKDOWN
+                and file_info.get("included_by_default") is False
+            ):
+                raise ValueError(f"{SKILL_MARKDOWN} must be included")
             seen_paths.add(file_info["path"])
             archive_path = f"skills/{slug}/{file_info['path']}"
             content_by_path[file_info["path"]] = _read_package_text(

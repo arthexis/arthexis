@@ -8,6 +8,7 @@ from zipfile import ZipFile
 import pytest
 from django.test import override_settings
 
+from apps.nodes.models import NodeRole
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import (
     PACKAGE_FORMAT,
@@ -181,11 +182,13 @@ def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
 
 @pytest.mark.django_db
 def test_scan_restores_soft_deleted_skill_slug(tmp_path):
+    role = NodeRole.objects.create(name="Old Role", acronym="OLD")
     skill = AgentSkill.objects.create(
         slug="operator-manual",
         title="Deleted",
         markdown="old",
     )
+    skill.node_roles.add(role)
     AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
     skill.refresh_from_db()
     skill.delete()
@@ -199,6 +202,7 @@ def test_scan_restores_soft_deleted_skill_slug(tmp_path):
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
     assert restored.is_seed_data is False
+    assert not restored.node_roles.exists()
     assert (
         restored.markdown.replace("\r\n", "\n") == "---\nname: operator-manual\n---\n"
     )
@@ -354,6 +358,27 @@ def test_import_rejects_entries_missing_skill_markdown(tmp_path):
         )
 
     with pytest.raises(ValueError, match="Missing required SKILL.md"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
+def test_import_rejects_excluded_skill_markdown(tmp_path):
+    package_path = tmp_path / "excluded-skill-markdown.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "excluded-skill-markdown",
+                "title": "Excluded Skill Markdown",
+                "files": [{"path": "SKILL.md", "included_by_default": False}],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/excluded-skill-markdown/SKILL.md", "demo")
+
+    with pytest.raises(ValueError, match="SKILL.md must be included"):
         import_codex_skill_package(package_path, dry_run=False)
 
 
