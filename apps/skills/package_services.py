@@ -193,6 +193,20 @@ def _prepare_materialized_file_path(path: Path, skill_dir: Path) -> None:
         _remove_tree_best_effort(path)
 
 
+def _validate_materialized_package_paths(package_paths: list[str]) -> None:
+    unique_paths = set(package_paths)
+    if len(unique_paths) != len(package_paths):
+        raise ValueError("Duplicate package path")
+    for package_path in unique_paths:
+        parts = package_path.split("/")
+        for index in range(1, len(parts)):
+            prefix = "/".join(parts[:index])
+            if prefix in unique_paths:
+                raise ValueError(
+                    f"Package path collides with nested path: {package_path}"
+                )
+
+
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
     normalized = relative_path.replace("\\", "/")
     return normalized, [part.lower() for part in normalized.split("/")]
@@ -626,11 +640,18 @@ def materialize_codex_skill_files(
             raise ValueError(f"Unsafe skill directory: {skill_dir}") from error
         package_managed = bool(_included_package_files(skill))
         files = []
-        desired_paths = set()
+        entries = []
         for relative_path, content in _package_file_entries(skill):
             package_path = validate_package_relative_path(relative_path)
-            desired_paths.add(package_path)
+            entries.append((relative_path, package_path, content))
+        desired_paths = {package_path for _, package_path, _ in entries}
+        _validate_materialized_package_paths(
+            [package_path for _, package_path, _ in entries]
+        )
+
+        for relative_path, package_path, content in entries:
             target_path = skill_dir / package_path
+            _prepare_materialized_file_path(target_path, skill_dir)
             resolved_target_path = target_path.resolve(strict=False)
             try:
                 resolved_target_path.relative_to(resolved_skill_dir)
@@ -641,7 +662,6 @@ def materialize_codex_skill_files(
                 resolve_sigils_on_write=resolve_sigils_on_write,
                 allowed_roots=allowed_roots,
             )
-            _prepare_materialized_file_path(target_path, skill_dir)
             existing = (
                 target_path.read_text(encoding="utf-8")
                 if target_path.exists()
