@@ -2,12 +2,12 @@ import logging
 import re
 
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.core.models import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
-
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,28 @@ class EmailCollector(Entity):
         max_length=255,
         blank=True,
         help_text="Pattern with [sigils] to extract values from the body.",
+    )
+    odoo_profile = models.ForeignKey(
+        "odoo.OdooEmployee",
+        related_name="email_collectors",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Optional Odoo account used to validate customer fields.",
+    )
+    odoo_customer_name_sigil = models.CharField(
+        max_length=64,
+        blank=True,
+        default="customer_name",
+        help_text="Parsed body sigil used as the Odoo customer lookup name.",
+    )
+    odoo_customer_name = models.CharField(max_length=255, blank=True, editable=False)
+    odoo_customer_address = models.TextField(blank=True, editable=False)
+    odoo_customer_phone = models.CharField(max_length=64, blank=True, editable=False)
+    odoo_customer_checked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
     )
     use_regular_expressions = models.BooleanField(
         default=False,
@@ -99,6 +121,119 @@ class EmailCollector(Entity):
         if not match:
             return {}
         return {k: v.strip() for k, v in match.groupdict().items()}
+
+    @staticmethod
+    def _odoo_text(value) -> str:
+        """Normalize Odoo RPC values for display and completeness checks."""
+        if value in (None, False):
+            return ""
+        if isinstance(value, (list, tuple)):
+            if len(value) > 1:
+                return str(value[1] or "").strip()
+            if value:
+                return str(value[0] or "").strip()
+            return ""
+        return str(value).strip()
+
+    @classmethod
+    def _format_odoo_address(cls, row: dict) -> str:
+        """Return a compact address string from common Odoo partner fields."""
+        city_line = " ".join(
+            part
+            for part in (
+                cls._odoo_text(row.get("zip")),
+                cls._odoo_text(row.get("city")),
+            )
+            if part
+        )
+        parts = [
+            cls._odoo_text(row.get("street")),
+            cls._odoo_text(row.get("street2")),
+            city_line,
+            cls._odoo_text(row.get("state_id")),
+            cls._odoo_text(row.get("country_id")),
+        ]
+        return ", ".join(part for part in parts if part)
+
+    def _odoo_customer_lookup_name(self, sigils: dict[str, str]) -> str:
+        """Return the parsed name used to search Odoo for a customer."""
+        candidates = [
+            self.odoo_customer_name_sigil,
+            "customer_name",
+            "name",
+            "customer",
+        ]
+        normalized = {
+            str(key).lower(): str(value).strip() for key, value in sigils.items()
+        }
+        for candidate in candidates:
+            key = str(candidate or "").strip().lower()
+            if key and normalized.get(key):
+                return normalized[key]
+        return ""
+
+    @property
+    def odoo_customer_fields_complete(self) -> bool:
+        """Whether the Odoo customer snapshot has the validation fields."""
+        return bool(
+            self.odoo_customer_name
+            and self.odoo_customer_address
+            and self.odoo_customer_phone
+        )
+
+    def _update_odoo_customer_snapshot(self, sigils: dict[str, str]) -> None:
+        """Refresh read-only Odoo customer fields from parsed email sigils."""
+        if not self.odoo_profile_id:
+            return
+
+        lookup_name = self._odoo_customer_lookup_name(sigils)
+        self.odoo_customer_name = lookup_name
+        self.odoo_customer_address = ""
+        self.odoo_customer_phone = ""
+        self.odoo_customer_checked_at = timezone.now()
+
+        if lookup_name and getattr(self.odoo_profile, "odoo_uid", None):
+            try:
+                rows = self.odoo_profile.execute(
+                    "res.partner",
+                    "search_read",
+                    [[("name", "ilike", lookup_name)]],
+                    fields=[
+                        "name",
+                        "phone",
+                        "mobile",
+                        "street",
+                        "street2",
+                        "city",
+                        "zip",
+                        "state_id",
+                        "country_id",
+                    ],
+                    limit=1,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed Odoo customer validation for collector %s", self.pk
+                )
+            else:
+                row = rows[0] if rows else {}
+                if row:
+                    self.odoo_customer_name = (
+                        self._odoo_text(row.get("name")) or lookup_name
+                    )
+                    self.odoo_customer_phone = self._odoo_text(
+                        row.get("phone")
+                    ) or self._odoo_text(row.get("mobile"))
+                    self.odoo_customer_address = self._format_odoo_address(row)
+
+        self.save(
+            update_fields=[
+                "odoo_customer_name",
+                "odoo_customer_address",
+                "odoo_customer_phone",
+                "odoo_customer_checked_at",
+            ]
+        )
 
     def __str__(self):  # pragma: no cover - simple representation
         if self.name:
@@ -237,6 +372,13 @@ class EmailCollector(Entity):
             )
             if not created:
                 continue
+
+            try:
+                self._update_odoo_customer_snapshot(sigils)
+            except Exception:
+                logger.exception(
+                    "Failed to update Odoo fields for collector %s", self.pk
+                )
 
             try:
                 self._notify_for_message(msg, sigils)

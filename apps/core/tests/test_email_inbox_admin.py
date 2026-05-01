@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from django.contrib.auth.models import Permission
+from django.contrib.admin.sites import AdminSite
+from django.test import RequestFactory
 from django.urls import reverse
 
+from apps.core.admin.emails import EmailCollectorAdmin
 from apps.emails.models import EmailCollector, EmailInbox
+from apps.odoo.models import OdooEmployee
 from apps.users.models import User
 
 
@@ -56,6 +59,8 @@ def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, adm
     assert collector.name == "Updated Collector"
     assert collector.additional_inboxes.filter(pk=additional.pk).exists()
     assert "Match" in response.rendered_content
+
+
 @pytest.mark.django_db
 def test_setup_collector_view_forbids_staff_without_view_permission(client, admin_user):
     """Staff users without inbox view permission cannot open setup wizard."""
@@ -76,3 +81,73 @@ def test_setup_collector_view_forbids_staff_without_view_permission(client, admi
 
     assert response.status_code == 403
 
+
+@pytest.mark.django_db
+def test_email_collector_admin_odoo_status_requires_all_customer_fields(admin_user):
+    """The admin Odoo column is green only when all customer fields are present."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="odoo-admin-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="example",
+        username="odoo@example.com",
+        password="secret",
+        odoo_uid=10,
+    )
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        odoo_profile=profile,
+        odoo_customer_name="Roberto Cuevas",
+        odoo_customer_phone="+52 33 1234 5678",
+        odoo_customer_address="Av Siempre Viva 123",
+    )
+    model_admin = EmailCollectorAdmin(EmailCollector, AdminSite())
+
+    assert "#0a7f35" in str(model_admin.odoo_customer_status(collector))
+
+    collector.odoo_customer_phone = ""
+    assert "#b42318" in str(model_admin.odoo_customer_status(collector))
+
+
+@pytest.mark.django_db
+def test_email_collector_admin_limits_odoo_profiles_for_staff(admin_user):
+    """Non-superusers can only select Odoo profiles they own."""
+
+    staff_user = User.objects.create_user(
+        username="odoo-profile-staff",
+        is_staff=True,
+    )
+    owned_profile = OdooEmployee.objects.create(
+        user=staff_user,
+        host="https://odoo.example.com",
+        database="example",
+        username="staff-odoo@example.com",
+        password="secret",
+        odoo_uid=10,
+    )
+    other_profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="example",
+        username="other-odoo@example.com",
+        password="secret",
+        odoo_uid=11,
+    )
+    request = RequestFactory().get("/")
+    request.user = staff_user
+    model_admin = EmailCollectorAdmin(EmailCollector, AdminSite())
+
+    field = model_admin.formfield_for_foreignkey(
+        EmailCollector._meta.get_field("odoo_profile"),
+        request,
+    )
+
+    assert list(field.queryset) == [owned_profile]
+    assert other_profile not in field.queryset

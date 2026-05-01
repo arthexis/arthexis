@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 
 from apps.core.models import EmailArtifact
 from apps.emails.models import EmailCollector, EmailInbox
-
+from apps.odoo.models import OdooEmployee
 
 pytestmark = pytest.mark.django_db
 
@@ -273,3 +273,126 @@ def test_collect_none_mode_skips_dispatch(monkeypatch):
 
     assert EmailArtifact.objects.filter(collector=collector).count() == 1
     assert popup_calls["count"] == 0
+
+
+def _create_odoo_profile(owner, username: str = "odoo@example.com") -> OdooEmployee:
+    """Create a verified-looking Odoo profile for collector validation tests."""
+
+    return OdooEmployee.objects.create(
+        user=owner,
+        host="https://odoo.example.com",
+        database="example",
+        username=username,
+        password="secret",
+        odoo_uid=10,
+    )
+
+
+def test_collect_refreshes_complete_odoo_customer_snapshot(monkeypatch):
+    """A new collected email should poll Odoo and mark complete customer data."""
+
+    owner = _create_owner("collector-odoo-complete-owner")
+    inbox = _create_inbox(owner, "collector-odoo-complete@example.com")
+    profile = _create_odoo_profile(owner)
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        fragment="Cliente: [customer_name]",
+        odoo_profile=profile,
+        odoo_customer_name_sigil="customer_name",
+    )
+
+    monkeypatch.setattr(
+        inbox,
+        "search_messages",
+        lambda **kwargs: [
+            {
+                "subject": "Porsche quote",
+                "from": "tecnologia@gelectriic.com",
+                "body": "Cliente: Roberto Cuevas",
+            }
+        ],
+    )
+    calls: list[tuple[str, str, tuple, dict]] = []
+
+    def _fake_execute(self, model, method, *args, **kwargs):
+        calls.append((model, method, args, kwargs))
+        return [
+            {
+                "name": "Roberto Cuevas",
+                "phone": "",
+                "mobile": "+52 33 1234 5678",
+                "street": "Av Siempre Viva 123",
+                "street2": "Interior 4",
+                "zip": "44100",
+                "city": "Guadalajara",
+                "state_id": [14, "Jalisco"],
+                "country_id": [156, "Mexico"],
+            }
+        ]
+
+    monkeypatch.setattr(OdooEmployee, "execute", _fake_execute)
+
+    collector.collect(limit=1)
+
+    collector.refresh_from_db()
+    assert collector.odoo_customer_name == "Roberto Cuevas"
+    assert collector.odoo_customer_phone == "+52 33 1234 5678"
+    assert (
+        collector.odoo_customer_address
+        == "Av Siempre Viva 123, Interior 4, 44100 Guadalajara, Jalisco, Mexico"
+    )
+    assert collector.odoo_customer_checked_at is not None
+    assert collector.odoo_customer_fields_complete is True
+    assert calls[0][0:2] == ("res.partner", "search_read")
+    assert calls[0][2][0] == [[("name", "ilike", "Roberto Cuevas")]]
+
+
+def test_collect_marks_odoo_customer_snapshot_incomplete(monkeypatch):
+    """Missing Odoo address or phone should keep the validation incomplete."""
+
+    owner = _create_owner("collector-odoo-incomplete-owner")
+    inbox = _create_inbox(owner, "collector-odoo-incomplete@example.com")
+    profile = _create_odoo_profile(owner, username="odoo-incomplete@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        fragment="Cliente: [customer_name]",
+        odoo_profile=profile,
+    )
+
+    monkeypatch.setattr(
+        inbox,
+        "search_messages",
+        lambda **kwargs: [
+            {
+                "subject": "Porsche quote",
+                "from": "tecnologia@gelectriic.com",
+                "body": "Cliente: Roberto Cuevas",
+            }
+        ],
+    )
+
+    def _fake_execute(self, model, method, *args, **kwargs):
+        return [
+            {
+                "name": "Roberto Cuevas",
+                "phone": "",
+                "mobile": "",
+                "street": "",
+                "street2": "",
+                "zip": "",
+                "city": "",
+                "state_id": False,
+                "country_id": False,
+            }
+        ]
+
+    monkeypatch.setattr(OdooEmployee, "execute", _fake_execute)
+
+    collector.collect(limit=1)
+
+    collector.refresh_from_db()
+    assert collector.odoo_customer_name == "Roberto Cuevas"
+    assert collector.odoo_customer_phone == ""
+    assert collector.odoo_customer_address == ""
+    assert collector.odoo_customer_checked_at is not None
+    assert collector.odoo_customer_fields_complete is False
