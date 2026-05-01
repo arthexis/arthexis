@@ -177,7 +177,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
         markdown="fallback [CONF.BASE_DIR]",
     )
     portable_files = [
-        ("SKILL.md", "Use suite root [CONF.BASE_DIR]"),
+        ("SKILL.md", "Use suite root [CONF.BASE_DIR] and keep [CONF.SECRET_KEY]"),
         ("references/glossary.md", "Portable glossary for [CONF.BASE_DIR]"),
         ("scripts/setup.ps1", "Write-Output '[CONF.BASE_DIR]'"),
     ]
@@ -216,7 +216,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     skill_root = target_root / "operator-manual"
     assert summary["files_written"] == 3
     assert (skill_root / "SKILL.md").read_text(encoding="utf-8") == (
-        f"Use suite root {suite_root}"
+        f"Use suite root {suite_root} and keep [CONF.SECRET_KEY]"
     )
     assert (skill_root / "references" / "glossary.md").read_text(
         encoding="utf-8"
@@ -226,6 +226,40 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     )
     assert not (skill_root / "credentials" / "token.txt").exists()
     assert not (skill_root / "workgroup.md").exists()
+
+
+@pytest.mark.django_db
+def test_materialize_can_write_unresolved_sigils(tmp_path):
+    SigilRoot.objects.get_or_create(
+        prefix="CONF",
+        defaults={"context_type": SigilRoot.Context.CONFIG},
+    )
+    target_root = tmp_path / "codex-skills"
+    skill = AgentSkill.objects.create(
+        slug="operator-manual",
+        title="Operator Manual",
+        markdown="fallback [CONF.BASE_DIR]",
+    )
+    content = "Use suite root [CONF.BASE_DIR]"
+    AgentSkillFile.objects.create(
+        skill=skill,
+        relative_path="SKILL.md",
+        content=content,
+        content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        portability=AgentSkillFile.Portability.PORTABLE,
+        included_by_default=True,
+        size_bytes=len(content.encode("utf-8")),
+    )
+
+    summary = materialize_codex_skill_files(
+        target_root,
+        resolve_sigils_on_write=False,
+    )
+
+    assert summary["files_written"] == 1
+    assert (target_root / "operator-manual" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == content
 
 
 @pytest.mark.django_db

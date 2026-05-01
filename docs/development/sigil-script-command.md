@@ -77,8 +77,10 @@ SIGILS are also the suite's portability mechanism for skills and documents that
 are stored generally and written locally on each Arthexis device. A package can
 store `[CONF.BASE_DIR]`, `[SYS.NODE_ROLE]`, or another allowed suite SIGIL in a
 skill reference, script template, or agent instruction. The stored package keeps
-the SIGIL text. The target device resolves it only when materializing the file to
-its local directory.
+the SIGIL text. The target device resolves only allowed non-secret SIGILS when
+materializing the file to its local directory. Default materialization resolves
+`SYS`, `NODE`, and an explicit safe subset of simple `CONF` keys; arbitrary
+settings such as `[CONF.SECRET_KEY]` remain literal text.
 
 This keeps portable documents reusable while still allowing local behavior. It
 also sets a hard boundary: secrets and runtime state must not be moved through

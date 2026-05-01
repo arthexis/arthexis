@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_slug
 from django.db import transaction
@@ -15,7 +17,9 @@ from apps.skills.models import AgentSkill, AgentSkillFile
 PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
 SKILL_MARKDOWN = "SKILL.md"
 EMPTY_CONTENT_SHA256 = hashlib.sha256(b"").hexdigest()
-DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"CONF", "NODE", "SYS"})
+DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"NODE", "SYS"})
+SAFE_MATERIALIZE_CONF_KEYS = frozenset({"BASE_DIR", "NODE_ROLE"})
+CONF_DOT_SIGIL_RE = re.compile(r"\[CONF\.([A-Za-z0-9_-]+)\]")
 
 BLOCKED_STATE_FILENAMES = {
     "pending-approval-alerts.lock.json",
@@ -109,7 +113,42 @@ def _resolve_document_sigils(
 
     from apps.sigils.sigil_resolver import resolve_sigils
 
-    return resolve_sigils(content, allowed_roots=allowed_roots)
+    return resolve_sigils(
+        _resolve_safe_conf_sigils(content),
+        allowed_roots=allowed_roots,
+    )
+
+
+def _resolve_safe_conf_sigils(content: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        raw_key = match.group(1)
+        normalized_key = raw_key.replace("-", "_").upper()
+        if normalized_key not in SAFE_MATERIALIZE_CONF_KEYS:
+            return match.group(0)
+        for candidate in (raw_key, normalized_key, normalized_key.lower()):
+            sentinel = object()
+            value = getattr(settings, candidate, sentinel)
+            if value is not sentinel:
+                return str(value)
+        return ""
+
+    return CONF_DOT_SIGIL_RE.sub(replace, content)
+
+
+def _remove_tree_best_effort(path: Path) -> None:
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+            return
+        if path.is_dir():
+            for nested in sorted(path.rglob("*"), reverse=True):
+                if nested.is_file() or nested.is_symlink():
+                    nested.unlink()
+                elif nested.is_dir():
+                    nested.rmdir()
+            path.rmdir()
+    except OSError:
+        return
 
 
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
@@ -520,12 +559,7 @@ def materialize_codex_skill_files(
         keep_slugs = set(queryset.values_list("slug", flat=True))
         for child in target_root.iterdir():
             if child.is_dir() and child.name not in keep_slugs:
-                for nested in sorted(child.rglob("*"), reverse=True):
-                    if nested.is_file() or nested.is_symlink():
-                        nested.unlink()
-                    elif nested.is_dir():
-                        nested.rmdir()
-                child.rmdir()
+                _remove_tree_best_effort(child)
 
     summary = {
         "target": str(target_root),
@@ -537,6 +571,7 @@ def materialize_codex_skill_files(
         slug = validate_package_skill_slug(skill.slug)
         skill_dir = target_root / slug
         skill_dir.mkdir(parents=True, exist_ok=True)
+        resolved_skill_dir = skill_dir.resolve(strict=False)
         files = []
         desired_paths = set()
         for relative_path, content in _package_file_entries(skill):
@@ -544,7 +579,7 @@ def materialize_codex_skill_files(
             desired_paths.add(package_path)
             target_path = (skill_dir / package_path).resolve(strict=False)
             try:
-                target_path.relative_to(skill_dir.resolve(strict=False))
+                target_path.relative_to(resolved_skill_dir)
             except ValueError as error:
                 raise ValueError(f"Unsafe package path: {relative_path}") from error
             resolved_content = _resolve_document_sigils(
@@ -565,25 +600,27 @@ def materialize_codex_skill_files(
             files.append({"path": package_path, "changed": changed})
 
         for existing_path in sorted(skill_dir.rglob("*"), reverse=True):
-            if not existing_path.is_file():
+            try:
+                if existing_path.is_file() or existing_path.is_symlink():
+                    relative = normalize_package_path(
+                        existing_path.relative_to(skill_dir)
+                    )
+                    if relative in desired_paths:
+                        continue
+                    classification = classify_codex_skill_path(relative)
+                    if (
+                        classification is not None
+                        and not classification.included_by_default
+                    ):
+                        continue
+                    top_level = relative.split("/", 1)[0]
+                    if relative != SKILL_MARKDOWN and top_level not in PORTABLE_ROOTS:
+                        continue
+                    existing_path.unlink()
+                elif existing_path.is_dir() and not any(existing_path.iterdir()):
+                    existing_path.rmdir()
+            except OSError:
                 continue
-            relative = normalize_package_path(existing_path.relative_to(skill_dir))
-            if relative in desired_paths:
-                continue
-            classification = classify_codex_skill_path(relative)
-            if classification is not None and not classification.included_by_default:
-                continue
-            top_level = relative.split("/", 1)[0]
-            if relative != SKILL_MARKDOWN and top_level not in PORTABLE_ROOTS:
-                continue
-            existing_path.unlink()
-
-        for existing_dir in sorted(
-            [path for path in skill_dir.rglob("*") if path.is_dir()],
-            reverse=True,
-        ):
-            if not any(existing_dir.iterdir()):
-                existing_dir.rmdir()
 
         summary["skills"].append({"slug": slug, "files": files})
     return summary

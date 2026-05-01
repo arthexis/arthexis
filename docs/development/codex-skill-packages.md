@@ -25,15 +25,17 @@ SIGILS only when package files are materialized into a local directory. This
 lets one general skill package adapt to each node without embedding one
 operator's local paths.
 
-Default materialization allows non-secret local context roots:
+Default materialization allows non-secret local context:
 
-- `CONF`: Django settings such as `[CONF.BASE_DIR]`.
 - `SYS`: suite system metadata such as role or upgrade state.
 - `NODE`: local node records when the node sigil root is configured.
+- A small allow-list of simple `CONF` keys such as `[CONF.BASE_DIR]` and
+  `[CONF.NODE_ROLE]`.
 
-Do not use `ENV` SIGILS in portable skill content for secrets. Secrets must be
-configured independently on each node and must never move through skill package
-export/import.
+Arbitrary `CONF` keys are not resolved during default materialization. Secret
+settings such as `[CONF.SECRET_KEY]` remain literal text, and `ENV` SIGILS are
+not allowed by default. Secrets must be configured independently on each node
+and must never move through skill package export/import.
 
 ## Workgroup State
 
