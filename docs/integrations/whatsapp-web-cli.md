@@ -15,10 +15,11 @@ Supported in this version:
 - Read visible messages from one phone-number chat on demand.
 - Filter read output by `--date`, `--since`, `--until`, or a local `--new`
   cursor.
+- Poll an operator self-chat in listener mode and launch a Codex Secretary
+  terminal for triggered requests.
 
 Not supported in this version:
 
-- Polling or background message ingestion.
 - Group chat automation.
 - Bulk messaging.
 - Attachments or media download.
@@ -71,6 +72,24 @@ Read only messages after the local cursor and then advance that cursor:
 python manage.py whatsapp read --from 525551234567 --new --json
 ```
 
+Listen for Secretary requests in the operator self-chat:
+
+```powershell
+python manage.py whatsapp listen --from 525551234567
+```
+
+By default, listener mode waits until the desktop has been idle for 300 seconds,
+polls WhatsApp once every 60 seconds, and processes a batch only after 60 seconds
+pass without additional new messages. A message must start with `secretary:` to
+launch a terminal. Messages that arrive after the first triggered message during
+the same quiet batch are included as continuation text.
+
+Run one local dry pass after a quiet batch without launching Codex:
+
+```powershell
+python manage.py whatsapp listen --from 525551234567 --once --no-launch --json
+```
+
 Attach to an already-open Edge debugging session:
 
 ```powershell
@@ -89,4 +108,10 @@ the local Arthexis cursor, but WhatsApp's own read state may still change.
 
 The `--new` cursor is local to the browser profile path and phone number. It
 returns the next visible batch after the stored cursor and advances only after an
-explicit on-demand read. It is not a poller and does not run in the background.
+explicit on-demand read or after listener mode finishes processing or ignoring a
+quiet batch.
+
+Listener mode is intentionally conservative. The default `secretary:` trigger
+prevents ordinary self-chat notes from launching local terminals. Use
+`--trigger-prefix ""` only when every new self-chat message should become a
+Secretary request.

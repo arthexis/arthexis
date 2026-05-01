@@ -6,8 +6,10 @@ import json
 import logging
 import os
 import re
+import shlex
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -22,6 +24,10 @@ DEFAULT_WHATSAPP_WEB_PROFILE_DIR = (
 DEFAULT_WHATSAPP_WEB_BROWSER = "edge" if sys.platform == "win32" else "firefox"
 DEFAULT_WHATSAPP_WEB_CHANNEL = "msedge" if sys.platform == "win32" else ""
 WHATSAPP_WEB_CURSOR_FILENAME = "message-cursors.json"
+DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX = "secretary:"
+DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS = 300.0
+DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS = 60.0
+DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS = 60.0
 
 LOGGED_IN_SELECTORS = (
     "#pane-side",
@@ -110,6 +116,19 @@ class WhatsAppWebReadResult:
     messages: list[WhatsAppWebMessage]
     cursor_updated: bool = False
     cursor_file: Path | None = None
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class WhatsAppSecretaryListenResult:
+    status: str
+    phone: str
+    message_count: int
+    launched: bool = False
+    cursor_updated: bool = False
+    cursor_file: Path | None = None
+    batch_fingerprint: str = ""
+    elapsed_seconds: float = 0.0
     detail: str = ""
 
 
@@ -676,6 +695,260 @@ def _write_cursor(cursor_file: Path, key: str, value: str) -> None:
             json.dumps(next_payload, indent=2, sort_keys=True), encoding="utf-8"
         )
         os.replace(temp_file, cursor_file)
+
+
+def operator_idle_seconds() -> float | None:
+    """Return local desktop idle seconds when the platform exposes it."""
+
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+        info = LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(info)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+            return None
+        tick_count = ctypes.windll.kernel32.GetTickCount()
+        return max((tick_count - info.dwTime) / 1000.0, 0.0)
+    except Exception:
+        logger.debug("Could not read local operator idle time.", exc_info=True)
+        return None
+
+
+def _message_text_after_trigger(text: str, trigger_prefix: str) -> str | None:
+    stripped = text.strip()
+    prefix = trigger_prefix.strip()
+    if not prefix:
+        return stripped
+    if stripped.lower().startswith(prefix.lower()):
+        return stripped[len(prefix) :].strip()
+    return None
+
+
+def secretary_request_text_from_messages(
+    messages: list[WhatsAppWebMessage],
+    *,
+    trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+) -> str:
+    """Build a Secretary request from the first triggered message and continuations."""
+
+    request_parts: list[str] = []
+    collecting = not trigger_prefix.strip()
+    for message in messages:
+        text = message.text.strip()
+        if not text:
+            continue
+        triggered_text = _message_text_after_trigger(text, trigger_prefix)
+        if triggered_text is not None:
+            collecting = True
+            text = triggered_text
+        elif not collecting:
+            continue
+        if text:
+            request_parts.append(text)
+    return "\n\n".join(request_parts).strip()
+
+
+def build_whatsapp_secretary_prompt(
+    messages: list[WhatsAppWebMessage],
+    *,
+    trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+    secretary_name: str = "Secretary",
+) -> str:
+    request_text = secretary_request_text_from_messages(
+        messages,
+        trigger_prefix=trigger_prefix,
+    )
+    if not request_text:
+        return ""
+    return "\n".join(
+        [
+            f"[SECRETARY] {secretary_name}:",
+            "",
+            "You are a SECRETARY agent operating for the ARTHEXIS operator.",
+            "Read the operator manual before acting if this is a new console session.",
+            "Record your current goal and owned scope in the workgroup file before taking ownership.",
+            "Treat the WhatsApp request below as the current operator request.",
+            "",
+            "Operator request:",
+            request_text,
+        ]
+    )
+
+
+def _batch_fingerprint(messages: list[WhatsAppWebMessage]) -> str:
+    data = "\x1f".join(message.fingerprint for message in messages)
+    return hashlib.sha256(data.encode("utf-8")).hexdigest() if data else ""
+
+
+def _merge_message_batches(
+    current: list[WhatsAppWebMessage],
+    incoming: list[WhatsAppWebMessage],
+) -> tuple[list[WhatsAppWebMessage], bool]:
+    by_fingerprint = {message.fingerprint: message for message in current}
+    merged = list(current)
+    changed = False
+    for message in incoming:
+        if message.fingerprint in by_fingerprint:
+            continue
+        by_fingerprint[message.fingerprint] = message
+        merged.append(message)
+        changed = True
+    return merged, changed
+
+
+def launch_codex_secretary_terminal(
+    prompt: str,
+    *,
+    codex_command: str = "codex",
+    terminal_title: str = "Arthexis Secretary",
+) -> str:
+    from django.conf import settings
+
+    from apps.terminals.tasks import launch_command_in_terminal
+
+    command = [*shlex.split(codex_command), prompt]
+    launch_path = launch_command_in_terminal(
+        command,
+        title=terminal_title,
+        state_key="whatsapp-secretary",
+        working_directory=Path(settings.BASE_DIR),
+    )
+    return f"Codex Secretary terminal launch requested; pid file: {launch_path}"
+
+
+def listen_for_whatsapp_secretary_requests(
+    *,
+    phone: str,
+    default_country_code: str = "52",
+    trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+    idle_after_seconds: float = DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
+    daemon_poll_seconds: float = DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS,
+    quiet_window_seconds: float = DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS,
+    limit: int = 50,
+    launch: bool = True,
+    codex_command: str = "codex",
+    secretary_name: str = "Secretary",
+    terminal_title: str = "Arthexis Secretary",
+    max_batches: int | None = None,
+    max_polls: int | None = None,
+    read_messages: Callable[..., WhatsAppWebReadResult] | None = None,
+    launch_callback: Callable[[str], str] | None = None,
+    idle_seconds: Callable[[], float | None] = operator_idle_seconds,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    event_callback: Callable[[WhatsAppSecretaryListenResult], None] | None = None,
+    **browser_options,
+) -> list[WhatsAppSecretaryListenResult]:
+    """Poll WhatsApp self-chat, debounce quiet batches, and launch Secretary."""
+
+    if limit < 0:
+        raise ValueError("--limit must be >= 0. Use 0 to return all visible messages.")
+    idle_after_seconds = max(float(idle_after_seconds), 0.0)
+    daemon_poll_seconds = max(float(daemon_poll_seconds), 1.0)
+    quiet_window_seconds = max(float(quiet_window_seconds), 1.0)
+    started_at = monotonic()
+    normalized_phone = normalize_whatsapp_phone(
+        phone, default_country_code=default_country_code
+    )
+    pending: list[WhatsAppWebMessage] = []
+    pending_changed_at = 0.0
+    results: list[WhatsAppSecretaryListenResult] = []
+    polls = 0
+    processed_batches = 0
+    reader = read_messages or read_whatsapp_web_messages
+
+    while True:
+        if max_polls is not None and polls >= max_polls:
+            return results
+        idle_for = idle_seconds()
+        if idle_after_seconds and idle_for is not None and idle_for < idle_after_seconds:
+            sleep(min(daemon_poll_seconds, idle_after_seconds - idle_for))
+            polls += 1
+            continue
+
+        read_result = reader(
+            phone=normalized_phone,
+            default_country_code=default_country_code,
+            only_new=True,
+            update_cursor=False,
+            limit=limit,
+            **browser_options,
+        )
+        polls += 1
+        if read_result.status != "ok":
+            result = WhatsAppSecretaryListenResult(
+                status=read_result.status,
+                phone=normalized_phone,
+                message_count=0,
+                cursor_file=read_result.cursor_file,
+                elapsed_seconds=monotonic() - started_at,
+                detail=read_result.detail or "WhatsApp Web read did not return ok.",
+            )
+            if event_callback:
+                event_callback(result)
+            results.append(result)
+            if max_batches is None:
+                sleep(daemon_poll_seconds)
+                continue
+            return results
+
+        if read_result.messages:
+            pending, changed = _merge_message_batches(pending, read_result.messages)
+            if changed or not pending_changed_at:
+                pending_changed_at = monotonic()
+
+        if pending and monotonic() - pending_changed_at >= quiet_window_seconds:
+            prompt = build_whatsapp_secretary_prompt(
+                pending,
+                trigger_prefix=trigger_prefix,
+                secretary_name=secretary_name,
+            )
+            cursor_file = cursor_file_for_profile(read_result.profile_dir)
+            cursor_key = cursor_key_for_profile(normalized_phone, read_result.profile_dir)
+            _write_cursor(cursor_file, cursor_key, pending[-1].fingerprint)
+            detail = "Batch ignored because no Secretary trigger prefix was present."
+            launched = False
+            status = "ignored"
+            if prompt:
+                status = "matched"
+                detail = "Secretary request matched."
+                if launch:
+                    launcher = launch_callback or (
+                        lambda text: launch_codex_secretary_terminal(
+                            text,
+                            codex_command=codex_command,
+                            terminal_title=terminal_title,
+                        )
+                    )
+                    detail = launcher(prompt)
+                    launched = True
+                    status = "launched"
+            result = WhatsAppSecretaryListenResult(
+                status=status,
+                phone=normalized_phone,
+                message_count=len(pending),
+                launched=launched,
+                cursor_updated=True,
+                cursor_file=cursor_file,
+                batch_fingerprint=_batch_fingerprint(pending),
+                elapsed_seconds=monotonic() - started_at,
+                detail=detail,
+            )
+            if event_callback:
+                event_callback(result)
+            results.append(result)
+            processed_batches += 1
+            pending = []
+            pending_changed_at = 0.0
+            if max_batches is not None and processed_batches >= max_batches:
+                return results
+
+        sleep(daemon_poll_seconds)
 
 
 def read_whatsapp_web_messages(

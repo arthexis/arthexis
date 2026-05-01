@@ -1,14 +1,13 @@
+import pytest
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
-import pytest
 
 from apps.core.admin import OwnableAdminForm
 from apps.groups.models import SecurityGroup
 from apps.terminals import tasks
 from apps.terminals.admin import AgentTerminalAdmin
 from apps.terminals.models import AgentTerminal
-
 
 User = get_user_model()
 
@@ -34,18 +33,66 @@ def test_admin_disables_add_permission(db):
     assert admin.has_add_permission(request) is False
 
 
-def test_launch_terminal_fails_fast_on_windows_before_posix_shell(tmp_path, monkeypatch):
+def test_launch_terminal_uses_powershell_script_on_windows(tmp_path, monkeypatch):
     monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
     monkeypatch.setattr(tasks, "_is_windows", lambda: True)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+    launched = {}
+
+    class FakeProcess:
+        pid = 1234
+
+    def fake_popen(command):
+        launched["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", fake_popen)
     terminal = AgentTerminal(name="windows-terminal", launch_command="echo ready")
 
-    with pytest.raises(RuntimeError, match="_launch_terminal") as exc_info:
-        tasks._launch_terminal(terminal)
+    tasks._launch_terminal(terminal)
 
-    message = str(exc_info.value)
-    assert "echo ready" not in message
-    assert "startup_script=" not in message
-    assert "executable=" not in message
+    assert launched["command"][:4] == [
+        "powershell.exe",
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+    ]
+    script_path = tmp_path / "scripts" / "None.ps1"
+    assert script_path.read_text(encoding="utf-8") == "echo ready"
+    assert (tmp_path / "None.pid").exists()
+
+
+def test_launch_command_in_terminal_builds_windows_codex_command(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tasks, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        tasks.shutil,
+        "which",
+        lambda name: "wt.exe" if name == "wt.exe" else None,
+    )
+    launched = {}
+
+    class FakeProcess:
+        pid = 5678
+
+    def fake_popen(command):
+        launched["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", fake_popen)
+
+    pid_file = tasks.launch_command_in_terminal(
+        ["codex", "[SECRETARY] Mara:\nOperator request"],
+        title="Arthexis Secretary",
+        state_key="whatsapp-secretary",
+        working_directory=tmp_path / "repo",
+    )
+
+    assert launched["command"][:4] == ["wt.exe", "new-tab", "--title", "Arthexis Secretary"]
+    assert pid_file == tmp_path / "whatsapp-secretary.pid"
+    script = (tmp_path / "scripts" / "whatsapp-secretary.ps1").read_text(encoding="utf-8")
+    assert "Set-Location -LiteralPath" in script
+    assert "& 'codex' '[SECRETARY] Mara:" in script
 
 
 def test_is_process_running_handles_windows_value_error(monkeypatch):
