@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 import subprocess
@@ -14,6 +15,44 @@ def _has_desktop_ui() -> bool:
     return bool(getattr(settings, "DESKTOP_UI_ENABLED", False) or getattr(settings, "DESKTOP_UI", False))
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _terminal_state_dir() -> Path:
+    override = os.environ.get("ARTHEXIS_TERMINAL_STATE_DIR")
+    if override:
+        return Path(override)
+    if _is_windows():
+        local_app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+        base = Path(local_app_data) / "Arthexis"
+    else:
+        configured_state_home = os.environ.get("XDG_STATE_HOME")
+        base = Path(configured_state_home) if configured_state_home else Path.home() / ".local" / "state"
+        if not _can_create_state_dir(base):
+            return Path(os.environ.get("TMPDIR") or "/tmp") / "arthexis-agent-terminals"
+    return base / "agent-terminals"
+
+
+def _can_create_state_dir(base: Path) -> bool:
+    current = base
+    while not current.exists() and current.parent != current:
+        current = current.parent
+    return current.is_dir() and os.access(current, os.W_OK | os.X_OK)
+
+
+def _terminal_pid_file(terminal_pk: int) -> Path:
+    return _terminal_state_dir() / f"{terminal_pk}.pid"
+
+
+def _is_process_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except (OSError, ValueError, SystemError):
+        return False
+    return True
+
+
 def _read_pid_file(pid_file: Path) -> tuple[int | None, str | None]:
     if not pid_file.exists():
         return None, None
@@ -25,6 +64,8 @@ def _read_pid_file(pid_file: Path) -> tuple[int | None, str | None]:
 
 
 def _process_commandline(pid: int) -> str:
+    if os.name == "nt":
+        return ""
     proc_cmdline = Path(f"/proc/{pid}/cmdline")
     if not proc_cmdline.exists():
         return ""
@@ -39,12 +80,13 @@ def _terminal_running(pid_file: Path) -> bool:
     if not pid or pid <= 0:
         return False
     try:
-        subprocess.run(["kill", "-0", str(pid)], check=True, capture_output=True)
+        if not _is_process_running(pid):
+            raise subprocess.CalledProcessError(1, ["kill", "-0", str(pid)])
     except (OSError, subprocess.CalledProcessError):
         pid_file.unlink(missing_ok=True)
         return False
 
-    if expected_command:
+    if expected_command and os.name != "nt":
         current_command = _process_commandline(pid)
         if not current_command or expected_command not in current_command:
             pid_file.unlink(missing_ok=True)
@@ -75,11 +117,16 @@ def _build_startup_script(terminal: AgentTerminal) -> str:
 
 
 def _launch_terminal(terminal: AgentTerminal) -> None:
-    pid_dir = Path("/tmp/arthexis-agent-terminals")
+    pid_dir = _terminal_state_dir()
     pid_dir.mkdir(parents=True, exist_ok=True)
-    pid_file = pid_dir / f"{terminal.pk}.pid"
+    pid_file = _terminal_pid_file(terminal.pk)
     executable = terminal.resolved_executable()
     startup_script = _build_startup_script(terminal)
+    if _is_windows():
+        raise RuntimeError(
+            "_launch_terminal does not support Windows POSIX shell launch "
+            f"for terminal pk={terminal.pk!r}; startup-script-present={bool(startup_script)!r}"
+        )
     command = [*shlex.split(executable)]
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])
@@ -102,7 +149,7 @@ def ensure_agent_terminals() -> int:
     for terminal in AgentTerminal.assigned_to_any_user():
         if not _matches_current_node_role(terminal):
             continue
-        pid_file = Path(f"/tmp/arthexis-agent-terminals/{terminal.pk}.pid")
+        pid_file = _terminal_pid_file(terminal.pk)
         if _terminal_running(pid_file):
             continue
         _launch_terminal(terminal)

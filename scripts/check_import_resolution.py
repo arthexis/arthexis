@@ -447,11 +447,12 @@ class ImportCollector(ast.NodeVisitor):
 
         if not isinstance(handler, ast.ExceptHandler):
             return False
+        import_error_names = {"ImportError", "ModuleNotFoundError"}
         if isinstance(handler.type, ast.Name):
-            return handler.type.id == "ImportError"
+            return handler.type.id in import_error_names
         if isinstance(handler.type, ast.Tuple):
             return any(
-                isinstance(elt, ast.Name) and elt.id == "ImportError"
+                isinstance(elt, ast.Name) and elt.id in import_error_names
                 for elt in handler.type.elts
             )
         return False

@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 from django.conf import settings
 
@@ -19,6 +20,7 @@ CAMERA_DIR = WORK_DIR / "camera"
 RPI_CAMERA_DEVICE = Path("/dev/video0")
 RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
 DEFAULT_CAMERA_RESOLUTION = (1280, 720)
+OPENCV_CAMERA_IDENTIFIER_PREFIX = "opencv:"
 FALLBACK_CAMERA_RESOLUTIONS = (
     (1920, 1080),
     (1280, 720),
@@ -38,6 +40,14 @@ class CameraStackProbe:
     backend: str
     reason: str
     detected_cameras: int = 0
+
+
+class Cv2CameraDevice(NamedTuple):
+    """OpenCV-discovered video capture device."""
+
+    identifier: str
+    description: str
+    raw_info: str
 
 
 def _is_video_device_available(device: Path) -> bool:
@@ -181,6 +191,125 @@ def has_rpi_camera_stack() -> bool:
     """Return ``True`` when any supported camera stack is available."""
 
     return probe_rpi_camera_stack().available
+
+
+def cv2_camera_identifier(index: int) -> str:
+    """Return a non-ambiguous identifier for an OpenCV camera index."""
+
+    return f"{OPENCV_CAMERA_IDENTIFIER_PREFIX}{int(index)}"
+
+
+def _cv2_camera_index(device_identifier: str | int) -> int | None:
+    """Return an OpenCV camera index parsed from a supported identifier."""
+
+    if type(device_identifier) is int:
+        return device_identifier
+    identifier = str(device_identifier or "").strip()
+    if identifier.startswith(OPENCV_CAMERA_IDENTIFIER_PREFIX):
+        suffix = identifier[len(OPENCV_CAMERA_IDENTIFIER_PREFIX) :].strip()
+        return int(suffix) if suffix.isdigit() else None
+    return int(identifier) if identifier.isdigit() else None
+
+
+def open_cv2_capture(cv2, device_identifier: str | int):
+    """Open an OpenCV capture source using the best local backend."""
+
+    index = _cv2_camera_index(device_identifier)
+    if index is not None:
+        if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
+            return cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        return cv2.VideoCapture(index)
+    return cv2.VideoCapture(str(device_identifier or "").strip())
+
+
+def detect_cv2_camera_devices(limit: int | None = None) -> list[Cv2CameraDevice]:
+    """Return camera devices that OpenCV can open locally."""
+
+    try:
+        import cv2  # type: ignore
+    except ImportError:
+        return []
+
+    probe_limit = limit
+    if probe_limit is None:
+        probe_limit = int(getattr(settings, "VIDEO_CV2_DISCOVERY_LIMIT", 5))
+
+    detected: list[Cv2CameraDevice] = []
+    for index in range(max(0, probe_limit)):
+        identifier = cv2_camera_identifier(index)
+        capture = open_cv2_capture(cv2, identifier)
+        try:
+            if not capture.isOpened():
+                continue
+            success, frame = capture.read()
+            if not success or frame is None:
+                continue
+            height, width = frame.shape[:2]
+            backend = (
+                capture.getBackendName()
+                if hasattr(capture, "getBackendName")
+                else "opencv"
+            )
+            detected.append(
+                Cv2CameraDevice(
+                    identifier=identifier,
+                    description=f"OpenCV Camera {index}",
+                    raw_info=(
+                        f"device_index={index} backend={backend} "
+                        f"frame_size={width}x{height}"
+                    ),
+                )
+            )
+        finally:
+            capture.release()
+    return detected
+
+
+def capture_cv2_snapshot(
+    device_identifier: str,
+    *,
+    timeout: int = 10,
+    width: int | None = None,
+    height: int | None = None,
+    auto_rotate: int = 0,
+) -> Path:
+    """Capture a JPEG snapshot from an OpenCV-supported video device."""
+
+    from apps.video.services.capture import rotate_cv2_frame
+    from apps.video.services.mjpeg import load_cv2
+
+    cv2 = load_cv2()
+    identifier = str(device_identifier or "").strip()
+    acquired = _CAMERA_LOCK.acquire(timeout=timeout)
+    if not acquired:
+        raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
+
+    capture = open_cv2_capture(cv2, identifier)
+    try:
+        if not capture.isOpened():
+            raise RuntimeError(f"Unable to open video device {device_identifier}")
+        if width:
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, int(width))
+        if height:
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, int(height))
+        success, frame = capture.read()
+        if not success or frame is None:
+            raise RuntimeError(
+                f"Unable to capture frame from video device {device_identifier}"
+            )
+        frame = rotate_cv2_frame(frame, angle=auto_rotate, cv2=cv2)
+        success, buffer = cv2.imencode(".jpg", frame)
+        if not success:
+            raise RuntimeError("JPEG encode failed")
+    finally:
+        capture.release()
+        _CAMERA_LOCK.release()
+
+    CAMERA_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc)
+    filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{uuid.uuid4().hex}.jpg"
+    filename.write_bytes(buffer.tobytes())
+    return filename
 
 
 def get_camera_resolutions() -> list[tuple[int, int]]:
@@ -352,12 +481,17 @@ __all__ = [
     "CAMERA_DIR",
     "DEFAULT_CAMERA_RESOLUTION",
     "FALLBACK_CAMERA_RESOLUTIONS",
+    "OPENCV_CAMERA_IDENTIFIER_PREFIX",
     "RPI_CAMERA_BINARIES",
     "RPI_CAMERA_DEVICE",
     "has_rpicam_binaries",
     "capture_rpi_snapshot",
+    "cv2_camera_identifier",
     "get_camera_resolutions",
     "has_rpi_camera_stack",
+    "capture_cv2_snapshot",
+    "detect_cv2_camera_devices",
+    "open_cv2_capture",
     "probe_rpi_camera_stack",
     "record_rpi_video",
 ]

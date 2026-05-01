@@ -144,7 +144,7 @@ Agents must run relevant tests after code changes.
 ### Test Execution
 
 * Execute tests and **fix errors introduced by changes**.
-* Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
+* Prefer validated repository entrypoints over ad-hoc interpreter calls. When `.venv` is missing, run the platform install entrypoint first (`./install.sh` on Linux/macOS, `install.bat` on Windows); the install scripts create `.venv`. Use `./env-refresh.sh --deps-only` or `env-refresh.bat` only after `.venv` already exists and dependencies need refreshing.
 * Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
 * Use the canonical app-test command for this repository: `.venv/bin/python manage.py test run -- <target>`.
 * Use direct `pytest` only where this repository already requires it:

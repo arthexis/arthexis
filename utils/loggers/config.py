@@ -174,7 +174,7 @@ def build_logging_settings(
         for logger_name in celery_logger_names
     }
 
-    logging_config["loggers"]["apps.forwarder.ocpp"] = {
+    logging_config["loggers"]["apps.ocpp.forwarder"] = {
         "handlers": ["cp_forwarder_file", "error_file"],
         "level": "INFO",
         "propagate": False,

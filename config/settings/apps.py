@@ -25,6 +25,7 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
 PROJECT_LOCAL_APPS = [
     "apps._legacy.netmesh_migration_only.apps.NetmeshMigrationOnlyConfig",
     "apps.actions",
+    "apps.skills",
     "apps.apis",
     "apps.app",
     "apps.audio",
@@ -52,7 +53,7 @@ PROJECT_LOCAL_APPS = [
     "apps.evergo",
     "apps.features",
     "apps.flows",
-    "apps.forwarder.ocpp",
+    "apps.ocpp.forwarder",
     "apps.ftp",
     "apps.gdrive",
     "apps.gallery",

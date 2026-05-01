@@ -20,10 +20,10 @@
       "public_views": [],
       "service_views": [
         "apps.ocpp.tasks.setup_forwarders",
-        "apps.forwarder.ocpp.Forwarder"
+        "apps.ocpp.forwarder.Forwarder"
       ],
       "code_locations": [
-        "apps/forwarder/ocpp/__init__.py",
+        "apps/ocpp/forwarder/__init__.py",
         "apps/ocpp/tasks/forwarding.py",
         "apps/ocpp/consumers/csms/transport.py",
         "apps/ocpp/consumers/base/connection_flow.py"

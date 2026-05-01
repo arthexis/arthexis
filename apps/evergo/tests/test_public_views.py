@@ -212,6 +212,21 @@ def test_order_tracking_uses_selected_contractor_account(client, monkeypatch):
     assert "Brand B" in response.content.decode()
 
 
+@pytest.mark.django_db
+def test_order_tracking_requires_staff_or_workspace_access(client):
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="tracking-owner-blocked", email="blocked@example.com")
+    profile = EvergoUser.objects.create(user=owner, evergo_email="blocked@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=9912, order_number="SO-9912")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 404
+
+
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
     """Security: TSV export must neutralize formulas and sanitize control characters."""
 

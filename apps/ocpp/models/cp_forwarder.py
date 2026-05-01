@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
     """Proxy to the OCPP forwarder for testability."""
 
-    from apps.forwarder.ocpp import forwarder
+    from apps.ocpp.forwarder import forwarder
 
     return forwarder.sync_forwarded_charge_points(
         refresh_forwarders=refresh_forwarders
@@ -18,7 +18,7 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
 def is_target_active(target_id: int | None) -> bool:
     """Proxy to check whether a forwarding session is active."""
 
-    from apps.forwarder.ocpp import forwarder
+    from apps.ocpp.forwarder import forwarder
 
     return forwarder.is_target_active(target_id)
 
@@ -502,7 +502,7 @@ class CPForwarder(Entity):
     def _forwarding_service(self):
         """Return the shared forwarding service used to manage sessions."""
 
-        from apps.forwarder.ocpp import forwarder
+        from apps.ocpp.forwarder import forwarder
 
         return forwarder
 

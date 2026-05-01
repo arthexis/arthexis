@@ -706,11 +706,13 @@ def _to_tsv(rows: list[dict[str, str]]) -> str:
 @login_required
 def order_tracking_public(request, order_id: int) -> HttpResponse:
     """Render and submit the order tracking phase-one helper form for authorized owners only."""
+    has_workspace_access = _has_evergo_workspace_access(user=request.user)
+    if not (request.user.is_staff or has_workspace_access):
+        raise Http404("Evergo order tracking not found.")
+
     order_lookup = {
         "remote_id": order_id,
     }
-    if not request.user.is_staff:
-        order_lookup["user__user"] = request.user
     order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
     requested_contractor_id = request.POST.get("contractor") or request.GET.get("contractor") or ""
     profile = order.user
