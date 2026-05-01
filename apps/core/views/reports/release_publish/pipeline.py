@@ -2303,10 +2303,12 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         if github_url:
             break
         if target.repository_url:
-            parsed = urlparse(target.repository_url)
-            host = parsed.hostname or ""
-            if host == "github.com" or host.endswith(".github.com"):
-                github_url = release.github_package_url() or ""
+            github_url = (
+                release.github_release_url(target.repository_url)
+                or release.github_package_url(target.repository_url)
+                or ""
+            )
+            if github_url:
                 break
     if github_url:
         release.github_url = github_url

@@ -336,20 +336,22 @@ class PackageRelease(Entity):
 
         return targets
 
-    def github_repository_path(self) -> str | None:
-        """Return the ``owner/repo`` path for this release's GitHub repository."""
-        repo_url = self.package.repository_url
+    @staticmethod
+    def _github_repository_path_from_url(repo_url: str | None) -> str | None:
+        """Return the ``owner/repo`` path for a GitHub repository URL."""
+
         if not repo_url:
             return None
         repo_url = repo_url.strip()
         if repo_url.startswith("git@"):
-            if "github.com" not in repo_url:
+            _, _, ssh_target = repo_url.partition("@")
+            host, separator, path = ssh_target.partition(":")
+            if not separator or not PackageRelease._is_github_host(host):
                 return None
-            _, _, path = repo_url.partition("github.com:")
             path = path.strip("/")
         else:
             parsed = urlparse(repo_url)
-            if "github.com" not in parsed.netloc.lower():
+            if not PackageRelease._is_github_host(parsed.hostname):
                 return None
             path = parsed.path.strip("/")
         if path.endswith(".git"):
@@ -359,19 +361,35 @@ class PackageRelease(Entity):
             return None
         return "/".join(parts[:2])
 
-    def github_release_url(self) -> str | None:
+    @staticmethod
+    def _is_github_host(host: str | None) -> bool:
+        """Return True when ``host`` identifies GitHub without lookalike hosts."""
+
+        normalized = (host or "").strip().lower().rstrip(".")
+        if normalized.startswith("www."):
+            normalized = normalized[4:]
+        return normalized == "github.com" or normalized.endswith(".github.com")
+
+    def github_repository_path(self, repository_url: str | None = None) -> str | None:
+        """Return the ``owner/repo`` path for this release's GitHub repository."""
+
+        return self._github_repository_path_from_url(
+            repository_url or self.package.repository_url
+        )
+
+    def github_release_url(self, repository_url: str | None = None) -> str | None:
         """Return the GitHub Release URL for this release if determinable."""
 
-        path = self.github_repository_path()
+        path = self.github_repository_path(repository_url)
         if not path:
             return None
         tag_name = quote(f"v{self.version}", safe="")
         return f"https://github.com/{path}/releases/tag/{tag_name}"
 
-    def github_package_url(self) -> str | None:
+    def github_package_url(self, repository_url: str | None = None) -> str | None:
         """Return the GitHub Packages URL for this release if determinable."""
 
-        path = self.github_repository_path()
+        path = self.github_repository_path(repository_url)
         if not path:
             return None
         return (
