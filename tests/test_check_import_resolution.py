@@ -100,11 +100,11 @@ def test_lcd_replay_posix_terminal_imports_are_optional(tmp_path) -> None:
             [
                 "try:",
                 "    'optional-import'",
-                "    import termios",
-                "    import tty",
+                "    import definitely_missing_arthexis_termios_stub",
+                "    import definitely_missing_arthexis_tty_stub",
                 "except ImportError:",
-                "    termios = None",
-                "    tty = None",
+                "    definitely_missing_arthexis_termios_stub = None",
+                "    definitely_missing_arthexis_tty_stub = None",
                 "",
             ]
         ),
@@ -113,4 +113,4 @@ def test_lcd_replay_posix_terminal_imports_are_optional(tmp_path) -> None:
 
     issues = check_import_resolution.collect_missing_imports([module_path])
 
-    assert [issue for issue in issues if issue.module in {"termios", "tty"}] == []
+    assert issues == []
