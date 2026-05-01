@@ -779,14 +779,20 @@ def _normalize_upgrade_args_for_host(base_dir: Path, args: list[str]) -> list[st
     return args
 
 
-def _skip_reason_log_message(reason: str | None, mode: AutoUpgradeMode) -> str | None:
-    if reason and reason.endswith("-upgrade-disallowed"):
+def _version_bump_skip_reason_log_message(
+    reason: str | None, mode: AutoUpgradeMode
+) -> str | None:
+    if not reason:
+        return None
+
+    if reason.endswith("-upgrade-disallowed"):
         bump = reason.removesuffix("-upgrade-disallowed")
         return (
             f"Skipping {mode.mode} auto-upgrade; "
             f"{bump} version upgrades are not allowed on this channel"
         )
-    if reason and reason.endswith("-upgrade-not-due"):
+
+    if reason.endswith("-upgrade-not-due"):
         bump = reason.removesuffix("-upgrade-not-due")
         cadence = auto_upgrade_bump_cadence_minutes(mode.mode, bump)
         if cadence:
@@ -794,6 +800,14 @@ def _skip_reason_log_message(reason: str | None, mode: AutoUpgradeMode) -> str |
                 f"Skipping {mode.mode} auto-upgrade; last upgrade was less than "
                 f"{cadence} minutes ago for a {bump} version bump"
             )
+
+    return None
+
+
+def _skip_reason_log_message(reason: str | None, mode: AutoUpgradeMode) -> str | None:
+    version_message = _version_bump_skip_reason_log_message(reason, mode)
+    if version_message:
+        return version_message
 
     reason_messages = {
         "pypi-release-missing": (

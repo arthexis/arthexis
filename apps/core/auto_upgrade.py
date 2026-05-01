@@ -13,6 +13,10 @@ from django.utils import timezone
 from apps.core.versioning import (
     AUTO_UPGRADE_DAY_MINUTES,
     AUTO_UPGRADE_WEEK_MINUTES,
+    UPGRADE_CHANNEL_ALIASES,
+    UPGRADE_CHANNEL_REGULAR,
+    UPGRADE_CHANNEL_STABLE,
+    UPGRADE_CHANNEL_UNSTABLE,
 )
 
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
@@ -24,66 +28,37 @@ AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_CADENCE_HOUR = 4
+_CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES = {
+    UPGRADE_CHANNEL_UNSTABLE: AUTO_UPGRADE_DAY_MINUTES,
+    UPGRADE_CHANNEL_STABLE: AUTO_UPGRADE_WEEK_MINUTES,
+    UPGRADE_CHANNEL_REGULAR: AUTO_UPGRADE_DAY_MINUTES,
+}
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": AUTO_UPGRADE_DAY_MINUTES,
-    "unstable": AUTO_UPGRADE_DAY_MINUTES,
-    "stable": AUTO_UPGRADE_WEEK_MINUTES,
-    "lts": AUTO_UPGRADE_WEEK_MINUTES,
-    "regular": AUTO_UPGRADE_DAY_MINUTES,
-    "normal": AUTO_UPGRADE_DAY_MINUTES,
-    "version": AUTO_UPGRADE_DAY_MINUTES,
+    alias: _CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES[channel]
+    for alias, channel in UPGRADE_CHANNEL_ALIASES.items()
+    if channel in _CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES
 }
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
+_DAILY_AUTO_UPGRADE_CRONTAB = {
+    "minute": "0",
+    "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+    "day_of_week": "*",
+    "day_of_month": "*",
+    "month_of_year": "*",
+}
+_WEEKLY_AUTO_UPGRADE_CRONTAB = {
+    **_DAILY_AUTO_UPGRADE_CRONTAB,
+    "day_of_week": "4",
+}
+_CANONICAL_AUTO_UPGRADE_CRONTABS = {
+    UPGRADE_CHANNEL_UNSTABLE: _DAILY_AUTO_UPGRADE_CRONTAB,
+    UPGRADE_CHANNEL_STABLE: _WEEKLY_AUTO_UPGRADE_CRONTAB,
+    UPGRADE_CHANNEL_REGULAR: _DAILY_AUTO_UPGRADE_CRONTAB,
+}
 AUTO_UPGRADE_CRONTAB_SCHEDULES = {
-    "latest": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "unstable": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "stable": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "lts": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "regular": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "normal": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "version": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
+    alias: dict(_CANONICAL_AUTO_UPGRADE_CRONTABS[channel])
+    for alias, channel in UPGRADE_CHANNEL_ALIASES.items()
+    if channel in _CANONICAL_AUTO_UPGRADE_CRONTABS
 }
 
 
