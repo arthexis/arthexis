@@ -139,12 +139,21 @@ def evergo_workspace(request) -> HttpResponse:
             "address_municipality",
         )
     )
-    contractors = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+    if request.user.is_superuser:
+        contractors = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+    else:
+        contractor_profile = get_object_or_404(EvergoUser.objects.only("pk"), user=request.user)
+        contractors = EvergoUser.objects.filter(pk=contractor_profile.pk)
+        selected_contractor_id = str(contractor_profile.pk)
+
     if selected_contractor_id.isdigit():
         contractor_pk = int(selected_contractor_id)
-        customers = customers.filter(user_id=contractor_pk)
-        orders = orders.filter(user_id=contractor_pk)
-    else:
+        if request.user.is_superuser or contractors.filter(pk=contractor_pk).exists():
+            customers = customers.filter(user_id=contractor_pk)
+            orders = orders.filter(user_id=contractor_pk)
+        else:
+            selected_contractor_id = ""
+    elif request.user.is_superuser:
         selected_contractor_id = ""
     return render(
         request,
@@ -703,13 +712,15 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     if not request.user.is_staff:
         order_lookup["user__user"] = request.user
     order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
-    contractor_options = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
     requested_contractor_id = request.POST.get("contractor") or request.GET.get("contractor") or ""
     profile = order.user
-    if requested_contractor_id.isdigit():
-        selected_profile = contractor_options.filter(pk=int(requested_contractor_id)).first()
-        if selected_profile is not None:
-            profile = selected_profile
+    contractor_options = EvergoUser.objects.filter(pk=profile.pk)
+    if request.user.is_staff:
+        contractor_options = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+        if requested_contractor_id.isdigit():
+            selected_profile = contractor_options.filter(pk=int(requested_contractor_id)).first()
+            if selected_profile is not None:
+                profile = selected_profile
     selected_contractor_id = str(profile.pk)
     brands = profile.fetch_charger_brand_options()
     remote_image_urls: dict[str, str] = {}

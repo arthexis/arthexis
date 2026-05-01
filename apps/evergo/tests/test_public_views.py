@@ -133,7 +133,7 @@ def test_evergo_workspace_renders_customers_and_orders_tabs(client):
 
 
 @pytest.mark.django_db
-def test_workspace_filters_rows_by_selected_contractor(client):
+def test_workspace_scopes_rows_to_current_contractor(client):
     user_model = get_user_model()
     user = user_model.objects.create_user(username="workspace-filter", email="workspace-filter@example.com")
     group = SecurityGroup.objects.create(name="Evergo Contractors")
@@ -145,12 +145,41 @@ def test_workspace_filters_rows_by_selected_contractor(client):
     EvergoCustomer.objects.create(user=profile_b, name="Customer B", latest_so="SO-B")
     client.force_login(user)
 
-    response = client.get(reverse("evergo:workspace"), {"tab": "customers", "contractor": str(profile_a.pk)})
+    response = client.get(reverse("evergo:workspace"), {"tab": "customers"})
 
     assert response.status_code == 200
     content = response.content.decode()
     assert "Customer A" in content
     assert "Customer B" not in content
+
+
+
+
+@pytest.mark.django_db
+def test_order_tracking_ignores_contractor_override_for_non_staff_owner(client, monkeypatch):
+    user_model = get_user_model()
+    owner_a = user_model.objects.create_user(username="owner-a-nonstaff", email="owner-a-nonstaff@example.com")
+    owner_b = user_model.objects.create_user(username="owner-b-nonstaff", email="owner-b-nonstaff@example.com")
+    profile_a = EvergoUser.objects.create(user=owner_a, evergo_email="a-nonstaff@example.com", evergo_password="secret")
+    profile_b = EvergoUser.objects.create(user=owner_b, evergo_email="b-nonstaff@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile_a, remote_id=9221, order_number="SO-9221")
+
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_charger_brand_options",
+        lambda self: ["Brand A"] if self.pk == profile_a.pk else ["Brand B"],
+    )
+    monkeypatch.setattr(EvergoUser, "fetch_order_detail", lambda self, order_id: {})
+    client.force_login(owner_a)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]), {"contractor": str(profile_b.pk)})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Brand A" in content
+    assert "Brand B" not in content
 
 
 @pytest.mark.django_db
