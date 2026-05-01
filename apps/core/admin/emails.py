@@ -1,22 +1,23 @@
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.shortcuts import redirect
 from django.template import TemplateDoesNotExist
 from django.template.loader import select_template
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.emails.models import EmailCollector, EmailInbox
 from apps.locals.user_data import EntityModelAdmin
+from apps.odoo.models import OdooEmployee
 
 from .forms import EmailInboxAdminForm
 from .inlines import EmailCollectorInline
 from .metrics import annotate_enabled_total, format_enabled_total
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
-
 
 SETUP_COLLECTOR_TEXT = _("Setup Collector")
 
@@ -30,20 +31,98 @@ class EmailCollectorAdmin(EntityModelAdmin):
         "sender",
         "body",
         "fragment",
+        "odoo_customer_status",
         "notification_mode",
     )
     list_filter = ("is_enabled", "notification_mode")
+    list_select_related = ("inbox", "odoo_profile")
     search_fields = (
         "name",
         "subject",
         "sender",
         "body",
         "fragment",
+        "odoo_customer_name",
+        "odoo_customer_address",
+        "odoo_customer_phone",
         "notification_subject",
         "notification_message",
         "notification_recipients",
     )
+    readonly_fields = (
+        "odoo_customer_name",
+        "odoo_customer_address",
+        "odoo_customer_phone",
+        "odoo_customer_checked_at",
+    )
+    fieldsets = (
+        (
+            _("Collector"),
+            {"fields": ("name", "inbox", "additional_inboxes", "is_enabled")},
+        ),
+        (
+            _("Filters and parsing"),
+            {
+                "fields": (
+                    "subject",
+                    "sender",
+                    "body",
+                    "fragment",
+                    "use_regular_expressions",
+                )
+            },
+        ),
+        (
+            _("Odoo integration"),
+            {"fields": ("odoo_profile", "odoo_customer_name_sigil")},
+        ),
+        (
+            _("Odoo Customer"),
+            {
+                "fields": (
+                    "odoo_customer_name",
+                    "odoo_customer_address",
+                    "odoo_customer_phone",
+                    "odoo_customer_checked_at",
+                )
+            },
+        ),
+        (
+            _("Notifications"),
+            {
+                "fields": (
+                    "notification_mode",
+                    "notification_subject",
+                    "notification_message",
+                    "notification_recipients",
+                )
+            },
+        ),
+    )
     actions = ["preview_messages"]
+
+    @admin.display(description=_("Odoo"), ordering="odoo_customer_checked_at")
+    def odoo_customer_status(self, obj):
+        if not obj.odoo_profile_id:
+            return "-"
+        if obj.odoo_customer_fields_complete:
+            return format_html(
+                '<span style="color: var(--{}-fg); font-weight: 700;">&#10003;</span>',
+                "success",
+            )
+        return format_html(
+            '<span style="color: var(--{}-fg); font-weight: 700;">&#10005;</span>',
+            "error",
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "odoo_profile" and not request.user.is_superuser:
+            group_ids = list(request.user.groups.values_list("id", flat=True))
+            owner_filter = Q(user=request.user)
+            if group_ids:
+                owner_filter |= Q(group_id__in=group_ids)
+            kwargs["queryset"] = OdooEmployee.objects.filter(owner_filter)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.action(description=_("Preview matches"))
     def preview_messages(self, request, queryset):
