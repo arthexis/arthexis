@@ -179,6 +179,37 @@ def _prune_stale_materialized_files(
             continue
 
 
+def _prepare_materialized_file_path(path: Path, skill_dir: Path) -> None:
+    current = skill_dir
+    for part in path.relative_to(skill_dir).parts[:-1]:
+        current = current / part
+        if current.is_symlink() or current.is_file():
+            current.unlink()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_dir():
+        _remove_tree_best_effort(path)
+
+
+def _validate_materialized_package_paths(package_paths: list[str]) -> None:
+    normalized_paths = {}
+    for package_path in package_paths:
+        normalized_path = package_path.casefold()
+        if normalized_path in normalized_paths:
+            raise ValueError(f"Duplicate package path: {package_path}")
+        normalized_paths[normalized_path] = package_path
+    for normalized_path, package_path in normalized_paths.items():
+        parts = normalized_path.split("/")
+        for index in range(1, len(parts)):
+            prefix = "/".join(parts[:index])
+            if prefix in normalized_paths:
+                raise ValueError(
+                    f"Package path collides with nested path: {package_path}"
+                )
+
+
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
     normalized = relative_path.replace("\\", "/")
     return normalized, [part.lower() for part in normalized.split("/")]
@@ -584,6 +615,7 @@ def materialize_codex_skill_files(
         queryset = queryset.filter(slug__in=skill_slugs)
 
     target_root.mkdir(parents=True, exist_ok=True)
+    resolved_target_root = target_root.resolve(strict=False)
     if skill_slugs is None:
         keep_slugs = set(queryset.values_list("slug", flat=True))
         for child in target_root.iterdir():
@@ -599,17 +631,33 @@ def materialize_codex_skill_files(
     for skill in queryset.order_by("slug"):
         slug = validate_package_skill_slug(skill.slug)
         skill_dir = target_root / slug
+        if skill_dir.is_symlink():
+            raise ValueError(f"Unsafe skill directory symlink: {skill_dir}")
+        if skill_dir.exists() and not skill_dir.is_dir():
+            skill_dir.unlink()
         skill_dir.mkdir(parents=True, exist_ok=True)
         resolved_skill_dir = skill_dir.resolve(strict=False)
+        try:
+            resolved_skill_dir.relative_to(resolved_target_root)
+        except ValueError as error:
+            raise ValueError(f"Unsafe skill directory: {skill_dir}") from error
         package_managed = bool(_included_package_files(skill))
         files = []
-        desired_paths = set()
+        entries = []
         for relative_path, content in _package_file_entries(skill):
             package_path = validate_package_relative_path(relative_path)
-            desired_paths.add(package_path)
-            target_path = (skill_dir / package_path).resolve(strict=False)
+            entries.append((relative_path, package_path, content))
+        desired_paths = {package_path for _, package_path, _ in entries}
+        _validate_materialized_package_paths(
+            [package_path for _, package_path, _ in entries]
+        )
+
+        for relative_path, package_path, content in entries:
+            target_path = skill_dir / package_path
+            _prepare_materialized_file_path(target_path, skill_dir)
+            resolved_target_path = target_path.resolve(strict=False)
             try:
-                target_path.relative_to(resolved_skill_dir)
+                resolved_target_path.relative_to(resolved_skill_dir)
             except ValueError as error:
                 raise ValueError(f"Unsafe package path: {relative_path}") from error
             resolved_content = _resolve_document_sigils(
@@ -617,7 +665,6 @@ def materialize_codex_skill_files(
                 resolve_sigils_on_write=resolve_sigils_on_write,
                 allowed_roots=allowed_roots,
             )
-            target_path.parent.mkdir(parents=True, exist_ok=True)
             existing = (
                 target_path.read_text(encoding="utf-8")
                 if target_path.exists()

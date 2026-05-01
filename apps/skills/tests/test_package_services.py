@@ -274,6 +274,156 @@ def test_materialize_legacy_skill_preserves_existing_portable_tree(tmp_path):
 
 
 @pytest.mark.django_db
+def test_materialize_replaces_file_directory_path_collisions(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill_root = target_root / "portable-skill"
+    _write(skill_root / "references" / "topic" / "old.md", "old directory")
+    _write(skill_root / "scripts" / "setup", "old file")
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    for relative_path, content in [
+        ("references/topic", "new file"),
+        ("scripts/setup/install.ps1", "Write-Output install"),
+    ]:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+
+    materialize_codex_skill_files(target_root)
+
+    assert (skill_root / "references" / "topic").read_text(encoding="utf-8") == (
+        "new file"
+    )
+    assert not (skill_root / "references" / "topic" / "old.md").exists()
+    assert (skill_root / "scripts" / "setup" / "install.ps1").read_text(
+        encoding="utf-8"
+    ) == "Write-Output install"
+
+
+@pytest.mark.django_db
+def test_materialize_rejects_package_path_prefix_collisions(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    for relative_path, content in [
+        ("references/topic", "parent file"),
+        ("references/topic/child.md", "child file"),
+    ]:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+
+    with pytest.raises(ValueError, match="collides with nested path"):
+        materialize_codex_skill_files(target_root)
+
+
+@pytest.mark.django_db
+def test_materialize_rejects_case_insensitive_prefix_collisions(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    for relative_path, content in [
+        ("references/Topic", "parent file"),
+        ("references/topic/child.md", "child file"),
+    ]:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+
+    with pytest.raises(ValueError, match="collides with nested path"):
+        materialize_codex_skill_files(target_root)
+
+
+@pytest.mark.django_db
+def test_materialize_recovers_from_stale_parent_symlink(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill_root = target_root / "portable-skill"
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+    skill_root.mkdir(parents=True)
+    try:
+        (skill_root / "references").symlink_to(
+            outside_root,
+            target_is_directory=True,
+        )
+    except (NotImplementedError, OSError):
+        pytest.skip("directory symlinks are unavailable")
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    content = "new file"
+    AgentSkillFile.objects.create(
+        skill=skill,
+        relative_path="references/topic.md",
+        content=content,
+        content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        portability=AgentSkillFile.Portability.PORTABLE,
+        included_by_default=True,
+        size_bytes=len(content.encode("utf-8")),
+    )
+
+    materialize_codex_skill_files(target_root)
+
+    assert not (skill_root / "references").is_symlink()
+    assert (skill_root / "references" / "topic.md").read_text(
+        encoding="utf-8"
+    ) == content
+    assert not (outside_root / "topic.md").exists()
+
+
+@pytest.mark.django_db
+def test_materialize_rejects_symlinked_skill_directory(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    target_root.mkdir()
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+    try:
+        (target_root / "portable-skill").symlink_to(
+            outside_root,
+            target_is_directory=True,
+        )
+    except (NotImplementedError, OSError):
+        pytest.skip("directory symlinks are unavailable")
+    AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+
+    with pytest.raises(ValueError, match="Unsafe skill directory symlink"):
+        materialize_codex_skill_files(target_root)
+
+
+@pytest.mark.django_db
 def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
     AgentSkill.objects.create(
         slug="legacy-skill",
