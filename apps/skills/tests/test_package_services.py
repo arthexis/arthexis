@@ -43,6 +43,13 @@ def test_classifies_portable_state_secret_and_operator_scoped_files():
     assert operator_scoped.portability == AgentSkillFile.Portability.OPERATOR_SCOPED
     assert operator_scoped.included_by_default is False
 
+    skill_markdown = classify_codex_skill_file(
+        "SKILL.md",
+        "Example path: C:\\Users\\arthexis\\.codex\\skills\\demo",
+    )
+    assert skill_markdown.portability == AgentSkillFile.Portability.PORTABLE
+    assert skill_markdown.included_by_default is True
+
     unknown = classify_codex_skill_file("local-state.txt", "unknown root")
     assert unknown.portability == AgentSkillFile.Portability.DEVICE_SCOPED
     assert unknown.included_by_default is False
@@ -199,6 +206,26 @@ def test_import_rejects_unsafe_manifest_paths(tmp_path):
         package.writestr("skills/unsafe/../secret.txt", "secret")
 
     with pytest.raises(ValueError, match="Unsafe package path"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
+def test_import_rejects_unsafe_skill_slugs(tmp_path):
+    package_path = tmp_path / "unsafe-slug.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "../ops",
+                "title": "Unsafe Slug",
+                "files": [],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="Unsafe skill slug"):
         import_codex_skill_package(package_path, dry_run=False)
 
 

@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_slug
 from django.db import transaction
 
 from apps.skills.models import AgentSkill, AgentSkillFile
@@ -82,6 +84,16 @@ def validate_package_relative_path(relative_path: str) -> str:
     return path.as_posix()
 
 
+def validate_package_skill_slug(slug: str) -> str:
+    if not isinstance(slug, str) or not slug:
+        raise ValueError(f"Unsafe skill slug: {slug}")
+    try:
+        validate_slug(slug)
+    except ValidationError as error:
+        raise ValueError(f"Unsafe skill slug: {slug}") from error
+    return slug
+
+
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
     normalized = relative_path.replace("\\", "/")
     return normalized, [part.lower() for part in normalized.split("/")]
@@ -145,13 +157,15 @@ def classify_codex_skill_file(
             False,
             "binary files are not exported by this prototype",
         )
+    if normalized == SKILL_MARKDOWN:
+        return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
     if any(marker in content for marker in OPERATOR_PATH_MARKERS):
         return SkillFileClassification(
             AgentSkillFile.Portability.OPERATOR_SCOPED,
             False,
             "operator-local paths must be parameterized before export",
         )
-    if normalized == SKILL_MARKDOWN or parts[0] in PORTABLE_ROOTS:
+    if parts[0] in PORTABLE_ROOTS:
         return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
     return SkillFileClassification(
         AgentSkillFile.Portability.DEVICE_SCOPED,
@@ -378,7 +392,7 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
 
         with transaction.atomic():
             for skill_entry in manifest.get("skills", []):
-                slug = skill_entry["slug"]
+                slug = validate_package_skill_slug(skill_entry["slug"])
                 files = skill_entry.get("files", [])
                 validated_files = [
                     {
