@@ -25,7 +25,7 @@ try:
     "optional-import"
     import termios
     import tty
-except ImportError:
+except ImportError:  # pragma: no cover - termios/tty are POSIX-only
     termios = None
     tty = None
 

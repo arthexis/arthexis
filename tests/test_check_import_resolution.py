@@ -66,9 +66,26 @@ def test_module_not_found_without_marker_still_reports_missing_import(
     assert issues[0].module == "definitely_missing_arthexis_required_module"
 
 
-def test_qr_printing_windows_registry_import_is_optional() -> None:
-    module_path = (
-        check_import_resolution.PROJECT_ROOT / "apps" / "links" / "qr_printing.py"
+def test_qr_printing_windows_registry_import_is_optional(tmp_path) -> None:
+    module_path = tmp_path / "windows_registry.py"
+    module_path.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "",
+                "def iter_windows_registry_paths():",
+                "    if sys.platform != 'win32':",
+                "        return []",
+                "    try:",
+                "        'optional-import'",
+                "        import winreg",
+                "    except ImportError:",
+                "        return []",
+                "    return [winreg.HKEY_LOCAL_MACHINE]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
     )
 
     issues = check_import_resolution.collect_missing_imports([module_path])
@@ -76,15 +93,22 @@ def test_qr_printing_windows_registry_import_is_optional() -> None:
     assert [issue for issue in issues if issue.module == "winreg"] == []
 
 
-def test_lcd_replay_posix_terminal_imports_are_optional() -> None:
-    module_path = (
-        check_import_resolution.PROJECT_ROOT
-        / "apps"
-        / "screens"
-        / "management"
-        / "commands"
-        / "lcd_actions"
-        / "replay.py"
+def test_lcd_replay_posix_terminal_imports_are_optional(tmp_path) -> None:
+    module_path = tmp_path / "posix_terminal.py"
+    module_path.write_text(
+        "\n".join(
+            [
+                "try:",
+                "    'optional-import'",
+                "    import termios",
+                "    import tty",
+                "except ImportError:",
+                "    termios = None",
+                "    tty = None",
+                "",
+            ]
+        ),
+        encoding="utf-8",
     )
 
     issues = check_import_resolution.collect_missing_imports([module_path])
