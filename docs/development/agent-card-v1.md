@@ -34,9 +34,11 @@ the [sigil command reference](sigil-script-command.md).
 
 ## Physical layout
 
-MIFARE Classic 1K has 16 sectors. Each sector has three 16 byte data blocks and
-one 16 byte trailer block for keys and access bits. The trailer block is not
-application data.
+MIFARE Classic 1K has 16 sectors. Sectors 1-15 each have three 16 byte
+data blocks and one 16 byte trailer block for keys and access bits. Sector 0
+has one read-only manufacturer block, two 16 byte data blocks, and one trailer
+block. Agent Card v1 reserves all of sector 0 so application data never depends
+on manufacturer or UID handling. Trailer blocks are not application data.
 
 | Sector | Data bytes | Agent Card v1 use |
 | --- | ---: | --- |
