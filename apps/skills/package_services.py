@@ -267,8 +267,30 @@ def _import_file_spec(file_info: dict, content: str) -> dict:
     }
 
 
+def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
+    validated_skills = []
+    for skill_entry in manifest.get("skills", []):
+        slug = validate_package_skill_slug(skill_entry["slug"])
+        validated_files = [
+            {
+                **file_info,
+                "path": validate_package_relative_path(file_info["path"]),
+            }
+            for file_info in skill_entry.get("files", [])
+        ]
+        for file_info in validated_files:
+            archive_path = f"skills/{slug}/{file_info['path']}"
+            try:
+                package.getinfo(archive_path)
+            except KeyError as error:
+                raise ValueError(f"Missing package file: {archive_path}") from error
+        validated_skills.append({**skill_entry, "slug": slug, "files": validated_files})
+    return validated_skills
+
+
 def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict:
     skill_dir = Path(skill_dir)
+    slug = validate_package_skill_slug(skill_dir.name)
     skill_md = skill_dir / SKILL_MARKDOWN
     if not skill_md.exists():
         raise ValueError(f"{skill_dir} does not contain {SKILL_MARKDOWN}")
@@ -283,7 +305,7 @@ def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict
         file_content_by_path[scan.relative_path] = text
 
     summary = {
-        "slug": skill_dir.name,
+        "slug": slug,
         "dry_run": dry_run,
         "files": [asdict(entry) for entry in file_entries],
         "included": sum(1 for entry in file_entries if entry.included_by_default),
@@ -294,8 +316,8 @@ def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict
 
     with transaction.atomic():
         skill = _restore_or_create_skill(
-            slug=skill_dir.name,
-            title=skill_dir.name.replace("-", " ").title(),
+            slug=slug,
+            title=slug.replace("-", " ").title(),
             markdown=file_content_by_path.get(SKILL_MARKDOWN, ""),
         )
         _sync_package_files(
@@ -375,13 +397,14 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
         manifest = json.loads(package.read("manifest.json").decode("utf-8"))
         if manifest.get("format") != PACKAGE_FORMAT:
             raise ValueError("Unsupported Codex skill package format")
+        validated_skills = _validate_manifest_skill_entries(package, manifest)
         summary = {
             "package": str(package_path),
             "dry_run": dry_run,
             "skills": [],
         }
         if dry_run:
-            for skill_entry in manifest.get("skills", []):
+            for skill_entry in validated_skills:
                 summary["skills"].append(
                     {
                         "slug": skill_entry["slug"],
@@ -391,18 +414,11 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
             return summary
 
         with transaction.atomic():
-            for skill_entry in manifest.get("skills", []):
-                slug = validate_package_skill_slug(skill_entry["slug"])
+            for skill_entry in validated_skills:
+                slug = skill_entry["slug"]
                 files = skill_entry.get("files", [])
-                validated_files = [
-                    {
-                        **file_info,
-                        "path": validate_package_relative_path(file_info["path"]),
-                    }
-                    for file_info in files
-                ]
                 content_by_path = {}
-                for file_info in validated_files:
+                for file_info in files:
                     content_by_path[file_info["path"]] = package.read(
                         f"skills/{slug}/{file_info['path']}"
                     ).decode("utf-8")
@@ -415,7 +431,7 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
                     skill,
                     [
                         _import_file_spec(file_info, content_by_path[file_info["path"]])
-                        for file_info in validated_files
+                        for file_info in files
                     ],
                 )
                 summary["skills"].append({"slug": slug, "files": len(files)})
