@@ -51,7 +51,7 @@ LOCK_DIR="$BASE_DIR/.locks"
 
 # Lifecycle CLI contract: keep reconfiguration flags aligned with docs/development/install-lifecycle-scripts-manual.md and contract tests.
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--email ADMIN_EMAIL] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--unstable|--stable|--lts|--regular|--normal] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--email ADMIN_EMAIL] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
     exit 1
 }
 
@@ -443,7 +443,7 @@ set_upgrade_channel() {
     local new_channel="$1"
 
     if [ -n "$UPGRADE_CHANNEL" ] && [ "$UPGRADE_CHANNEL" != "$new_channel" ]; then
-        echo "Only one of --latest, --stable, or --regular may be specified" >&2
+        echo "Only one auto-upgrade channel flag may be specified" >&2
         usage
     fi
 
@@ -457,20 +457,16 @@ while [[ $# -gt 0 ]]; do
             SERVICE="$2"
             shift 2
             ;;
-        --latest)
+        --latest|--unstable)
             set_upgrade_channel "latest"
             shift
             ;;
-        --stable)
+        --stable|--lts)
             set_upgrade_channel "stable"
             shift
             ;;
         --regular|--normal)
-            set_upgrade_channel "version"
-            shift
-            ;;
-        --unstable)
-            set_upgrade_channel "latest"
+            set_upgrade_channel "regular"
             shift
             ;;
         --fixed)
@@ -757,11 +753,11 @@ if [ "$REPAIR" = true ]; then
     if [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
         stored_channel=$(tr -d '\r\n\t ' < "$LOCK_DIR/auto_upgrade.lck" | tr '[:upper:]' '[:lower:]')
         case "$stored_channel" in
-            latest|stable|version)
+            latest|unstable|stable|lts|regular|normal|version)
                 REPAIR_AUTO_UPGRADE_CHANNEL="$stored_channel"
                 ;;
             "")
-                REPAIR_AUTO_UPGRADE_CHANNEL="version"
+                REPAIR_AUTO_UPGRADE_CHANNEL="stable"
                 ;;
             *)
                 REPAIR_AUTO_UPGRADE_CHANNEL="version"
@@ -793,14 +789,14 @@ if [ "$CHECK" = true ]; then
 
     if [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
         case "$(cat "$LOCK_DIR/auto_upgrade.lck")" in
-            latest)
-                echo "Auto-upgrade: enabled (latest channel)"
+            latest|unstable)
+                echo "Auto-upgrade: enabled (latest/unstable channel)"
                 ;;
-            stable)
-                echo "Auto-upgrade: enabled (stable channel)"
+            stable|lts)
+                echo "Auto-upgrade: enabled (stable/LTS channel)"
                 ;;
-            version)
-                echo "Auto-upgrade: enabled (regular channel)"
+            regular|normal|version)
+                echo "Auto-upgrade: enabled (regular/normal channel)"
                 ;;
             *)
                 echo "Auto-upgrade: enabled (unknown channel)"
@@ -951,18 +947,18 @@ if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
     ACTION_PERFORMED=true
     mkdir -p "$LOCK_DIR"
     if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
-        channel="${UPGRADE_CHANNEL:-version}"
+        channel="${UPGRADE_CHANNEL:-stable}"
         echo "$channel" > "$LOCK_DIR/auto_upgrade.lck"
         run_auto_upgrade_management enable
         case "$channel" in
-            latest)
-                echo "Auto-upgrade enabled on the latest channel."
+            latest|unstable)
+                echo "Auto-upgrade enabled on the latest/unstable channel."
                 ;;
-            stable)
-                echo "Auto-upgrade enabled on the stable channel."
+            stable|lts)
+                echo "Auto-upgrade enabled on the stable/LTS channel."
                 ;;
             *)
-                echo "Auto-upgrade enabled on the regular channel."
+                echo "Auto-upgrade enabled on the regular/normal channel."
                 ;;
         esac
     else
@@ -1119,18 +1115,18 @@ fi
 
 
 if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
-    channel="${UPGRADE_CHANNEL:-version}"
+    channel="${UPGRADE_CHANNEL:-stable}"
     echo "$channel" > "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management enable
     case "$channel" in
-        latest)
-            echo "Auto-upgrade enabled on the latest channel."
+        latest|unstable)
+            echo "Auto-upgrade enabled on the latest/unstable channel."
             ;;
-        stable)
-            echo "Auto-upgrade enabled on the stable channel."
+        stable|lts)
+            echo "Auto-upgrade enabled on the stable/LTS channel."
             ;;
         *)
-            echo "Auto-upgrade enabled on the regular channel."
+            echo "Auto-upgrade enabled on the regular/normal channel."
             ;;
     esac
 elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then

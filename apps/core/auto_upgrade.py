@@ -10,6 +10,10 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
+from apps.core.versioning import (
+    AUTO_UPGRADE_DAY_MINUTES,
+    AUTO_UPGRADE_WEEK_MINUTES,
+)
 
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
@@ -21,15 +25,24 @@ AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_CADENCE_HOUR = 4
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": 1440,
-    "unstable": 15,
-    "stable": 10080,
-    "regular": 10080,
-    "normal": 10080,
+    "latest": AUTO_UPGRADE_DAY_MINUTES,
+    "unstable": AUTO_UPGRADE_DAY_MINUTES,
+    "stable": AUTO_UPGRADE_WEEK_MINUTES,
+    "lts": AUTO_UPGRADE_WEEK_MINUTES,
+    "regular": AUTO_UPGRADE_DAY_MINUTES,
+    "normal": AUTO_UPGRADE_DAY_MINUTES,
+    "version": AUTO_UPGRADE_DAY_MINUTES,
 }
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
 AUTO_UPGRADE_CRONTAB_SCHEDULES = {
     "latest": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "*",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+    "unstable": {
         "minute": "0",
         "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
         "day_of_week": "*",
@@ -43,17 +56,31 @@ AUTO_UPGRADE_CRONTAB_SCHEDULES = {
         "day_of_month": "*",
         "month_of_year": "*",
     },
-    "regular": {
+    "lts": {
         "minute": "0",
         "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
         "day_of_week": "4",
         "day_of_month": "*",
         "month_of_year": "*",
     },
+    "regular": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "*",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
     "normal": {
         "minute": "0",
         "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
+        "day_of_week": "*",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+    "version": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "*",
         "day_of_month": "*",
         "month_of_year": "*",
     },
@@ -268,8 +295,9 @@ def _resolve_policy_interval_minutes() -> int:
     """
 
     try:  # pragma: no cover - optional dependency failures
-        from apps.nodes.models import Node, UpgradePolicy
         from django.db import DatabaseError
+
+        from apps.nodes.models import Node, UpgradePolicy
     except Exception:
         return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
 
@@ -359,11 +387,11 @@ def ensure_auto_upgrade_periodic_task(
     del sender, kwargs, base_dir  # Unused when invoked as a Django signal handler.
 
     try:  # pragma: no cover - optional dependency failures
+        from django.db.utils import OperationalError, ProgrammingError
         from django_celery_beat.models import (
             IntervalSchedule,
             PeriodicTask,
         )
-        from django.db.utils import OperationalError, ProgrammingError
     except Exception:
         return
 
@@ -380,7 +408,7 @@ def ensure_auto_upgrade_periodic_task(
                 interval_minutes = parsed_interval
 
     try:
-        description = "Upgrade policy checks run every %s minutes." % interval_minutes
+        description = f"Upgrade policy checks run every {interval_minutes} minutes."
         schedule = _get_or_create_interval_schedule(
             every=interval_minutes,
             period=IntervalSchedule.MINUTES,

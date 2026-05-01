@@ -51,8 +51,9 @@ If this repository is provided without Git remotes configured, `configure.sh`, `
 | `--upgrade` | Allow install flow to run in upgrade mode (reuses existing DB state paths). |
 | `--auto-upgrade` | Enable auto-upgrade lock behavior. |
 | `--fixed` | Disable auto-upgrade lock behavior. |
-| `--latest`, `--unstable` | Enable auto-upgrade and set unstable channel. |
-| `--stable`, `--regular`, `--normal` | Enable auto-upgrade and set stable channel. |
+| `--latest`, `--unstable` | Enable auto-upgrade and set latest/unstable channel. |
+| `--stable`, `--lts` | Enable auto-upgrade and set stable/LTS channel. |
+| `--regular`, `--normal` | Enable auto-upgrade and set regular/normal channel. |
 | `--celery` | Enable Celery lock and related unit handling. |
 | `--embedded` | Force embedded service mode. |
 | `--systemd` | Force systemd service mode. |
@@ -105,8 +106,9 @@ Other arguments are passed through to `scripts/service-start.sh`.
 
 | Flag | Notes |
 | --- | --- |
-| `--latest`, `--unstable`, `-l`, `-t` | Use unstable channel behavior. |
-| `--stable`, `--normal`, `--regular` | Use stable channel behavior. |
+| `--latest`, `--unstable`, `-l`, `-t` | Use latest/unstable channel behavior. |
+| `--stable`, `--lts` | Use stable/LTS channel behavior. |
+| `--normal`, `--regular` | Use regular/normal channel behavior. |
 | `--force`, `-f` | Force stop/upgrade when needed. |
 | `--confirm` | Enable confirmation for stop operations. |
 | `--stash` | Force auto-stash of local changes before upgrade. |
@@ -158,9 +160,9 @@ Both supported backends emit a consistent reconciliation report that includes co
 | --- | --- |
 | `--service NAME` | Set service name lock. |
 | `--port PORT` | Set backend port lock. |
-| `--latest`, `--unstable` | Set latest channel for auto-upgrade. |
-| `--stable` | Set stable channel for auto-upgrade. |
-| `--regular`, `--normal` | Set version/regular channel for auto-upgrade. |
+| `--latest`, `--unstable` | Set latest/unstable channel for auto-upgrade. |
+| `--stable`, `--lts` | Set stable/LTS channel for auto-upgrade. |
+| `--regular`, `--normal` | Set regular/normal channel for auto-upgrade. |
 | `--fixed` | Disable auto-upgrade. |
 | `--auto-upgrade`, `--no-auto-upgrade` | Explicitly enable/disable auto-upgrade. |
 | `--debug`, `--no-debug` | Toggle debug env setting. |
@@ -178,6 +180,11 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--check` | Print current role/port/upgrade/debug/feature state. |
 | `--repair` | Restore lock state from existing role and lock files. |
 | `--failover ROLE` | Provide role fallback for repair when role lock cannot be resolved. |
+
+Auto-upgrade channel tiers gate release bumps after the scheduler fires:
+`stable`/`lts` allows patch upgrades weekly and minor upgrades monthly,
+`regular`/`normal` allows patch and minor upgrades daily and major upgrades
+weekly, and `latest`/`unstable` follows live `main` revisions daily.
 
 
 ## 5. Runtime status (`status.sh`)

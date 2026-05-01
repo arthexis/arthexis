@@ -84,7 +84,7 @@ is_debian_host() {
 
 # Lifecycle CLI contract: keep this usage block aligned with docs/development/install-lifecycle-scripts-manual.md and lifecycle contract tests.
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--lts|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -282,12 +282,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         --latest|--unstable)
             AUTO_UPGRADE=true
-            CHANNEL="unstable"
+            CHANNEL="latest"
             shift
             ;;
-        --stable|--regular|--normal)
+        --stable|--lts)
             AUTO_UPGRADE=true
             CHANNEL="stable"
+            shift
+            ;;
+        --regular|--normal)
+            AUTO_UPGRADE=true
+            CHANNEL="regular"
             shift
             ;;
         --celery)
@@ -761,7 +766,7 @@ fi
 
 arthexis_timing_start "requirements_install"
 env_refresh_args=(--force-refresh --install-and-refresh)
-if [ "$CHANNEL" = "unstable" ]; then
+if [ "$CHANNEL" = "unstable" ] || [ "$CHANNEL" = "latest" ]; then
     env_refresh_args+=(--latest)
 fi
 INSTALL_HARDWARE_DEPS=false
@@ -879,8 +884,10 @@ if [ "$AUTO_UPGRADE" = true ]; then
     rm -f AUTO_UPGRADE
     echo "$CHANNEL" > "$LOCK_DIR/auto_upgrade.lck"
     if [ "$UPGRADE" = true ]; then
-        if [ "$CHANNEL" = "unstable" ]; then
+        if [ "$CHANNEL" = "unstable" ] || [ "$CHANNEL" = "latest" ]; then
             ./upgrade.sh --latest
+        elif [ "$CHANNEL" = "regular" ] || [ "$CHANNEL" = "normal" ]; then
+            ./upgrade.sh --regular
         else
             ./upgrade.sh --stable
         fi
@@ -893,8 +900,10 @@ ensure_auto_upgrade_periodic_task()
 PYCODE
     deactivate
 elif [ "$UPGRADE" = true ]; then
-    if [ "$CHANNEL" = "unstable" ]; then
+    if [ "$CHANNEL" = "unstable" ] || [ "$CHANNEL" = "latest" ]; then
         ./upgrade.sh --latest
+    elif [ "$CHANNEL" = "regular" ] || [ "$CHANNEL" = "normal" ]; then
+        ./upgrade.sh --regular
     else
         ./upgrade.sh --stable
     fi

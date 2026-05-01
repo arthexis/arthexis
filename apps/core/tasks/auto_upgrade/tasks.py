@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import socket
 import subprocess
@@ -22,13 +21,21 @@ from django.utils import timezone
 
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
-    AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
     shorten_auto_upgrade_failure,
 )
 from apps.core.notifications import LcdChannel
+from apps.core.versioning import (
+    UPGRADE_CHANNEL_REGULAR,
+    UPGRADE_CHANNEL_STABLE,
+    UPGRADE_CHANNEL_UNSTABLE,
+    auto_upgrade_bump_allowed,
+    auto_upgrade_bump_cadence_minutes,
+    classify_version_bump,
+    normalize_upgrade_channel,
+)
 from apps.release import release_workflow
 
 from ..system_ops import _ensure_runtime_services
@@ -90,16 +97,6 @@ def _project_base_dir() -> Path:
     return auto_upgrade_base_dir()
 
 
-def _normalize_channel_mode(value: str | None) -> str | None:
-    """Return a lowercased, whitespace-trimmed channel value."""
-
-    if value is None:
-        return None
-
-    normalized = value.strip().lower()
-    return normalized or None
-
-
 def _latest_release() -> tuple[str | None, str | None, str | None]:
     """Return the latest release version, revision, and PyPI URL when available."""
 
@@ -154,21 +151,6 @@ def _read_remote_version(base_dir: Path, branch: str) -> str | None:
         )
     except (subprocess.CalledProcessError, FileNotFoundError):  # pragma: no cover - git failure
         return None
-
-
-def _parse_major_minor(version: str) -> tuple[int, int] | None:
-    match = re.match(r"^\s*(\d+)\.(\d+)", version)
-    if not match:
-        return None
-    return int(match.group(1)), int(match.group(2))
-
-
-def _shares_stable_series(local: str, remote: str) -> bool:
-    local_parts = _parse_major_minor(local)
-    remote_parts = _parse_major_minor(remote)
-    if not local_parts or not remote_parts:
-        return False
-    return local_parts == remote_parts
 
 
 def _ci_status_for_revision(_base_dir: Path, _revision: str) -> str:
@@ -402,7 +384,9 @@ def _resolve_auto_upgrade_mode(
     skip_recency_check = False
 
     if policy is not None:
-        mode = (getattr(policy, "channel", "") or DEFAULT_AUTO_UPGRADE_MODE).lower()
+        mode = normalize_upgrade_channel(
+            getattr(policy, "channel", "") or DEFAULT_AUTO_UPGRADE_MODE
+        ) or DEFAULT_AUTO_UPGRADE_MODE
         interval_minutes = int(getattr(policy, "interval_minutes", 0) or 0)
         if interval_minutes <= 0:
             interval_minutes = AUTO_UPGRADE_FALLBACK_INTERVAL
@@ -412,14 +396,6 @@ def _resolve_auto_upgrade_mode(
         mode_file_exists = False
         mode_file_physical = False
         skip_recency_check = True
-
-        mode = {
-            "latest": "unstable",
-            "unstable": "unstable",
-            "stable": "stable",
-            "normal": "stable",
-            "regular": "stable",
-        }.get(mode, mode)
 
         return AutoUpgradeMode(
             mode=mode,
@@ -439,29 +415,21 @@ def _resolve_auto_upgrade_mode(
     except (OSError, UnicodeDecodeError):
         logger.warning("Failed to read auto-upgrade mode lockfile", exc_info=True)
     else:
-        cleaned_mode = _normalize_channel_mode(raw_mode)
+        cleaned_mode = normalize_upgrade_channel(raw_mode)
         if cleaned_mode:
             mode = cleaned_mode
 
     override_log: str | None = None
-    override_mode = _normalize_channel_mode(channel_override)
+    override_mode = normalize_upgrade_channel(channel_override)
     if override_mode:
-        if override_mode in {"latest", "unstable"}:
-            mode = "unstable"
+        if override_mode == UPGRADE_CHANNEL_UNSTABLE:
+            mode = UPGRADE_CHANNEL_UNSTABLE
             override_log = "latest"
-        elif override_mode in {"stable", "normal", "regular", "version"}:
-            mode = "stable"
-            if override_mode == "stable":
-                override_log = "stable"
+        elif override_mode in {UPGRADE_CHANNEL_STABLE, UPGRADE_CHANNEL_REGULAR}:
+            mode = override_mode
+            override_log = mode
 
-    mode = {
-        "latest": "unstable",
-        "unstable": "unstable",
-        "version": "stable",
-        "stable": "stable",
-        "normal": "stable",
-        "regular": "stable",
-    }.get(mode, mode)
+    mode = normalize_upgrade_channel(mode) or DEFAULT_AUTO_UPGRADE_MODE
 
     interval_minutes = _resolve_auto_upgrade_interval_minutes(mode)
 
@@ -698,16 +666,7 @@ def build_upgrade_decision(
                 notify=False,
             )
 
-    if mode.mode == "unstable":
-        if repo_state.severity == SEVERITY_LOW:
-            return AutoUpgradeDecision(
-                skip=True,
-                apply=False,
-                reason="low-severity-unstable-skip",
-                args=[],
-                notify=False,
-            )
-
+    if mode.mode == UPGRADE_CHANNEL_UNSTABLE:
         if (
             repo_state.local_revision == repo_state.remote_revision
             and repo_state.local_revision
@@ -741,6 +700,30 @@ def build_upgrade_decision(
                 notify=False,
             )
 
+        version_bump = classify_version_bump(repo_state.local_version, target_version)
+        if not auto_upgrade_bump_allowed(mode.mode, version_bump):
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason=f"{version_bump}-upgrade-disallowed",
+                args=[],
+                notify=False,
+            )
+
+        bump_cadence = auto_upgrade_bump_cadence_minutes(mode.mode, version_bump)
+        if (
+            bump_cadence
+            and not mode.admin_override
+            and _auto_upgrade_ran_recently(base_dir, bump_cadence)
+        ):
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason=f"{version_bump}-upgrade-not-due",
+                args=[],
+                notify=False,
+            )
+
         if repo_state.release_version and repo_state.release_revision:
             matches_revision = False
             model = _get_package_release_model()
@@ -763,7 +746,9 @@ def build_upgrade_decision(
                 skip=False,
                 apply=True,
                 reason=None,
-                args=_upgrade_command_args("stable"),
+                args=_upgrade_command_args(
+                    "regular" if mode.mode == UPGRADE_CHANNEL_REGULAR else "stable"
+                ),
                 notify=True,
             ),
             recency_throttled=recency_throttled,
@@ -795,10 +780,22 @@ def _normalize_upgrade_args_for_host(base_dir: Path, args: list[str]) -> list[st
 
 
 def _skip_reason_log_message(reason: str | None, mode: AutoUpgradeMode) -> str | None:
+    if reason and reason.endswith("-upgrade-disallowed"):
+        bump = reason.removesuffix("-upgrade-disallowed")
+        return (
+            f"Skipping {mode.mode} auto-upgrade; "
+            f"{bump} version upgrades are not allowed on this channel"
+        )
+    if reason and reason.endswith("-upgrade-not-due"):
+        bump = reason.removesuffix("-upgrade-not-due")
+        cadence = auto_upgrade_bump_cadence_minutes(mode.mode, bump)
+        if cadence:
+            return (
+                f"Skipping {mode.mode} auto-upgrade; last upgrade was less than "
+                f"{cadence} minutes ago for a {bump} version bump"
+            )
+
     reason_messages = {
-        "low-severity-unstable-skip": (
-            "Skipping auto-upgrade for low severity patch on latest channel"
-        ),
         "pypi-release-missing": (
             "Skipping auto-upgrade; PyPI release has not been published yet."
         ),
@@ -910,8 +907,8 @@ def _execute_upgrade_plan(
             append_auto_upgrade_log(
                 base_dir,
                 (
-                    "Scheduled post-upgrade health check in %s seconds"
-                    % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+                    "Scheduled post-upgrade health check in "
+                    f"{AUTO_UPGRADE_HEALTH_DELAY_SECONDS} seconds"
                 ),
             )
             _schedule_health_check(1)
@@ -931,8 +928,8 @@ def _execute_upgrade_plan(
             append_auto_upgrade_log(
                 base_dir,
                 (
-                    "Scheduled post-upgrade health check in %s seconds"
-                    % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+                    "Scheduled post-upgrade health check in "
+                    f"{AUTO_UPGRADE_HEALTH_DELAY_SECONDS} seconds"
                 ),
             )
             _schedule_health_check(1)
@@ -1084,7 +1081,7 @@ def _record_health_check_result(
     base_dir: Path, attempt: int, status: int | None, detail: str
 ) -> None:
     status_display = status if status is not None else "unreachable"
-    message = "Health check attempt %s %s (%s)" % (attempt, detail, status_display)
+    message = f"Health check attempt {attempt} {detail} ({status_display})"
     append_auto_upgrade_log(base_dir, message)
 
 
