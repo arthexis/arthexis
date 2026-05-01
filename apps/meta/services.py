@@ -160,6 +160,14 @@ def cursor_file_for_profile(profile_dir: Path | str | None = None) -> Path:
     return resolved.parent / WHATSAPP_WEB_CURSOR_FILENAME
 
 
+def cursor_key_for_profile(phone: str, profile_dir: Path | str | None = None) -> str:
+    resolved = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
+    profile_id = hashlib.sha256(
+        str(resolved.resolve(strict=False)).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"{phone}:{profile_id}"
+
+
 def _is_whatsapp_web_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
@@ -722,8 +730,10 @@ def read_whatsapp_web_messages(
         )
         all_messages = build_whatsapp_web_messages(rows, phone=normalized_phone)
         cursor_file = cursor_file_for_profile(resolved_profile_dir)
-        cursor_key = f"{normalized_phone}:default"
+        cursor_key = cursor_key_for_profile(normalized_phone, resolved_profile_dir)
         after_fingerprint = _read_cursor(cursor_file, cursor_key) if only_new else ""
+        if only_new and not after_fingerprint:
+            after_fingerprint = _read_cursor(cursor_file, f"{normalized_phone}:default")
         messages = filter_whatsapp_web_messages(
             all_messages,
             since=since,
@@ -731,10 +741,10 @@ def read_whatsapp_web_messages(
             after_fingerprint=after_fingerprint,
         )
         if limit > 0:
-            messages = messages[-limit:]
+            messages = messages[:limit] if only_new else messages[-limit:]
         cursor_updated = False
-        if only_new and update_cursor and all_messages:
-            _write_cursor(cursor_file, cursor_key, all_messages[-1].fingerprint)
+        if only_new and update_cursor and messages:
+            _write_cursor(cursor_file, cursor_key, messages[-1].fingerprint)
             cursor_updated = True
         return WhatsAppWebReadResult(
             status="ok",

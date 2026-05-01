@@ -87,5 +87,6 @@ Opening a chat in WhatsApp Web can mark messages as read in the WhatsApp
 account. Use `read --new --no-update-cursor` to inspect output without advancing
 the local Arthexis cursor, but WhatsApp's own read state may still change.
 
-The `--new` cursor is local to the browser profile and phone number. It is not a
-poller and does not run in the background.
+The `--new` cursor is local to the browser profile path and phone number. It
+returns the next visible batch after the stored cursor and advances only after an
+explicit on-demand read. It is not a poller and does not run in the background.

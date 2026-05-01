@@ -20,10 +20,12 @@ from apps.meta.services import (
     _write_cursor,
     build_whatsapp_web_messages,
     cursor_file_for_profile,
+    cursor_key_for_profile,
     detect_whatsapp_web_login_state,
     filter_whatsapp_web_messages,
     normalize_whatsapp_phone,
     parse_cli_date,
+    read_whatsapp_web_messages,
 )
 
 
@@ -31,16 +33,23 @@ class FakeLocator:
     def __init__(self, visible: bool):
         self._visible = visible
         self.first = self
+        self.last = self
 
     def is_visible(self, *, timeout: int):
         del timeout
         return self._visible
 
+    def wait_for(self, *, timeout: int):
+        del timeout
+        return None
+
 
 class FakePage:
-    def __init__(self, *, visible_selectors=None, visible_texts=None):
+    def __init__(self, *, visible_selectors=None, visible_texts=None, rows=None):
         self.visible_selectors = set(visible_selectors or [])
         self.visible_texts = set(visible_texts or [])
+        self.rows = list(rows or [])
+        self.url = ""
 
     def locator(self, selector: str):
         return FakeLocator(selector in self.visible_selectors)
@@ -48,6 +57,14 @@ class FakePage:
     def get_by_text(self, text: str, *, exact: bool):
         del exact
         return FakeLocator(text in self.visible_texts)
+
+    def goto(self, url: str, *, wait_until: str, timeout: int):
+        del wait_until, timeout
+        self.url = url
+
+    def evaluate(self, script: str):
+        del script
+        return self.rows
 
 
 def test_detect_whatsapp_web_login_state_detects_logged_in_chat_list():
@@ -206,6 +223,54 @@ def test_cursor_file_round_trips_atomic_payload(tmp_path):
     assert payload["expires_at"] is None
     assert payload["cursors"]["525551234567:default"] == "fingerprint-a"
     assert _read_cursor(cursor_file, "525551234567:default") == "fingerprint-a"
+
+
+def test_cursor_key_is_scoped_to_profile_path(tmp_path):
+    first = cursor_key_for_profile("525551234567", tmp_path / "profile-a")
+    second = cursor_key_for_profile("525551234567", tmp_path / "profile-b")
+
+    assert first.startswith("525551234567:")
+    assert second.startswith("525551234567:")
+    assert first != second
+
+
+def test_read_new_cursor_advances_to_returned_limited_batch(monkeypatch, tmp_path):
+    rows = [
+        {
+            "pre": f"[14:{minute:02d}, 2026-05-01] ARTHEXIS: ",
+            "direction": "in",
+            "message_id": f"message-{index}",
+            "text": f"message {index}",
+        }
+        for index, minute in enumerate(range(30, 34))
+    ]
+    profile_dir = tmp_path / "profile-a"
+
+    def fake_with_whatsapp_page(callback, **kwargs):
+        del kwargs
+        page = FakePage(visible_selectors={"#pane-side"}, rows=rows)
+        return callback(page, profile_dir, 1.0)
+
+    monkeypatch.setattr(
+        "apps.meta.services._with_whatsapp_page",
+        fake_with_whatsapp_page,
+    )
+
+    result = read_whatsapp_web_messages(
+        phone="5551234567",
+        only_new=True,
+        limit=2,
+        profile_dir=profile_dir,
+        timeout_seconds=1.0,
+    )
+    all_messages = build_whatsapp_web_messages(rows, phone=result.phone)
+    cursor_file = cursor_file_for_profile(profile_dir)
+    cursor_key = cursor_key_for_profile(result.phone, profile_dir)
+
+    assert [message.text for message in result.messages] == ["message 0", "message 1"]
+    assert result.cursor_updated is True
+    assert _read_cursor(cursor_file, cursor_key) == result.messages[-1].fingerprint
+    assert result.messages[-1].fingerprint != all_messages[-1].fingerprint
 
 
 def test_whatsapp_status_command_outputs_json(monkeypatch, tmp_path):
