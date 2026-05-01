@@ -6,7 +6,8 @@ Sigils are bracketed tokens such as `[ENV.SMTP_PASSWORD]` that Arthexis expands 
 - [2. Syntax reference](#2-syntax-reference)
 - [3. Built-in prefixes](#3-built-in-prefixes)
 - [4. Managing Sigil Roots](#4-managing-sigil-roots)
-- [5. Troubleshooting and observability](#5-troubleshooting-and-observability)
+- [5. Portable documents](#5-portable-documents)
+- [6. Troubleshooting and observability](#6-troubleshooting-and-observability)
 
 ---
 
@@ -61,7 +62,18 @@ When adding a root:
 
 Changes take effect immediately—no service restart is required—so review tokens carefully in the test console before saving.
 
-## 5. Troubleshooting and observability
+## 5. Portable documents
+
+Portable suite documents, including Codex skill packages, store sigils as raw
+text and resolve only allowed non-secret sigils when files are materialized on a
+specific device. This lets one package adapt to local paths, node roles, or
+suite metadata without embedding another installation's values.
+
+Do not use portable documents to move secrets or runtime coordination state
+between devices. Secrets must be configured independently on each node, and
+local files such as `workgroup.md` stay local to the device where they are used.
+
+## 6. Troubleshooting and observability
 
 - Unknown prefixes remain in place (for example `[UNKNOWN.VALUE]`) and are logged so you can spot typos quickly.
 - Failed lookups for entity prefixes raise descriptive errors in the logs; configuration prefixes resolve to an empty string when the key is missing.

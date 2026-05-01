@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_slug
 from django.db import transaction
@@ -15,6 +17,9 @@ from apps.skills.models import AgentSkill, AgentSkillFile
 PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
 SKILL_MARKDOWN = "SKILL.md"
 EMPTY_CONTENT_SHA256 = hashlib.sha256(b"").hexdigest()
+DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"NODE", "SYS"})
+SAFE_MATERIALIZE_CONF_KEYS = frozenset({"BASE_DIR", "NODE_ROLE"})
+CONF_DOT_SIGIL_RE = re.compile(r"\[CONF\.([A-Za-z0-9_-]+)\]")
 
 BLOCKED_STATE_FILENAMES = {
     "pending-approval-alerts.lock.json",
@@ -95,6 +100,83 @@ def validate_package_skill_slug(slug: str) -> str:
     except ValidationError as error:
         raise ValueError(f"Unsafe skill slug: {slug}") from error
     return slug
+
+
+def _resolve_document_sigils(
+    content: str,
+    *,
+    resolve_sigils_on_write: bool,
+    allowed_roots: set[str] | frozenset[str] | None,
+) -> str:
+    if not resolve_sigils_on_write:
+        return content
+
+    from apps.sigils.sigil_resolver import resolve_sigils
+
+    return resolve_sigils(
+        _resolve_safe_conf_sigils(content),
+        allowed_roots=allowed_roots,
+    )
+
+
+def _resolve_safe_conf_sigils(content: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        raw_key = match.group(1)
+        normalized_key = raw_key.replace("-", "_").upper()
+        if normalized_key not in SAFE_MATERIALIZE_CONF_KEYS:
+            return match.group(0)
+        for candidate in (raw_key, normalized_key, normalized_key.lower()):
+            sentinel = object()
+            value = getattr(settings, candidate, sentinel)
+            if value is not sentinel:
+                return str(value)
+        return ""
+
+    return CONF_DOT_SIGIL_RE.sub(replace, content)
+
+
+def _remove_tree_best_effort(path: Path) -> None:
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+            return
+        if path.is_dir():
+            for nested in sorted(path.rglob("*"), reverse=True):
+                if nested.is_file() or nested.is_symlink():
+                    nested.unlink()
+                elif nested.is_dir():
+                    nested.rmdir()
+            path.rmdir()
+    except OSError:
+        return
+
+
+def _should_prune_materialized_path(
+    relative_path: str, desired_paths: set[str]
+) -> bool:
+    if relative_path in desired_paths:
+        return False
+    classification = classify_codex_skill_path(relative_path)
+    if classification is not None and not classification.included_by_default:
+        return False
+    top_level = relative_path.split("/", 1)[0]
+    return relative_path == SKILL_MARKDOWN or top_level in PORTABLE_ROOTS
+
+
+def _prune_stale_materialized_files(
+    skill_dir: Path,
+    desired_paths: set[str],
+) -> None:
+    for existing_path in sorted(skill_dir.rglob("*"), reverse=True):
+        try:
+            if existing_path.is_file() or existing_path.is_symlink():
+                relative = normalize_package_path(existing_path.relative_to(skill_dir))
+                if _should_prune_materialized_path(relative, desired_paths):
+                    existing_path.unlink()
+            elif existing_path.is_dir() and not any(existing_path.iterdir()):
+                existing_path.rmdir()
+        except OSError:
+            continue
 
 
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
@@ -454,6 +536,104 @@ def export_codex_skill_package(
                 manifest["skills"].append(skill_entry)
         package.writestr("manifest.json", json.dumps(manifest, indent=2))
     return manifest
+
+
+def _included_package_files(skill: AgentSkill) -> list[AgentSkillFile]:
+    return [
+        file_entry
+        for file_entry in skill.package_files.all()
+        if file_entry.included_by_default
+    ]
+
+
+def _legacy_skill_file_entry(skill: AgentSkill) -> tuple[str, str]:
+    return SKILL_MARKDOWN, skill.markdown
+
+
+def _package_file_entries(skill: AgentSkill) -> list[tuple[str, str]]:
+    package_files = _included_package_files(skill)
+    if not package_files:
+        return [_legacy_skill_file_entry(skill)]
+
+    entries = [
+        (file_entry.relative_path, file_entry.content)
+        for file_entry in package_files
+        if file_entry.relative_path != SKILL_MARKDOWN
+    ]
+    entries.insert(0, _legacy_skill_file_entry(skill))
+    return entries
+
+
+def materialize_codex_skill_files(
+    target_root: Path,
+    *,
+    skill_slugs: list[str] | None = None,
+    resolve_sigils_on_write: bool = True,
+    allowed_roots: set[str] | frozenset[str] | None = DEFAULT_MATERIALIZE_SIGIL_ROOTS,
+) -> dict:
+    """Write stored portable skill trees to a local skills directory.
+
+    Stored package content remains generic. SIGILS are resolved only while
+    writing to the target node, so portable documents can adapt to local suite
+    paths and role metadata without copying operator-specific state.
+    """
+
+    target_root = Path(target_root)
+    queryset = AgentSkill.objects.prefetch_related("package_files")
+    if skill_slugs:
+        queryset = queryset.filter(slug__in=skill_slugs)
+
+    target_root.mkdir(parents=True, exist_ok=True)
+    if skill_slugs is None:
+        keep_slugs = set(queryset.values_list("slug", flat=True))
+        for child in target_root.iterdir():
+            if child.is_dir() and child.name not in keep_slugs:
+                _remove_tree_best_effort(child)
+
+    summary = {
+        "target": str(target_root),
+        "resolve_sigils_on_write": resolve_sigils_on_write,
+        "skills": [],
+        "files_written": 0,
+    }
+    for skill in queryset.order_by("slug"):
+        slug = validate_package_skill_slug(skill.slug)
+        skill_dir = target_root / slug
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        resolved_skill_dir = skill_dir.resolve(strict=False)
+        package_managed = bool(_included_package_files(skill))
+        files = []
+        desired_paths = set()
+        for relative_path, content in _package_file_entries(skill):
+            package_path = validate_package_relative_path(relative_path)
+            desired_paths.add(package_path)
+            target_path = (skill_dir / package_path).resolve(strict=False)
+            try:
+                target_path.relative_to(resolved_skill_dir)
+            except ValueError as error:
+                raise ValueError(f"Unsafe package path: {relative_path}") from error
+            resolved_content = _resolve_document_sigils(
+                content,
+                resolve_sigils_on_write=resolve_sigils_on_write,
+                allowed_roots=allowed_roots,
+            )
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            existing = (
+                target_path.read_text(encoding="utf-8")
+                if target_path.exists()
+                else None
+            )
+            changed = existing != resolved_content
+            if changed:
+                target_path.write_text(resolved_content, encoding="utf-8")
+                summary["files_written"] += 1
+            files.append({"path": package_path, "changed": changed})
+
+        if package_managed:
+            _prune_stale_materialized_files(skill_dir, desired_paths)
+
+        summary["skills"].append({"slug": slug, "files": files})
+    return summary
 
 
 def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> dict:
