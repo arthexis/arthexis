@@ -8,7 +8,6 @@ from django.db import transaction
 from apps.skills.models import AgentSkill
 from apps.nodes.models import NodeRole
 
-
 DEFAULT_SKILL_ROLE_MAP = {
     "cp-doctor": "Satellite",
     "arthexis-cleanup-step": "Control",
@@ -24,7 +23,9 @@ def sync_filesystem_to_db() -> int:
     changed = 0
     with transaction.atomic():
         keep_slugs = set(DEFAULT_SKILL_ROLE_MAP)
-        AgentSkill.objects.exclude(slug__in=keep_slugs).delete()
+        AgentSkill.objects.filter(is_seed_data=True).exclude(
+            slug__in=keep_slugs
+        ).delete()
         for slug, role_name in DEFAULT_SKILL_ROLE_MAP.items():
             path = skills_root / slug / "SKILL.md"
             if not path.exists():
@@ -35,6 +36,8 @@ def sync_filesystem_to_db() -> int:
                 slug=slug,
                 defaults={"title": title, "markdown": content},
             )
+            AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+            skill.is_seed_data = True
             role = NodeRole.objects.filter(name=role_name).first()
             if role:
                 skill.node_roles.set([role])
