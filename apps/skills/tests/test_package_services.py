@@ -336,6 +336,32 @@ def test_materialize_rejects_package_path_prefix_collisions(tmp_path):
 
 
 @pytest.mark.django_db
+def test_materialize_rejects_case_insensitive_prefix_collisions(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    for relative_path, content in [
+        ("references/Topic", "parent file"),
+        ("references/topic/child.md", "child file"),
+    ]:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+
+    with pytest.raises(ValueError, match="collides with nested path"):
+        materialize_codex_skill_files(target_root)
+
+
+@pytest.mark.django_db
 def test_materialize_recovers_from_stale_parent_symlink(tmp_path):
     target_root = tmp_path / "codex-skills"
     skill_root = target_root / "portable-skill"

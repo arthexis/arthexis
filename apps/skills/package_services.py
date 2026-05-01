@@ -194,14 +194,17 @@ def _prepare_materialized_file_path(path: Path, skill_dir: Path) -> None:
 
 
 def _validate_materialized_package_paths(package_paths: list[str]) -> None:
-    unique_paths = set(package_paths)
-    if len(unique_paths) != len(package_paths):
-        raise ValueError("Duplicate package path")
-    for package_path in unique_paths:
-        parts = package_path.split("/")
+    normalized_paths = {}
+    for package_path in package_paths:
+        normalized_path = package_path.casefold()
+        if normalized_path in normalized_paths:
+            raise ValueError(f"Duplicate package path: {package_path}")
+        normalized_paths[normalized_path] = package_path
+    for normalized_path, package_path in normalized_paths.items():
+        parts = normalized_path.split("/")
         for index in range(1, len(parts)):
             prefix = "/".join(parts[:index])
-            if prefix in unique_paths:
+            if prefix in normalized_paths:
                 raise ValueError(
                     f"Package path collides with nested path: {package_path}"
                 )
