@@ -11,6 +11,7 @@ import apps.core.views.reports.release_publish.workflow as workflow_module
 from apps.core.views.reports.release_publish import pipeline
 from apps.core.views.reports.release_publish.exceptions import PublishPending
 from apps.core.views.reports.release_publish.workflow import ReleasePublishContext
+from apps.release.models import Package, PackageRelease
 
 
 def test_publish_workflow_polling_pauses_when_run_in_progress(
@@ -330,6 +331,17 @@ def test_step_run_tests_executes_configured_validation_command(
 ):
     ctx: dict[str, object] = {}
     settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo 'release tests ok'"
+
+    class Completed:
+        returncode = 0
+        stdout = "release tests ok\n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        pipeline.subprocess,
+        "run",
+        lambda *_args, **_kwargs: Completed(),
+    )
     monkeypatch.setattr(
         pipeline,
         "_append_log",
@@ -438,6 +450,80 @@ def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflo
     assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
     assert ctx["trusted_publisher_environment"] == "pypi"
     assert "trusted_publisher_verified_at" in ctx
+
+
+def test_publish_workflow_uses_same_artifact_for_github_release_and_pypi() -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    workflow_path = repo_root / ".github" / "workflows" / "publish.yml"
+    workflow_data = pipeline.yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = workflow_data["jobs"]
+
+    build_job = jobs["build"]
+    release_job = jobs["publish-to-github-release"]
+    pypi_job = jobs["publish-to-pypi"]
+
+    assert release_job["needs"] == "build"
+    assert release_job["permissions"] == {"contents": "write"}
+    assert pypi_job["needs"] == ["build", "publish-to-github-release"]
+    assert pypi_job["permissions"]["id-token"] == "write"
+    assert pypi_job["permissions"]["contents"] == "read"
+
+    build_upload = next(
+        step
+        for step in build_job["steps"]
+        if step.get("name") == "Upload dist artifacts"
+    )
+    release_download = next(
+        step
+        for step in release_job["steps"]
+        if step.get("name") == "Download build artifacts"
+    )
+    pypi_download = next(
+        step
+        for step in pypi_job["steps"]
+        if step.get("name") == "Download build artifacts"
+    )
+
+    assert build_upload["with"]["name"] == "arthexis-dists"
+    assert release_download["with"] == {"name": "arthexis-dists", "path": "dist/"}
+    assert pypi_download["with"] == {"name": "arthexis-dists", "path": "dist/"}
+
+    release_run = next(
+        step
+        for step in release_job["steps"]
+        if step.get("name") == "Upload distributions to GitHub Release"
+    )["run"]
+    assert "gh release create" in release_run
+    assert "gh release upload" in release_run
+    assert "dist/*.whl dist/*.tar.gz" in release_run
+
+
+@pytest.mark.django_db
+def test_step_record_publish_metadata_records_github_release_url(
+    monkeypatch, tmp_path: Path
+):
+    package = Package.objects.create(
+        name="arthexis",
+        repository_url="https://github.com/arthexis/arthexis",
+    )
+    release = PackageRelease.objects.create(package=package, version="1.2.3")
+
+    monkeypatch.setattr(pipeline, "_pypi_release_available", lambda _release: True)
+    monkeypatch.setattr(pipeline.PackageRelease, "dump_fixture", lambda: None)
+    monkeypatch.setattr(
+        pipeline,
+        "_record_release_fixture_updates",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+
+    pipeline._step_record_publish_metadata(release, {}, tmp_path / "publish.log")
+
+    release.refresh_from_db()
+    assert release.pypi_url == "https://pypi.org/project/arthexis/1.2.3/"
+    assert release.github_url == (
+        "https://github.com/arthexis/arthexis/releases/tag/v1.2.3"
+    )
 
 
 def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(

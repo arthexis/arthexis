@@ -6,7 +6,7 @@ import os
 import subprocess
 from datetime import datetime as datetime_datetime
 from pathlib import Path
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote, quote_plus, urlparse
 
 from django.core import serializers
 from django.core.exceptions import ValidationError
@@ -336,20 +336,44 @@ class PackageRelease(Entity):
 
         return targets
 
-    def github_package_url(self) -> str | None:
-        """Return the GitHub Packages URL for this release if determinable."""
-
+    def github_repository_path(self) -> str | None:
+        """Return the ``owner/repo`` path for this release's GitHub repository."""
         repo_url = self.package.repository_url
         if not repo_url:
             return None
-        parsed = urlparse(repo_url)
-        if "github.com" not in parsed.netloc.lower():
-            return None
-        path = parsed.path.strip("/")
-        if not path:
-            return None
+        repo_url = repo_url.strip()
+        if repo_url.startswith("git@"):
+            if "github.com" not in repo_url:
+                return None
+            _, _, path = repo_url.partition("github.com:")
+            path = path.strip("/")
+        else:
+            parsed = urlparse(repo_url)
+            if "github.com" not in parsed.netloc.lower():
+                return None
+            path = parsed.path.strip("/")
         if path.endswith(".git"):
             path = path[: -len(".git")]
+        parts = [part for part in path.split("/") if part]
+        if len(parts) < 2:
+            return None
+        return "/".join(parts[:2])
+
+    def github_release_url(self) -> str | None:
+        """Return the GitHub Release URL for this release if determinable."""
+
+        path = self.github_repository_path()
+        if not path:
+            return None
+        tag_name = quote(f"v{self.version}", safe="")
+        return f"https://github.com/{path}/releases/tag/{tag_name}"
+
+    def github_package_url(self) -> str | None:
+        """Return the GitHub Packages URL for this release if determinable."""
+
+        path = self.github_repository_path()
+        if not path:
+            return None
         return (
             f"https://github.com/{path}/pkgs/pypi/{self.package.name}"
             f"/versions?version={quote_plus(self.version)}"

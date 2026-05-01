@@ -1,4 +1,4 @@
-name: Publish Python distribution to PyPI
+name: Publish Python distributions to GitHub Releases and PyPI
 
 on:
   push:
@@ -303,9 +303,47 @@ jobs:
           name: arthexis-dists
           path: dist/
 
+  publish-to-github-release:
+    name: Upload distributions to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: arthexis-dists
+          path: dist/
+
+      - name: Upload distributions to GitHub Release
+        run: |
+          shopt -s nullglob
+          artifacts=(dist/*.whl dist/*.tar.gz)
+          if [ ${#artifacts[@]} -eq 0 ]; then
+            echo "No release distributions found in dist/." >&2
+            exit 1
+          fi
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${artifacts[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${artifacts[@]}" \
+              --verify-tag \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
+          printf 'Published GitHub Release assets for %s:\n' "${GITHUB_REF_NAME}"
+          printf ' - %s\n' "${artifacts[@]}"
+
   publish-to-pypi:
     name: Publish to PyPI via Trusted Publisher
-    needs: build
+    needs:
+      - build
+      - publish-to-github-release
     runs-on: ubuntu-latest
     environment:
       name: pypi

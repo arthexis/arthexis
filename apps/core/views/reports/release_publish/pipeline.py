@@ -2298,8 +2298,10 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
-    github_url = ""
+    github_url = release.github_release_url() or ""
     for target in targets[1:]:
+        if github_url:
+            break
         if target.repository_url:
             parsed = urlparse(target.repository_url)
             host = parsed.hostname or ""
