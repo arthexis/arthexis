@@ -1,0 +1,148 @@
+"""Tests for the QR console command."""
+
+from __future__ import annotations
+
+from io import StringIO
+
+import pytest
+from django.core.management import call_command
+
+from apps.links.models import QRRedirect, Reference
+from apps.links.qr_printing import (
+    QRLabelSpec,
+    build_phomemo_m220_job,
+    build_qr_label_image,
+)
+
+pytestmark = pytest.mark.django_db
+
+
+def test_qr_print_text_writes_preview_png(tmp_path) -> None:
+    output_path = tmp_path / "text-qr.png"
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--text",
+        "https://example.test/path",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    assert output_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert "SOURCE=text" in stdout.getvalue()
+    assert "PAYLOAD_BYTES=" in stdout.getvalue()
+
+
+def test_qr_print_wifi_does_not_echo_password(tmp_path) -> None:
+    output_path = tmp_path / "wifi-qr.png"
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--wifi-ssid",
+        "Office WiFi",
+        "--wifi-password",
+        "do-not-print-this-secret",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "WIFI_SSID=Office WiFi" in output
+    assert "do-not-print-this-secret" not in output
+
+
+def test_qr_print_reference_uses_database_value(settings, tmp_path) -> None:
+    settings.MEDIA_ROOT = tmp_path / "media"
+    reference = Reference.objects.create(
+        alt_text="Support Portal",
+        value="https://example.test/support",
+    )
+    output_path = tmp_path / "reference-qr.png"
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--reference",
+        str(reference.pk),
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "SOURCE=reference" in output
+    assert f"REFERENCE_ID={reference.pk}" in output
+
+
+def test_qr_print_redirect_uses_base_url(tmp_path) -> None:
+    redirect = QRRedirect.objects.create(
+        slug="support",
+        target_url="https://example.test/support-target",
+        title="Support",
+    )
+    output_path = tmp_path / "redirect-qr.png"
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--redirect",
+        redirect.slug,
+        "--base-url",
+        "https://suite.example.test",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "SOURCE=redirect" in output
+    assert "QR_REDIRECT_SLUG=support" in output
+    assert "PAYLOAD_RELATIVE=1" not in output
+
+
+def test_qr_print_phomemo_dry_run_builds_job_without_usb(tmp_path) -> None:
+    output_path = tmp_path / "phomemo-qr.png"
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--text",
+        "https://example.test/phomemo",
+        "--printer",
+        "phomemo-m220",
+        "--dry-run",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "PRINTER=phomemo-m220" in output
+    assert "COMMAND_BYTES=" in output
+    assert "DRY_RUN=1" in output
+
+
+def test_phomemo_m220_job_contains_raster_payload() -> None:
+    image = build_qr_label_image(
+        "https://example.test",
+        QRLabelSpec(title="QR CODE", subtitle="Example"),
+    )
+
+    job = build_phomemo_m220_job(image)
+
+    assert job.startswith(b"\x1b\x4e\x0d\x02")
+    assert b"\x1d\x76\x30\x00" in job
+    assert job.endswith(b"\x1f\xf0\x05\x00\x1f\xf0\x03\x00")
