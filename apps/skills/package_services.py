@@ -221,11 +221,18 @@ def _scan_file(skill_dir: Path, path: Path) -> tuple[SkillFileScan, str]:
 def _restore_or_create_skill(*, slug: str, title: str, markdown: str) -> AgentSkill:
     skill = AgentSkill.all_objects.filter(slug=slug).first()
     if skill is None:
-        return AgentSkill.objects.create(slug=slug, title=title, markdown=markdown)
+        return AgentSkill.objects.create(
+            slug=slug,
+            title=title,
+            markdown=markdown,
+            is_seed_data=False,
+        )
     skill.title = title
     skill.markdown = markdown
     skill.is_deleted = False
     skill.save(update_fields=["title", "markdown", "is_deleted"])
+    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=False)
+    skill.is_seed_data = False
     return skill
 
 
@@ -248,21 +255,24 @@ def _sync_package_files(skill: AgentSkill, file_specs: list[dict]) -> None:
 
 
 def _import_file_spec(file_info: dict, content: str) -> dict:
-    included_by_default = file_info.get("included_by_default", True)
+    classification = classify_codex_skill_file(file_info["path"], content)
+    manifest_included = file_info.get("included_by_default", True)
+    included_by_default = manifest_included and classification.included_by_default
     stored_content = content if included_by_default else ""
+    exclusion_reason = ""
+    if not included_by_default:
+        exclusion_reason = (
+            file_info.get("exclusion_reason")
+            or classification.exclusion_reason
+            or "excluded by package manifest"
+        )
     return {
         "relative_path": file_info["path"],
         "content": stored_content,
         "content_sha256": hashlib.sha256(stored_content.encode("utf-8")).hexdigest(),
-        "portability": file_info.get(
-            "portability", AgentSkillFile.Portability.PORTABLE
-        ),
+        "portability": classification.portability,
         "included_by_default": included_by_default,
-        "exclusion_reason": (
-            ""
-            if included_by_default
-            else file_info.get("exclusion_reason") or "excluded by package manifest"
-        ),
+        "exclusion_reason": exclusion_reason,
         "size_bytes": len(stored_content.encode("utf-8")),
     }
 
@@ -400,7 +410,22 @@ def export_codex_skill_package(
                 "title": skill.title,
                 "files": [],
             }
-            for file_entry in skill.package_files.all():
+            package_files = list(skill.package_files.all())
+            if not package_files:
+                archive_path = f"skills/{skill.slug}/{SKILL_MARKDOWN}"
+                package.writestr(archive_path, skill.markdown)
+                skill_entry["files"].append(
+                    {
+                        "path": SKILL_MARKDOWN,
+                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "included_by_default": True,
+                        "exclusion_reason": "",
+                        "content_sha256": hashlib.sha256(
+                            skill.markdown.encode("utf-8")
+                        ).hexdigest(),
+                    }
+                )
+            for file_entry in package_files:
                 if portable_only and not file_entry.included_by_default:
                     continue
                 archive_path = f"skills/{skill.slug}/{file_entry.relative_path}"

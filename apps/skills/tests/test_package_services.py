@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from zipfile import ZipFile
@@ -153,6 +154,32 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
 
 
 @pytest.mark.django_db
+def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
+    AgentSkill.objects.create(
+        slug="legacy-skill",
+        title="Legacy Skill",
+        markdown="legacy markdown",
+    )
+    package_path = tmp_path / "legacy.zip"
+
+    manifest = export_codex_skill_package(package_path, skill_slugs=["legacy-skill"])
+
+    assert manifest["skills"][0]["files"] == [
+        {
+            "path": "SKILL.md",
+            "portability": AgentSkillFile.Portability.PORTABLE,
+            "included_by_default": True,
+            "exclusion_reason": "",
+            "content_sha256": hashlib.sha256(b"legacy markdown").hexdigest(),
+        }
+    ]
+    with ZipFile(package_path) as package:
+        assert package.read("skills/legacy-skill/SKILL.md").decode("utf-8") == (
+            "legacy markdown"
+        )
+
+
+@pytest.mark.django_db
 def test_scan_restores_soft_deleted_skill_slug(tmp_path):
     skill = AgentSkill.objects.create(
         slug="operator-manual",
@@ -171,6 +198,7 @@ def test_scan_restores_soft_deleted_skill_slug(tmp_path):
     restored = AgentSkill.objects.get(slug="operator-manual")
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
+    assert restored.is_seed_data is False
     assert (
         restored.markdown.replace("\r\n", "\n") == "---\nname: operator-manual\n---\n"
     )
@@ -194,6 +222,7 @@ def test_import_restores_soft_deleted_skill_slug(tmp_path):
     restored = AgentSkill.objects.get(slug="security-codes")
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
+    assert restored.is_seed_data is False
 
 
 @pytest.mark.django_db
@@ -413,6 +442,46 @@ def test_import_redacts_excluded_manifest_entries(tmp_path):
     assert file_entry.content == ""
     assert file_entry.size_bytes == 0
     assert file_entry.exclusion_reason == "secret payload"
+
+
+@pytest.mark.django_db
+def test_import_reclassifies_manifest_portability_flags(tmp_path):
+    package_path = tmp_path / "misclassified.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "misclassified",
+                "title": "Misclassified",
+                "files": [
+                    {
+                        "path": "SKILL.md",
+                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "included_by_default": True,
+                    },
+                    {
+                        "path": "credentials/token.txt",
+                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "included_by_default": True,
+                    },
+                ],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/misclassified/SKILL.md", "---\nname: demo\n---\n")
+        package.writestr("skills/misclassified/credentials/token.txt", "secret")
+
+    import_codex_skill_package(package_path, dry_run=False)
+
+    file_entry = AgentSkillFile.objects.get(
+        skill__slug="misclassified",
+        relative_path="credentials/token.txt",
+    )
+    assert file_entry.content == ""
+    assert file_entry.portability == AgentSkillFile.Portability.SECRET
+    assert file_entry.included_by_default is False
 
 
 @pytest.mark.django_db
