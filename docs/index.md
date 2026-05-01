@@ -20,6 +20,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Codex Skill Packages](development/codex-skill-packages.md)
 - [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
+- [Agent Card v1 RFID Layout](development/agent-card-v1.md)
 - [Sigil Script Command](development/sigil-script-command.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [App Structure Policy](development/app-structure-policy.md)
