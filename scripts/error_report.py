@@ -14,6 +14,7 @@ import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from gettext import gettext as _
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -76,8 +77,14 @@ SECRET_KEY_RE = re.compile(
 )
 AUTH_HEADER_RE = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
 AWS_ACCESS_KEY_RE = re.compile(r"\bA(?:KIA|SIA)[0-9A-Z]{16}\b")
-URL_USERINFO_RE = re.compile(r"([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@",
-                             re.IGNORECASE)
+URL_USERINFO_RE = re.compile(
+    r"([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@",
+    re.IGNORECASE,
+)
+URL_TOKEN_USERINFO_RE = re.compile(
+    r"([a-z][a-z0-9+.-]*://)([^/\s:@]+)@",
+    re.IGNORECASE,
+)
 PRIVATE_KEY_BLOCK_RE = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
     re.DOTALL,
@@ -128,7 +135,7 @@ def parse_duration(value: str) -> timedelta:
     match = re.fullmatch(r"\s*(\d+)\s*([smhdw])\s*", value)
     if not match:
         raise argparse.ArgumentTypeError(
-            "duration must use a suffix: s, m, h, d, or w; for example 12h or 7d"
+            _("duration must use a suffix: s, m, h, d, or w; for example 12h or 7d")
         )
     amount = int(match.group(1))
     unit = match.group(2)
@@ -146,6 +153,7 @@ def parse_duration(value: str) -> timedelta:
 def redact_text(text: str) -> str:
     redacted = PRIVATE_KEY_BLOCK_RE.sub("<redacted:private-key>", text)
     redacted = URL_USERINFO_RE.sub(r"\1<redacted>@", redacted)
+    redacted = URL_TOKEN_USERINFO_RE.sub(r"\1<redacted>@", redacted)
     redacted = AUTH_HEADER_RE.sub(lambda match: f"{match.group(1)} <redacted>", redacted)
     redacted = AWS_ACCESS_KEY_RE.sub("<redacted:aws-access-key>", redacted)
     redacted = SSO_KEY_RE.sub("sso-key <redacted>", redacted)
@@ -153,12 +161,15 @@ def redact_text(text: str) -> str:
     return redacted
 
 
-def is_sensitive_path(path: Path) -> bool:
+def is_sensitive_path(path: Path, *, base_dir: Path | None = None) -> bool:
     name = path.name.lower()
     suffix = path.suffix.lower()
     if name in SENSITIVE_NAMES or suffix in SENSITIVE_SUFFIXES:
         return True
-    parts = {part.lower() for part in path.parts}
+    relative = path_relative_to(path, base_dir) if base_dir is not None else None
+    if relative is None:
+        return False
+    parts = {part.lower() for part in relative.parts}
     return bool(parts & SENSITIVE_PARTS)
 
 
@@ -217,7 +228,7 @@ class ReportBuilder:
             return
         if not path.is_file():
             return
-        if is_sensitive_path(path):
+        if is_sensitive_path(path, base_dir=self.config.base_dir):
             self.warnings.append(f"Skipped sensitive path: {path}")
             return
         if not should_read_text(path):
@@ -274,17 +285,24 @@ def run_command(args: list[str], *, cwd: Path, timeout: int = 10) -> str:
             cwd=str(cwd),
             check=False,
             capture_output=True,
-            text=True,
             timeout=timeout,
         )
     except FileNotFoundError:
-        return f"Command not available: {args[0]}\n"
+        return _("Command not available: {command}").format(command=args[0]) + "\n"
     except subprocess.TimeoutExpired:
-        return f"Command timed out after {timeout}s: {' '.join(args)}\n"
+        return (
+            _("Command timed out after {timeout}s: {command}").format(
+                timeout=timeout,
+                command=" ".join(args),
+            )
+            + "\n"
+        )
 
-    output = completed.stdout
-    if completed.stderr:
-        output += ("\n[stderr]\n" if output else "[stderr]\n") + completed.stderr
+    stdout = completed.stdout.decode("utf-8", errors="replace")
+    stderr = completed.stderr.decode("utf-8", errors="replace")
+    output = stdout
+    if stderr:
+        output += ("\n[stderr]\n" if output else "[stderr]\n") + stderr
     output += f"\n[exit_code] {completed.returncode}\n"
     return redact_text(output)
 
@@ -325,7 +343,7 @@ def collect_log_files(base_dir: Path, config: ReportConfig, cutoff: float | None
                 continue
             if path.suffix.lower() not in LOG_SUFFIXES:
                 continue
-            if is_sensitive_path(path):
+            if is_sensitive_path(path, base_dir=base_dir):
                 continue
             if cutoff is not None and path.name not in STANDARD_LOG_NAMES:
                 try:
@@ -372,7 +390,7 @@ def collect_locks(builder: ReportBuilder) -> None:
             continue
         if path.suffix.lower() not in {".lck", ".json", ".txt", ".log", ""}:
             continue
-        if is_sensitive_path(path):
+        if is_sensitive_path(path, base_dir=builder.config.base_dir):
             continue
         found = True
         relative = path.relative_to(lock_dir)
@@ -596,16 +614,16 @@ def build_report(config: ReportConfig) -> ReportResult:
 def validate_upload_url(url: str, allow_insecure: bool) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("upload URL must be an http(s) URL with a host")
+        raise ValueError(_("upload URL must be an http(s) URL with a host"))
     if parsed.scheme != "https" and not allow_insecure:
-        raise ValueError("upload URL must use https unless --allow-insecure-upload is set")
+        raise ValueError(_("upload URL must use https unless --allow-insecure-upload is set"))
 
 
 def upload_report(path: Path, url: str, *, method: str = "PUT", timeout: int = 60, allow_insecure: bool = False) -> int:
     validate_upload_url(url, allow_insecure)
     method = method.upper()
     if method not in {"PUT", "POST"}:
-        raise ValueError("upload method must be PUT or POST")
+        raise ValueError(_("upload method must be PUT or POST"))
     data = path.read_bytes()
     request = Request(
         url,
@@ -623,12 +641,12 @@ def upload_report(path: Path, url: str, *, method: str = "PUT", timeout: int = 6
 def positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
-        raise argparse.ArgumentTypeError("value must be greater than zero")
+        raise argparse.ArgumentTypeError(_("value must be greater than zero"))
     return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Build an Arthexis diagnostic error-report zip.")
+    parser = argparse.ArgumentParser(description=_("Build an Arthexis diagnostic error-report zip."))
     parser.add_argument("--base-dir", default=Path.cwd(), type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--since", type=parse_duration)
@@ -668,21 +686,21 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = build_report(config)
     except OSError as exc:
-        print(f"error-report failed: {exc}", file=sys.stderr)
+        print(_("error-report failed: {error}").format(error=exc), file=sys.stderr)
         return 1
 
     if result.dry_run:
-        print(f"Would create: {result.path}")
+        print(_("Would create: {path}").format(path=result.path))
         for entry in result.entries:
             source = f" <- {entry.source_path}" if entry.source_path else ""
             print(f"- {entry.archive_path}{source}")
         if config.upload_url:
-            print("Upload skipped during dry run.")
+            print(_("Upload skipped during dry run."))
         return 0
 
-    print(f"Created error report: {result.path}")
+    print(_("Created error report: {path}").format(path=result.path))
     if result.warnings:
-        print(f"Warnings: {len(result.warnings)}")
+        print(_("Warnings: {count}").format(count=len(result.warnings)))
     if config.upload_url:
         try:
             status = upload_report(
@@ -693,9 +711,15 @@ def main(argv: list[str] | None = None) -> int:
                 allow_insecure=config.allow_insecure_upload,
             )
         except (HTTPError, URLError, OSError, ValueError) as exc:
-            print(f"Upload failed; local zip remains at {result.path}: {exc}", file=sys.stderr)
+            print(
+                _("Upload failed; local zip remains at {path}: {error}").format(
+                    path=result.path,
+                    error=exc,
+                ),
+                file=sys.stderr,
+            )
             return 2
-        print(f"Uploaded error report: HTTP {status}")
+        print(_("Uploaded error report: HTTP {status}").format(status=status))
     return 0
 
 

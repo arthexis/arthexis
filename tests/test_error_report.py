@@ -98,11 +98,22 @@ def test_upload_report_requires_https_by_default(tmp_path: Path) -> None:
 
 
 def test_data_parent_directory_does_not_make_log_file_sensitive(tmp_path: Path) -> None:
-    log_path = tmp_path / "data" / "arthexis" / "logs" / "error.log"
+    base_dir = tmp_path / "data" / "arthexis"
+    log_path = base_dir / "logs" / "error.log"
     log_path.parent.mkdir(parents=True)
     log_path.write_text("safe diagnostic line\n", encoding="utf-8")
 
-    assert error_report.is_sensitive_path(log_path) is False
+    assert error_report.is_sensitive_path(log_path, base_dir=base_dir) is False
+    assert error_report.is_sensitive_path(base_dir / "media" / "capture.log", base_dir=base_dir) is True
+
+
+def test_redact_text_removes_token_only_url_credentials() -> None:
+    payload = "origin https://ghp_do-not-leak@github.com/arthexis/arthexis.git (fetch)"
+
+    redacted = error_report.redact_text(payload)
+
+    assert "ghp_do-not-leak" not in redacted
+    assert "https://<redacted>@github.com/arthexis/arthexis.git" in redacted
 
 
 def test_upload_report_uses_explicit_method(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
