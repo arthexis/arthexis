@@ -151,6 +151,34 @@ def _remove_tree_best_effort(path: Path) -> None:
         return
 
 
+def _should_prune_materialized_path(
+    relative_path: str, desired_paths: set[str]
+) -> bool:
+    if relative_path in desired_paths:
+        return False
+    classification = classify_codex_skill_path(relative_path)
+    if classification is not None and not classification.included_by_default:
+        return False
+    top_level = relative_path.split("/", 1)[0]
+    return relative_path == SKILL_MARKDOWN or top_level in PORTABLE_ROOTS
+
+
+def _prune_stale_materialized_files(
+    skill_dir: Path,
+    desired_paths: set[str],
+) -> None:
+    for existing_path in sorted(skill_dir.rglob("*"), reverse=True):
+        try:
+            if existing_path.is_file() or existing_path.is_symlink():
+                relative = normalize_package_path(existing_path.relative_to(skill_dir))
+                if _should_prune_materialized_path(relative, desired_paths):
+                    existing_path.unlink()
+            elif existing_path.is_dir() and not any(existing_path.iterdir()):
+                existing_path.rmdir()
+        except OSError:
+            continue
+
+
 def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
     normalized = relative_path.replace("\\", "/")
     return normalized, [part.lower() for part in normalized.split("/")]
@@ -572,6 +600,7 @@ def materialize_codex_skill_files(
         skill_dir = target_root / slug
         skill_dir.mkdir(parents=True, exist_ok=True)
         resolved_skill_dir = skill_dir.resolve(strict=False)
+        package_managed = bool(_included_package_files(skill))
         files = []
         desired_paths = set()
         for relative_path, content in _package_file_entries(skill):
@@ -599,28 +628,8 @@ def materialize_codex_skill_files(
                 summary["files_written"] += 1
             files.append({"path": package_path, "changed": changed})
 
-        for existing_path in sorted(skill_dir.rglob("*"), reverse=True):
-            try:
-                if existing_path.is_file() or existing_path.is_symlink():
-                    relative = normalize_package_path(
-                        existing_path.relative_to(skill_dir)
-                    )
-                    if relative in desired_paths:
-                        continue
-                    classification = classify_codex_skill_path(relative)
-                    if (
-                        classification is not None
-                        and not classification.included_by_default
-                    ):
-                        continue
-                    top_level = relative.split("/", 1)[0]
-                    if relative != SKILL_MARKDOWN and top_level not in PORTABLE_ROOTS:
-                        continue
-                    existing_path.unlink()
-                elif existing_path.is_dir() and not any(existing_path.iterdir()):
-                    existing_path.rmdir()
-            except OSError:
-                continue
+        if package_managed:
+            _prune_stale_materialized_files(skill_dir, desired_paths)
 
         summary["skills"].append({"slug": slug, "files": files})
     return summary

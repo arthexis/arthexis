@@ -250,6 +250,30 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
 
 
 @pytest.mark.django_db
+def test_materialize_legacy_skill_preserves_existing_portable_tree(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill_root = target_root / "legacy-skill"
+    _write(skill_root / "references" / "existing.md", "keep reference")
+    _write(skill_root / "scripts" / "existing.ps1", "Write-Output keep")
+    AgentSkill.objects.create(
+        slug="legacy-skill",
+        title="Legacy Skill",
+        markdown="legacy markdown",
+    )
+
+    summary = materialize_codex_skill_files(target_root)
+
+    assert summary["files_written"] == 1
+    assert (skill_root / "SKILL.md").read_text(encoding="utf-8") == "legacy markdown"
+    assert (skill_root / "references" / "existing.md").read_text(
+        encoding="utf-8"
+    ) == "keep reference"
+    assert (skill_root / "scripts" / "existing.ps1").read_text(
+        encoding="utf-8"
+    ) == "Write-Output keep"
+
+
+@pytest.mark.django_db
 def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
     AgentSkill.objects.create(
         slug="legacy-skill",
