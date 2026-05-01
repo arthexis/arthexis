@@ -28,10 +28,13 @@ class Command(BaseCommand):
         prompt = (options.get("prompt") or "").strip()
         if not prompt:
             raise CommandError("--prompt is required")
-        summary = compose_skill_bundle(
-            prompt,
-            created_by=getattr(self, "user", None),
-            limit=options["limit"],
-            dry_run=not options["write"],
-        )
+        try:
+            summary = compose_skill_bundle(
+                prompt,
+                created_by=getattr(self, "user", None),
+                limit=options["limit"],
+                dry_run=not options["write"],
+            )
+        except ValueError as error:
+            raise CommandError(str(error)) from error
         self.stdout.write(json.dumps(summary, indent=2, sort_keys=True))

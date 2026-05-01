@@ -79,6 +79,12 @@ def test_parse_agent_card_rejects_non_ascii_string_payloads():
         parse_agent_card(records)
 
 
+@pytest.mark.parametrize("sector_payloads", [None, 7, "AC1|M|S=4", b"AC1|M|S=4"])
+def test_parse_agent_card_rejects_non_iterable_or_scalar_payloads(sector_payloads):
+    with pytest.raises(AgentCardError, match="mapping or iterable"):
+        parse_agent_card(sector_payloads)
+
+
 def test_score_soul_identity_returns_best_candidate():
     card = parse_agent_card(valid_agent_card_records())
 

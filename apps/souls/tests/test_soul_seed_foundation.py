@@ -5,6 +5,7 @@ from io import StringIO
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.souls.models import AgentInterfaceSpec, CardSession, SkillBundle, SoulIntent
@@ -63,6 +64,12 @@ def test_search_agent_skills_scores_registered_skill_package_content(skill):
 
 
 @pytest.mark.django_db
+def test_search_agent_skills_rejects_negative_limit(skill):
+    with pytest.raises(ValueError, match="non-negative"):
+        search_agent_skills("rfid reader problem", limit=-1)
+
+
+@pytest.mark.django_db
 def test_compose_skill_bundle_dry_run_returns_bundle_plan(skill):
     summary = compose_skill_bundle("rfid-triage", dry_run=True)
 
@@ -109,6 +116,12 @@ def test_soul_seed_compose_command_outputs_json(skill):
 
     assert summary["dry_run"] is True
     assert summary["matches"][0]["slug"] == skill.slug
+
+
+@pytest.mark.django_db
+def test_soul_seed_compose_command_rejects_negative_limit(skill):
+    with pytest.raises(CommandError, match="non-negative"):
+        call_command("soul_seed", "compose", "--prompt", "rfid reader problem", "--limit", "-1")
 
 
 def test_agent_card_inspect_command_outputs_json(tmp_path):

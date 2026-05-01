@@ -80,7 +80,18 @@ def _score_skill(skill: AgentSkill, prompt: str, prompt_tokens: set[str]) -> Ski
     )
 
 
+def _validate_limit(limit: int) -> int:
+    try:
+        normalized_limit = int(limit)
+    except (TypeError, ValueError) as error:
+        raise ValueError("limit must be an integer.") from error
+    if normalized_limit < 0:
+        raise ValueError("limit must be non-negative.")
+    return normalized_limit
+
+
 def search_agent_skills(prompt: str, *, limit: int = 10) -> list[SkillMatchCandidate]:
+    limit = _validate_limit(limit)
     normalized = normalize_intent_prompt(prompt)
     prompt_tokens = _tokens(normalized)
     matches = [

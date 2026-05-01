@@ -169,7 +169,14 @@ def _coerce_sector_payloads(
                 raise AgentCardError(f"Invalid sector key: {key!r}") from error
             coerced[sector] = value
         return coerced
-    values = list(sector_payloads)
+    if isinstance(sector_payloads, str | bytes):
+        raise AgentCardError("Agent Card v1 sectors must be a mapping or iterable of payloads.")
+    try:
+        values = list(sector_payloads)
+    except TypeError as error:
+        raise AgentCardError(
+            "Agent Card v1 sectors must be a mapping or iterable of payloads."
+        ) from error
     if len(values) != len(APPLICATION_SECTORS):
         raise AgentCardError("Agent Card v1 requires exactly 15 application sectors.")
     return {sector: values[index] for index, sector in enumerate(APPLICATION_SECTORS)}
