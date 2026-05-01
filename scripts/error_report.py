@@ -64,7 +64,6 @@ SENSITIVE_PARTS = {
     "__pycache__",
     "backups",
     "cache",
-    "data",
     "media",
     "node_modules",
     "static",
@@ -392,6 +391,7 @@ def collect_logs(builder: ReportBuilder, cutoff: float | None) -> None:
 
 
 def status_snapshot(base_dir: Path, log_dirs: Iterable[Path]) -> str:
+    log_dir_list = list(log_dirs)
     lock_dir = base_dir / ".locks"
     service = read_optional_text(lock_dir / "service.lck")
     role = read_optional_text(lock_dir / "role.lck") or os.environ.get("NODE_ROLE", "")
@@ -416,9 +416,9 @@ def status_snapshot(base_dir: Path, log_dirs: Iterable[Path]) -> str:
         f"Upgrade in progress lock present: {upgrade_in_progress}",
         "Log directories:",
     ]
-    for log_dir in log_dirs:
+    for log_dir in log_dir_list:
         lines.append(f"- {log_dir}")
-    if not list(log_dirs):
+    if not log_dir_list:
         lines.append("- none found")
     lines.extend(
         [

@@ -97,6 +97,14 @@ def test_upload_report_requires_https_by_default(tmp_path: Path) -> None:
         error_report.upload_report(report_path, "http://example.test/upload")
 
 
+def test_data_parent_directory_does_not_make_log_file_sensitive(tmp_path: Path) -> None:
+    log_path = tmp_path / "data" / "arthexis" / "logs" / "error.log"
+    log_path.parent.mkdir(parents=True)
+    log_path.write_text("safe diagnostic line\n", encoding="utf-8")
+
+    assert error_report.is_sensitive_path(log_path) is False
+
+
 def test_upload_report_uses_explicit_method(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     report_path = tmp_path / "report.zip"
     report_path.write_bytes(b"zip")
