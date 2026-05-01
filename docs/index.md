@@ -25,6 +25,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
+- [Error Report Package](operations/error-report.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
 - OCPP 1.6 coverage artifact: `apps/ocpp/coverage.json`
 - [Ops Command Wrapper](operations/operational-commands.md)

@@ -40,6 +40,7 @@ def test_lifecycle_manual_covers_operator_entrypoints() -> None:
         "## 5. Runtime status (`status.sh`)",
         "## 6. Operational command entrypoint (`command.sh`)",
         "## 7. Uninstall (`uninstall.sh`)",
+        "## 8. Error report (`error-report.sh`)",
     )
 
     for section in expected_sections:
@@ -89,6 +90,13 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
             "--stop",
             "--branch",
         ),
+        "error-report.sh": (
+            "Usage: ./error-report.sh",
+            "--output-dir DIR",
+            "--upload-url URL",
+            "--dry-run",
+            "sys.version_info[0] == 3",
+        ),
         "uninstall.sh": ("--service NAME", "--no-warn", "--rfid-service", "--no-rfid-service"),
     }
 
@@ -108,3 +116,4 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
     manual = MANUAL.read_text(encoding="utf-8")
     assert "`./command.sh list`" in manual
     assert "`./command.sh <operational-command> [args...]`" in manual
+    assert "`error-report.sh` builds a single diagnostic zip" in manual
