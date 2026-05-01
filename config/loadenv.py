@@ -103,20 +103,12 @@ def _load_dpapi_env_secrets() -> None:
         )
         return
 
-    for target_key, error in errors.items():
-        logger.warning(
-            "Failed to load DPAPI environment secret for %s from %s: %s",
-            target_key,
-            pending.get(target_key, ""),
-            error,
-        )
+    for _ in errors:
+        logger.warning("Failed to load one configured DPAPI environment secret.")
 
     for target_key, secret in secrets.items():
         if target_key not in pending:
-            logger.warning(
-                "Ignoring DPAPI environment secret for unexpected target %s",
-                target_key,
-            )
+            logger.warning("Ignoring DPAPI environment secret for unexpected target.")
             continue
         if target_key in os.environ:
             continue
