@@ -64,9 +64,9 @@ payload. The card data model spans sectors, not key slots.
 ## Slot grammar
 
 Each application sector stores one ASCII record of at most 48 bytes. Writers pad
-the rest of the 48 byte payload with spaces or `0x00`. Readers trim padding,
-parse the record, and reject anything that exceeds 48 bytes or includes
-non-printable control characters other than padding.
+the rest of the 48 byte payload with spaces (`0x20`). Readers trim trailing
+spaces, parse the record, and reject anything that exceeds 48 bytes or includes
+non-printable control characters.
 
 All records start with `AC1|`, followed by an allowlisted slot code:
 
@@ -86,6 +86,7 @@ Example records:
 ```text
 AC1|M|S=4|X=10|ALG=B2S8|POL=RDRSIG
 AC1|I1|NS=SOUL|ID=7G4P2K|H=3MF4DA8C2E1B
+AC1|I2|VOID=1
 AC1|K01|SIG=[AGENT.SKILL:TRIAGE]|H=A91B22
 AC1|F02|T=NOTE|H=A91B22|TXT=BRIEF-HINT
 ```
@@ -112,9 +113,10 @@ Match score:
 | 3 of 4 | Strong | Suitable for normal activation with trusted reader context. |
 | 4 of 4 | Best | Highest confidence match for a task. |
 
-An empty or intentionally unused identity sector must be encoded as an explicit
-empty identity record, not as arbitrary blank data, so the reader can distinguish
-an unused slot from a damaged or uninitialized sector.
+An empty or intentionally unused identity sector must be encoded as
+`AC1|I<n>|VOID=1`, where `<n>` is the slot number for that sector. It must not
+be arbitrary blank data, so the reader can distinguish an unused slot from a
+damaged or uninitialized sector.
 
 ## Capability and file slots
 
@@ -137,6 +139,13 @@ They must not contain:
 SIGILS are pointers into the suite. Resolution happens after identity matching,
 reader trust validation, and operator-scope checks. If the current operator is
 not allowed to resolve a SIGIL, the slot stays inert.
+
+Capability SIGILS must still fit inside one 48 byte sector. `AC1|Kxx|SIG=`
+consumes 12 bytes before the SIGIL value, and any checksum metadata consumes
+additional bytes. Use short registry aliases for on-card `Kxx` slots. If a
+capability needs a longer SIGIL, multiple attributes, or human-readable context,
+store a compact `Fxx` file reference or registry handle on the card and keep the
+larger artifact in the suite.
 
 ## Reader-location trust
 
