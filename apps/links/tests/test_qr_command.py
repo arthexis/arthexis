@@ -176,6 +176,15 @@ def test_windows_wifi_profile_password_parser_accepts_localized_label() -> None:
     assert qr_command._extract_windows_wifi_profile_password(output) == "localized-secret"
 
 
+def test_windows_wifi_profile_password_parser_preserves_secret_spaces() -> None:
+    output = "Key Content     :  leading-and-trailing-secret "
+
+    assert (
+        qr_command._extract_windows_wifi_profile_password(output)
+        == " leading-and-trailing-secret "
+    )
+
+
 def test_qr_print_reference_uses_database_value(settings, tmp_path) -> None:
     settings.MEDIA_ROOT = tmp_path / "media"
     reference = Reference.objects.create(

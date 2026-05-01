@@ -418,7 +418,10 @@ def _extract_windows_wifi_profile_password(output: str) -> str:
         if not separator:
             continue
         if _normalize_windows_label(key) in WINDOWS_WIFI_PASSWORD_LABELS:
-            return value.strip()
+            password = value.rstrip("\r\n")
+            if password.startswith((" ", "\t")):
+                password = password[1:]
+            return password
     return ""
 
 
