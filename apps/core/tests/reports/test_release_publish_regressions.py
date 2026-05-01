@@ -472,6 +472,7 @@ def test_publish_workflow_uses_same_artifact_for_github_release_and_pypi() -> No
 
     assert release_job["needs"] == "build"
     assert release_job["permissions"] == {"contents": "write"}
+    assert release_job["env"]["GH_REPO"] == "${{ github.repository }}"
     assert pypi_job["needs"] == ["build", "publish-to-github-release"]
     assert pypi_job["permissions"]["id-token"] == "write"
     assert pypi_job["permissions"]["contents"] == "read"
@@ -488,6 +489,7 @@ def test_publish_workflow_uses_same_artifact_for_github_release_and_pypi() -> No
     )["run"]
     assert "gh release create" in release_run
     assert "gh release upload" in release_run
+    assert '--repo "${GITHUB_REPOSITORY}"' in release_run
     assert "dist/*.whl dist/*.tar.gz" in release_run
 
 
