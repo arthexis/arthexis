@@ -15,9 +15,12 @@ class UpgradePolicy(Entity):
     """Configurable policy governing automated upgrades."""
 
     class Channel(models.TextChoices):
-        STABLE = "stable", _("Stable")
+        STABLE = "stable", _("Stable / LTS")
+        REGULAR = "regular", _("Regular / Normal")
+        LATEST = "latest", _("Latest / Unstable")
+        LTS = "lts", _("LTS")
+        NORMAL = "normal", _("Normal")
         UNSTABLE = "unstable", _("Unstable")
-        LATEST = "latest", _("Latest")
 
     name = models.CharField(max_length=100, unique=True)
     description = models.CharField(max_length=200, blank=True)
@@ -28,7 +31,10 @@ class UpgradePolicy(Entity):
     )
     interval_minutes = models.PositiveIntegerField(
         default=10080,
-        help_text=_("How often to check for upgrades, in minutes."),
+        help_text=_(
+            "How often to check for upgrades, in minutes. Channel bump cadences "
+            "still gate whether the upgrade is allowed to proceed."
+        ),
     )
     requires_pypi_packages = models.BooleanField(
         default=False,

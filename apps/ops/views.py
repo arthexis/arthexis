@@ -6,8 +6,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -208,13 +207,21 @@ def _build_node_role_validation_summary() -> dict[str, object]:
             {"label": "No restart", "flags": ["--no-restart"]},
         ]
     else:
+        from apps.core.versioning import (
+            UPGRADE_CHANNEL_REGULAR,
+            UPGRADE_CHANNEL_UNSTABLE,
+            normalize_upgrade_channel,
+        )
+
         upgrade_policy_options = []
         for policy in UpgradePolicy.objects.order_by("name"):
-            channel_flag = (
-                "--latest"
-                if policy.channel == UpgradePolicy.Channel.UNSTABLE
-                else "--stable"
-            )
+            policy_channel = normalize_upgrade_channel(policy.channel)
+            if policy_channel == UPGRADE_CHANNEL_UNSTABLE:
+                channel_flag = "--latest"
+            elif policy_channel == UPGRADE_CHANNEL_REGULAR:
+                channel_flag = "--regular"
+            else:
+                channel_flag = "--stable"
             option_label = f"Policy: {policy.name}"
             if not policy.is_active:
                 option_label = f"{option_label} (inactive)"

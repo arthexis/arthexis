@@ -66,6 +66,103 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
     assert unstable_decision.args[1] == "--latest"
 
 
+def test_build_upgrade_decision_blocks_stable_major_upgrade(monkeypatch):
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="stable"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="2.0.0",
+            local_version="1.9.9",
+        ),
+    )
+
+    assert decision.skip is True
+    assert decision.apply is False
+    assert decision.reason == "major-upgrade-disallowed"
+
+
+def test_build_upgrade_decision_throttles_stable_minor_upgrade(monkeypatch):
+    checked_intervals: list[int] = []
+
+    def _ran_recently(_base_dir, interval_minutes):
+        checked_intervals.append(interval_minutes)
+        return interval_minutes == 43200
+
+    monkeypatch.setattr(tasks, "_auto_upgrade_ran_recently", _ran_recently)
+
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="stable"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.1.0",
+            local_version="1.0.9",
+        ),
+    )
+
+    assert decision.skip is True
+    assert decision.apply is False
+    assert decision.reason == "minor-upgrade-not-due"
+    assert 43200 in checked_intervals
+
+
+def test_build_upgrade_decision_regular_uses_regular_channel_for_minor(monkeypatch):
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="regular"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.1.0",
+            local_version="1.0.9",
+        ),
+    )
+
+    assert decision.apply is True
+    assert decision.args[1] == "--regular"
+
+
+def test_build_upgrade_decision_throttles_regular_major_upgrade(monkeypatch):
+    monkeypatch.setattr(tasks, "_auto_upgrade_ran_recently", lambda *_args: True)
+
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="regular"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="2.0.0",
+            local_version="1.9.9",
+        ),
+    )
+
+    assert decision.skip is True
+    assert decision.apply is False
+    assert decision.reason == "major-upgrade-not-due"
+
+
+def test_build_upgrade_decision_latest_ignores_release_severity(monkeypatch):
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="unstable"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.0.1",
+            local_version="1.0.1",
+            local_revision="local-rev",
+            remote_revision="remote-rev",
+            severity=tasks.SEVERITY_LOW,
+        ),
+    )
+
+    assert decision.apply is True
+    assert decision.args[1] == "--latest"
+
+
 def test_ci_status_for_revision_compatibility_shim_returns_empty_string(tmp_path):
     assert tasks._ci_status_for_revision(tmp_path, "abc123") == ""
 

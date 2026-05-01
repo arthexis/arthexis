@@ -853,26 +853,6 @@ env_refresh_in_progress() {
   return 1
 }
 
-parse_major_minor() {
-  local version="$1"
-  if [[ "$version" =~ ^[[:space:]]*([0-9]+)\.([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-  fi
-}
-
-shares_stable_series() {
-  local local_version
-  local remote_version
-  local_version=$(parse_major_minor "$1")
-  remote_version=$(parse_major_minor "$2")
-
-  if [ -z "$local_version" ] || [ -z "$remote_version" ]; then
-    return 1
-  fi
-
-  [[ "$local_version" == "$remote_version" ]]
-}
-
 cleanup_non_terminal_git_state() {
   local role="$1"
 
@@ -1116,8 +1096,13 @@ while [[ $# -gt 0 ]]; do
       FORWARDED_ARGS+=("$1")
       shift
       ;;
-    --stable|--normal|--regular)
+    --stable|--lts)
       CHANNEL="stable"
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --normal|--regular)
+      CHANNEL="regular"
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -1925,7 +1910,7 @@ if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
   elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
     echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
   elif [[ "$CHANNEL" == "unstable" ]]; then
-    echo "Unstable channel requested; continuing upgrade despite matching version $REMOTE_VERSION."
+    echo "Latest/unstable channel requested; continuing upgrade despite matching version $REMOTE_VERSION."
   elif [[ $FORCE_UPGRADE -eq 1 ]]; then
     echo "Forcing upgrade despite matching version $LOCAL_VERSION."
   elif [[ -n "$REMOTE_REVISION" && -n "$LOCAL_REVISION" && "$LOCAL_REVISION" != "$REMOTE_REVISION" ]]; then

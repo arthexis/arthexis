@@ -5,9 +5,9 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Unstable",
-      "description": "Unstable channel for rapid rollout testing.",
-      "channel": "unstable",
-      "interval_minutes": 15,
+      "description": "Latest/unstable channel with daily live-main checks.",
+      "channel": "latest",
+      "interval_minutes": 1440,
       "requires_pypi_packages": false
     }
   }

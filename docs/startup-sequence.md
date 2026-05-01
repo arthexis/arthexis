@@ -58,7 +58,7 @@ Systemd-managed service starts can run the boot upgrade prestart helper before
 3. If the last successful check is recent (within
    `ARTHEXIS_BOOT_UPGRADE_CHECK_TTL_SECONDS`, default `300`) and the revision is
    unchanged, skip invoking `upgrade.sh`.
-4. Otherwise invoke `upgrade.sh` (stable/latest channel rules unchanged). On
+4. Otherwise invoke `upgrade.sh` with the configured channel tier. On
    success, refresh the recency lock; on failure, preserve existing behavior by
    writing backoff to `.locks/<service>-boot-upgrade-backoff-until.lck`.
 

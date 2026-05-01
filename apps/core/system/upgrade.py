@@ -1,24 +1,25 @@
 from __future__ import annotations
 
+import logging
+import subprocess
 from collections import deque
 from datetime import datetime, timedelta
-import logging
 from pathlib import Path
-import subprocess
 
 from django.conf import settings
 from django.core.exceptions import AppRegistryNotReady, FieldError, ImproperlyConfigured
 from django.db import DatabaseError
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 
 from apps.celery.utils import enqueue_task, is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
-    auto_upgrade_failure_guide,
     auto_upgrade_base_dir,
+    auto_upgrade_failure_guide,
     auto_upgrade_log_file,
     ensure_auto_upgrade_periodic_task,
 )
@@ -26,10 +27,15 @@ from apps.core.tasks.auto_upgrade import (
     _read_auto_upgrade_failure_count,
     check_github_updates,
 )
+from apps.core.versioning import (
+    UPGRADE_CHANNEL_REGULAR,
+    UPGRADE_CHANNEL_STABLE,
+    UPGRADE_CHANNEL_UNSTABLE,
+    normalize_upgrade_channel,
+)
 
 from .filesystem import _auto_upgrade_skip_file
 from .ui import _format_datetime, _format_timestamp, _suite_uptime_details
-
 
 AUTO_UPGRADE_LOG_LIMIT = 30
 AUTO_UPGRADE_RECENT_ACTIVITY_HOURS = 48
@@ -45,11 +51,14 @@ REVISION_STATE_ERROR = "error"
 
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
-    "stable": {"override": "stable", "label": _("Stable")},
-    "unstable": {"override": "unstable", "label": _("Unstable")},
+    "stable": {"override": UPGRADE_CHANNEL_STABLE, "label": _("Stable / LTS")},
+    "regular": {"override": UPGRADE_CHANNEL_REGULAR, "label": _("Regular / Normal")},
+    "latest": {"override": UPGRADE_CHANNEL_UNSTABLE, "label": _("Latest / Unstable")},
     # Legacy aliases
-    "normal": {"override": "stable", "label": _("Stable")},
-    "latest": {"override": "latest", "label": _("Latest")},
+    "lts": {"override": UPGRADE_CHANNEL_STABLE, "label": _("Stable / LTS")},
+    "normal": {"override": UPGRADE_CHANNEL_REGULAR, "label": _("Regular / Normal")},
+    "version": {"override": UPGRADE_CHANNEL_REGULAR, "label": _("Regular / Normal")},
+    "unstable": {"override": UPGRADE_CHANNEL_UNSTABLE, "label": _("Latest / Unstable")},
 }
 
 
@@ -238,9 +247,9 @@ def _load_upgrade_policy_report() -> dict[str, object]:
         policy = assignment.policy
         if not policy:
             continue
-        channel = (policy.channel or "stable").lower()
+        channel = normalize_upgrade_channel(policy.channel or "stable") or "stable"
         channel_label = str(getattr(policy, "get_channel_display", lambda: policy.channel)())
-        channel_state = "ok" if channel == "stable" else "warning"
+        channel_state = "ok" if channel in {"stable", "regular"} else "warning"
         channels.add(channel)
         policies.append(
             {
@@ -257,10 +266,7 @@ def _load_upgrade_policy_report() -> dict[str, object]:
             }
         )
 
-    normalized_channels = {
-        "unstable" if channel in {"unstable", "latest"} else "stable"
-        for channel in channels
-    }
+    normalized_channels = {normalize_upgrade_channel(channel) or channel for channel in channels}
     return {
         "policies": policies,
         "manual": not policies,
@@ -288,9 +294,7 @@ def _set_upgrade_policy_channel(channel: str) -> dict[str, object]:
     if not isinstance(override, str):
         return _error_response(normalized, _("Unsupported upgrade channel."))
 
-    policy_channel = override
-    if policy_channel not in {"stable", "unstable", "latest"}:
-        policy_channel = "stable"
+    policy_channel = normalize_upgrade_channel(override) or UPGRADE_CHANNEL_STABLE
 
     try:  # pragma: no cover - optional dependency
         from apps.nodes.models import Node, NodeUpgradePolicyAssignment

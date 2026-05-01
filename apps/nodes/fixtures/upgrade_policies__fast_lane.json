@@ -5,9 +5,9 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Fast Lane",
-      "description": "Unstable channel with hourly checks.",
-      "channel": "unstable",
-      "interval_minutes": 60,
+      "description": "Latest/unstable channel with daily live-main checks.",
+      "channel": "latest",
+      "interval_minutes": 1440,
       "requires_pypi_packages": false
     }
   }

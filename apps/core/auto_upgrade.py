@@ -10,6 +10,14 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
+from apps.core.versioning import (
+    AUTO_UPGRADE_DAY_MINUTES,
+    AUTO_UPGRADE_WEEK_MINUTES,
+    UPGRADE_CHANNEL_ALIASES,
+    UPGRADE_CHANNEL_REGULAR,
+    UPGRADE_CHANNEL_STABLE,
+    UPGRADE_CHANNEL_UNSTABLE,
+)
 
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
@@ -20,43 +28,37 @@ AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_CADENCE_HOUR = 4
+_CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES = {
+    UPGRADE_CHANNEL_UNSTABLE: AUTO_UPGRADE_DAY_MINUTES,
+    UPGRADE_CHANNEL_STABLE: AUTO_UPGRADE_WEEK_MINUTES,
+    UPGRADE_CHANNEL_REGULAR: AUTO_UPGRADE_DAY_MINUTES,
+}
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": 1440,
-    "unstable": 15,
-    "stable": 10080,
-    "regular": 10080,
-    "normal": 10080,
+    alias: _CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES[channel]
+    for alias, channel in UPGRADE_CHANNEL_ALIASES.items()
+    if channel in _CANONICAL_AUTO_UPGRADE_INTERVAL_MINUTES
 }
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
+_DAILY_AUTO_UPGRADE_CRONTAB = {
+    "minute": "0",
+    "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+    "day_of_week": "*",
+    "day_of_month": "*",
+    "month_of_year": "*",
+}
+_WEEKLY_AUTO_UPGRADE_CRONTAB = {
+    **_DAILY_AUTO_UPGRADE_CRONTAB,
+    "day_of_week": "4",
+}
+_CANONICAL_AUTO_UPGRADE_CRONTABS = {
+    UPGRADE_CHANNEL_UNSTABLE: _DAILY_AUTO_UPGRADE_CRONTAB,
+    UPGRADE_CHANNEL_STABLE: _WEEKLY_AUTO_UPGRADE_CRONTAB,
+    UPGRADE_CHANNEL_REGULAR: _DAILY_AUTO_UPGRADE_CRONTAB,
+}
 AUTO_UPGRADE_CRONTAB_SCHEDULES = {
-    "latest": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "*",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "stable": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "regular": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
-    "normal": {
-        "minute": "0",
-        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
-        "day_of_week": "4",
-        "day_of_month": "*",
-        "month_of_year": "*",
-    },
+    alias: dict(_CANONICAL_AUTO_UPGRADE_CRONTABS[channel])
+    for alias, channel in UPGRADE_CHANNEL_ALIASES.items()
+    if channel in _CANONICAL_AUTO_UPGRADE_CRONTABS
 }
 
 
@@ -268,8 +270,9 @@ def _resolve_policy_interval_minutes() -> int:
     """
 
     try:  # pragma: no cover - optional dependency failures
-        from apps.nodes.models import Node, UpgradePolicy
         from django.db import DatabaseError
+
+        from apps.nodes.models import Node, UpgradePolicy
     except Exception:
         return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
 
@@ -359,11 +362,11 @@ def ensure_auto_upgrade_periodic_task(
     del sender, kwargs, base_dir  # Unused when invoked as a Django signal handler.
 
     try:  # pragma: no cover - optional dependency failures
+        from django.db.utils import OperationalError, ProgrammingError
         from django_celery_beat.models import (
             IntervalSchedule,
             PeriodicTask,
         )
-        from django.db.utils import OperationalError, ProgrammingError
     except Exception:
         return
 
@@ -380,7 +383,7 @@ def ensure_auto_upgrade_periodic_task(
                 interval_minutes = parsed_interval
 
     try:
-        description = "Upgrade policy checks run every %s minutes." % interval_minutes
+        description = f"Upgrade policy checks run every {interval_minutes} minutes."
         schedule = _get_or_create_interval_schedule(
             every=interval_minutes,
             period=IntervalSchedule.MINUTES,
