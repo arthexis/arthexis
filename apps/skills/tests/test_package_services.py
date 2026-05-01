@@ -82,7 +82,7 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
     _write(skill_dir / "credentials" / "odoo.json", "{}")
     scan_codex_skill_directory(skill_dir, dry_run=False)
 
-    package_path = tmp_path / "portable-skills.zip"
+    package_path = tmp_path / "nested" / "portable-skills.zip"
     manifest = export_codex_skill_package(package_path, skill_slugs=["quotation"])
     AgentSkill.objects.filter(slug="quotation").delete()
 
@@ -100,6 +100,50 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
     assert not skill.package_files.filter(
         relative_path="credentials/odoo.json"
     ).exists()
+
+
+@pytest.mark.django_db
+def test_scan_restores_soft_deleted_skill_slug(tmp_path):
+    skill = AgentSkill.objects.create(
+        slug="operator-manual",
+        title="Deleted",
+        markdown="old",
+    )
+    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    skill.refresh_from_db()
+    skill.delete()
+
+    skill_dir = tmp_path / "operator-manual"
+    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+
+    scan_codex_skill_directory(skill_dir, dry_run=False)
+
+    restored = AgentSkill.objects.get(slug="operator-manual")
+    assert restored.pk == skill.pk
+    assert restored.is_deleted is False
+    assert (
+        restored.markdown.replace("\r\n", "\n") == "---\nname: operator-manual\n---\n"
+    )
+
+
+@pytest.mark.django_db
+def test_import_restores_soft_deleted_skill_slug(tmp_path):
+    skill_dir = tmp_path / "security-codes"
+    _write(skill_dir / "SKILL.md", "---\nname: security-codes\n---\n")
+    scan_codex_skill_directory(skill_dir, dry_run=False)
+    package_path = tmp_path / "portable-skills.zip"
+    export_codex_skill_package(package_path, skill_slugs=["security-codes"])
+
+    skill = AgentSkill.objects.get(slug="security-codes")
+    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    skill.refresh_from_db()
+    skill.delete()
+
+    import_codex_skill_package(package_path, dry_run=False)
+
+    restored = AgentSkill.objects.get(slug="security-codes")
+    assert restored.pk == skill.pk
+    assert restored.is_deleted is False
 
 
 @pytest.mark.django_db

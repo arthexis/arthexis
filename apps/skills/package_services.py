@@ -122,8 +122,6 @@ def classify_codex_skill_file(
             False,
             "operator-local paths must be parameterized before export",
         )
-    if relative_path == "SKILL.md" or parts[0] in PORTABLE_ROOTS:
-        return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
     return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
 
 
@@ -153,6 +151,35 @@ def _scan_file(skill_dir: Path, path: Path) -> tuple[SkillFileScan, str]:
     )
 
 
+def _restore_or_create_skill(*, slug: str, title: str, markdown: str) -> AgentSkill:
+    skill = AgentSkill.all_objects.filter(slug=slug).first()
+    if skill is None:
+        return AgentSkill.objects.create(slug=slug, title=title, markdown=markdown)
+    skill.title = title
+    skill.markdown = markdown
+    skill.is_deleted = False
+    skill.save(update_fields=["title", "markdown", "is_deleted"])
+    return skill
+
+
+def _sync_package_files(skill: AgentSkill, file_specs: list[dict]) -> None:
+    seen_paths = {file_spec["relative_path"] for file_spec in file_specs}
+    skill.package_files.exclude(relative_path__in=seen_paths).delete()
+    AgentSkillFile.objects.bulk_create(
+        [AgentSkillFile(skill=skill, **file_spec) for file_spec in file_specs],
+        update_conflicts=True,
+        update_fields=[
+            "content",
+            "content_sha256",
+            "portability",
+            "included_by_default",
+            "exclusion_reason",
+            "size_bytes",
+        ],
+        unique_fields=["skill", "relative_path"],
+    )
+
+
 def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict:
     skill_dir = Path(skill_dir)
     skill_md = skill_dir / "SKILL.md"
@@ -179,20 +206,16 @@ def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict
         return summary
 
     with transaction.atomic():
-        skill, _ = AgentSkill.objects.update_or_create(
+        skill = _restore_or_create_skill(
             slug=skill_dir.name,
-            defaults={
-                "title": skill_dir.name.replace("-", " ").title(),
-                "markdown": file_content_by_path.get("SKILL.md", ""),
-            },
+            title=skill_dir.name.replace("-", " ").title(),
+            markdown=file_content_by_path.get("SKILL.md", ""),
         )
-        seen_paths = {entry.relative_path for entry in file_entries}
-        skill.package_files.exclude(relative_path__in=seen_paths).delete()
-        for entry in file_entries:
-            AgentSkillFile.objects.update_or_create(
-                skill=skill,
-                relative_path=entry.relative_path,
-                defaults={
+        _sync_package_files(
+            skill,
+            [
+                {
+                    "relative_path": entry.relative_path,
                     "content": (
                         file_content_by_path[entry.relative_path]
                         if entry.included_by_default
@@ -203,8 +226,10 @@ def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict
                     "included_by_default": entry.included_by_default,
                     "exclusion_reason": entry.exclusion_reason,
                     "size_bytes": entry.size_bytes,
-                },
-            )
+                }
+                for entry in file_entries
+            ],
+        )
     return summary
 
 
@@ -229,6 +254,7 @@ def export_codex_skill_package(
         queryset = queryset.filter(slug__in=skill_slugs)
 
     manifest = {"format": PACKAGE_FORMAT, "skills": []}
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output_path, "w", ZIP_DEFLATED) as package:
         for skill in queryset.order_by("slug"):
             skill_entry = {
@@ -286,23 +312,16 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
                     ).decode("utf-8")
                     for file_info in files
                 }
-                skill, _ = AgentSkill.objects.update_or_create(
+                skill = _restore_or_create_skill(
                     slug=slug,
-                    defaults={
-                        "title": skill_entry.get(
-                            "title", slug.replace("-", " ").title()
-                        ),
-                        "markdown": content_by_path.get("SKILL.md", ""),
-                    },
+                    title=skill_entry.get("title", slug.replace("-", " ").title()),
+                    markdown=content_by_path.get("SKILL.md", ""),
                 )
-                seen_paths = {file_info["path"] for file_info in files}
-                skill.package_files.exclude(relative_path__in=seen_paths).delete()
-                for file_info in files:
-                    content = content_by_path[file_info["path"]]
-                    AgentSkillFile.objects.update_or_create(
-                        skill=skill,
-                        relative_path=file_info["path"],
-                        defaults={
+                _sync_package_files(
+                    skill,
+                    [
+                        {
+                            "relative_path": file_info["path"],
                             "content": content,
                             "content_sha256": hashlib.sha256(
                                 content.encode("utf-8")
@@ -315,7 +334,10 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
                             ),
                             "exclusion_reason": "",
                             "size_bytes": len(content.encode("utf-8")),
-                        },
-                    )
+                        }
+                        for file_info in files
+                        for content in [content_by_path[file_info["path"]]]
+                    ],
+                )
                 summary["skills"].append({"slug": slug, "files": len(files)})
         return summary
