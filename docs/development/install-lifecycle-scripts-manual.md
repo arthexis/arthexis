@@ -2,7 +2,7 @@
 
 > **Single source of truth:** Keep operational flag and behavior details in this file. Update `apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md` only with role-oriented guidance and a link back here.
 
-This is the canonical reference for Linux lifecycle scripts: `install.sh`, `start.sh`, `stop.sh`, `status.sh`, `command.sh`, `upgrade.sh`, `configure.sh`, and `uninstall.sh`.
+This is the canonical reference for Linux lifecycle scripts: `install.sh`, `start.sh`, `stop.sh`, `status.sh`, `command.sh`, `upgrade.sh`, `configure.sh`, `error-report.sh`, and `uninstall.sh`.
 
 
 ## Lifecycle map (operator contract)
@@ -25,11 +25,14 @@ Graceful shutdown]
 Pull/update/migrate]
     U --> S
     U --> T
+    T --> R[error-report.sh
+Collect diagnostics]
+    O --> R
     P --> X[uninstall.sh
 Retire node]
 
     classDef safety fill:#fff8e6,stroke:#b36b00,color:#3d2500;
-    class T,O safety;
+    class T,O,R safety;
 ```
 
 This map is a regression guardrail: lifecycle changes should preserve these operator touchpoints unless the manual and tests are updated together.
@@ -223,7 +226,34 @@ For non-ops/admin Django commands, use `.venv/bin/python manage.py ...` directly
 | `--no-warn` | Skip DB deletion warning prompt. |
 | `--rfid-service`, `--no-rfid-service` | Control whether RFID unit/lock is removed during uninstall. |
 
-## 8. Documentation maintenance check
+## 8. Error report (`error-report.sh`)
+
+`error-report.sh` builds a single diagnostic zip without invoking Django
+management commands. It is intended for startup, upgrade, migration, and
+environment failures where `command.sh` or `manage.py` may not work.
+
+### Supported flags
+
+| Flag | Notes |
+| --- | --- |
+| `--output-dir DIR` | Directory for generated zip files. Defaults to `work/error-reports`. |
+| `--since DURATION` | Include non-critical logs modified within a duration such as `12h` or `7d`. |
+| `--max-log-files COUNT` | Cap selected log files. Defaults to `30`. |
+| `--max-file-bytes BYTES` | Copy only the tail of large text files. Defaults to `262144`. |
+| `--upload-url URL` | Upload the generated zip to an explicit signed URL after writing it locally. |
+| `--upload-method METHOD` | Upload method, `PUT` or `POST`. Defaults to `PUT`. |
+| `--upload-timeout SECONDS` | Upload timeout. Defaults to `60`. |
+| `--allow-insecure-upload` | Permit `http://` upload URLs. HTTPS is required by default. |
+| `--dry-run` | Print planned report contents without writing a zip or uploading. |
+| `-h`, `--help` | Print usage and exit successfully. |
+
+The collector uses Python standard library modules only and passes copied text
+through secret redaction. It excludes environment files, databases, dumps,
+backups, media/static/cache trees, virtual environments, Git internals, and key
+material. See `docs/operations/error-report.md` for operator usage and package
+contents.
+
+## 9. Documentation maintenance check
 
 When lifecycle script docs are updated:
 
