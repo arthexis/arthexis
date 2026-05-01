@@ -174,10 +174,10 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     skill = AgentSkill.objects.create(
         slug="operator-manual",
         title="Operator Manual",
-        markdown="fallback [CONF.BASE_DIR]",
+        markdown="Use suite root [CONF.BASE_DIR] and keep [CONF.SECRET_KEY]",
     )
     portable_files = [
-        ("SKILL.md", "Use suite root [CONF.BASE_DIR] and keep [CONF.SECRET_KEY]"),
+        ("SKILL.md", "Stale package markdown [CONF.BASE_DIR]"),
         ("references/glossary.md", "Portable glossary for [CONF.BASE_DIR]"),
         ("scripts/setup.ps1", "Write-Output '[CONF.BASE_DIR]'"),
     ]

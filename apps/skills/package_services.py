@@ -556,10 +556,11 @@ def _package_file_entries(skill: AgentSkill) -> list[tuple[str, str]]:
         return [_legacy_skill_file_entry(skill)]
 
     entries = [
-        (file_entry.relative_path, file_entry.content) for file_entry in package_files
+        (file_entry.relative_path, file_entry.content)
+        for file_entry in package_files
+        if file_entry.relative_path != SKILL_MARKDOWN
     ]
-    if SKILL_MARKDOWN not in {relative_path for relative_path, _ in entries}:
-        entries.insert(0, _legacy_skill_file_entry(skill))
+    entries.insert(0, _legacy_skill_file_entry(skill))
     return entries
 
 
