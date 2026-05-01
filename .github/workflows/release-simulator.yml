@@ -2,7 +2,7 @@ name: Release Simulator
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
   push:
     branches:
@@ -514,7 +514,7 @@ jobs:
             const body = [
               marker,
               '',
-              'Automated hourly release readiness report.',
+              'Automated release readiness report. Scheduled every 3 hours for 8 release windows per day.',
               '',
               `- Workflow run: ${runUrl}`,
               `- Ref: ${context.ref}`,
