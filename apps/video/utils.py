@@ -20,6 +20,7 @@ CAMERA_DIR = WORK_DIR / "camera"
 RPI_CAMERA_DEVICE = Path("/dev/video0")
 RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
 DEFAULT_CAMERA_RESOLUTION = (1280, 720)
+OPENCV_CAMERA_IDENTIFIER_PREFIX = "opencv:"
 FALLBACK_CAMERA_RESOLUTIONS = (
     (1920, 1080),
     (1280, 720),
@@ -192,12 +193,33 @@ def has_rpi_camera_stack() -> bool:
     return probe_rpi_camera_stack().available
 
 
-def _open_cv2_capture(cv2, index: int):
-    """Open a numeric OpenCV capture index using the best local backend."""
+def cv2_camera_identifier(index: int) -> str:
+    """Return a non-ambiguous identifier for an OpenCV camera index."""
 
-    if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
-        return cv2.VideoCapture(index, cv2.CAP_DSHOW)
-    return cv2.VideoCapture(index)
+    return f"{OPENCV_CAMERA_IDENTIFIER_PREFIX}{int(index)}"
+
+
+def _cv2_camera_index(device_identifier: str | int) -> int | None:
+    """Return an OpenCV camera index parsed from a supported identifier."""
+
+    if type(device_identifier) is int:
+        return device_identifier
+    identifier = str(device_identifier or "").strip()
+    if identifier.startswith(OPENCV_CAMERA_IDENTIFIER_PREFIX):
+        suffix = identifier[len(OPENCV_CAMERA_IDENTIFIER_PREFIX) :].strip()
+        return int(suffix) if suffix.isdigit() else None
+    return int(identifier) if identifier.isdigit() else None
+
+
+def open_cv2_capture(cv2, device_identifier: str | int):
+    """Open an OpenCV capture source using the best local backend."""
+
+    index = _cv2_camera_index(device_identifier)
+    if index is not None:
+        if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
+            return cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        return cv2.VideoCapture(index)
+    return cv2.VideoCapture(str(device_identifier or "").strip())
 
 
 def detect_cv2_camera_devices(limit: int | None = None) -> list[Cv2CameraDevice]:
@@ -214,7 +236,8 @@ def detect_cv2_camera_devices(limit: int | None = None) -> list[Cv2CameraDevice]
 
     detected: list[Cv2CameraDevice] = []
     for index in range(max(0, probe_limit)):
-        capture = _open_cv2_capture(cv2, index)
+        identifier = cv2_camera_identifier(index)
+        capture = open_cv2_capture(cv2, identifier)
         try:
             if not capture.isOpened():
                 continue
@@ -229,7 +252,7 @@ def detect_cv2_camera_devices(limit: int | None = None) -> list[Cv2CameraDevice]
             )
             detected.append(
                 Cv2CameraDevice(
-                    identifier=str(index),
+                    identifier=identifier,
                     description=f"OpenCV Camera {index}",
                     raw_info=(
                         f"device_index={index} backend={backend} "
@@ -261,11 +284,7 @@ def capture_cv2_snapshot(
     if not acquired:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
-    capture = (
-        _open_cv2_capture(cv2, int(identifier))
-        if identifier.isdigit()
-        else cv2.VideoCapture(identifier)
-    )
+    capture = open_cv2_capture(cv2, identifier)
     try:
         if not capture.isOpened():
             raise RuntimeError(f"Unable to open video device {device_identifier}")
@@ -462,14 +481,17 @@ __all__ = [
     "CAMERA_DIR",
     "DEFAULT_CAMERA_RESOLUTION",
     "FALLBACK_CAMERA_RESOLUTIONS",
+    "OPENCV_CAMERA_IDENTIFIER_PREFIX",
     "RPI_CAMERA_BINARIES",
     "RPI_CAMERA_DEVICE",
     "has_rpicam_binaries",
     "capture_rpi_snapshot",
+    "cv2_camera_identifier",
     "get_camera_resolutions",
     "has_rpi_camera_stack",
     "capture_cv2_snapshot",
     "detect_cv2_camera_devices",
+    "open_cv2_capture",
     "probe_rpi_camera_stack",
     "record_rpi_video",
 ]

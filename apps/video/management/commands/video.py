@@ -27,7 +27,7 @@ from apps.video.frame_cache import (
     store_status,
 )
 from apps.video.models import MjpegDependencyError, MjpegStream, VideoDevice
-from apps.video.utils import WORK_DIR, probe_rpi_camera_stack
+from apps.video.utils import WORK_DIR, open_cv2_capture, probe_rpi_camera_stack
 
 logger = logging.getLogger("apps.video.camera_service")
 
@@ -56,7 +56,10 @@ class _StreamCapture:
         if self._cv2 is None:
             self._cv2 = self.stream._load_cv2()
         if self._capture is None:
-            self._capture = self._cv2.VideoCapture(self.stream.video_device.identifier)
+            self._capture = open_cv2_capture(
+                self._cv2,
+                self.stream.video_device.identifier,
+            )
         if not self._capture.isOpened():
             self._capture.release()
             self._capture = None

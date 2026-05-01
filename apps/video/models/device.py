@@ -153,6 +153,10 @@ class VideoDevice(Ownable):
             return_objects=return_objects,
         )
         cls._ensure_single_default_for_node(node)
+        if return_objects:
+            _created, _updated, created_objects, updated_objects = result
+            for device in [*created_objects, *updated_objects]:
+                device.refresh_from_db(fields=["is_default"])
         return result
 
     @classmethod
@@ -163,7 +167,10 @@ class VideoDevice(Ownable):
         if len(defaults) == 1:
             return
         if len(defaults) > 1:
-            cls.objects.filter(pk__in=[device.pk for device in defaults[1:]]).update(
+            extra_defaults = defaults[1:]
+            for device in extra_defaults:
+                device.is_default = False
+            cls.objects.filter(pk__in=[device.pk for device in extra_defaults]).update(
                 is_default=False
             )
             return
