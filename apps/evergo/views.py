@@ -95,10 +95,23 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     }
 
 
-def _has_evergo_workspace_access(*, user) -> bool:
-    if not user.is_authenticated:
+def _is_evergo_contractor_group_member(*, user) -> bool:
+    if not getattr(user, "is_authenticated", False):
         return False
-    return user.groups.filter(name=EVERGO_CONTRACTORS_GROUP_NAME).exists() or user.is_superuser
+    if not getattr(user, "is_active", False):
+        return False
+    return user.groups.filter(name=EVERGO_CONTRACTORS_GROUP_NAME).exists()
+
+
+def _has_evergo_workspace_access(*, user) -> bool:
+    return bool(getattr(user, "is_superuser", False)) or _is_evergo_contractor_group_member(user=user)
+
+
+def _allowed_evergo_contractors_for_user(*, user):
+    contractors = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+    if _has_evergo_workspace_access(user=user):
+        return contractors
+    return EvergoUser.objects.none()
 
 
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
@@ -139,21 +152,15 @@ def evergo_workspace(request) -> HttpResponse:
             "address_municipality",
         )
     )
-    if request.user.is_superuser:
-        contractors = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
-    else:
-        contractor_profile = get_object_or_404(EvergoUser.objects.only("pk"), user=request.user)
-        contractors = EvergoUser.objects.filter(pk=contractor_profile.pk)
-        selected_contractor_id = str(contractor_profile.pk)
-
+    contractors = _allowed_evergo_contractors_for_user(user=request.user)
     if selected_contractor_id.isdigit():
         contractor_pk = int(selected_contractor_id)
-        if request.user.is_superuser or contractors.filter(pk=contractor_pk).exists():
+        if contractors.filter(pk=contractor_pk).exists():
             customers = customers.filter(user_id=contractor_pk)
             orders = orders.filter(user_id=contractor_pk)
         else:
             selected_contractor_id = ""
-    elif request.user.is_superuser:
+    else:
         selected_contractor_id = ""
     return render(
         request,
@@ -706,8 +713,8 @@ def _to_tsv(rows: list[dict[str, str]]) -> str:
 @login_required
 def order_tracking_public(request, order_id: int) -> HttpResponse:
     """Render and submit the order tracking phase-one helper form for authorized owners only."""
-    has_workspace_access = _has_evergo_workspace_access(user=request.user)
-    if not (request.user.is_staff or has_workspace_access):
+    contractor_options = _allowed_evergo_contractors_for_user(user=request.user)
+    if not _has_evergo_workspace_access(user=request.user):
         raise Http404("Evergo order tracking not found.")
 
     order_lookup = {
@@ -716,13 +723,12 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
     requested_contractor_id = request.POST.get("contractor") or request.GET.get("contractor") or ""
     profile = order.user
-    contractor_options = EvergoUser.objects.filter(pk=profile.pk)
-    if request.user.is_staff:
-        contractor_options = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
-        if requested_contractor_id.isdigit():
-            selected_profile = contractor_options.filter(pk=int(requested_contractor_id)).first()
-            if selected_profile is not None:
-                profile = selected_profile
+    if not contractor_options.filter(pk=profile.pk).exists():
+        raise Http404("Evergo order tracking not found.")
+    if requested_contractor_id.isdigit():
+        selected_profile = contractor_options.filter(pk=int(requested_contractor_id)).first()
+        if selected_profile is not None:
+            profile = selected_profile
     selected_contractor_id = str(profile.pk)
     brands = profile.fetch_charger_brand_options()
     remote_image_urls: dict[str, str] = {}

@@ -133,7 +133,7 @@ def test_evergo_workspace_renders_customers_and_orders_tabs(client):
 
 
 @pytest.mark.django_db
-def test_workspace_scopes_rows_to_current_contractor(client):
+def test_workspace_filters_rows_by_selected_contractor_for_security_group(client):
     user_model = get_user_model()
     user = user_model.objects.create_user(username="workspace-filter", email="workspace-filter@example.com")
     group = SecurityGroup.objects.create(name="Evergo Contractors")
@@ -145,7 +145,7 @@ def test_workspace_scopes_rows_to_current_contractor(client):
     EvergoCustomer.objects.create(user=profile_b, name="Customer B", latest_so="SO-B")
     client.force_login(user)
 
-    response = client.get(reverse("evergo:workspace"), {"tab": "customers"})
+    response = client.get(reverse("evergo:workspace"), {"tab": "customers", "contractor": str(profile_a.pk)})
 
     assert response.status_code == 200
     content = response.content.decode()
@@ -153,10 +153,28 @@ def test_workspace_scopes_rows_to_current_contractor(client):
     assert "Customer B" not in content
 
 
+@pytest.mark.django_db
+def test_workspace_handles_multiple_profiles_for_security_group_member(client):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="workspace-duplicates", email="workspace-duplicates@example.com")
+    group = SecurityGroup.objects.create(name="Evergo Contractors")
+    user.groups.add(group)
+    profile_a = EvergoUser.objects.create(user=user, evergo_email="duplicate-a@example.com", evergo_password="secret")
+    profile_b = EvergoUser.objects.create(user=user, evergo_email="duplicate-b@example.com", evergo_password="secret")
+    EvergoCustomer.objects.create(user=profile_a, name="Duplicate Customer A", latest_so="SO-DA")
+    EvergoCustomer.objects.create(user=profile_b, name="Duplicate Customer B", latest_so="SO-DB")
+    client.force_login(user)
+
+    response = client.get(reverse("evergo:workspace"), {"tab": "customers"})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Duplicate Customer A" in content
+    assert "Duplicate Customer B" in content
 
 
 @pytest.mark.django_db
-def test_order_tracking_ignores_contractor_override_for_non_staff_owner(client, monkeypatch):
+def test_order_tracking_rejects_contractor_override_without_evergo_security_group(client):
     user_model = get_user_model()
     owner_a = user_model.objects.create_user(username="owner-a-nonstaff", email="owner-a-nonstaff@example.com")
     owner_b = user_model.objects.create_user(username="owner-b-nonstaff", email="owner-b-nonstaff@example.com")
@@ -166,26 +184,19 @@ def test_order_tracking_ignores_contractor_override_for_non_staff_owner(client, 
 
     order = EvergoOrder.objects.create(user=profile_a, remote_id=9221, order_number="SO-9221")
 
-    monkeypatch.setattr(
-        EvergoUser,
-        "fetch_charger_brand_options",
-        lambda self: ["Brand A"] if self.pk == profile_a.pk else ["Brand B"],
-    )
-    monkeypatch.setattr(EvergoUser, "fetch_order_detail", lambda self, order_id: {})
     client.force_login(owner_a)
 
     response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]), {"contractor": str(profile_b.pk)})
 
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert "Brand A" in content
-    assert "Brand B" not in content
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db
-def test_order_tracking_uses_selected_contractor_account(client, monkeypatch):
+def test_order_tracking_uses_selected_contractor_account_for_security_group_member(client, monkeypatch):
     user_model = get_user_model()
-    staff = user_model.objects.create_user(username="tracking-staff", email="staff@example.com", is_staff=True)
+    group_member = user_model.objects.create_user(username="tracking-group-member", email="group-member@example.com")
+    group = SecurityGroup.objects.create(name="Evergo Contractors")
+    group_member.groups.add(group)
     owner_a = user_model.objects.create_user(username="owner-a", email="owner-a@example.com")
     owner_b = user_model.objects.create_user(username="owner-b", email="owner-b@example.com")
     profile_a = EvergoUser.objects.create(user=owner_a, evergo_email="a@example.com", evergo_password="secret")
@@ -204,7 +215,7 @@ def test_order_tracking_uses_selected_contractor_account(client, monkeypatch):
         "fetch_order_detail",
         lambda self, order_id: {},
     )
-    client.force_login(staff)
+    client.force_login(group_member)
 
     response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]), {"contractor": str(profile_b.pk)})
 
@@ -213,14 +224,19 @@ def test_order_tracking_uses_selected_contractor_account(client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_order_tracking_requires_staff_or_workspace_access(client):
+def test_order_tracking_rejects_staff_without_evergo_security_group(client):
     user_model = get_user_model()
-    owner = user_model.objects.create_user(username="tracking-owner-blocked", email="blocked@example.com")
+    owner = user_model.objects.create_user(username="tracking-owner-blocked", email="blocked-owner@example.com")
+    staff = user_model.objects.create_user(
+        username="tracking-staff-blocked",
+        email="blocked-staff@example.com",
+        is_staff=True,
+    )
     profile = EvergoUser.objects.create(user=owner, evergo_email="blocked@example.com", evergo_password="secret")
     from apps.evergo.models import EvergoOrder
 
     order = EvergoOrder.objects.create(user=profile, remote_id=9912, order_number="SO-9912")
-    client.force_login(owner)
+    client.force_login(staff)
 
     response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
 
