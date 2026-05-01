@@ -28,7 +28,7 @@ flowchart TD
 5. **Complete test suite with --all flag** – Enforced gate. The workflow now requires test evidence in release context (`tests_verified_at`, `tests_command`, and a successful `tests_result`) or runs a configured validation command (`RELEASE_PUBLISH_VALIDATION_COMMAND`) and records the result before it can proceed.
 6. **Confirm PyPI Trusted Publisher settings** – Enforced gate. The workflow validates the publish metadata against the expected Trusted Publisher values (`publish.yml`, `refs/tags/v*`, and `pypi`) and fails with actionable guidance when the workflow metadata is missing or mismatched.
 7. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
-8. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes and publishes to PyPI via OIDC.
+8. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes, attaches the same built distributions to the GitHub Release, and publishes those distributions to PyPI via OIDC.
 9. **Wait for GitHub Actions publish** – The workflow pauses until the publish workflow completes, logging the GitHub Actions run URL when available so operators can monitor progress.
 10. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
 11. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
@@ -51,7 +51,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
    - The release UI/headless workflow runs through metadata prep and artifact generation.
    - The workflow exports built artifacts (wheel/sdist) to the GitHub release and pushes the release tag, which triggers the GitHub Actions `publish` workflow for OIDC uploads.
 4. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
-   - Builds the sdist and wheel in a dedicated job, uploads them as artifacts, and publishes in a separate job.
+   - Builds the sdist and wheel in a dedicated job, uploads them as workflow artifacts for job handoff, attaches them to the GitHub Release, and publishes them in a separate PyPI job.
    - Runs a pre-build version consistency gate that normalizes the release tag (`vX.Y.Z` → `X.Y.Z`) and compares it against `VERSION` (and the `tool.setuptools.dynamic.version.file` source when configured). The build fails early if they do not match.
    - Uses `permissions: id-token: write` on the publish job and keeps `permissions: contents: read` at the workflow level.
    - Uses `pypa/gh-action-pypi-publish@release/v1` with `attestations: true` and no API token configured, relying on OIDC instead.
@@ -63,7 +63,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 
 ### Implementation notes
 
-- The new `publish.yml` workflow is designed to build from a release tag and publish to PyPI using OIDC.
+- The new `publish.yml` workflow is designed to build from a release tag, upload the resulting distributions to the matching GitHub Release, and publish the same distributions to PyPI using OIDC.
 - Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
 - Use the `pypi` environment in GitHub with required reviewers if a human approval gate is required before the job publishes.
 - Before pushing a release tag, ensure `VERSION` and any dynamic version source file configured in `pyproject.toml` contain the exact same version string as the tag (e.g., `X.Y.Z`, without the `v` prefix). The publish workflow now enforces this and will stop before build if they are out of sync.
