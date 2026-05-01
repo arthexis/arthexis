@@ -8,12 +8,12 @@ import tempfile
 import unicodedata
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.links.models import QRRedirect, Reference
 from apps.links.qr_printing import (
@@ -189,7 +189,7 @@ class Command(BaseCommand):
         output_path = self._resolve_output_path(options.get("output"))
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            image.convert("RGB").save(output_path, format="PNG")
+            image.save(output_path, format="PNG")
         except OSError as exc:
             raise CommandError(f"Failed to write QR preview '{output_path}': {exc}") from exc
 
@@ -355,7 +355,11 @@ class Command(BaseCommand):
         profile = options["wifi_profile"].strip()
         if not profile:
             raise CommandError("Wi-Fi profile cannot be blank.")
-        password = self._read_windows_wifi_profile_password(profile)
+        password = (
+            ""
+            if options["wifi_auth"] == "nopass"
+            else self._read_windows_wifi_profile_password(profile)
+        )
         return QRSelection(
             source="wifi-profile",
             payload=build_wifi_payload(
@@ -406,7 +410,7 @@ class Command(BaseCommand):
     def _resolve_output_path(self, output: str | None) -> Path:
         if output:
             return Path(output).expanduser().resolve()
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S")
         return Path(tempfile.gettempdir()) / f"arthexis-qr-{stamp}.png"
 
 

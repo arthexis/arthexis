@@ -121,6 +121,37 @@ def test_qr_print_wifi_profile_uses_profile_lookup(monkeypatch, tmp_path) -> Non
     assert "profile-secret" not in output
 
 
+def test_qr_print_wifi_profile_nopass_skips_password_lookup(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "wifi-profile-open-qr.png"
+    stdout = StringIO()
+
+    def fail_password_lookup(self, profile):
+        raise AssertionError("open profiles should not read saved keys")
+
+    monkeypatch.setattr(
+        qr_command.Command,
+        "_read_windows_wifi_profile_password",
+        fail_password_lookup,
+    )
+
+    call_command(
+        "qr",
+        "print",
+        "--wifi-profile",
+        "Guest Profile",
+        "--wifi-auth",
+        "nopass",
+        "--output",
+        str(output_path),
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert output_path.exists()
+    assert "SOURCE=wifi-profile" in output
+    assert "WIFI_PROFILE=Guest Profile" in output
+
+
 def test_qr_devices_lists_discovered_phomemo_paths(monkeypatch) -> None:
     stdout = StringIO()
     monkeypatch.setattr(qr_command, "resolve_phomemo_m220_usb_path", lambda path="": "USB-A")

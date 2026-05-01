@@ -142,11 +142,29 @@ def _make_qr_image(payload: str) -> Image.Image:
 
 
 def _load_font(size: int, *, bold: bool) -> ImageFont.ImageFont:
-    font_name = "arialbd.ttf" if bold else "arial.ttf"
-    try:
-        return ImageFont.truetype(font_name, size)
-    except OSError:
-        return ImageFont.load_default()
+    candidates = (
+        (
+            "arialbd.ttf",
+            "Arial Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+            "/Library/Fonts/Arial Bold.ttf",
+        )
+        if bold
+        else (
+            "arial.ttf",
+            "Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/Library/Fonts/Arial.ttf",
+        )
+    )
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _truncate_to_width(
