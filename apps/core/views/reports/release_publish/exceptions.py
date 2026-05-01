@@ -1,9 +1,9 @@
-"""Domain exceptions for release publishing workflows."""
+"""Compatibility alias for release publish exceptions."""
 
+from __future__ import annotations
 
-class DirtyRepository(Exception):
-    """Raised when the Git workspace has uncommitted changes."""
+import sys
 
+from apps.release.publishing import exceptions as _exceptions
 
-class PublishPending(Exception):
-    """Raised when publish metadata updates must wait for external publishing."""
+sys.modules[__name__] = _exceptions

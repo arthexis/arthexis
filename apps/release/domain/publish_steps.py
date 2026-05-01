@@ -1,8 +1,8 @@
 """Canonical release publish step definitions.
 
-The release domain owns authoritative publish step ordering. Adapters in the
-admin report pipeline and the headless scheduler resolve step handlers to their
-runtime implementations.
+The release domain owns authoritative publish step ordering. The release
+publishing service resolves handler names to runtime implementations, while
+admin HTTP views remain adapters around that service.
 """
 
 from __future__ import annotations

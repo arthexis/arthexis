@@ -1,8 +1,4 @@
-"""Release publish package public API.
-
-Use :mod:`apps.core.views.reports.release_publish.views` as the canonical
-Django URL entrypoint for release publish HTTP wiring.
-"""
+"""Release publish HTTP adapter public API."""
 
 from .exceptions import DirtyRepository, PublishPending
 from .views import PUBLISH_STEPS, release_progress

@@ -3,7 +3,7 @@
 Legacy import path: ``release_publish.integrations.github``.
 """
 
-from ..github_ops import (  # noqa: F401
+from apps.release.publishing.github_ops import (  # noqa: F401
     GitHubRequestAdapter,
     ensure_github_release,
     fetch_publish_workflow_run,
