@@ -1,9 +1,67 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from apps.video import utils
+
+
+class _FakeFrame:
+    shape = (480, 640, 3)
+
+
+class _FakeCapture:
+    def __init__(self, *, opened: bool = True):
+        self.opened = opened
+        self.released = False
+
+    def isOpened(self):
+        return self.opened
+
+    def read(self):
+        return True, _FakeFrame()
+
+    def getBackendName(self):
+        return "FAKE"
+
+    def release(self):
+        self.released = True
+
+
+class _FakeCv2:
+    CAP_DSHOW = 700
+
+    def __init__(self):
+        self.calls = []
+
+    def VideoCapture(self, *args):
+        self.calls.append(args)
+        return _FakeCapture()
+
+
+def test_open_cv2_capture_uses_prefixed_index_with_windows_backend(monkeypatch):
+    fake_cv2 = _FakeCv2()
+    monkeypatch.setattr(utils.os, "name", "nt")
+
+    capture = utils.open_cv2_capture(fake_cv2, "opencv:2")
+
+    assert capture.isOpened()
+    assert fake_cv2.calls == [(2, fake_cv2.CAP_DSHOW)]
+
+
+def test_detect_cv2_camera_devices_uses_prefixed_identifiers(monkeypatch):
+    fake_cv2 = _FakeCv2()
+    monkeypatch.setattr(utils.os, "name", "posix")
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
+    devices = utils.detect_cv2_camera_devices(limit=1)
+
+    assert len(devices) == 1
+    assert devices[0].identifier == "opencv:0"
+    assert devices[0].description == "OpenCV Camera 0"
+    assert "device_index=0" in devices[0].raw_info
+    assert fake_cv2.calls == [(0,)]
 
 
 def test_has_rpicam_binaries_rejects_unrunnable_binary(monkeypatch):

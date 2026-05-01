@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from django.utils.translation import gettext_lazy as _
 
 from apps.video.services.capture import rotate_cv2_frame
+from apps.video.utils import open_cv2_capture
 
 
 class MjpegDependencyError(RuntimeError):
@@ -34,7 +35,7 @@ def load_cv2():
 def _open_capture(*, cv2, device_identifier: str):
     """Create and yield an opened ``cv2.VideoCapture`` instance."""
 
-    capture = cv2.VideoCapture(device_identifier)
+    capture = open_cv2_capture(cv2, device_identifier)
     if not capture.isOpened():
         capture.release()
         raise MjpegDeviceUnavailableError(
