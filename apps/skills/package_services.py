@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.core.exceptions import ValidationError
@@ -73,11 +73,14 @@ def normalize_package_path(path: Path) -> str:
 def validate_package_relative_path(relative_path: str) -> str:
     normalized = relative_path.replace("\\", "/")
     path = PurePosixPath(normalized)
+    windows_path = PureWindowsPath(relative_path)
     if (
         not normalized
         or normalized == "."
         or path.is_absolute()
         or Path(relative_path).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
         or any(part in {"", ".", ".."} for part in path.parts)
     ):
         raise ValueError(f"Unsafe package path: {relative_path}")

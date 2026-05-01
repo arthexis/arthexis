@@ -271,6 +271,31 @@ def test_import_dry_run_validates_manifest_paths(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_rejects_windows_absolute_manifest_paths(tmp_path):
+    package_path = tmp_path / "windows-absolute.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "windows-absolute",
+                "title": "Windows Absolute",
+                "files": [
+                    {
+                        "path": "C:/Users/alice/secret.txt",
+                        "included_by_default": True,
+                    }
+                ],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="Unsafe package path"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
 def test_import_dry_run_rejects_missing_manifest_files(tmp_path):
     package_path = tmp_path / "missing-file.zip"
     manifest = {
