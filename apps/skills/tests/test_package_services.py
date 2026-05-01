@@ -64,6 +64,34 @@ def test_scan_dry_run_reports_without_writing(tmp_path):
 
 
 @pytest.mark.django_db
+def test_scan_redacts_path_blocked_files_without_reading(tmp_path, monkeypatch):
+    skill_dir = tmp_path / "operator-manual"
+    blocked_file = skill_dir / "logs" / "debug.log"
+    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+    _write(blocked_file, "blocked runtime log")
+
+    original_read_bytes = Path.read_bytes
+
+    def read_bytes(path: Path) -> bytes:
+        if path == blocked_file:
+            raise AssertionError("path-blocked files should not be read")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+
+    summary = scan_codex_skill_directory(skill_dir, dry_run=True)
+
+    blocked_entry = next(
+        entry
+        for entry in summary["files"]
+        if entry["relative_path"] == "logs/debug.log"
+    )
+    assert blocked_entry["portability"] == AgentSkillFile.Portability.CACHE
+    assert blocked_entry["included_by_default"] is False
+    assert blocked_entry["size_bytes"] == 0
+
+
+@pytest.mark.django_db
 def test_scan_preserves_custom_skills_and_redacts_excluded_content(tmp_path):
     AgentSkill.objects.create(slug="custom-existing", title="Custom", markdown="keep")
     skill_dir = tmp_path / "security-codes"
@@ -232,3 +260,25 @@ def test_seed_skill_sync_preserves_custom_skills(tmp_path):
     assert not AgentSkill.objects.filter(pk=stale.pk).exists()
     synced = AgentSkill.objects.get(slug="cp-doctor")
     assert synced.is_seed_data is True
+
+
+@pytest.mark.django_db
+def test_seed_skill_sync_restores_soft_deleted_default_skill(tmp_path):
+    skills_root = tmp_path / "skills"
+    _write(skills_root / "cp-doctor" / "SKILL.md", "restored diagnostic skill")
+    skill = AgentSkill.objects.create(
+        slug="cp-doctor",
+        title="Deleted",
+        markdown="old",
+    )
+    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    skill.refresh_from_db()
+    skill.delete()
+
+    with override_settings(BASE_DIR=tmp_path):
+        sync_filesystem_to_db()
+
+    restored = AgentSkill.objects.get(slug="cp-doctor")
+    assert restored.pk == skill.pk
+    assert restored.markdown == "restored diagnostic skill"
+    assert restored.is_seed_data is True

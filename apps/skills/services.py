@@ -18,6 +18,25 @@ DEFAULT_SKILL_ROLE_MAP = {
 }
 
 
+def _restore_or_create_seed_skill(
+    *,
+    slug: str,
+    title: str,
+    markdown: str,
+) -> tuple[AgentSkill, bool]:
+    skill = AgentSkill.all_objects.filter(slug=slug).first()
+    if skill is None:
+        return (
+            AgentSkill.objects.create(slug=slug, title=title, markdown=markdown),
+            True,
+        )
+    skill.title = title
+    skill.markdown = markdown
+    skill.is_deleted = False
+    skill.save(update_fields=["title", "markdown", "is_deleted"])
+    return skill, False
+
+
 def sync_filesystem_to_db() -> int:
     skills_root = Path(settings.BASE_DIR) / "skills"
     changed = 0
@@ -32,9 +51,10 @@ def sync_filesystem_to_db() -> int:
                 continue
             content = path.read_text(encoding="utf-8")
             title = slug.replace("-", " ").title()
-            skill, created = AgentSkill.objects.update_or_create(
+            skill, created = _restore_or_create_seed_skill(
                 slug=slug,
-                defaults={"title": title, "markdown": content},
+                title=title,
+                markdown=content,
             )
             AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
             skill.is_seed_data = True

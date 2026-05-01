@@ -12,6 +12,7 @@ from apps.skills.models import AgentSkill, AgentSkillFile
 
 PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
 SKILL_MARKDOWN = "SKILL.md"
+EMPTY_CONTENT_SHA256 = hashlib.sha256(b"").hexdigest()
 
 BLOCKED_STATE_FILENAMES = {
     "pending-approval-alerts.lock.json",
@@ -81,11 +82,13 @@ def validate_package_relative_path(relative_path: str) -> str:
     return path.as_posix()
 
 
-def classify_codex_skill_file(
-    relative_path: str,
-    content: str | None,
-) -> SkillFileClassification:
-    parts = [part.lower() for part in relative_path.replace("\\", "/").split("/")]
+def _normalized_parts(relative_path: str) -> tuple[str, list[str]]:
+    normalized = relative_path.replace("\\", "/")
+    return normalized, [part.lower() for part in normalized.split("/")]
+
+
+def classify_codex_skill_path(relative_path: str) -> SkillFileClassification | None:
+    _, parts = _normalized_parts(relative_path)
     filename = parts[-1]
     suffix = Path(filename).suffix.lower()
 
@@ -125,6 +128,17 @@ def classify_codex_skill_file(
             False,
             "runtime artifact file is not portable",
         )
+    return None
+
+
+def classify_codex_skill_file(
+    relative_path: str,
+    content: str | None,
+) -> SkillFileClassification:
+    normalized, parts = _normalized_parts(relative_path)
+    path_classification = classify_codex_skill_path(relative_path)
+    if path_classification is not None:
+        return path_classification
     if content is None:
         return SkillFileClassification(
             AgentSkillFile.Portability.DEVICE_SCOPED,
@@ -137,7 +151,7 @@ def classify_codex_skill_file(
             False,
             "operator-local paths must be parameterized before export",
         )
-    if relative_path == SKILL_MARKDOWN or parts[0] in PORTABLE_ROOTS:
+    if normalized == SKILL_MARKDOWN or parts[0] in PORTABLE_ROOTS:
         return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
     return SkillFileClassification(
         AgentSkillFile.Portability.DEVICE_SCOPED,
@@ -156,19 +170,37 @@ def _read_skill_file(path: Path) -> tuple[bytes, str | None]:
 
 def _scan_file(skill_dir: Path, path: Path) -> tuple[SkillFileScan, str]:
     relative_path = normalize_package_path(path.relative_to(skill_dir))
+    path_classification = classify_codex_skill_path(relative_path)
+    if path_classification is not None:
+        return (
+            SkillFileScan(
+                relative_path=relative_path,
+                portability=path_classification.portability,
+                included_by_default=path_classification.included_by_default,
+                exclusion_reason=path_classification.exclusion_reason,
+                size_bytes=0,
+                content_sha256=EMPTY_CONTENT_SHA256,
+            ),
+            "",
+        )
+
     content_bytes, text = _read_skill_file(path)
     classification = classify_codex_skill_file(relative_path, text)
-    digest = hashlib.sha256(content_bytes).hexdigest()
+    stored_text = (
+        text if classification.included_by_default and text is not None else ""
+    )
+    stored_bytes = stored_text.encode("utf-8")
+    digest = hashlib.sha256(stored_bytes).hexdigest()
     return (
         SkillFileScan(
             relative_path=relative_path,
             portability=classification.portability,
             included_by_default=classification.included_by_default,
             exclusion_reason=classification.exclusion_reason,
-            size_bytes=len(content_bytes),
+            size_bytes=len(stored_bytes),
             content_sha256=digest,
         ),
-        text or "",
+        stored_text,
     )
 
 
