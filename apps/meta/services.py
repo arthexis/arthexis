@@ -13,6 +13,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+from filelock import FileLock
+
 WHATSAPP_WEB_URL = "https://web.whatsapp.com/"
 DEFAULT_WHATSAPP_WEB_PROFILE_DIR = (
     Path.home() / ".codex" / "whatsapp-web" / "playwright-profile"
@@ -139,8 +141,9 @@ def normalize_whatsapp_phone(value: str, *, default_country_code: str = "52") ->
         digits = re.sub(r"\D+", "", raw)
         if digits.startswith("00"):
             digits = digits[2:]
-    if len(digits) == 10 and default_country_code:
-        digits = f"{default_country_code}{digits}"
+    country_code = re.sub(r"\D+", "", default_country_code or "")
+    if len(digits) == 10 and country_code:
+        digits = f"{country_code}{digits}"
     if len(digits) < 8:
         raise ValueError("WhatsApp phone number is too short.")
     return digits
@@ -323,6 +326,12 @@ def _with_whatsapp_page(
     timeout_seconds: float = 120.0,
     cdp_url: str = "",
 ):
+    resolved_browser = _resolve_browser(browser)
+    resolved_profile_dir = _resolve_profile_dir(profile_dir)
+    timeout_seconds = max(float(timeout_seconds), 1.0)
+    if cdp_url and resolved_browser == "firefox":
+        raise ValueError("--cdp-url only supports Chromium/Edge sessions.")
+
     try:
         from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -332,10 +341,6 @@ def _with_whatsapp_page(
             "Playwright is required for WhatsApp Web automation. "
             f"Install it for this interpreter ({sys.executable})."
         ) from exc
-
-    resolved_browser = _resolve_browser(browser)
-    resolved_profile_dir = _resolve_profile_dir(profile_dir)
-    timeout_seconds = max(float(timeout_seconds), 1.0)
 
     try:
         _ensure_windows_subprocess_event_loop_policy()
@@ -638,33 +643,39 @@ def _read_cursor(cursor_file: Path, key: str) -> str:
     return str(payload.get(key) or "")
 
 
+def _cursor_lock_for_file(cursor_file: Path) -> FileLock:
+    lock_file = cursor_file.with_name(f".{cursor_file.name}.lock")
+    return FileLock(str(lock_file), timeout=10)
+
+
 def _write_cursor(cursor_file: Path, key: str, value: str) -> None:
     cursor_file.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        payload = json.loads(cursor_file.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        payload = {}
-    if isinstance(payload.get("cursors"), dict):
-        cursors = dict(payload["cursors"])
-    else:
-        cursors = {
-            existing_key: existing_value
-            for existing_key, existing_value in payload.items()
-            if isinstance(existing_value, str)
+    with _cursor_lock_for_file(cursor_file):
+        try:
+            payload = json.loads(cursor_file.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload.get("cursors"), dict):
+            cursors = dict(payload["cursors"])
+        else:
+            cursors = {
+                existing_key: existing_value
+                for existing_key, existing_value in payload.items()
+                if isinstance(existing_value, str)
+            }
+        cursors[key] = value
+        next_payload = {
+            "updated_at": datetime.now(UTC).isoformat(),
+            "expires_at": None,
+            "cursors": cursors,
         }
-    cursors[key] = value
-    next_payload = {
-        "updated_at": datetime.now(UTC).isoformat(),
-        "expires_at": None,
-        "cursors": cursors,
-    }
-    temp_file = cursor_file.with_name(
-        f".{cursor_file.name}.{os.getpid()}.{time.monotonic_ns()}.tmp"
-    )
-    temp_file.write_text(
-        json.dumps(next_payload, indent=2, sort_keys=True), encoding="utf-8"
-    )
-    os.replace(temp_file, cursor_file)
+        temp_file = cursor_file.with_name(
+            f".{cursor_file.name}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+        )
+        temp_file.write_text(
+            json.dumps(next_payload, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        os.replace(temp_file, cursor_file)
 
 
 def read_whatsapp_web_messages(

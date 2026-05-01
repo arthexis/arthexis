@@ -177,6 +177,8 @@ class Command(BaseCommand):
         )
 
     def _handle_read(self, options):
+        if options["limit"] < 0:
+            raise CommandError("--limit must be >= 0. Use 0 to return all visible messages.")
         since = parse_cli_date(options["since"])
         until = parse_cli_date(options["until"])
         exact_date = parse_cli_date(options["date"])

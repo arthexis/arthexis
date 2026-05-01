@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.meta.management.commands import whatsapp as whatsapp_command
 from apps.meta.services import (
@@ -17,6 +18,7 @@ from apps.meta.services import (
     WhatsAppWebSendResult,
     _is_whatsapp_web_url,
     _read_cursor,
+    _with_whatsapp_page,
     _write_cursor,
     build_whatsapp_web_messages,
     cursor_file_for_profile,
@@ -96,6 +98,7 @@ def test_detect_whatsapp_web_login_state_detects_login_required_text():
 
 def test_normalize_whatsapp_phone_adds_default_country_code():
     assert normalize_whatsapp_phone("555 123 4567") == "525551234567"
+    assert normalize_whatsapp_phone("555 123 4567", default_country_code="+52") == "525551234567"
     assert normalize_whatsapp_phone("+1 (555) 123-4567") == "15551234567"
 
 
@@ -105,6 +108,16 @@ def test_is_whatsapp_web_url_requires_exact_whatsapp_host():
     assert not _is_whatsapp_web_url("https://example.com/?next=https://web.whatsapp.com/")
     assert not _is_whatsapp_web_url("https://web.whatsapp.com.example.com/")
     assert not _is_whatsapp_web_url("notaurl")
+
+
+def test_cdp_url_rejects_firefox_browser():
+    with pytest.raises(ValueError, match="Chromium/Edge"):
+        _with_whatsapp_page(
+            lambda *_args: None,
+            browser="firefox",
+            cdp_url="http://127.0.0.1:9223",
+            timeout_seconds=1,
+        )
 
 
 def test_parse_cli_date_requires_iso_format():
@@ -218,10 +231,12 @@ def test_cursor_file_round_trips_atomic_payload(tmp_path):
     cursor_file = tmp_path / "message-cursors.json"
 
     _write_cursor(cursor_file, "525551234567:default", "fingerprint-a")
+    _write_cursor(cursor_file, "525551234568:default", "fingerprint-b")
 
     payload = json.loads(cursor_file.read_text(encoding="utf-8"))
     assert payload["expires_at"] is None
     assert payload["cursors"]["525551234567:default"] == "fingerprint-a"
+    assert payload["cursors"]["525551234568:default"] == "fingerprint-b"
     assert _read_cursor(cursor_file, "525551234567:default") == "fingerprint-a"
 
 
@@ -271,6 +286,54 @@ def test_read_new_cursor_advances_to_returned_limited_batch(monkeypatch, tmp_pat
     assert result.cursor_updated is True
     assert _read_cursor(cursor_file, cursor_key) == result.messages[-1].fingerprint
     assert result.messages[-1].fingerprint != all_messages[-1].fingerprint
+
+
+def test_whatsapp_login_command_outputs_json(monkeypatch, tmp_path):
+    def fake_validate_whatsapp_web_login(**kwargs):
+        assert kwargs["profile_dir"] == tmp_path
+        assert kwargs["timeout_seconds"] == 3
+        assert kwargs["poll_interval_seconds"] == 0.5
+        assert kwargs["headless"] is True
+        assert kwargs["browser"] == "edge"
+        assert kwargs["channel"] == "msedge"
+        return WhatsAppWebLoginResult(
+            status=WhatsAppWebLoginStatus.LOGIN_REQUIRED,
+            profile_dir=Path(tmp_path),
+            elapsed_seconds=3.01,
+            url="https://web.whatsapp.com/",
+            marker="[data-testid='qrcode']",
+            detail="WhatsApp Web login screen was visible until timeout.",
+        )
+
+    monkeypatch.setattr(
+        whatsapp_command,
+        "validate_whatsapp_web_login",
+        fake_validate_whatsapp_web_login,
+    )
+    stdout = StringIO()
+
+    call_command(
+        "whatsapp",
+        "login",
+        "--profile-dir",
+        str(tmp_path),
+        "--timeout",
+        "3",
+        "--poll-interval",
+        "0.5",
+        "--headless",
+        "--browser",
+        "edge",
+        "--channel",
+        "msedge",
+        "--json",
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["status"] == WhatsAppWebLoginStatus.LOGIN_REQUIRED
+    assert payload["profile_dir"] == str(tmp_path)
+    assert payload["marker"] == "[data-testid='qrcode']"
 
 
 def test_whatsapp_status_command_outputs_json(monkeypatch, tmp_path):
@@ -411,3 +474,15 @@ def test_whatsapp_read_command_outputs_messages(monkeypatch, tmp_path):
     assert payload["status"] == "ok"
     assert payload["messages"][0]["text"] == "hello"
     assert payload["cursor_updated"] is True
+
+
+def test_whatsapp_read_command_rejects_negative_limit():
+    with pytest.raises(CommandError, match="--limit must be >= 0"):
+        call_command(
+            "whatsapp",
+            "read",
+            "--from",
+            "5551234567",
+            "--limit",
+            "-1",
+        )
