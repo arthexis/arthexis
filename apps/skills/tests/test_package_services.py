@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from django.test import override_settings
 
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import (
+    PACKAGE_FORMAT,
     classify_codex_skill_file,
     export_codex_skill_package,
     import_codex_skill_package,
@@ -39,6 +42,10 @@ def test_classifies_portable_state_secret_and_operator_scoped_files():
     )
     assert operator_scoped.portability == AgentSkillFile.Portability.OPERATOR_SCOPED
     assert operator_scoped.included_by_default is False
+
+    unknown = classify_codex_skill_file("local-state.txt", "unknown root")
+    assert unknown.portability == AgentSkillFile.Portability.DEVICE_SCOPED
+    assert unknown.included_by_default is False
 
 
 @pytest.mark.django_db
@@ -144,6 +151,62 @@ def test_import_restores_soft_deleted_skill_slug(tmp_path):
     restored = AgentSkill.objects.get(slug="security-codes")
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
+
+
+@pytest.mark.django_db
+def test_import_rejects_unsafe_manifest_paths(tmp_path):
+    package_path = tmp_path / "unsafe.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "unsafe",
+                "title": "Unsafe",
+                "files": [{"path": "../secret.txt", "included_by_default": True}],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/unsafe/../secret.txt", "secret")
+
+    with pytest.raises(ValueError, match="Unsafe package path"):
+        import_codex_skill_package(package_path, dry_run=False)
+
+
+@pytest.mark.django_db
+def test_import_redacts_excluded_manifest_entries(tmp_path):
+    package_path = tmp_path / "excluded.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "excluded",
+                "title": "Excluded",
+                "files": [
+                    {
+                        "path": "credentials/token.txt",
+                        "portability": AgentSkillFile.Portability.SECRET,
+                        "included_by_default": False,
+                        "exclusion_reason": "secret payload",
+                    }
+                ],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/excluded/credentials/token.txt", "secret")
+
+    import_codex_skill_package(package_path, dry_run=False)
+
+    file_entry = AgentSkillFile.objects.get(
+        skill__slug="excluded",
+        relative_path="credentials/token.txt",
+    )
+    assert file_entry.content == ""
+    assert file_entry.size_bytes == 0
+    assert file_entry.exclusion_reason == "secret payload"
 
 
 @pytest.mark.django_db

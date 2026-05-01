@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.db import transaction
@@ -11,6 +11,7 @@ from django.db import transaction
 from apps.skills.models import AgentSkill, AgentSkillFile
 
 PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
+SKILL_MARKDOWN = "SKILL.md"
 
 BLOCKED_STATE_FILENAMES = {
     "pending-approval-alerts.lock.json",
@@ -63,6 +64,20 @@ class SkillFileScan:
 
 
 def normalize_package_path(path: Path) -> str:
+    return path.as_posix()
+
+
+def validate_package_relative_path(relative_path: str) -> str:
+    normalized = relative_path.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if (
+        not normalized
+        or normalized == "."
+        or path.is_absolute()
+        or Path(relative_path).is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(f"Unsafe package path: {relative_path}")
     return path.as_posix()
 
 
@@ -122,7 +137,13 @@ def classify_codex_skill_file(
             False,
             "operator-local paths must be parameterized before export",
         )
-    return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
+    if relative_path == SKILL_MARKDOWN or parts[0] in PORTABLE_ROOTS:
+        return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
+    return SkillFileClassification(
+        AgentSkillFile.Portability.DEVICE_SCOPED,
+        False,
+        "file is outside portable skill package roots",
+    )
 
 
 def _read_skill_file(path: Path) -> tuple[bytes, str | None]:
@@ -180,16 +201,36 @@ def _sync_package_files(skill: AgentSkill, file_specs: list[dict]) -> None:
     )
 
 
+def _import_file_spec(file_info: dict, content: str) -> dict:
+    included_by_default = file_info.get("included_by_default", True)
+    stored_content = content if included_by_default else ""
+    return {
+        "relative_path": file_info["path"],
+        "content": stored_content,
+        "content_sha256": hashlib.sha256(stored_content.encode("utf-8")).hexdigest(),
+        "portability": file_info.get(
+            "portability", AgentSkillFile.Portability.PORTABLE
+        ),
+        "included_by_default": included_by_default,
+        "exclusion_reason": (
+            ""
+            if included_by_default
+            else file_info.get("exclusion_reason") or "excluded by package manifest"
+        ),
+        "size_bytes": len(stored_content.encode("utf-8")),
+    }
+
+
 def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict:
     skill_dir = Path(skill_dir)
-    skill_md = skill_dir / "SKILL.md"
+    skill_md = skill_dir / SKILL_MARKDOWN
     if not skill_md.exists():
-        raise ValueError(f"{skill_dir} does not contain SKILL.md")
+        raise ValueError(f"{skill_dir} does not contain {SKILL_MARKDOWN}")
 
     file_entries = []
     file_content_by_path = {}
     for path in sorted(skill_dir.rglob("*")):
-        if not path.is_file():
+        if path.is_symlink() or not path.is_file():
             continue
         scan, text = _scan_file(skill_dir, path)
         file_entries.append(scan)
@@ -209,7 +250,7 @@ def scan_codex_skill_directory(skill_dir: Path, *, dry_run: bool = True) -> dict
         skill = _restore_or_create_skill(
             slug=skill_dir.name,
             title=skill_dir.name.replace("-", " ").title(),
-            markdown=file_content_by_path.get("SKILL.md", ""),
+            markdown=file_content_by_path.get(SKILL_MARKDOWN, ""),
         )
         _sync_package_files(
             skill,
@@ -237,7 +278,7 @@ def scan_codex_skills_root(source: Path, *, dry_run: bool = True) -> dict:
     source = Path(source)
     summaries = []
     for child in sorted(source.iterdir()):
-        if child.is_dir() and (child / "SKILL.md").exists():
+        if child.is_dir() and (child / SKILL_MARKDOWN).exists():
             summaries.append(scan_codex_skill_directory(child, dry_run=dry_run))
     return {"source": str(source), "dry_run": dry_run, "skills": summaries}
 
@@ -272,6 +313,7 @@ def export_codex_skill_package(
                         "path": file_entry.relative_path,
                         "portability": file_entry.portability,
                         "included_by_default": file_entry.included_by_default,
+                        "exclusion_reason": file_entry.exclusion_reason,
                         "content_sha256": file_entry.content_sha256,
                     }
                 )
@@ -306,37 +348,28 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
             for skill_entry in manifest.get("skills", []):
                 slug = skill_entry["slug"]
                 files = skill_entry.get("files", [])
-                content_by_path = {
-                    file_info["path"]: package.read(
+                validated_files = [
+                    {
+                        **file_info,
+                        "path": validate_package_relative_path(file_info["path"]),
+                    }
+                    for file_info in files
+                ]
+                content_by_path = {}
+                for file_info in validated_files:
+                    content_by_path[file_info["path"]] = package.read(
                         f"skills/{slug}/{file_info['path']}"
                     ).decode("utf-8")
-                    for file_info in files
-                }
                 skill = _restore_or_create_skill(
                     slug=slug,
                     title=skill_entry.get("title", slug.replace("-", " ").title()),
-                    markdown=content_by_path.get("SKILL.md", ""),
+                    markdown=content_by_path.get(SKILL_MARKDOWN, ""),
                 )
                 _sync_package_files(
                     skill,
                     [
-                        {
-                            "relative_path": file_info["path"],
-                            "content": content,
-                            "content_sha256": hashlib.sha256(
-                                content.encode("utf-8")
-                            ).hexdigest(),
-                            "portability": file_info.get(
-                                "portability", AgentSkillFile.Portability.PORTABLE
-                            ),
-                            "included_by_default": file_info.get(
-                                "included_by_default", True
-                            ),
-                            "exclusion_reason": "",
-                            "size_bytes": len(content.encode("utf-8")),
-                        }
-                        for file_info in files
-                        for content in [content_by_path[file_info["path"]]]
+                        _import_file_spec(file_info, content_by_path[file_info["path"]])
+                        for file_info in validated_files
                     ],
                 )
                 summary["skills"].append({"slug": slug, "files": len(files)})
