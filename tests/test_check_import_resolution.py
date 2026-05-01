@@ -64,3 +64,29 @@ def test_module_not_found_without_marker_still_reports_missing_import(
 
     assert len(issues) == 1
     assert issues[0].module == "definitely_missing_arthexis_required_module"
+
+
+def test_qr_printing_windows_registry_import_is_optional() -> None:
+    module_path = (
+        check_import_resolution.PROJECT_ROOT / "apps" / "links" / "qr_printing.py"
+    )
+
+    issues = check_import_resolution.collect_missing_imports([module_path])
+
+    assert [issue for issue in issues if issue.module == "winreg"] == []
+
+
+def test_lcd_replay_posix_terminal_imports_are_optional() -> None:
+    module_path = (
+        check_import_resolution.PROJECT_ROOT
+        / "apps"
+        / "screens"
+        / "management"
+        / "commands"
+        / "lcd_actions"
+        / "replay.py"
+    )
+
+    issues = check_import_resolution.collect_missing_imports([module_path])
+
+    assert [issue for issue in issues if issue.module in {"termios", "tty"}] == []
