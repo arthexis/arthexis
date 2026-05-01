@@ -110,10 +110,10 @@ def test_email_collector_admin_odoo_status_requires_all_customer_fields(admin_us
     )
     model_admin = EmailCollectorAdmin(EmailCollector, AdminSite())
 
-    assert "#0a7f35" in str(model_admin.odoo_customer_status(collector))
+    assert "var(--success-fg)" in str(model_admin.odoo_customer_status(collector))
 
     collector.odoo_customer_phone = ""
-    assert "#b42318" in str(model_admin.odoo_customer_status(collector))
+    assert "var(--error-fg)" in str(model_admin.odoo_customer_status(collector))
 
 
 @pytest.mark.django_db

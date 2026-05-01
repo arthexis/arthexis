@@ -107,12 +107,12 @@ class EmailCollectorAdmin(EntityModelAdmin):
             return "-"
         if obj.odoo_customer_fields_complete:
             return format_html(
-                '<span style="color: {}; font-weight: 700;">&#10003;</span>',
-                "#0a7f35",
+                '<span style="color: var(--{}-fg); font-weight: 700;">&#10003;</span>',
+                "success",
             )
         return format_html(
-            '<span style="color: {}; font-weight: 700;">&#10005;</span>',
-            "#b42318",
+            '<span style="color: var(--{}-fg); font-weight: 700;">&#10005;</span>',
+            "error",
         )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):

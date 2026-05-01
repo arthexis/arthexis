@@ -344,7 +344,8 @@ def test_collect_refreshes_complete_odoo_customer_snapshot(monkeypatch):
     assert collector.odoo_customer_checked_at is not None
     assert collector.odoo_customer_fields_complete is True
     assert calls[0][0:2] == ("res.partner", "search_read")
-    assert calls[0][2][0] == [[("name", "ilike", "Roberto Cuevas")]]
+    assert calls[0][2][0] == [[("name", "=", "Roberto Cuevas")]]
+    assert calls[0][3]["limit"] == 2
 
 
 def test_collect_marks_odoo_customer_snapshot_incomplete(monkeypatch):
@@ -395,4 +396,111 @@ def test_collect_marks_odoo_customer_snapshot_incomplete(monkeypatch):
     assert collector.odoo_customer_phone == ""
     assert collector.odoo_customer_address == ""
     assert collector.odoo_customer_checked_at is not None
+    assert collector.odoo_customer_fields_complete is False
+
+
+def test_collect_updates_odoo_snapshot_once_from_newest_created_email(monkeypatch):
+    """Collector-level Odoo validation should run once per collection cycle."""
+
+    owner = _create_owner("collector-odoo-once-owner")
+    inbox = _create_inbox(owner, "collector-odoo-once@example.com")
+    profile = _create_odoo_profile(owner, username="odoo-once@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        fragment="Cliente: [customer_name]",
+        odoo_profile=profile,
+    )
+
+    monkeypatch.setattr(
+        inbox,
+        "search_messages",
+        lambda **kwargs: [
+            {
+                "subject": "Newest quote",
+                "from": "tecnologia@gelectriic.com",
+                "body": "Cliente: Roberto Cuevas",
+            },
+            {
+                "subject": "Older quote",
+                "from": "tecnologia@gelectriic.com",
+                "body": "Cliente: Older Customer",
+            },
+        ],
+    )
+    calls: list[tuple[str, str, tuple, dict]] = []
+
+    def _fake_execute(self, model, method, *args, **kwargs):
+        calls.append((model, method, args, kwargs))
+        return [
+            {
+                "name": "Roberto Cuevas",
+                "phone": "+52 33 1234 5678",
+                "mobile": "",
+                "street": "Av Siempre Viva 123",
+                "street2": "",
+                "zip": "",
+                "city": "Guadalajara",
+                "state_id": False,
+                "country_id": False,
+            }
+        ]
+
+    monkeypatch.setattr(OdooEmployee, "execute", _fake_execute)
+
+    collector.collect(limit=2)
+
+    collector.refresh_from_db()
+    assert EmailArtifact.objects.filter(collector=collector).count() == 2
+    assert len(calls) == 1
+    assert calls[0][2][0] == [[("name", "=", "Roberto Cuevas")]]
+    assert collector.odoo_customer_name == "Roberto Cuevas"
+
+
+def test_collect_rejects_partial_odoo_customer_name_match(monkeypatch):
+    """Partial Odoo matches must not populate another customer's snapshot."""
+
+    owner = _create_owner("collector-odoo-partial-owner")
+    inbox = _create_inbox(owner, "collector-odoo-partial@example.com")
+    profile = _create_odoo_profile(owner, username="odoo-partial@example.com")
+    collector = EmailCollector.objects.create(
+        inbox=inbox,
+        fragment="Cliente: [customer_name]",
+        odoo_profile=profile,
+    )
+
+    monkeypatch.setattr(
+        inbox,
+        "search_messages",
+        lambda **kwargs: [
+            {
+                "subject": "Porsche quote",
+                "from": "tecnologia@gelectriic.com",
+                "body": "Cliente: Roberto Cuevas",
+            }
+        ],
+    )
+
+    def _fake_execute(self, model, method, *args, **kwargs):
+        return [
+            {
+                "name": "Roberto Cuevas Logistics",
+                "phone": "+52 33 9999 0000",
+                "mobile": "",
+                "street": "Wrong customer street",
+                "street2": "",
+                "zip": "",
+                "city": "Guadalajara",
+                "state_id": False,
+                "country_id": False,
+            }
+        ]
+
+    monkeypatch.setattr(OdooEmployee, "execute", _fake_execute)
+
+    collector.collect(limit=1)
+
+    collector.refresh_from_db()
+    assert collector.odoo_customer_name == "Roberto Cuevas"
+    assert collector.odoo_customer_phone == ""
+    assert collector.odoo_customer_address == ""
     assert collector.odoo_customer_fields_complete is False

@@ -136,6 +136,11 @@ class EmailCollector(Entity):
         return str(value).strip()
 
     @classmethod
+    def _normalize_odoo_name(cls, value) -> str:
+        """Return a normalized customer name for exact Odoo match checks."""
+        return " ".join(cls._odoo_text(value).casefold().split())
+
+    @classmethod
     def _format_odoo_address(cls, row: dict) -> str:
         """Return a compact address string from common Odoo partner fields."""
         city_line = " ".join(
@@ -197,8 +202,9 @@ class EmailCollector(Entity):
                 rows = self.odoo_profile.execute(
                     "res.partner",
                     "search_read",
-                    [[("name", "ilike", lookup_name)]],
+                    [[("name", "=", lookup_name)]],
                     fields=[
+                        "id",
                         "name",
                         "phone",
                         "mobile",
@@ -209,14 +215,25 @@ class EmailCollector(Entity):
                         "state_id",
                         "country_id",
                     ],
-                    limit=1,
+                    limit=2,
                 )
             except Exception:
                 logger.exception(
                     "Failed Odoo customer validation for collector %s", self.pk
                 )
             else:
-                row = rows[0] if rows else {}
+                normalized_lookup = self._normalize_odoo_name(lookup_name)
+                exact_rows = [
+                    row
+                    for row in rows
+                    if self._normalize_odoo_name(row.get("name")) == normalized_lookup
+                ]
+                row = exact_rows[0] if len(exact_rows) == 1 else {}
+                if len(exact_rows) > 1:
+                    logger.warning(
+                        "Skipped ambiguous Odoo customer validation for collector %s",
+                        self.pk,
+                    )
                 if row:
                     self.odoo_customer_name = (
                         self._odoo_text(row.get("name")) or lookup_name
@@ -354,6 +371,7 @@ class EmailCollector(Entity):
             return
 
         messages = self.search_messages(limit=limit)
+        odoo_snapshot_sigils = None
         for msg in messages:
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
@@ -373,14 +391,18 @@ class EmailCollector(Entity):
             if not created:
                 continue
 
-            try:
-                self._update_odoo_customer_snapshot(sigils)
-            except Exception:
-                logger.exception(
-                    "Failed to update Odoo fields for collector %s", self.pk
-                )
+            if odoo_snapshot_sigils is None:
+                odoo_snapshot_sigils = sigils
 
             try:
                 self._notify_for_message(msg, sigils)
             except Exception:
                 logger.exception("Failed to send notification for collector %s", self.pk)
+
+        if odoo_snapshot_sigils is not None:
+            try:
+                self._update_odoo_customer_snapshot(odoo_snapshot_sigils)
+            except Exception:
+                logger.exception(
+                    "Failed to update Odoo fields for collector %s", self.pk
+                )
