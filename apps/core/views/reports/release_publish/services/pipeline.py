@@ -3,7 +3,7 @@
 Legacy import path: ``release_publish.services.pipeline``.
 """
 
-from ..steps import (  # noqa: F401
+from apps.release.publishing.steps import (  # noqa: F401
     PersistContext,
     ReleaseStep,
     StepDefinition,

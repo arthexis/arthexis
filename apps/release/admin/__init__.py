@@ -18,11 +18,11 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
-from apps.core.views.reports.release_publish.context import (
+from apps.release.publishing.context import (
     ReleaseContextState,
     load_release_context,
 )
-from apps.core.views.reports.release_publish.views import PUBLISH_STEPS
+from apps.release.publishing.pipeline import PUBLISH_STEPS
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
     prepare_package_release,

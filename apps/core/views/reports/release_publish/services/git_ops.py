@@ -3,7 +3,7 @@
 Legacy import path: ``release_publish.services.git_ops``.
 """
 
-from ..git_ops import (  # noqa: F401
+from apps.release.publishing.git_ops import (  # noqa: F401
     GitProcessAdapter,
     SubprocessGitAdapter,
     collect_dirty_files,

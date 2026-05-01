@@ -1,12 +1,8 @@
-"""HTTP entry points for the release publish flow.
-
-This module is the canonical Django URL entrypoint for release publish.
-Workflow orchestration is delegated to :mod:`pipeline`.
-"""
+"""HTTP entry points for the release publish flow."""
 
 from django.contrib.admin.views.decorators import staff_member_required
 
-from .pipeline import PUBLISH_STEPS, release_progress_impl
+from apps.release.publishing.pipeline import PUBLISH_STEPS, release_progress_impl
 
 
 @staff_member_required

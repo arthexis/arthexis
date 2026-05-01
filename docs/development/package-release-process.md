@@ -1,6 +1,6 @@
 # Package Release Workflow
 
-The publish workflow coordinates multiple guarded steps to move a package version from source control to public repositories. The flow below mirrors the `PUBLISH_STEPS` sequence used by the release UI and the headless scheduler.
+The publish workflow coordinates multiple guarded steps to move a package version from source control to public repositories. The flow below mirrors the `PUBLISH_STEPS` sequence used by the release UI and the headless scheduler. Runtime implementations live under `apps.release.publishing`; `apps.core.views.reports.release_publish` remains the HTTP and compatibility adapter.
 
 ```mermaid
 flowchart TD
@@ -9,7 +9,8 @@ flowchart TD
     C --> D[Execute pre-release actions]
     D -->|Sync main, bump VERSION, stage fixtures| E[Build release artifacts]
     E -->|Promote build, commit metadata, push| F[Complete test suite with --all flag]
-    F --> TP[Confirm PyPI Trusted Publisher settings]
+    F --> P[Prune worst 1% of tests by PR]
+    P --> TP[Confirm PyPI Trusted Publisher settings]
     TP --> G[Verify release environment]
     G -->|Environment ready| H[Export artifacts and push release tag]
     H --> I[Wait for GitHub Actions publish]
@@ -26,12 +27,13 @@ flowchart TD
 3. **Execute pre-release actions** – Refreshes release fixtures, updates the `VERSION` file to the target value, stages the changes, and commits them if anything changed. The workflow also tracks the pre-sync version to support clean restarts.
 4. **Build release artifacts** – Re-validates that `origin/main` is unchanged, promotes the build via `release_utils.promote`, and commits any updated metadata (e.g., `VERSION`, release fixtures). The step sets the build revision and renames the log to the release-specific filename, ensuring traceability.
 5. **Complete test suite with --all flag** – Enforced gate. The workflow now requires test evidence in release context (`tests_verified_at`, `tests_command`, and a successful `tests_result`) or runs a configured validation command (`RELEASE_PUBLISH_VALIDATION_COMMAND`) and records the result before it can proceed.
-6. **Confirm PyPI Trusted Publisher settings** – Enforced gate. The workflow validates the publish metadata against the expected Trusted Publisher values (`publish.yml`, `refs/tags/v*`, and `pypi`) and fails with actionable guidance when the workflow metadata is missing or mismatched.
-7. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
-8. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes, attaches the same built distributions to the GitHub Release, and publishes those distributions to PyPI via OIDC.
-9. **Wait for GitHub Actions publish** – The workflow pauses until the publish workflow completes, logging the GitHub Actions run URL when available so operators can monitor progress.
-10. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
-11. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
+6. **Prune worst 1% of tests by PR** – Enforced gate. The workflow requires a pull request URL showing low-value test pruning evidence after the full suite passes and before external publish prerequisites can advance.
+7. **Confirm PyPI Trusted Publisher settings** – Enforced gate. The workflow validates the publish metadata against the expected Trusted Publisher values (`publish.yml`, `refs/tags/v*`, and `pypi`) and fails with actionable guidance when the workflow metadata is missing or mismatched.
+8. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
+9. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes, attaches the same built distributions to the GitHub Release, and publishes those distributions to PyPI via OIDC.
+10. **Wait for GitHub Actions publish** – The workflow pauses until the publish workflow completes, logging the GitHub Actions run URL when available so operators can monitor progress.
+11. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
+12. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
 
 ## Operational notes
 
