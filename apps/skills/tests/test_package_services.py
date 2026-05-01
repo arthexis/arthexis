@@ -274,6 +274,65 @@ def test_materialize_legacy_skill_preserves_existing_portable_tree(tmp_path):
 
 
 @pytest.mark.django_db
+def test_materialize_replaces_file_directory_path_collisions(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    skill_root = target_root / "portable-skill"
+    _write(skill_root / "references" / "topic" / "old.md", "old directory")
+    _write(skill_root / "scripts" / "setup", "old file")
+    skill = AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+    for relative_path, content in [
+        ("references/topic", "new file"),
+        ("scripts/setup/install.ps1", "Write-Output install"),
+    ]:
+        AgentSkillFile.objects.create(
+            skill=skill,
+            relative_path=relative_path,
+            content=content,
+            content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            portability=AgentSkillFile.Portability.PORTABLE,
+            included_by_default=True,
+            size_bytes=len(content.encode("utf-8")),
+        )
+
+    materialize_codex_skill_files(target_root)
+
+    assert (skill_root / "references" / "topic").read_text(encoding="utf-8") == (
+        "new file"
+    )
+    assert not (skill_root / "references" / "topic" / "old.md").exists()
+    assert (skill_root / "scripts" / "setup" / "install.ps1").read_text(
+        encoding="utf-8"
+    ) == "Write-Output install"
+
+
+@pytest.mark.django_db
+def test_materialize_rejects_symlinked_skill_directory(tmp_path):
+    target_root = tmp_path / "codex-skills"
+    target_root.mkdir()
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+    try:
+        (target_root / "portable-skill").symlink_to(
+            outside_root,
+            target_is_directory=True,
+        )
+    except (NotImplementedError, OSError):
+        pytest.skip("directory symlinks are unavailable")
+    AgentSkill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
+        markdown="current markdown",
+    )
+
+    with pytest.raises(ValueError, match="Unsafe skill directory symlink"):
+        materialize_codex_skill_files(target_root)
+
+
+@pytest.mark.django_db
 def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
     AgentSkill.objects.create(
         slug="legacy-skill",
