@@ -198,7 +198,12 @@ class AgentSkillAdmin(admin.ModelAdmin):
                 modified_at = default_storage.get_modified_time(storage_name)
             except (AttributeError, FileNotFoundError, NotImplementedError, OSError):
                 continue
-            if timezone.is_naive(modified_at):
+            if timezone.is_naive(cutoff) and timezone.is_aware(modified_at):
+                modified_at = timezone.make_naive(
+                    modified_at,
+                    timezone.get_current_timezone(),
+                )
+            elif timezone.is_aware(cutoff) and timezone.is_naive(modified_at):
                 modified_at = timezone.make_aware(
                     modified_at,
                     timezone.get_current_timezone(),

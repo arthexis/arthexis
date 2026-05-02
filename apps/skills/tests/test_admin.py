@@ -345,6 +345,30 @@ def test_preview_cleans_expired_storage_uploads(
     isolated_import_storage.delete(preview_upload_name)
 
 
+def test_preview_cleanup_handles_use_tz_false(
+    admin_client,
+    isolated_import_storage,
+    settings,
+):
+    settings.USE_TZ = False
+    old_upload_name = (
+        f"{skills_admin._IMPORT_UPLOAD_STORAGE_DIR}/"
+        f"{skills_admin._IMPORT_UPLOAD_PREFIX}old.zip"
+    )
+    isolated_import_storage.save(old_upload_name, ContentFile(b"stale"))
+    old_upload = Path(isolated_import_storage.path(old_upload_name))
+    expired_at = time.time() - skills_admin._IMPORT_PREVIEW_TTL_SECONDS - 5
+    os.utime(old_upload, (expired_at, expired_at))
+
+    response = admin_client.post(
+        reverse("admin:skills_agentskill_import_package"),
+        {"action": "preview", "package": _valid_package_upload("admin-naive")},
+    )
+
+    assert response.status_code == 200
+    assert not isolated_import_storage.exists(old_upload_name)
+
+
 def test_import_package_blocks_staff_without_add_and_change_permissions(
     client,
     django_user_model,
