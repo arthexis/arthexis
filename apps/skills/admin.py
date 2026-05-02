@@ -73,7 +73,16 @@ class AgentSkillAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
     def has_import_package_permission(self, request: HttpRequest) -> bool:
-        return self.has_add_permission(request) and self.has_change_permission(request)
+        file_opts = AgentSkillFile._meta
+        required_file_perms = [
+            f"{file_opts.app_label}.{action}_{file_opts.model_name}"
+            for action in ("add", "change", "delete")
+        ]
+        return (
+            self.has_add_permission(request)
+            and self.has_change_permission(request)
+            and request.user.has_perms(required_file_perms)
+        )
 
     def import_package_view(self, request: HttpRequest):
         if not self.has_import_package_permission(request):

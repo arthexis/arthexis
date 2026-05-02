@@ -8,6 +8,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -387,3 +388,27 @@ def test_import_package_blocks_staff_without_add_and_change_permissions(
 
     assert response.status_code == 403
     assert not AgentSkill.objects.filter(slug="blocked-import").exists()
+
+
+def test_import_package_blocks_staff_without_agent_skill_file_permissions(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(
+        username="skill-import-missing-file-perms",
+        password="pw",
+        is_staff=True,
+    )
+    skill_perms = Permission.objects.filter(
+        codename__in=("add_agentskill", "change_agentskill"),
+    )
+    user.user_permissions.add(*skill_perms)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:skills_agentskill_import_package"),
+        {"action": "preview", "package": _valid_package_upload("blocked-file-perms")},
+    )
+
+    assert response.status_code == 403
+    assert not AgentSkill.objects.filter(slug="blocked-file-perms").exists()
