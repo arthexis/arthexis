@@ -721,6 +721,134 @@ def test_read_limited_request_body_rejects_negative_length_before_reading():
         module._read_limited_request_body(headers, io.BytesIO(b"email=guest@example.com"))
 
 
+def _exercise_get(handler_class, path: str, *, asset_exists: bool = True):
+    handler = object.__new__(handler_class)
+    handler.path = path
+    handler.command = "GET"
+    handler.headers = {}
+    handler.client_address = ("10.42.0.25", 12345)
+    recorded = []
+    served = []
+    errors = []
+    handler._record_request = recorded.append
+    handler._serve_asset = lambda name: served.append(name) or asset_exists
+    handler.send_error = errors.append
+
+    handler.do_GET()
+
+    return SimpleNamespace(recorded=recorded, served=served, errors=errors)
+
+
+def test_get_probe_path_returns_portal_page(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/connecttest.txt")
+
+    assert result.recorded == ["/connecttest.txt"]
+    assert result.served == ["index.html"]
+    assert result.errors == []
+
+
+def test_get_nested_unknown_path_returns_portal_page(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/soul/register/")
+
+    assert result.recorded == ["/soul/register/"]
+    assert result.served == ["index.html"]
+    assert result.errors == []
+
+
+def test_get_unknown_api_path_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/api/unknown")
+
+    assert result.recorded == ["/api/unknown"]
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_missing_literal_asset_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/missing.css", asset_exists=False)
+
+    assert result.recorded == ["/missing.css"]
+    assert result.served == ["missing.css"]
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_hidden_asset_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/.env")
+
+    assert result.recorded == []
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_nested_hidden_asset_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/foo/.env")
+
+    assert result.recorded == []
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_encoded_nested_hidden_asset_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/foo/%2eenv")
+
+    assert result.recorded == []
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_encoded_dot_segment_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/foo/%2e%2e/admin")
+
+    assert result.recorded == []
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
+def test_get_nested_asset_path_serves_asset(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/css/style.css")
+
+    assert result.recorded == ["/css/style.css"]
+    assert result.served == ["css/style.css"]
+    assert result.errors == []
+
+
+def test_get_missing_nested_asset_path_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/css/missing.css", asset_exists=False)
+
+    assert result.recorded == ["/css/missing.css"]
+    assert result.served == ["css/missing.css"]
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
 def test_subscribe_post_returns_json_error_when_request_logging_fails(tmp_path):
     module = load_portal_module()
     handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()

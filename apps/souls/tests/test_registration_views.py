@@ -19,6 +19,12 @@ SOUL_SEED_REGISTRATION_TITLE = "Soul Seed Registration"
 
 
 class SoulRegistrationViewsTests(TestCase):
+    def test_register_landing_renders(self):
+        response = self.client.get(reverse("souls:register_landing"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Soul Seed Registration")
+
     def test_register_start_uses_same_redirect_for_existing_and_new_email(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="existing-user", email="existing@example.com", password="x")
