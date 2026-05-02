@@ -80,6 +80,8 @@ def normalize_package_path(path: Path) -> str:
 
 
 def validate_package_relative_path(relative_path: str) -> str:
+    if not isinstance(relative_path, str):
+        raise ValueError(f"Unsafe package path: {relative_path}")
     normalized = relative_path.replace("\\", "/")
     path = PurePosixPath(normalized)
     windows_path = PureWindowsPath(relative_path)

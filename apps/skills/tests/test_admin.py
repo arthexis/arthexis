@@ -200,6 +200,27 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
             "Unsafe package path",
             "unsafe-path",
         ),
+        (
+            _zip_upload(
+                {
+                    "format": PACKAGE_FORMAT,
+                    "skills": [
+                        {
+                            "slug": "non-string-path",
+                            "title": "Non String Path",
+                            "files": [
+                                {
+                                    "path": None,
+                                    "included_by_default": True,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+            "Unsafe package path: None",
+            "non-string-path",
+        ),
     ]
 
     for upload, error_fragment, slug in invalid_cases:
