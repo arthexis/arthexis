@@ -18,6 +18,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+  RELEASE_REF: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
 jobs:
   test:
     name: Run full test suite
@@ -34,7 +38,6 @@ jobs:
           --health-retries 5
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
-      RELEASE_REF: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -92,8 +95,6 @@ jobs:
     name: Build distributions
     needs: test
     runs-on: ubuntu-latest
-    env:
-      RELEASE_REF: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -104,7 +105,7 @@ jobs:
       - name: Resolve publish version against PyPI
         id: resolve_publish_version
         env:
-          RELEASE_TAG: ${{ env.RELEASE_REF }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -347,17 +348,17 @@ jobs:
             exit 1
           fi
 
-          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${artifacts[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${artifacts[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
           else
-            gh release create "${GITHUB_REF_NAME}" "${artifacts[@]}" \
+            gh release create "${RELEASE_TAG}" "${artifacts[@]}" \
               --repo "${GITHUB_REPOSITORY}" \
               --verify-tag \
-              --title "${GITHUB_REF_NAME}" \
+              --title "${RELEASE_TAG}" \
               --generate-notes
           fi
 
-          printf 'Published GitHub Release assets for %s:\n' "${GITHUB_REF_NAME}"
+          printf 'Published GitHub Release assets for %s:\n' "${RELEASE_TAG}"
           printf ' - %s\n' "${artifacts[@]}"
 
   publish-to-pypi:
