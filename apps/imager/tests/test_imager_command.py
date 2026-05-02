@@ -37,8 +37,10 @@ from apps.imager.services import (
     list_block_devices,
     prepare_image_serve,
     select_host_network_profiles,
-    test_rpi_access as run_rpi_access_test,
     write_image_to_device,
+)
+from apps.imager.services import (
+    test_rpi_access as run_rpi_access_test,
 )
 
 VALID_RECOVERY_KEY_ONE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILOoi93uar4kpDufSrgJPoOKh8UzGiiAsz+GIspRlj7p recovery-one"
@@ -58,6 +60,7 @@ def make_suite_source(tmp_path: Path) -> Path:
     return suite_source
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> None:
     """Regression: lsblk JSON discovery should request tree mode for children[]."""
 
@@ -82,6 +85,7 @@ def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> 
     ]
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> None:
     """Regression: nested children mountpoints must prevent in-use target writes."""
 
@@ -99,6 +103,7 @@ def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> No
     assert devices[0].partitions == ["/dev/sdb1", "/dev/mapper/crypt"]
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_marks_root_mount_disk_protected_when_findmnt_uses_dev_root() -> None:
     """Regression: root disks must stay protected even when findmnt reports /dev/root."""
 
@@ -122,6 +127,7 @@ def test_list_block_devices_marks_root_mount_disk_protected_when_findmnt_uses_de
     assert devices[1].protected is False
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_raises_operator_error_when_lsblk_missing() -> None:
     """Regression: operators should get a clear error if lsblk is unavailable."""
 

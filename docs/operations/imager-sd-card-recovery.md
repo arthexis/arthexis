@@ -71,6 +71,9 @@ Inspect block devices before writing:
 .venv/bin/python manage.py imager devices
 ```
 
+On Windows, this reports physical writer targets as `\\.\PhysicalDriveN` using PowerShell
+disk inventory. On Linux/GWAY, it reports `/dev/*` block devices using `lsblk`.
+
 This output includes:
 
 - device path and size
@@ -168,6 +171,36 @@ Then write the recovery-enabled artifact:
 If you write with `--image-path`, verify that the image was already built with recovery
 metadata or use a freshly built recovery artifact. The write command verifies bytes on
 the target media, but it does not retrofit recovery SSH into an arbitrary image.
+
+## Windows/GWAY helper
+
+On a Windows operator host, use the repo-local helper when you want one entrypoint for
+local image creation plus either a local writer or a burner attached to GWAY:
+
+```bat
+gway-imager.bat devices-local
+gway-imager.bat create-burn-local --name field-kit --base-image-uri C:\images\raspios.img.xz --device \\.\PhysicalDrive3 --yes
+```
+
+The helper runs the local suite's `manage.py imager` command, sets `--suite-source` to the
+current checkout by default, and uses the first available public key from
+`%USERPROFILE%\.ssh\id_ed25519.pub`, `id_ecdsa.pub`, or `id_rsa.pub` for recovery SSH unless
+you pass `--recovery-authorized-key-file`, `--recovery-authorized-key`, or
+`--skip-recovery-ssh`. Set `GWAY_IMAGER_RECOVERY_KEY_FILE` to force a specific public key.
+
+When the SD-card writer is connected to the GWAY bastion instead of the Windows host, inspect
+remote devices and burn through the remote suite writer:
+
+```bat
+gway-imager.bat devices-gway --gway arthe@10.42.0.1
+gway-imager.bat create-burn-gway --name field-kit --base-image-uri C:\images\raspios.img.xz --device /dev/sdb --gway arthe@10.42.0.1 --yes
+```
+
+The GWAY path builds the image locally, uploads the generated `.img` to
+`/tmp/arthexis-imager`, then runs `/home/arthe/arthexis/.venv/bin/python manage.py imager write`
+on GWAY. Override the remote defaults with `--gway-suite`, `--remote-dir`, or
+`--remote-python`, or with `GWAY_IMAGER_SUITE`, `GWAY_IMAGER_REMOTE_DIR`, and
+`GWAY_IMAGER_REMOTE_PYTHON`.
 
 ## Post-install access test
 

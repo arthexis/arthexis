@@ -1442,8 +1442,114 @@ def _walk_block_descendants(entry: dict[str, object]) -> list[dict[str, object]]
     return descendants
 
 
+def _coerce_windows_json_rows(value: object) -> list[dict[str, object]]:
+    """Normalize PowerShell ConvertTo-Json array/singleton output."""
+
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _coerce_windows_access_paths(value: object) -> list[str]:
+    """Normalize Windows partition access paths from PowerShell JSON."""
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    return []
+
+
+def _list_windows_block_devices() -> list[BlockDeviceInfo]:
+    """Enumerate Windows physical disks with safety metadata."""
+
+    powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+    if not powershell:
+        raise ImagerBuildError("PowerShell is required to enumerate Windows disks.")
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$disks=@(Get-Disk | Select-Object Number,FriendlyName,SerialNumber,BusType,Size,IsBoot,IsSystem,IsReadOnly,IsOffline,OperationalStatus);"
+        "$partitions=@(Get-Partition | Select-Object DiskNumber,PartitionNumber,DriveLetter,AccessPaths);"
+        "[pscustomobject]@{disks=$disks;partitions=$partitions} | ConvertTo-Json -Depth 6 -Compress"
+    )
+    try:
+        result = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ImagerBuildError("PowerShell is required to enumerate Windows disks.") from exc
+    if result.returncode != 0:
+        raise ImagerBuildError(result.stderr.strip() or "Unable to enumerate Windows disks.")
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ImagerBuildError("Unable to parse Windows disk inventory output.") from exc
+
+    partitions_by_disk: dict[int, list[dict[str, object]]] = {}
+    for partition in _coerce_windows_json_rows(payload.get("partitions")):
+        try:
+            disk_number = int(partition.get("DiskNumber"))
+        except (TypeError, ValueError):
+            continue
+        partitions_by_disk.setdefault(disk_number, []).append(partition)
+
+    devices: list[BlockDeviceInfo] = []
+    for disk in _coerce_windows_json_rows(payload.get("disks")):
+        try:
+            number = int(disk.get("Number"))
+            size_bytes = int(disk.get("Size") or 0)
+        except (TypeError, ValueError):
+            continue
+
+        bus_type = str(disk.get("BusType") or "")
+        disk_partitions = partitions_by_disk.get(number, [])
+        mountpoints: list[str] = []
+        partitions: list[str] = []
+        for partition in disk_partitions:
+            partition_number = partition.get("PartitionNumber")
+            if partition_number not in (None, ""):
+                partitions.append(f"PhysicalDrive{number}Partition{partition_number}")
+            drive_letter = str(partition.get("DriveLetter") or "").strip()
+            if drive_letter:
+                mountpoints.append(f"{drive_letter.upper()}:\\")
+            mountpoints.extend(_coerce_windows_access_paths(partition.get("AccessPaths")))
+
+        devices.append(
+            BlockDeviceInfo(
+                path=f"\\\\.\\PhysicalDrive{number}",
+                size_bytes=size_bytes,
+                transport=bus_type,
+                removable=bus_type.lower() in {"usb", "sd", "mmc"},
+                mountpoints=sorted(set(mountpoints)),
+                partitions=partitions,
+                protected=bool(disk.get("IsBoot") or disk.get("IsSystem")),
+            )
+        )
+    return sorted(devices, key=lambda item: item.path)
+
+
 def list_block_devices() -> list[BlockDeviceInfo]:
     """Enumerate host block devices and safety-relevant metadata."""
+
+    if os.name == "nt":
+        return _list_windows_block_devices()
 
     try:
         result = subprocess.run(
@@ -1562,7 +1668,7 @@ def write_image_to_device(
     )
 
     source_hash = _sha256_for_file(source_path)
-    with source_path.open("rb") as source_handle, Path(device_path).open("wb") as device_handle:
+    with source_path.open("rb") as source_handle, open(device_path, "r+b", buffering=0) as device_handle:
         shutil.copyfileobj(source_handle, device_handle, length=1024 * 1024 * 4)
         device_handle.flush()
         os.fsync(device_handle.fileno())
