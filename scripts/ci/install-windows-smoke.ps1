@@ -8,6 +8,9 @@ Set-Location $repoRoot
 $env:PYTHONDONTWRITEBYTECODE = "1"
 $env:NODE_OPTIONS = "--no-deprecation"
 $env:ARTHEXIS_DB_BACKEND = "sqlite"
+if ($env:pythonLocation) {
+    $env:Path = "$env:pythonLocation;$env:pythonLocation\Scripts;$env:Path"
+}
 
 $gtkCandidates = @()
 if ($env:WEASYPRINT_DLL_DIRECTORIES) {
@@ -22,7 +25,6 @@ $gtkDllDirs = @()
 foreach ($candidate in $gtkCandidates) {
     if (Test-Path $candidate) {
         $gtkDllDirs += $candidate
-        $env:Path = "$candidate;$env:Path"
     }
 }
 if ($gtkDllDirs.Count -eq 0) {

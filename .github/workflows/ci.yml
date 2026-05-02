@@ -146,14 +146,13 @@ jobs:
             mingw-w64-x86_64-libffi
             mingw-w64-x86_64-pango
 
-      - name: Add GTK runtime to PATH
+      - name: Expose GTK runtime to WeasyPrint
         shell: pwsh
         run: |
           $gtkBin = Join-Path '${{ steps.setup_msys2.outputs.msys2-location }}' 'mingw64\bin'
           if (-not (Test-Path $gtkBin)) {
             throw "Expected MSYS2 GTK bin directory at $gtkBin"
           }
-          $gtkBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "WEASYPRINT_DLL_DIRECTORIES=$gtkBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run Windows install smoke
