@@ -9,6 +9,10 @@ permissions:
   actions: write
   contents: write
 
+concurrency:
+  group: release-tag-from-version-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   tag-from-version:
     name: Create v* tag from VERSION
@@ -29,6 +33,11 @@ jobs:
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Create tag when missing
         id: create_tag
         env:
@@ -41,7 +50,7 @@ jobs:
             exit 0
           fi
 
-          git tag "$tag"
+          git tag -a "$tag" -m "Release ${tag}"
           git push origin "$tag"
           echo "created=true" >> "$GITHUB_OUTPUT"
           echo "Created tag ${tag} from VERSION=${VERSION}."

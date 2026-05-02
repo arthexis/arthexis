@@ -16,9 +16,17 @@ from apps.release.models import Package, PackageRelease
 
 
 def _publish_workflow_jobs() -> dict[str, object]:
+    return _workflow_data("publish.yml")["jobs"]
+
+
+def _workflow_data(filename: str) -> dict[str, object]:
     repo_root = Path(__file__).resolve().parents[4]
-    workflow_path = repo_root / ".github" / "workflows" / "publish.yml"
-    return pipeline.yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
+    workflow_path = repo_root / ".github" / "workflows" / filename
+    return pipeline.yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+
+def _workflow_on(workflow: dict[str, object]) -> object:
+    return workflow.get("on", workflow.get(True, {}))
 
 
 def _workflow_step(job: dict[str, object], name: str) -> dict[str, object]:
@@ -491,6 +499,33 @@ def test_publish_workflow_uses_same_artifact_for_github_release_and_pypi() -> No
     assert "gh release upload" in release_run
     assert '--repo "${GITHUB_REPOSITORY}"' in release_run
     assert "dist/*.whl dist/*.tar.gz" in release_run
+    assert "--notes-file" in release_run
+    assert "--generate-notes" not in release_run
+    assert "https://pypi.org/project/arthexis/%s/" in release_run
+
+
+def test_tag_from_version_workflow_creates_release_tag_and_dispatches_publish() -> None:
+    workflow = _workflow_data("tag-from-version.yml")
+    on_section = _workflow_on(workflow)
+
+    assert on_section["push"]["branches"] == ["main"]
+    assert workflow["permissions"]["contents"] == "write"
+    assert workflow["permissions"]["actions"] == "write"
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+    job = workflow["jobs"]["tag-from-version"]
+    steps_by_name = {step["name"]: step for step in job["steps"]}
+
+    create_tag_run = steps_by_name["Create tag when missing"]["run"]
+    assert 'tag="v${VERSION}"' in create_tag_run
+    assert 'git tag -a "$tag" -m "Release ${tag}"' in create_tag_run
+    assert 'git push origin "$tag"' in create_tag_run
+
+    dispatch_step = steps_by_name["Dispatch publish workflow for created tag"]
+    assert dispatch_step["if"] == "steps.create_tag.outputs.created == 'true'"
+    dispatch_run = dispatch_step["run"]
+    assert 'tag="v${VERSION}"' in dispatch_run
+    assert 'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
 
 
 @pytest.mark.django_db
