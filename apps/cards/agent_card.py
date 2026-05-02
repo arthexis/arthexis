@@ -417,6 +417,18 @@ def _candidate_id(candidate: Mapping[str, Any] | object) -> str:
     return str(getattr(candidate, "id", None) or getattr(candidate, "soul_id", "") or getattr(candidate, "name", ""))
 
 
+def _expected_reader_proof(
+    *,
+    trust_tier: str,
+    reader_id: str,
+    node_id: str,
+    observed_at: str,
+    manifest_fingerprint: str,
+) -> str:
+    payload = "|".join((trust_tier, reader_id, node_id, observed_at, manifest_fingerprint))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _confidence_for_count(count: int) -> str:
     if count <= 0:
         return "no_match"
@@ -457,33 +469,48 @@ def score_soul_identity(
     return best
 
 
-def validate_reader_event(reader_event: Mapping[str, Any]) -> ReaderTrustResult:
+def validate_reader_event(
+    reader_event: Mapping[str, Any],
+    *,
+    manifest_fingerprint: str,
+) -> ReaderTrustResult:
     trust_tier = str(reader_event.get("trust_tier") or "unknown").strip()
     if trust_tier not in TRUST_TIERS:
         return ReaderTrustResult(False, "unknown", "unknown reader trust tier")
     if trust_tier not in ACTIVATING_TRUST_TIERS:
         return ReaderTrustResult(False, trust_tier, "reader is not trusted for activation")
-    observed_at = reader_event.get("observed_at")
-    if observed_at:
-        try:
-            observed = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
-        except ValueError:
-            return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        observed = observed.astimezone(timezone.utc)
-        if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
-            return ReaderTrustResult(False, trust_tier, "reader event timestamp is in the future")
-        age = now - observed
-        if age > timedelta(seconds=FRESH_READER_EVENT_SECONDS):
-            return ReaderTrustResult(False, trust_tier, "reader event is stale")
+    observed_at = str(reader_event.get("observed_at") or "").strip()
+    if not observed_at:
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is required")
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    observed = observed.astimezone(timezone.utc)
+    if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is in the future")
+    age = now - observed
+    if age > timedelta(seconds=FRESH_READER_EVENT_SECONDS):
+        return ReaderTrustResult(False, trust_tier, "reader event is stale")
     if not reader_event.get("reader_id"):
         return ReaderTrustResult(False, trust_tier, "reader_id is required")
     if not reader_event.get("node_id"):
         return ReaderTrustResult(False, trust_tier, "node_id is required")
-    if not reader_event.get("proof"):
+    proof = str(reader_event.get("proof") or "").strip()
+    if not proof:
         return ReaderTrustResult(False, trust_tier, "reader proof is required")
+    expected_proof = _expected_reader_proof(
+        trust_tier=trust_tier,
+        reader_id=str(reader_event.get("reader_id")),
+        node_id=str(reader_event.get("node_id")),
+        observed_at=observed_at,
+        manifest_fingerprint=manifest_fingerprint,
+    )
+    if proof != expected_proof:
+        return ReaderTrustResult(False, trust_tier, "reader proof is invalid")
     return ReaderTrustResult(True, trust_tier)
 
 
@@ -494,7 +521,7 @@ def plan_agent_activation(
     skill_bundle_id: str | int | None = None,
     interface_spec_id: str | int | None = None,
 ) -> ActivationPlan:
-    trust = validate_reader_event(reader_event)
+    trust = validate_reader_event(reader_event, manifest_fingerprint=card.fingerprint)
     if not trust.trusted:
         return ActivationPlan(
             status="rejected",
