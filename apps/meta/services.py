@@ -1097,6 +1097,14 @@ def build_whatsapp_listener_install_plan(
     from django.conf import settings
 
     resolved_platform = _listener_install_platform(platform)
+    host_platform = _listener_install_platform()
+    if platform and resolved_platform != host_platform and (
+        not python_executable or not manage_py
+    ):
+        raise ValueError(
+            "Cross-platform WhatsApp listener provisioning requires --python and "
+            "--manage-py for paths that exist on the target machine."
+        )
     safe_service = _safe_service_name(service_name)
     resolved_base_dir = Path(base_dir or settings.BASE_DIR).resolve()
     resolved_profile_dir = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()

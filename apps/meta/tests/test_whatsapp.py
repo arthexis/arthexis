@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from io import StringIO
 from pathlib import Path
 
@@ -792,6 +793,10 @@ def test_whatsapp_install_listener_windows_writes_manual_artifacts(tmp_path):
             str(profile_dir),
             "--codex-command",
             r"C:\Program Files\Codex\codex.exe",
+            "--python",
+            r"C:\Arthexis\.venv\Scripts\python.exe",
+            "--manage-py",
+            r"C:\Arthexis\manage.py",
             "--write",
             "--json",
             stdout=stdout,
@@ -831,6 +836,10 @@ def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_pat
             str(output_dir),
             "--systemd-user-dir",
             str(systemd_dir),
+            "--python",
+            "/opt/arthexis/.venv/bin/python",
+            "--manage-py",
+            "/opt/arthexis/manage.py",
             "--headless",
             "--json",
             stdout=stdout,
@@ -862,6 +871,10 @@ def test_install_listener_target_platform_controls_browser_defaults(tmp_path):
             "windows",
             "--output-dir",
             str(tmp_path / "install"),
+            "--python",
+            r"C:\Arthexis\.venv\Scripts\python.exe",
+            "--manage-py",
+            r"C:\Arthexis\manage.py",
             "--json",
             stdout=stdout,
         )
@@ -888,6 +901,10 @@ def test_install_listener_explicit_browser_skips_platform_channel_default(tmp_pa
             "firefox",
             "--output-dir",
             str(tmp_path / "install"),
+            "--python",
+            r"C:\Arthexis\.venv\Scripts\python.exe",
+            "--manage-py",
+            r"C:\Arthexis\manage.py",
             "--json",
             stdout=stdout,
         )
@@ -914,6 +931,10 @@ def test_install_listener_requirements_match_chromium_override(tmp_path):
             "chromium",
             "--output-dir",
             str(tmp_path / "install"),
+            "--python",
+            "/opt/arthexis/.venv/bin/python",
+            "--manage-py",
+            "/opt/arthexis/manage.py",
             "--json",
             stdout=stdout,
         )
@@ -922,6 +943,23 @@ def test_install_listener_requirements_match_chromium_override(tmp_path):
     assert "--browser chromium" in payload["listen_command"]
     assert any("Playwright Chromium" in item for item in payload["requirements"])
     assert not any("Firefox" in item for item in payload["requirements"])
+
+
+def test_install_listener_cross_platform_requires_target_paths(tmp_path):
+    target = "linux" if sys.platform == "win32" else "windows"
+
+    with override_settings(BASE_DIR=tmp_path), pytest.raises(
+        CommandError,
+        match="Cross-platform WhatsApp listener provisioning requires --python",
+    ):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            target,
+        )
 
 
 def test_systemd_quote_escapes_backslashes_without_spaces():

@@ -115,6 +115,10 @@ python manage.py whatsapp send --to 525551234567 --message "Hello" --cdp-url htt
 manual registration commands. It only writes helper files when `--write` is
 passed. It does not silently register startup services.
 
+Run `install-listener` on the machine that will run the listener. When using
+`--platform` to generate files for a different operating system, also pass
+`--python` and `--manage-py` with paths that exist on that target machine.
+
 Shared requirements:
 
 - Run `python manage.py whatsapp login --timeout 300` first in a headed browser
