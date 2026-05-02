@@ -4,7 +4,12 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.locals.user_data import EntityModelAdmin
-from apps.meta.models import Attention, WhatsAppWebhook, WhatsAppWebhookMessage
+from apps.meta.models import (
+    Attention,
+    WhatsAppSecretaryAuthorizedPhone,
+    WhatsAppWebhook,
+    WhatsAppWebhookMessage,
+)
 
 
 @admin.register(Attention)
@@ -176,3 +181,10 @@ class WhatsAppWebhookMessageAdmin(EntityModelAdmin):
 
 
 __all__ = ["admin"]
+
+
+@admin.register(WhatsAppSecretaryAuthorizedPhone)
+class WhatsAppSecretaryAuthorizedPhoneAdmin(EntityModelAdmin):
+    list_display = ("phone", "user", "is_active", "label")
+    list_filter = ("is_active",)
+    search_fields = ("phone", "label", "user__username", "user__email")

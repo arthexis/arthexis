@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
+
+from apps.meta.models import WhatsAppSecretaryAuthorizedPhone
 
 from apps.meta.services import (
     DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
@@ -16,7 +20,9 @@ from apps.meta.services import (
     build_whatsapp_listener_install_plan,
     dataclass_payload,
     listen_for_whatsapp_secretary_requests,
+    normalize_whatsapp_phone,
     parse_cli_date,
+    registered_whatsapp_secretary_phones,
     read_whatsapp_web_messages,
     send_whatsapp_web_message,
     validate_whatsapp_web_login,
@@ -282,6 +288,24 @@ class Command(BaseCommand):
         )
         install.add_argument("--json", action="store_true", help="Emit JSON output.")
 
+        register_phone = subparsers.add_parser(
+            "register-phone",
+            help="Register an authorized phone for Secretary listener.",
+        )
+        register_phone.add_argument("--user", required=True, help="Username or email.")
+        register_phone.add_argument(
+            "--phone",
+            required=True,
+            help="Authorized sender phone number.",
+        )
+        register_phone.add_argument("--label", default="", help="Optional label for this authorization.")
+        register_phone.add_argument(
+            "--country-code",
+            default="52",
+            help="Country code for 10-digit local numbers. Default: 52.",
+        )
+        register_phone.add_argument("--json", action="store_true", help="Emit JSON output.")
+
     def _add_browser_arguments(
         self,
         parser,
@@ -350,6 +374,8 @@ class Command(BaseCommand):
                 return self._handle_listen(options)
             elif action == "install-listener":
                 return self._handle_install_listener(options)
+            elif action == "register-phone":
+                return self._handle_register_phone(options)
             else:
                 raise CommandError(f"Unknown whatsapp action: {action}")
         except (RuntimeError, ValueError) as exc:
@@ -436,6 +462,9 @@ class Command(BaseCommand):
             terminal_title=options["terminal_title"],
             max_batches=1 if options["once"] else None,
             event_callback=None if options["once"] else write_event,
+            authorized_phones=lambda: registered_whatsapp_secretary_phones(
+                raise_on_error=True
+            ),
             **self._browser_options(options),
         )
         if options["once"] and results:
@@ -511,6 +540,51 @@ class Command(BaseCommand):
         self.stdout.write("instructions:")
         for instruction in payload["instructions"]:
             self.stdout.write(f"- {instruction}")
+
+    def _handle_register_phone(self, options):
+        User = get_user_model()
+        user_value = (options["user"] or "").strip()
+        user = User.objects.filter(Q(username=user_value) | Q(email=user_value)).first()
+        if user is None:
+            raise CommandError(f"No suite user found for {user_value!r}.")
+
+        raw_phone = (options["phone"] or "").strip()
+        try:
+            phone = normalize_whatsapp_phone(
+                raw_phone, default_country_code=options["country_code"]
+            )
+        except ValueError as exc:
+            raise CommandError("--phone must be a valid WhatsApp phone number.") from exc
+        if not phone:
+            raise CommandError("--phone cannot be blank.")
+
+        phone_manager = getattr(
+            WhatsAppSecretaryAuthorizedPhone,
+            "all_objects",
+            WhatsAppSecretaryAuthorizedPhone.objects,
+        )
+        authorization, created = phone_manager.update_or_create(
+            phone=phone,
+            defaults={
+                "user": user,
+                "label": (options["label"] or "").strip(),
+                "is_active": True,
+                "is_deleted": False,
+            },
+        )
+        payload = {
+            "status": "created" if created else "updated",
+            "phone": authorization.phone,
+            "user": str(user),
+            "label": authorization.label,
+        }
+        if options.get("json"):
+            self.stdout.write(json.dumps(payload, indent=2))
+            return None
+        self.stdout.write(
+            f"{payload['status'].capitalize()} authorized phone {authorization.phone} for user {user}."
+        )
+        return None
 
     def _write_text_result(self, result) -> None:
         payload = dataclass_payload(result)

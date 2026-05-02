@@ -285,6 +285,27 @@ class WhatsAppWebhookMessage(Entity):
         }
 
 
+class WhatsAppSecretaryAuthorizedPhone(Entity):
+    """Allowlisted WhatsApp sender that can trigger Secretary listener actions."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="whatsapp_secretary_phones",
+    )
+    phone = models.CharField(max_length=32, unique=True)
+    label = models.CharField(max_length=120, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["phone", "pk"]
+        verbose_name = _("WhatsApp Secretary Authorized Phone")
+        verbose_name_plural = _("WhatsApp Secretary Authorized Phones")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.phone} ({self.user})"
+
+
 class Attention(Entity):
     """Urgent attention request sent through the suite WhatsApp bridge."""
 

@@ -132,6 +132,10 @@ class WhatsAppSecretaryListenResult:
     detail: str = ""
 
 
+class WhatsAppSecretaryAuthorizationUnavailable(RuntimeError):
+    """Raised when the Secretary phone allowlist cannot be loaded."""
+
+
 @dataclass(frozen=True)
 class WhatsAppListenerInstallPlan:
     status: str
@@ -188,6 +192,18 @@ def normalize_whatsapp_phone(value: str, *, default_country_code: str = "52") ->
     if len(digits) < 8:
         raise ValueError("WhatsApp phone number is too short.")
     return digits
+
+
+def canonical_whatsapp_sender(value: str, *, default_country_code: str = "52") -> str:
+    """Return a stable allowlist key for a WhatsApp sender label."""
+
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    try:
+        return normalize_whatsapp_phone(raw, default_country_code=default_country_code)
+    except ValueError:
+        return ""
 
 
 def parse_cli_date(value: str | None) -> date | None:
@@ -755,12 +771,35 @@ def secretary_request_text_from_messages(
     messages: list[WhatsAppWebMessage],
     *,
     trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+    authorized_phones: set[str] | None = None,
+    default_country_code: str = "52",
+    fallback_sender_phone: str = "",
 ) -> str:
     """Build a Secretary request from the first triggered message and continuations."""
 
     request_parts: list[str] = []
     collecting = not trigger_prefix.strip()
+    authorized_senders: set[str] | None = None
+    if authorized_phones is not None:
+        authorized_senders = {
+            sender
+            for phone in authorized_phones
+            if (sender := canonical_whatsapp_sender(phone, default_country_code=default_country_code))
+        }
     for message in messages:
+        sender_key = canonical_whatsapp_sender(
+            message.sender,
+            default_country_code=default_country_code,
+        )
+        if not sender_key and message.direction == "out":
+            sender_key = canonical_whatsapp_sender(
+                fallback_sender_phone,
+                default_country_code=default_country_code,
+            )
+        if authorized_senders is not None and (
+            not sender_key or sender_key not in authorized_senders
+        ):
+            continue
         text = message.text.strip()
         if not text:
             continue
@@ -780,10 +819,16 @@ def build_whatsapp_secretary_prompt(
     *,
     trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
     secretary_name: str = "Secretary",
+    authorized_phones: set[str] | None = None,
+    default_country_code: str = "52",
+    fallback_sender_phone: str = "",
 ) -> str:
     request_text = secretary_request_text_from_messages(
         messages,
         trigger_prefix=trigger_prefix,
+        authorized_phones=authorized_phones,
+        default_country_code=default_country_code,
+        fallback_sender_phone=fallback_sender_phone,
     )
     if not request_text:
         return ""
@@ -1300,6 +1345,31 @@ def build_whatsapp_listener_install_plan(
     )
 
 
+def registered_whatsapp_secretary_phones(*, raise_on_error: bool = False) -> set[str]:
+    from django.db.utils import OperationalError, ProgrammingError
+
+    from apps.meta.models import WhatsAppSecretaryAuthorizedPhone
+
+    try:
+        authorizations = list(
+            WhatsAppSecretaryAuthorizedPhone.objects.filter(
+                is_active=True,
+                is_deleted=False,
+            )
+        )
+    except (OperationalError, ProgrammingError):
+        if raise_on_error:
+            raise WhatsAppSecretaryAuthorizationUnavailable(
+                "WhatsApp Secretary authorization lookup is unavailable."
+            )
+        return set()
+    return {
+        str(authorization.phone).strip()
+        for authorization in authorizations
+        if str(authorization.phone).strip()
+    }
+
+
 def listen_for_whatsapp_secretary_requests(
     *,
     phone: str,
@@ -1321,6 +1391,7 @@ def listen_for_whatsapp_secretary_requests(
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     event_callback: Callable[[WhatsAppSecretaryListenResult], None] | None = None,
+    authorized_phones: set[str] | Callable[[], set[str]] | None = None,
     **browser_options,
 ) -> list[WhatsAppSecretaryListenResult]:
     """Poll WhatsApp self-chat, debounce quiet batches, and launch Secretary."""
@@ -1384,13 +1455,40 @@ def listen_for_whatsapp_secretary_requests(
                 pending_changed_at = monotonic()
 
         if pending and monotonic() - pending_changed_at >= quiet_window_seconds:
+            cursor_file = cursor_file_for_profile(read_result.profile_dir)
+            cursor_key = cursor_key_for_profile(normalized_phone, read_result.profile_dir)
+            try:
+                current_authorized_phones = (
+                    authorized_phones() if callable(authorized_phones) else authorized_phones
+                )
+            except WhatsAppSecretaryAuthorizationUnavailable as exc:
+                result = WhatsAppSecretaryListenResult(
+                    status="authorization_unavailable",
+                    phone=normalized_phone,
+                    message_count=len(pending),
+                    launched=False,
+                    cursor_updated=False,
+                    cursor_file=cursor_file,
+                    batch_fingerprint=_batch_fingerprint(pending),
+                    elapsed_seconds=monotonic() - started_at,
+                    detail=str(exc),
+                )
+                if event_callback:
+                    event_callback(result)
+                if should_store_results:
+                    results.append(result)
+                if max_batches is not None:
+                    return results
+                sleep(daemon_poll_seconds)
+                continue
             prompt = build_whatsapp_secretary_prompt(
                 pending,
                 trigger_prefix=trigger_prefix,
                 secretary_name=secretary_name,
+                authorized_phones=current_authorized_phones,
+                default_country_code=default_country_code,
+                fallback_sender_phone=normalized_phone,
             )
-            cursor_file = cursor_file_for_profile(read_result.profile_dir)
-            cursor_key = cursor_key_for_profile(normalized_phone, read_result.profile_dir)
             detail = "Batch ignored because no Secretary trigger prefix was present."
             launched = False
             status = "ignored"
