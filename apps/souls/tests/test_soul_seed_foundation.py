@@ -29,6 +29,7 @@ from apps.souls.services import (
     provision_soul_seed_card,
     search_agent_skills,
 )
+from apps.souls.services.card_sessions import _active_console_sessions
 
 
 def _valid_agent_card_records() -> list[str]:
@@ -120,6 +121,13 @@ def test_evict_card_session_clears_runtime_fields():
     assert session.runtime_namespace == ""
     assert session.eviction_reason == "card switch"
     assert session.ended_at is not None
+
+
+def test_active_console_sessions_locks_only_session_rows():
+    queryset = _active_console_sessions("console-a")
+
+    assert queryset.query.select_for_update is True
+    assert queryset.query.select_for_update_of == ("self",)
 
 
 @pytest.mark.django_db

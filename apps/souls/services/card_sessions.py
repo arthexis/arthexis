@@ -75,7 +75,7 @@ def close_card_session(session: CardSession, *, reason: str = "") -> CardSession
 
 def _active_console_sessions(console_id: str):
     return (
-        CardSession.objects.select_for_update()
+        CardSession.objects.select_for_update(of=("self",))
         .filter(node_id=console_id, state__in=ACTIVE_SESSION_STATES)
         .select_related(
             "card",
