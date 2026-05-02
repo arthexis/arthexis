@@ -4,13 +4,15 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from typing import Any
 
 from apps.cards.actions import dispatch_rfid_action
 from apps.cards.models import RFID
 from apps.core.notifications import notify_async
+from apps.video.rfid import queue_camera_snapshot
 
 from .constants import (
     DEFAULT_RST_PIN,
@@ -18,7 +20,6 @@ from .constants import (
     SPI_BUS,
     SPI_DEVICE,
 )
-from apps.video.rfid import queue_camera_snapshot
 from .utils import convert_endianness_value, normalize_endianness
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,24 @@ _HEX_RE = re.compile(r"^[0-9A-F]+$")
 _KEY_RE = re.compile(r"^[0-9A-F]{12}$")
 _SPI_DEVICE_PATTERN = re.compile(r"(?:/dev/)?spidev(?P<bus>\d+)\.(?P<device>\d+)$")
 _SPI_DEVICE_SHORT_PATTERN = re.compile(r"(?P<bus>\d+)\.(?P<device>\d+)$")
+
+
+def _suppress_gpio_warnings() -> None:
+    """Suppress expected GPIO reuse warnings before direct MFRC522 setup."""
+
+    try:
+        import RPi.GPIO as GPIO  # type: ignore
+    except Exception:  # pragma: no cover - hardware dependent
+        return
+
+    setwarnings = getattr(GPIO, "setwarnings", None)
+    if not callable(setwarnings):
+        return
+
+    try:
+        setwarnings(False)
+    except Exception:  # pragma: no cover - defensive hardware guard
+        logger.debug("Unable to suppress GPIO warnings before RFID setup", exc_info=True)
 
 
 def _normalize_command_text(value: object) -> str:
@@ -146,6 +165,7 @@ def _with_detected_rfid_card(timeout: float, handler) -> dict:
         from mfrc522 import MFRC522  # type: ignore
 
         spi_bus, spi_device = resolve_spi_bus_device()
+        _suppress_gpio_warnings()
         mfrc = MFRC522(
             bus=spi_bus,
             device=spi_device,
@@ -450,6 +470,7 @@ def _init_default_reader_strategy(
         from mfrc522 import MFRC522  # type: ignore
 
         spi_bus, spi_device = resolve_spi_bus_device()
+        _suppress_gpio_warnings()
         reader = MFRC522(
             bus=spi_bus,
             device=spi_device,
