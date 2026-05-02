@@ -36,6 +36,22 @@ def _zip_upload(
     )
 
 
+def _raw_zip_upload(
+    files: dict[str, str | bytes],
+    *,
+    name: str = "codex-skills.zip",
+) -> SimpleUploadedFile:
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as package:
+        for archive_path, content in files.items():
+            package.writestr(archive_path, content)
+    return SimpleUploadedFile(
+        name,
+        buffer.getvalue(),
+        content_type="application/zip",
+    )
+
+
 def _valid_package_upload(slug: str = "admin-upload") -> SimpleUploadedFile:
     manifest = {
         "format": PACKAGE_FORMAT,
@@ -131,6 +147,37 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
             _zip_upload({"format": "wrong", "skills": []}),
             "Unsupported Codex skill package format",
             None,
+        ),
+        (
+            _raw_zip_upload({"skills/missing-manifest/SKILL.md": "demo"}),
+            "Missing required manifest.json",
+            None,
+        ),
+        (
+            _zip_upload({"format": PACKAGE_FORMAT, "skills": "not a list"}),
+            "Package manifest skills must be a list",
+            None,
+        ),
+        (
+            _zip_upload({"format": PACKAGE_FORMAT, "skills": ["not an object"]}),
+            "Package skill entries must be objects",
+            None,
+        ),
+        (
+            _zip_upload(
+                {
+                    "format": PACKAGE_FORMAT,
+                    "skills": [
+                        {
+                            "slug": "invalid-files",
+                            "title": "Invalid Files",
+                            "files": "not a list",
+                        }
+                    ],
+                },
+            ),
+            "Package files must be a list",
+            "invalid-files",
         ),
         (
             _zip_upload(

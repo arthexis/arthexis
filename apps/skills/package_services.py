@@ -416,9 +416,16 @@ def _read_package_text(package: ZipFile, archive_path: str) -> str:
 
 
 def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
+    if not isinstance(manifest, dict):
+        raise CodexSkillPackageImportError("Package manifest must be an object")
+    skills = manifest.get("skills", [])
+    if not isinstance(skills, list):
+        raise CodexSkillPackageImportError("Package manifest skills must be a list")
     validated_skills = []
     seen_slugs = set()
-    for skill_entry in manifest.get("skills", []):
+    for skill_entry in skills:
+        if not isinstance(skill_entry, dict):
+            raise CodexSkillPackageImportError("Package skill entries must be objects")
         try:
             slug = validate_package_skill_slug(skill_entry["slug"])
         except KeyError as error:
@@ -434,14 +441,21 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
         seen_slugs.add(slug)
         seen_paths = set()
         content_by_path = {}
+        files = skill_entry.get("files", [])
+        if not isinstance(files, list):
+            raise CodexSkillPackageImportError("Package files must be a list")
         try:
             validated_files = [
                 {
                     **file_info,
                     "path": validate_package_relative_path(file_info["path"]),
                 }
-                for file_info in skill_entry.get("files", [])
+                for file_info in files
             ]
+        except TypeError as error:
+            raise CodexSkillPackageImportError(
+                "Package file entries must be objects"
+            ) from error
         except KeyError as error:
             raise CodexSkillPackageImportError(
                 "Missing required package file path"
@@ -716,7 +730,15 @@ def materialize_codex_skill_files(
 def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> dict:
     package_path = Path(package_path)
     with ZipFile(package_path) as package:
-        manifest = json.loads(package.read("manifest.json").decode("utf-8"))
+        try:
+            manifest_bytes = package.read("manifest.json")
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required manifest.json"
+            ) from error
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, dict):
+            raise CodexSkillPackageImportError("Package manifest must be an object")
         if manifest.get("format") != PACKAGE_FORMAT:
             raise CodexSkillPackageImportError(
                 "Unsupported Codex skill package format"
