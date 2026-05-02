@@ -12,7 +12,7 @@ flowchart TD
     F --> P[Prune worst 1% of tests by PR]
     P --> TP[Confirm PyPI Trusted Publisher settings]
     TP --> G[Verify release environment]
-    G -->|Environment ready| H[Export artifacts and push release tag]
+    G -->|Environment ready| H[Export artifacts and create release tag]
     H --> I[Wait for GitHub Actions publish]
     I --> J[Record publish URLs & update fixtures after publish]
     J --> K[Capture PyPI publish logs]
@@ -30,7 +30,7 @@ flowchart TD
 6. **Prune worst 1% of tests by PR** – Enforced gate. The workflow requires a pull request URL showing low-value test pruning evidence after the full suite passes and before external publish prerequisites can advance.
 7. **Confirm PyPI Trusted Publisher settings** – Enforced gate. The workflow validates the publish metadata against the expected Trusted Publisher values (`publish.yml`, `refs/tags/v*`, and `pypi`) and fails with actionable guidance when the workflow metadata is missing or mismatched.
 8. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
-9. **Export artifacts and push release tag** – Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and pushes the tag to GitHub. The `publish.yml` workflow listens for tag pushes, attaches the same built distributions to the GitHub Release, and publishes those distributions to PyPI via OIDC.
+9. **Export artifacts and create release tag** - Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and creates/pushes the matching `vVERSION` tag. On `main`, `.github/workflows/tag-from-version.yml` also acts as the automatic fallback: when `VERSION` changes and the matching tag is missing, it creates the annotated `vVERSION` tag and dispatches `publish.yml` from that tag. Manual tag pushes are fallback-only for authentication or GitHub Actions outages.
 10. **Wait for GitHub Actions publish** – The workflow pauses until the publish workflow completes, logging the GitHub Actions run URL when available so operators can monitor progress.
 11. **Record publish URLs & update fixtures** – After the GitHub Actions publish completes (and the release is visible on PyPI), the workflow records the PyPI/GitHub URLs, updates fixtures, and commits the publish metadata.
 12. **Capture PyPI publish logs** – Downloads the GitHub Actions publish run logs, stores the PyPI upload results, and persists them into the release fixtures for traceability.
@@ -40,6 +40,7 @@ flowchart TD
 - The same step sequence is executed by the headless scheduler through `run_headless_publish`, which builds a `NodeWorkflow` from `PUBLISH_STEPS` and writes progress logs under `LOG_DIR`.
 - Dry-run mode exercises build and publish commands against Test PyPI, restoring `VERSION` and `pyproject.toml` afterward to avoid polluting the working tree.
 - Repository hygiene safeguards (dirty checks, syncs against `origin/main`, and build stale detection) ensure releases restart when source changes appear mid-run.
+- Release tags are automatic release output. Do not create the publish tag by hand during the normal path; let the release workflow or `tag-from-version.yml` create `vVERSION` from the reviewed `VERSION` on `main`.
 
 ## Publish with PyPI Trusted Publishers (OIDC)
 
@@ -51,7 +52,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 2. **Register a trusted publisher in PyPI** for the `arthexis` project that targets the GitHub Actions workflow used for releases. Capture the required configuration fields (GitHub owner, repository name, workflow filename such as `publish.yml`, and the optional GitHub environment name if using environment protection rules). This ties the project to the repository, workflow file path, and branch or tag protection rules.
 3. **Split release into two phases**:
    - The release UI/headless workflow runs through metadata prep and artifact generation.
-   - The workflow exports built artifacts (wheel/sdist) to the GitHub release and pushes the release tag, which triggers the GitHub Actions `publish` workflow for OIDC uploads.
+   - The workflow exports built artifacts (wheel/sdist) to the GitHub release and creates the release tag. If the release metadata lands on `main` without a tag, `tag-from-version.yml` creates the tag from `VERSION` and dispatches the GitHub Actions `publish` workflow for OIDC uploads.
 4. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Builds the sdist and wheel in a dedicated job, uploads them as workflow artifacts for job handoff, attaches them to the GitHub Release, and publishes them in a separate PyPI job.
    - Runs a pre-build version consistency gate that normalizes the release tag (`vX.Y.Z` → `X.Y.Z`) and compares it against `VERSION` (and the `tool.setuptools.dynamic.version.file` source when configured). The build fails early if they do not match.
@@ -66,6 +67,8 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 ### Implementation notes
 
 - The new `publish.yml` workflow is designed to build from a release tag, upload the resulting distributions to the matching GitHub Release, and publish the same distributions to PyPI using OIDC.
+- The `tag-from-version.yml` workflow is designed to create the missing annotated `vVERSION` tag from the reviewed `VERSION` on `main`, then dispatch `publish.yml` with `--ref "$tag"` and `release_tag="$tag"` so PyPI Trusted Publisher sees a tag-scoped workflow run.
+- GitHub Release creation uses bounded release notes generated inside `publish.yml` instead of GitHub's unbounded generated notes, so a long commit range cannot block asset upload.
 - Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
 - Use the `pypi` environment in GitHub with required reviewers if a human approval gate is required before the job publishes.
 - Before pushing a release tag, ensure `VERSION` and any dynamic version source file configured in `pyproject.toml` contain the exact same version string as the tag (e.g., `X.Y.Z`, without the `v` prefix). The publish workflow now enforces this and will stop before build if they are out of sync.
@@ -112,11 +115,11 @@ If you need to restrict access to `main`, enforce branch protection rules on Git
 ## Git authentication for tag pushes
 
 When the release workflow needs to push a tag to GitHub (for example during the
-"Export artifacts and push release tag" step), the release runner
+"Export artifacts and create release tag" step), the release runner
 must be authenticated to `origin`. If the logs show authentication failures
 like `fatal: could not read Username for 'https://github.com'`, a release
 operator needs to authenticate before retrying the publish step or pushing the
-tag manually.
+tag manually. Manual tag pushes are a recovery path, not the normal release path.
 
 Use one of the following options:
 

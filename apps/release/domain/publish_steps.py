@@ -41,7 +41,7 @@ PUBLISH_STEPS: list[tuple[str, str]] = [
     ),
     ("Verify release environment", "_step_verify_release_environment"),
     (
-        "Export artifacts and push release tag",
+        "Export artifacts and create release tag",
         "_step_export_and_dispatch",
     ),
     ("Wait for GitHub Actions publish", "_step_wait_for_github_actions_publish"),

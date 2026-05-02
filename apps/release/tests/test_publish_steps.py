@@ -19,7 +19,7 @@ EXPECTED_STEP_ORDER = [
     "Prune worst 1% of tests by PR",
     "Confirm PyPI Trusted Publisher settings",
     "Verify release environment",
-    "Export artifacts and push release tag",
+    "Export artifacts and create release tag",
     "Wait for GitHub Actions publish",
     "Record publish URLs & update fixtures",
     "Capture PyPI publish logs",
