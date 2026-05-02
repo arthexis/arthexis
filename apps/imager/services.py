@@ -13,14 +13,18 @@ import shlex
 import shutil
 import socket
 import subprocess
+import tarfile
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError, URLError
-from urllib.parse import ParseResult, unquote, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import ParseResult, quote, unquote, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -31,6 +35,50 @@ TARGET_RPI4B = "rpi-4b"
 DEFAULT_RECOVERY_SSH_USER = "arthe"
 RECOVERY_SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
 RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
+VALID_PUBLIC_KEY_PREFIXES = (
+    "ecdsa-sha2-nistp256",
+    "ecdsa-sha2-nistp384",
+    "ecdsa-sha2-nistp521",
+    "sk-ecdsa-sha2-nistp256@openssh.com",
+    "sk-ssh-ed25519@openssh.com",
+    "ssh-ed25519",
+    "ssh-rsa",
+)
+VALID_PUBLIC_KEY_PATTERN = re.compile(
+    r"^(?:"
+    + "|".join(re.escape(prefix) for prefix in VALID_PUBLIC_KEY_PREFIXES)
+    + r")\s+[A-Za-z0-9+/=]+(?:\s+.+)?$"
+)
+SUITE_BUNDLE_REMOTE_PATH = "/usr/local/share/arthexis/arthexis-suite.tar.gz"
+NETWORK_MANAGER_CONNECTIONS_REMOTE_PATH = "/etc/NetworkManager/system-connections"
+DEFAULT_HOST_NETWORK_PROFILE_DIR = "/etc/NetworkManager/system-connections"
+SUITE_BUNDLE_EXCLUDED_TOP_LEVEL = frozenset(
+    {
+        ".cache",
+        ".git",
+        ".locks",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "backups",
+        "build",
+        "logs",
+        "media",
+        "node_modules",
+        "staticfiles",
+        "work",
+    }
+)
+SUITE_BUNDLE_EXCLUDED_NAMES = frozenset(
+    {
+        ".env",
+        "__pycache__",
+        "db.sqlite3",
+        "test_db.sqlite3",
+    }
+)
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -49,11 +97,19 @@ if [ "${#missing_packages[@]}" -gt 0 ]; then
 fi
 
 APP_HOME=/opt/arthexis
-if [ ! -d "$APP_HOME/.git" ]; then
+ARTHEXIS_BUNDLE=/usr/local/share/arthexis/arthexis-suite.tar.gz
+if [ ! -x "$APP_HOME/start.sh" ] && [ -f "$ARTHEXIS_BUNDLE" ]; then
+  rm -rf "$APP_HOME"
+  install -d -m 755 "$APP_HOME"
+  tar -xzf "$ARTHEXIS_BUNDLE" -C "$APP_HOME"
+fi
+
+if [ ! -x "$APP_HOME/start.sh" ]; then
   git clone --depth 1 "${ARTHEXIS_GIT_URL}" "$APP_HOME"
 fi
 
 cd "$APP_HOME"
+chmod +x ./install.sh ./env-refresh.sh ./start.sh ./manage.py 2>/dev/null || true
 ./env-refresh.sh --deps-only
 ./start.sh
 """
@@ -154,6 +210,10 @@ class ImagerBuildError(RuntimeError):
     """Raised when a Raspberry Pi image build cannot complete."""
 
 
+class RecoveryAuthorizedKeyError(ValueError):
+    """Raised when a recovery authorized-key line is malformed."""
+
+
 @dataclass
 class BuildResult:
     """Metadata returned from an image build operation."""
@@ -193,6 +253,66 @@ class WriteResult:
     source_sha256: str
     written_sha256: str
     verified: bool
+
+
+@dataclass(frozen=True)
+class SuiteBundleInfo:
+    """Metadata for a static Arthexis source bundle injected into an image."""
+
+    source_path: Path
+    remote_path: str
+    sha256: str
+    size_bytes: int
+    file_count: int
+
+
+@dataclass(frozen=True)
+class NetworkProfileInfo:
+    """NetworkManager profile selected for copying into a generated image."""
+
+    name: str
+    filename: str
+    source_path: Path
+    remote_path: str
+
+
+@dataclass(frozen=True)
+class ImageCustomizationResult:
+    """Metadata produced while injecting first-boot customization files."""
+
+    suite_bundle: SuiteBundleInfo | None = None
+    network_profiles: tuple[NetworkProfileInfo, ...] = ()
+
+
+@dataclass(frozen=True)
+class ServeResult:
+    """Metadata for a locally served image artifact."""
+
+    image_path: Path
+    url: str
+    host: str
+    port: int
+
+
+@dataclass(frozen=True)
+class AccessCheckResult:
+    """Single RPi access check result."""
+
+    name: str
+    ok: bool
+    detail: str
+
+
+@dataclass(frozen=True)
+class RpiAccessTestResult:
+    """Aggregate access-test result for a burned Raspberry Pi image."""
+
+    host: str
+    checks: tuple[AccessCheckResult, ...]
+
+    @property
+    def ok(self) -> bool:
+        return all(check.ok for check in self.checks)
 
 
 @dataclass(frozen=True)
@@ -385,6 +505,178 @@ def _ensure_guestfish() -> None:
     raise ImagerBuildError(
         "guestfish is required to customize Raspberry Pi images. Install libguestfs-tools first."
     )
+
+
+def normalize_recovery_authorized_key_line(line: str) -> str | None:
+    """Normalize one recovery authorized-key line or raise a validation error."""
+
+    normalized = line.strip()
+    if not normalized or normalized.startswith("#"):
+        return None
+    if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
+        raise RecoveryAuthorizedKeyError("unrecognized key line")
+    try:
+        load_ssh_public_key(normalized.encode("utf-8"))
+    except (TypeError, ValueError, UnsupportedAlgorithm) as exc:
+        raise RecoveryAuthorizedKeyError("malformed public key line") from exc
+    return normalized
+
+
+def _should_exclude_suite_bundle_path(relative_path: Path) -> bool:
+    """Return whether a repo path should be excluded from the static image bundle."""
+
+    parts = relative_path.parts
+    if not parts:
+        return False
+    if parts[0] in SUITE_BUNDLE_EXCLUDED_TOP_LEVEL:
+        return True
+    if any(part in SUITE_BUNDLE_EXCLUDED_NAMES for part in parts):
+        return True
+    name = relative_path.name
+    return name.endswith((".env", ".pyc", ".pyo"))
+
+
+def _create_suite_bundle(source_path: Path, archive_path: Path) -> SuiteBundleInfo:
+    """Create a sanitized tarball of the suite source for image injection."""
+
+    source = source_path.expanduser().resolve()
+    if not source.is_dir():
+        raise ImagerBuildError(f"Suite source path is not a directory: {source}")
+    for required_file in ("manage.py", "start.sh", "env-refresh.sh"):
+        if not (source / required_file).is_file():
+            raise ImagerBuildError(f"Suite source path is missing required file: {required_file}")
+
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    file_count = 0
+    with tarfile.open(archive_path, "w:gz") as archive:
+        for path in sorted(source.rglob("*")):
+            if path.is_symlink() or not path.is_file():
+                continue
+            relative_path = path.relative_to(source)
+            if _should_exclude_suite_bundle_path(relative_path):
+                continue
+            archive.add(path, arcname=relative_path.as_posix(), recursive=False)
+            file_count += 1
+    if file_count == 0:
+        raise ImagerBuildError(f"Suite source path did not contain any bundleable files: {source}")
+
+    return SuiteBundleInfo(
+        source_path=source,
+        remote_path=SUITE_BUNDLE_REMOTE_PATH,
+        sha256=_sha256_for_file(archive_path),
+        size_bytes=archive_path.stat().st_size,
+        file_count=file_count,
+    )
+
+
+def _parse_network_profile_id(profile_path: Path) -> str:
+    """Read a NetworkManager connection id from a keyfile profile when present."""
+
+    try:
+        lines = profile_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return profile_path.stem
+
+    in_connection_section = False
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_connection_section = line.lower() == "[connection]"
+            continue
+        if not in_connection_section or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip().lower() == "id" and value.strip():
+            return value.strip()
+    return profile_path.stem
+
+
+def _network_profile_remote_filename(source_path: Path) -> str:
+    """Return a safe NetworkManager keyfile name for image injection."""
+
+    filename = source_path.name
+    if not filename.endswith(".nmconnection"):
+        filename = f"{filename}.nmconnection"
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", filename)
+
+
+def select_host_network_profiles(
+    *,
+    profile_dir: Path | None = None,
+    names: list[str] | tuple[str, ...] | None = None,
+    copy_all: bool = False,
+) -> tuple[NetworkProfileInfo, ...]:
+    """Select host NetworkManager profiles for copying into the generated image."""
+
+    requested_names = tuple(name.strip() for name in (names or ()) if str(name).strip())
+    if not requested_names and not copy_all:
+        return ()
+
+    source_dir = (profile_dir or Path(DEFAULT_HOST_NETWORK_PROFILE_DIR)).expanduser().resolve()
+    if not source_dir.is_dir():
+        raise ImagerBuildError(f"Host NetworkManager profile directory does not exist: {source_dir}")
+
+    candidates: list[tuple[Path, str, set[str]]] = []
+    for path in sorted(source_dir.iterdir(), key=lambda item: item.name):
+        if path.name.startswith(".") or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            path.resolve().relative_to(source_dir)
+        except ValueError:
+            continue
+        profile_id = _parse_network_profile_id(path)
+        candidates.append(
+            (
+                path,
+                profile_id,
+                {path.name, path.stem, profile_id},
+            )
+        )
+
+    selected: list[tuple[Path, str]] = []
+    if copy_all:
+        selected.extend((path, profile_id) for path, profile_id, _aliases in candidates)
+
+    for requested_name in requested_names:
+        match = next(
+            (
+                (path, profile_id)
+                for path, profile_id, aliases in candidates
+                if requested_name in aliases
+            ),
+            None,
+        )
+        if match is None:
+            available = ", ".join(sorted({alias for _, _, aliases in candidates for alias in aliases}))
+            raise ImagerBuildError(
+                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'}."
+            )
+        if match not in selected:
+            selected.append(match)
+
+    used_filenames: set[str] = set()
+    profiles: list[NetworkProfileInfo] = []
+    for source_path, profile_id in selected:
+        filename = _network_profile_remote_filename(source_path)
+        if filename in used_filenames:
+            stem = Path(filename).stem
+            suffix = Path(filename).suffix or ".nmconnection"
+            counter = 2
+            while f"{stem}-{counter}{suffix}" in used_filenames:
+                counter += 1
+            filename = f"{stem}-{counter}{suffix}"
+        used_filenames.add(filename)
+        profiles.append(
+            NetworkProfileInfo(
+                name=profile_id,
+                filename=filename,
+                source_path=source_path,
+                remote_path=f"{NETWORK_MANAGER_CONNECTIONS_REMOTE_PATH}/{filename}",
+            )
+        )
+    return tuple(profiles)
 
 
 def _normalize_local_source_path(base_image_uri: str, parsed_uri: ParseResult) -> Path | None:
@@ -727,7 +1019,9 @@ def _customize_image(
     *,
     git_url: str,
     recovery_ssh_access: RecoverySSHAccess | None = None,
-) -> None:
+    suite_source_path: Path | None = None,
+    network_profiles: tuple[NetworkProfileInfo, ...] = (),
+) -> ImageCustomizationResult:
     """Inject bootstrap scripts and systemd units into the image."""
 
     _ensure_guestfish()
@@ -737,6 +1031,7 @@ def _customize_image(
         service = work_dir / "arthexis-bootstrap.service"
         firstrun = work_dir / "firstrun.sh"
         recovery_service = work_dir / "arthexis-recovery-access.service"
+        suite_bundle_info: SuiteBundleInfo | None = None
 
         bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
         service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
@@ -767,6 +1062,21 @@ def _customize_image(
             ],
             error_message="guestfish failed while injecting bootstrap files",
         )
+        if suite_source_path is not None:
+            suite_bundle = work_dir / "arthexis-suite.tar.gz"
+            suite_bundle_info = _create_suite_bundle(suite_source_path, suite_bundle)
+            _guestfish_run_commands(
+                image_path,
+                [
+                    _guestfish_mkdir_p_command(str(PurePosixPath(SUITE_BUNDLE_REMOTE_PATH).parent)),
+                    *_guestfish_upload_commands(
+                        suite_bundle,
+                        SUITE_BUNDLE_REMOTE_PATH,
+                        chmod_mode="0644",
+                    ),
+                ],
+                error_message="guestfish failed while injecting suite bundle",
+            )
         if recovery_ssh_access and recovery_ssh_access.enabled:
             recovery_keys = work_dir / "recovery_authorized_keys"
             recovery_script = work_dir / "arthexis-recovery-access.sh"
@@ -789,7 +1099,7 @@ def _customize_image(
                 image_path,
                 [
                     _guestfish_mkdir_p_command(
-                        str(Path(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent)
+                        str(PurePosixPath(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent)
                     ),
                     *_guestfish_upload_commands(
                         recovery_keys,
@@ -827,10 +1137,30 @@ def _customize_image(
                 ],
                 error_message="guestfish failed while removing stale recovery files",
             )
+        if network_profiles:
+            profile_commands = [_guestfish_mkdir_p_command(NETWORK_MANAGER_CONNECTIONS_REMOTE_PATH)]
+            for profile in network_profiles:
+                profile_commands.extend(
+                    _guestfish_upload_commands(
+                        profile.source_path,
+                        profile.remote_path,
+                        chmod_mode="0600",
+                    )
+                )
+            _guestfish_run_commands(
+                image_path,
+                profile_commands,
+                error_message="guestfish failed while injecting host network profiles",
+            )
         try:
             _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
         except ImagerBuildError:
             _guestfish_write(image_path, firstrun, "/boot/firmware/firstrun.sh", chmod_mode="0755")
+
+    return ImageCustomizationResult(
+        suite_bundle=suite_bundle_info,
+        network_profiles=network_profiles,
+    )
 
 
 def _coerce_profile_metadata(profile_metadata: dict[str, object] | None) -> dict[str, object]:
@@ -866,6 +1196,237 @@ def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
 
     normalized_path = f"{parsed_base.path.rstrip('/')}/{output_filename}"
     return parsed_base._replace(path=normalized_path).geturl()
+
+
+def _suite_bundle_metadata(suite_bundle: SuiteBundleInfo | None) -> dict[str, object]:
+    """Return JSON-safe metadata for static suite bundle injection."""
+
+    if suite_bundle is None:
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "source_path": str(suite_bundle.source_path),
+        "remote_path": suite_bundle.remote_path,
+        "sha256": suite_bundle.sha256,
+        "size_bytes": suite_bundle.size_bytes,
+        "file_count": suite_bundle.file_count,
+    }
+
+
+def _network_profiles_metadata(network_profiles: tuple[NetworkProfileInfo, ...]) -> dict[str, object]:
+    """Return JSON-safe metadata for injected host network profiles."""
+
+    return {
+        "enabled": bool(network_profiles),
+        "count": len(network_profiles),
+        "profiles": [
+            {
+                "name": profile.name,
+                "filename": profile.filename,
+                "remote_path": profile.remote_path,
+            }
+            for profile in network_profiles
+        ],
+    }
+
+
+def _format_url_host(host: str) -> str:
+    """Bracket IPv6 hosts for URL construction."""
+
+    return f"[{host}]" if ":" in host and not host.startswith("[") else host
+
+
+def _build_served_artifact_url(
+    *,
+    output_filename: str,
+    port: int,
+    url_host: str = "",
+    base_url: str = "",
+) -> str:
+    """Build the URL advertised for a locally served image artifact."""
+
+    if base_url:
+        parsed_base = urlparse(base_url)
+        if parsed_base.scheme not in {"http", "https"} or not parsed_base.hostname:
+            raise ImagerBuildError("Serve base URL must use http or https and include a host.")
+        normalized_path = f"{parsed_base.path.rstrip('/')}/{quote(output_filename)}"
+        return parsed_base._replace(path=normalized_path).geturl()
+
+    advertised_host = _format_url_host((url_host or "127.0.0.1").strip())
+    return f"http://{advertised_host}:{port}/{quote(output_filename)}"
+
+
+def prepare_image_serve(
+    *,
+    artifact_name: str = "",
+    image_path: str = "",
+    host: str = "0.0.0.0",
+    port: int = 8088,
+    url_host: str = "",
+    base_url: str = "",
+    update_artifact_url: bool = True,
+) -> ServeResult:
+    """Resolve an image and optionally persist the URL used for local artifact serving."""
+
+    resolved_path, artifact = _resolve_image_path_for_write(
+        artifact_name=artifact_name,
+        image_path=image_path,
+    )
+    artifact_url = _build_served_artifact_url(
+        output_filename=resolved_path.name,
+        port=port,
+        url_host=url_host,
+        base_url=base_url,
+    )
+    if artifact is not None and update_artifact_url:
+        artifact.download_uri = artifact_url
+        artifact.metadata = {
+            **artifact.metadata,
+            "local_serve": {
+                "host": host,
+                "port": port,
+                "url": artifact_url,
+                "updated_at": timezone.now().isoformat(),
+            },
+        }
+        artifact.save(update_fields=["download_uri", "metadata", "updated_at"])
+    return ServeResult(
+        image_path=resolved_path,
+        url=artifact_url,
+        host=host,
+        port=port,
+    )
+
+
+def serve_image_file(*, image_path: Path, host: str, port: int) -> None:
+    """Serve a single image file over HTTP until interrupted."""
+
+    image = image_path.resolve()
+    filename = image.name
+
+    class SingleImageHandler(BaseHTTPRequestHandler):
+        def do_HEAD(self) -> None:  # noqa: N802
+            self._send_file(include_body=False)
+
+        def do_GET(self) -> None:  # noqa: N802
+            self._send_file(include_body=True)
+
+        def _send_file(self, *, include_body: bool) -> None:
+            requested_name = Path(unquote(urlparse(self.path).path).lstrip("/")).name
+            if requested_name != filename:
+                self.send_error(404, "Image artifact not found")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(image.stat().st_size))
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.end_headers()
+            if include_body:
+                with image.open("rb") as handle:
+                    shutil.copyfileobj(handle, self.wfile, length=1024 * 1024)
+
+        def log_message(self, _format: str, *args: object) -> None:
+            return
+
+    with ThreadingHTTPServer((host, port), SingleImageHandler) as server:
+        server.serve_forever()
+
+
+def _tcp_access_check(*, host: str, port: int, timeout: float, name: str) -> AccessCheckResult:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return AccessCheckResult(name=name, ok=True, detail=f"tcp/{port} reachable")
+    except OSError as exc:
+        return AccessCheckResult(name=name, ok=False, detail=f"tcp/{port} failed: {exc}")
+
+
+def _ssh_access_check(
+    *,
+    host: str,
+    user: str,
+    port: int,
+    key_path: str,
+    timeout: float,
+) -> AccessCheckResult:
+    ssh_path = shutil.which("ssh")
+    if not ssh_path:
+        return AccessCheckResult(name="ssh-auth", ok=False, detail="ssh command not found")
+
+    command = [
+        ssh_path,
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        f"ConnectTimeout={max(1, int(timeout))}",
+        "-p",
+        str(port),
+    ]
+    if key_path:
+        command.extend(["-i", str(Path(key_path).expanduser())])
+    command.extend([f"{user}@{host}", "true"])
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(1, int(timeout) + 2),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return AccessCheckResult(name="ssh-auth", ok=False, detail=f"ssh failed: {exc}")
+    if result.returncode == 0:
+        return AccessCheckResult(name="ssh-auth", ok=True, detail=f"{user}@{host}:{port} accepted key auth")
+    detail = (result.stderr or result.stdout or "ssh command failed").strip().splitlines()
+    return AccessCheckResult(name="ssh-auth", ok=False, detail=detail[-1] if detail else "ssh command failed")
+
+
+def _http_access_check(*, url: str, timeout: float) -> AccessCheckResult:
+    try:
+        with urlopen(Request(url), timeout=timeout) as response:
+            status = response.getcode()
+    except (OSError, HTTPError, URLError) as exc:
+        return AccessCheckResult(name="http", ok=False, detail=f"{url} failed: {exc}")
+    return AccessCheckResult(
+        name="http",
+        ok=200 <= status < 500,
+        detail=f"{url} returned HTTP {status}",
+    )
+
+
+def test_rpi_access(
+    *,
+    host: str,
+    ssh_user: str = DEFAULT_RECOVERY_SSH_USER,
+    ssh_port: int = 22,
+    ssh_key: str = "",
+    http_url: str = "",
+    http_port: int = 8888,
+    timeout: float = 5.0,
+    skip_ssh: bool = False,
+    skip_http: bool = False,
+) -> RpiAccessTestResult:
+    """Test SSH and HTTP access to a burned Raspberry Pi image."""
+
+    checks: list[AccessCheckResult] = []
+    if not skip_ssh:
+        checks.append(_tcp_access_check(host=host, port=ssh_port, timeout=timeout, name="ssh-tcp"))
+        checks.append(
+            _ssh_access_check(
+                host=host,
+                user=ssh_user,
+                port=ssh_port,
+                key_path=ssh_key,
+                timeout=timeout,
+            )
+        )
+    if not skip_http:
+        target_url = http_url or f"http://{_format_url_host(host)}:{http_port}/"
+        checks.append(_http_access_check(url=target_url, timeout=timeout))
+    if not checks:
+        raise ImagerBuildError("Enable at least one access check.")
+    return RpiAccessTestResult(host=host, checks=tuple(checks))
 
 
 def _resolve_root_disk_path() -> str | None:
@@ -924,8 +1485,114 @@ def _walk_block_descendants(entry: dict[str, object]) -> list[dict[str, object]]
     return descendants
 
 
+def _coerce_windows_json_rows(value: object) -> list[dict[str, object]]:
+    """Normalize PowerShell ConvertTo-Json array/singleton output."""
+
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _coerce_windows_access_paths(value: object) -> list[str]:
+    """Normalize Windows partition access paths from PowerShell JSON."""
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    return []
+
+
+def _list_windows_block_devices() -> list[BlockDeviceInfo]:
+    """Enumerate Windows physical disks with safety metadata."""
+
+    powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+    if not powershell:
+        raise ImagerBuildError("PowerShell is required to enumerate Windows disks.")
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$disks=@(Get-Disk | Select-Object Number,FriendlyName,SerialNumber,BusType,Size,IsBoot,IsSystem,IsReadOnly,IsOffline,OperationalStatus);"
+        "$partitions=@(Get-Partition | Select-Object DiskNumber,PartitionNumber,DriveLetter,AccessPaths);"
+        "[pscustomobject]@{disks=$disks;partitions=$partitions} | ConvertTo-Json -Depth 6 -Compress"
+    )
+    try:
+        result = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ImagerBuildError("PowerShell is required to enumerate Windows disks.") from exc
+    if result.returncode != 0:
+        raise ImagerBuildError(result.stderr.strip() or "Unable to enumerate Windows disks.")
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ImagerBuildError("Unable to parse Windows disk inventory output.") from exc
+
+    partitions_by_disk: dict[int, list[dict[str, object]]] = {}
+    for partition in _coerce_windows_json_rows(payload.get("partitions")):
+        try:
+            disk_number = int(partition.get("DiskNumber"))
+        except (TypeError, ValueError):
+            continue
+        partitions_by_disk.setdefault(disk_number, []).append(partition)
+
+    devices: list[BlockDeviceInfo] = []
+    for disk in _coerce_windows_json_rows(payload.get("disks")):
+        try:
+            number = int(disk.get("Number"))
+            size_bytes = int(disk.get("Size") or 0)
+        except (TypeError, ValueError):
+            continue
+
+        bus_type = str(disk.get("BusType") or "")
+        disk_partitions = partitions_by_disk.get(number, [])
+        mountpoints: list[str] = []
+        partitions: list[str] = []
+        for partition in disk_partitions:
+            partition_number = partition.get("PartitionNumber")
+            if partition_number not in (None, ""):
+                partitions.append(f"PhysicalDrive{number}Partition{partition_number}")
+            drive_letter = str(partition.get("DriveLetter") or "").strip()
+            if drive_letter:
+                mountpoints.append(f"{drive_letter.upper()}:\\")
+            mountpoints.extend(_coerce_windows_access_paths(partition.get("AccessPaths")))
+
+        devices.append(
+            BlockDeviceInfo(
+                path=f"\\\\.\\PhysicalDrive{number}",
+                size_bytes=size_bytes,
+                transport=bus_type,
+                removable=bus_type.lower() in {"usb", "sd", "mmc"},
+                mountpoints=sorted(set(mountpoints)),
+                partitions=partitions,
+                protected=bool(disk.get("IsBoot") or disk.get("IsSystem")),
+            )
+        )
+    return sorted(devices, key=lambda item: item.path)
+
+
 def list_block_devices() -> list[BlockDeviceInfo]:
     """Enumerate host block devices and safety-relevant metadata."""
+
+    if os.name == "nt":
+        return _list_windows_block_devices()
 
     try:
         result = subprocess.run(
@@ -1044,7 +1711,7 @@ def write_image_to_device(
     )
 
     source_hash = _sha256_for_file(source_path)
-    with source_path.open("rb") as source_handle, Path(device_path).open("wb") as device_handle:
+    with source_path.open("rb") as source_handle, open(device_path, "r+b", buffering=0) as device_handle:
         shutil.copyfileobj(source_handle, device_handle, length=1024 * 1024 * 4)
         device_handle.flush()
         os.fsync(device_handle.fileno())
@@ -1090,6 +1757,12 @@ def build_rpi4b_image(
     profile_metadata: dict[str, object] | None = None,
     recovery_ssh_user: str = "",
     recovery_authorized_keys: list[str] | tuple[str, ...] | None = None,
+    skip_recovery_ssh: bool = False,
+    bundle_suite: bool = True,
+    suite_source_path: Path | None = None,
+    copy_all_host_networks: bool = False,
+    host_network_names: list[str] | tuple[str, ...] | None = None,
+    host_network_profile_dir: Path | None = None,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -1114,10 +1787,30 @@ def build_rpi4b_image(
         recovery_ssh_user=recovery_ssh_user,
         recovery_authorized_keys=recovery_authorized_keys,
     )
+    if skip_recovery_ssh and recovery_ssh_access and recovery_ssh_access.enabled:
+        raise ImagerBuildError("skip_recovery_ssh cannot be combined with recovery SSH keys.")
+    if customize and not skip_recovery_ssh and not (recovery_ssh_access and recovery_ssh_access.enabled):
+        raise ImagerBuildError(
+            "Recovery SSH is required for customized image builds. "
+            "Provide recovery authorized keys or explicitly skip recovery SSH."
+        )
     if recovery_ssh_access and recovery_ssh_access.enabled and not customize:
         raise ImagerBuildError(
             "Recovery SSH access requires image customization. Remove --skip-customize or omit recovery key options."
         )
+    if not customize:
+        bundle_suite = False
+        if copy_all_host_networks or host_network_names:
+            raise ImagerBuildError("Host network profile copying requires image customization.")
+
+    resolved_suite_source_path = suite_source_path
+    if customize and bundle_suite and resolved_suite_source_path is None:
+        resolved_suite_source_path = Path(settings.BASE_DIR)
+    network_profiles = select_host_network_profiles(
+        profile_dir=host_network_profile_dir,
+        names=host_network_names,
+        copy_all=copy_all_host_networks,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
@@ -1128,12 +1821,17 @@ def build_rpi4b_image(
             raise ImagerBuildError("Base image path must differ from output artifact path.")
         shutil.copyfile(source_path, output_path)
 
+    customization_result = ImageCustomizationResult()
     if customize:
-        _customize_image(
+        raw_customization_result = _customize_image(
             output_path,
             git_url=git_url,
             recovery_ssh_access=recovery_ssh_access,
+            suite_source_path=resolved_suite_source_path if bundle_suite else None,
+            network_profiles=network_profiles,
         )
+        if isinstance(raw_customization_result, ImageCustomizationResult):
+            customization_result = raw_customization_result
 
     sha256 = _sha256_for_file(output_path)
     size_bytes = output_path.stat().st_size
@@ -1158,12 +1856,17 @@ def build_rpi4b_image(
                     "bootstrap_script": "/usr/local/bin/arthexis-bootstrap.sh",
                     "first_boot_script": "firstrun.sh",
                     "git_url": git_url,
+                    "suite_bundle": _suite_bundle_metadata(customization_result.suite_bundle),
+                    "host_network_profiles": _network_profiles_metadata(
+                        customization_result.network_profiles
+                    ),
                     "recovery_ssh": {
                         "enabled": bool(customize and recovery_ssh_access and recovery_ssh_access.enabled),
                         "user": recovery_ssh_access.username if recovery_ssh_access else "",
                         "authorized_key_count": len(recovery_ssh_access.authorized_keys)
                         if recovery_ssh_access
                         else 0,
+                        "explicitly_skipped": bool(customize and skip_recovery_ssh),
                     },
                 },
                 "build_engine": build_engine,

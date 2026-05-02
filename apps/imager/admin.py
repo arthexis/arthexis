@@ -1,9 +1,9 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
+import socket
 from contextlib import contextmanager, nullcontext
 from ipaddress import ip_address
 from pathlib import Path
-import socket
 from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlparse
@@ -21,7 +21,12 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import ImagerBuildError, build_rpi4b_image
+from apps.imager.services import (
+    ImagerBuildError,
+    RecoveryAuthorizedKeyError,
+    build_rpi4b_image,
+    normalize_recovery_authorized_key_line,
+)
 
 BLOCKED_ADDRESS_FLAGS = (
     "is_link_local",
@@ -149,6 +154,20 @@ class RaspberryPiImageBuildForm(forms.Form):
         required=False,
         help_text=_("Copy the base image without injecting Arthexis bootstrap scripts."),
     )
+    recovery_ssh_user = forms.CharField(
+        max_length=64,
+        required=False,
+        help_text=_("Recovery SSH username used when public keys are provided; defaults to arthe."),
+    )
+    recovery_authorized_keys = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text=_("OpenSSH public keys to authorize for first-boot recovery access, one per line."),
+    )
+    skip_recovery_ssh = forms.BooleanField(
+        required=False,
+        help_text=_("Explicitly opt out of recovery SSH for this customized image."),
+    )
 
     def clean_name(self) -> str:
         """Keep artifact names safe to embed into output filenames."""
@@ -157,6 +176,50 @@ class RaspberryPiImageBuildForm(forms.Form):
         if not name or name in {".", ".."} or "/" in name or "\\" in name:
             raise ValidationError(_("Artifact name must not contain path separators or traversal segments."))
         return name
+
+    def clean_recovery_authorized_keys(self) -> list[str]:
+        """Normalize and validate admin-entered recovery authorized keys."""
+
+        raw_value = self.cleaned_data.get("recovery_authorized_keys", "")
+        if not raw_value:
+            return []
+        keys: list[str] = []
+        errors: list[ValidationError] = []
+        for line_number, line in enumerate(raw_value.splitlines(), start=1):
+            try:
+                normalized = normalize_recovery_authorized_key_line(line)
+            except RecoveryAuthorizedKeyError as exc:
+                errors.append(
+                    ValidationError(
+                        _("Line %(line_number)d: %(error)s."),
+                        params={"line_number": line_number, "error": str(exc)},
+                    )
+                )
+                continue
+            if normalized:
+                keys.append(normalized)
+        if errors:
+            raise ValidationError(errors)
+        return keys
+
+    def clean(self) -> dict[str, object]:
+        cleaned = super().clean()
+        skip_customize = bool(cleaned.get("skip_customize"))
+        skip_recovery_ssh = bool(cleaned.get("skip_recovery_ssh"))
+        recovery_authorized_keys = cleaned.get("recovery_authorized_keys") or []
+        recovery_ssh_user = str(cleaned.get("recovery_ssh_user") or "").strip()
+        if skip_recovery_ssh and (recovery_authorized_keys or recovery_ssh_user):
+            raise ValidationError(
+                _("Recovery SSH fields cannot be combined with the explicit recovery SSH skip option.")
+            )
+        if not skip_customize and not skip_recovery_ssh and not recovery_authorized_keys:
+            raise ValidationError(
+                _(
+                    "Recovery SSH is required for customized image builds. "
+                    "Provide at least one public key or explicitly opt out."
+                )
+            )
+        return cleaned
 
     @staticmethod
     def _resolved_within(path: Path, roots: tuple[Path, ...]) -> bool:
@@ -169,7 +232,13 @@ class RaspberryPiImageBuildForm(forms.Form):
         if parsed.scheme in {"http", "https"}:
             raise ValidationError(_("Remote URLs are not valid in this field."))
 
-        if parsed.scheme == "file":
+        if (
+            len(parsed.scheme) == 1
+            and parsed.scheme.isalpha()
+            and parsed.path.startswith(("/", "\\"))
+        ):
+            local_path = Path(f"{parsed.scheme}:{unquote(parsed.path)}")
+        elif parsed.scheme == "file":
             if not allow_file_uri:
                 raise ValidationError(_("File URIs are not valid in this field."))
             if parsed.netloc and parsed.netloc not in {"", "localhost"}:
@@ -286,6 +355,9 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
                     download_base_uri=cleaned["download_base_uri"],
                     git_url=cleaned["git_url"],
                     customize=not cleaned["skip_customize"],
+                    recovery_ssh_user=cleaned["recovery_ssh_user"],
+                    recovery_authorized_keys=cleaned["recovery_authorized_keys"],
+                    skip_recovery_ssh=cleaned["skip_recovery_ssh"],
                 )
             except (ImagerBuildError, OSError) as exc:
                 messages.error(request, str(exc))

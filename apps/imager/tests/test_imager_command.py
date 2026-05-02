@@ -17,9 +17,15 @@ from django.test import override_settings
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
     TARGET_RPI4B,
+    AccessCheckResult,
     BlockDeviceInfo,
+    ImageCustomizationResult,
     ImagerBuildError,
+    NetworkProfileInfo,
+    ServeResult,
+    SuiteBundleInfo,
     _build_download_uri,
+    _build_served_artifact_url,
     _customize_image,
     _download_remote_base_image,
     _guestfish_remove_file,
@@ -29,7 +35,12 @@ from apps.imager.services import (
     _validate_remote_base_image_url,
     build_rpi4b_image,
     list_block_devices,
+    prepare_image_serve,
+    select_host_network_profiles,
     write_image_to_device,
+)
+from apps.imager.services import (
+    test_rpi_access as run_rpi_access_test,
 )
 
 VALID_RECOVERY_KEY_ONE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILOoi93uar4kpDufSrgJPoOKh8UzGiiAsz+GIspRlj7p recovery-one"
@@ -37,6 +48,19 @@ VALID_RECOVERY_KEY_TWO = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxEAcOg5erwB9w67f
 MALFORMED_RECOVERY_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAA malformed"
 
 
+def make_suite_source(tmp_path: Path) -> Path:
+    suite_source = tmp_path / "suite"
+    suite_source.mkdir()
+    for name in ("manage.py", "start.sh", "env-refresh.sh"):
+        (suite_source / name).write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (suite_source / "apps").mkdir()
+    (suite_source / "apps" / "__init__.py").write_text("", encoding="utf-8")
+    (suite_source / "db.sqlite3").write_text("secret", encoding="utf-8")
+    (suite_source / ".env").write_text("SECRET=1", encoding="utf-8")
+    return suite_source
+
+
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> None:
     """Regression: lsblk JSON discovery should request tree mode for children[]."""
 
@@ -61,6 +85,7 @@ def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> 
     ]
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> None:
     """Regression: nested children mountpoints must prevent in-use target writes."""
 
@@ -78,6 +103,7 @@ def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> No
     assert devices[0].partitions == ["/dev/sdb1", "/dev/mapper/crypt"]
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_marks_root_mount_disk_protected_when_findmnt_uses_dev_root() -> None:
     """Regression: root disks must stay protected even when findmnt reports /dev/root."""
 
@@ -101,6 +127,7 @@ def test_list_block_devices_marks_root_mount_disk_protected_when_findmnt_uses_de
     assert devices[1].protected is False
 
 
+@patch("apps.imager.services.os.name", "posix")
 def test_list_block_devices_raises_operator_error_when_lsblk_missing() -> None:
     """Regression: operators should get a clear error if lsblk is unavailable."""
 
@@ -260,6 +287,52 @@ def test_imager_build_command_passes_connect_ota_profile_metadata(mock_build, tm
 
     assert mock_build.call_args.kwargs["profile"] == "connect-ota"
     assert mock_build.call_args.kwargs["profile_metadata"]["ota_channel"] == "stable"
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_passes_bundle_and_host_network_options(mock_build, tmp_path: Path) -> None:
+    """Regression: CLI image builds should expose static-suite and network-copy controls."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    suite_source = make_suite_source(tmp_path)
+    network_dir = tmp_path / "networks"
+    network_dir.mkdir()
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "networked",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--suite-source",
+        str(suite_source),
+        "--copy-host-network",
+        "Shop WiFi",
+        "--host-network-profile-dir",
+        str(network_dir),
+    )
+
+    assert mock_build.call_args.kwargs["bundle_suite"] is True
+    assert mock_build.call_args.kwargs["suite_source_path"] == suite_source
+    assert mock_build.call_args.kwargs["host_network_names"] == ["Shop WiFi"]
+    assert mock_build.call_args.kwargs["host_network_profile_dir"] == network_dir
 
 
 @pytest.mark.django_db
@@ -497,6 +570,7 @@ def test_imager_build_command_allows_explicit_skip_recovery_ssh(mock_build, tmp_
 
     assert mock_build.call_args.kwargs["recovery_authorized_keys"] == []
     assert mock_build.call_args.kwargs["recovery_ssh_user"] == ""
+    assert mock_build.call_args.kwargs["skip_recovery_ssh"] is True
     assert "recovery_ssh=disabled (--skip-recovery-ssh)" in stdout.getvalue()
 
 
@@ -660,6 +734,79 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
     ]
 
 
+def test_customize_image_writes_suite_bundle_and_selected_network_profiles(tmp_path: Path) -> None:
+    """Regression: customized images can boot from bundled source and copied Wi-Fi profiles."""
+
+    image_path = tmp_path / "artifact.img"
+    image_path.write_bytes(b"pi")
+    suite_source = make_suite_source(tmp_path)
+    network_dir = tmp_path / "networks"
+    network_dir.mkdir()
+    network_profile = network_dir / "home.nmconnection"
+    network_profile.write_text(
+        "[connection]\nid=Home WiFi\n\n[wifi-security]\npsk=secret\n",
+        encoding="utf-8",
+    )
+    selected_profiles = select_host_network_profiles(
+        profile_dir=network_dir,
+        names=("Home WiFi",),
+    )
+    guestfish_batches: list[list[str]] = []
+
+    def capture_guestfish(
+        image_path_arg: Path,
+        commands: list[str],
+        *,
+        error_message: str,
+    ) -> None:
+        assert image_path_arg == image_path
+        assert error_message
+        guestfish_batches.append(commands)
+
+    with (
+        patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_run_commands", side_effect=capture_guestfish),
+    ):
+        result = _customize_image(
+            image_path,
+            git_url="https://github.com/arthexis/arthexis.git",
+            recovery_ssh_access=None,
+            suite_source_path=suite_source,
+            network_profiles=selected_profiles,
+        )
+
+    flattened_commands = "\n".join(command for batch in guestfish_batches for command in batch)
+    assert result.suite_bundle is not None
+    assert result.suite_bundle.file_count == 4
+    assert result.network_profiles[0].name == "Home WiFi"
+    assert f"upload {shlex.quote(str(network_profile))} /etc/NetworkManager/system-connections/home.nmconnection" in flattened_commands
+    assert "chmod 0600 /etc/NetworkManager/system-connections/home.nmconnection" in flattened_commands
+    assert "upload" in flattened_commands
+    assert "/usr/local/share/arthexis/arthexis-suite.tar.gz" in flattened_commands
+
+
+def test_select_host_network_profiles_skips_symlinked_profiles(tmp_path: Path) -> None:
+    """Regression: host network copying should not follow symlinks out of the profile directory."""
+
+    network_dir = tmp_path / "networks"
+    network_dir.mkdir()
+    real_profile = network_dir / "home.nmconnection"
+    real_profile.write_text("[connection]\nid=Home WiFi\n", encoding="utf-8")
+    outside_profile = tmp_path / "outside.nmconnection"
+    outside_profile.write_text("[connection]\nid=Outside WiFi\n", encoding="utf-8")
+    try:
+        (network_dir / "outside-link.nmconnection").symlink_to(outside_profile)
+    except OSError as exc:
+        pytest.skip(f"Symlink creation is unavailable on this host: {exc}")
+
+    selected_profiles = select_host_network_profiles(
+        profile_dir=network_dir,
+        copy_all=True,
+    )
+
+    assert [profile.name for profile in selected_profiles] == ["Home WiFi"]
+
+
 def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path) -> None:
     """Regression: recovery SSH usernames must be Linux-safe for first-boot scripting."""
 
@@ -739,6 +886,23 @@ def test_build_rpi4b_image_rejects_default_recovery_username_without_keys(tmp_pa
         )
 
 
+def test_build_rpi4b_image_requires_recovery_ssh_unless_explicitly_skipped(tmp_path: Path) -> None:
+    """Regression: service-layer callers must not bypass recovery SSH requirements."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Recovery SSH is required"):
+        build_rpi4b_image(
+            name="recovery-service-required",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
+
+
 def test_build_rpi4b_image_rejects_root_recovery_username(tmp_path: Path) -> None:
     """Regression: root must not be accepted as a recovery SSH username."""
 
@@ -775,6 +939,7 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
             download_base_uri="https://cdn.example.com/images",
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
+            skip_recovery_ssh=True,
         )
 
     artifact = RaspberryPiImageArtifact.objects.get(name="stable")
@@ -785,6 +950,13 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
         "enabled": False,
         "user": "",
         "authorized_key_count": 0,
+        "explicitly_skipped": True,
+    }
+    assert artifact.metadata["suite_bundle"] == {"enabled": False}
+    assert artifact.metadata["host_network_profiles"] == {
+        "enabled": False,
+        "count": 0,
+        "profiles": [],
     }
 
 
@@ -813,7 +985,58 @@ def test_build_rpi4b_image_persists_recovery_ssh_metadata(tmp_path: Path) -> Non
         "enabled": True,
         "user": "arthe",
         "authorized_key_count": 1,
+        "explicitly_skipped": False,
     }
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_persists_suite_and_network_metadata(tmp_path: Path) -> None:
+    """Regression: build records static bundle and host network injection metadata."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+    suite_source = make_suite_source(tmp_path)
+    network_profile = NetworkProfileInfo(
+        name="Home WiFi",
+        filename="home.nmconnection",
+        source_path=tmp_path / "home.nmconnection",
+        remote_path="/etc/NetworkManager/system-connections/home.nmconnection",
+    )
+    customization_result = ImageCustomizationResult(
+        suite_bundle=SuiteBundleInfo(
+            source_path=suite_source,
+            remote_path="/usr/local/share/arthexis/arthexis-suite.tar.gz",
+            sha256="bundle123",
+            size_bytes=1234,
+            file_count=4,
+        ),
+        network_profiles=(network_profile,),
+    )
+
+    with patch("apps.imager.services._customize_image", return_value=customization_result):
+        build_rpi4b_image(
+            name="bundled",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            recovery_authorized_keys=[
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
+            ],
+            suite_source_path=suite_source,
+        )
+
+    artifact = RaspberryPiImageArtifact.objects.get(name="bundled")
+    assert artifact.metadata["suite_bundle"]["enabled"] is True
+    assert artifact.metadata["suite_bundle"]["sha256"] == "bundle123"
+    assert artifact.metadata["host_network_profiles"]["profiles"] == [
+        {
+            "name": "Home WiFi",
+            "filename": "home.nmconnection",
+            "remote_path": "/etc/NetworkManager/system-connections/home.nmconnection",
+        }
+    ]
 
 
 @pytest.mark.django_db
@@ -833,6 +1056,7 @@ def test_build_rpi4b_image_decompresses_local_xz_source(tmp_path: Path) -> None:
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
+            skip_recovery_ssh=True,
         )
 
     assert result.output_path.read_bytes() == source_bytes
@@ -870,6 +1094,7 @@ def test_build_rpi4b_image_persists_connect_ota_engine_profile_metadata(tmp_path
             customize=True,
             profile="connect-ota",
             profile_metadata=profile_metadata,
+            skip_recovery_ssh=True,
         )
 
     artifact = RaspberryPiImageArtifact.objects.get(name="connect-stable")
@@ -932,6 +1157,7 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
+            skip_recovery_ssh=True,
         )
 
     assert result.output_path.exists()
@@ -962,6 +1188,7 @@ def test_build_rpi4b_image_downloads_and_decompresses_remote_xz_source(
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
+            skip_recovery_ssh=True,
         )
 
     assert result.output_path.exists()
@@ -1144,7 +1371,144 @@ def test_build_rpi4b_image_rejects_corrupted_archives(tmp_path: Path, extension:
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
+            skip_recovery_ssh=True,
         )
+
+
+@pytest.mark.django_db
+def test_prepare_image_serve_updates_artifact_download_url(tmp_path: Path) -> None:
+    """Regression: local serving should produce and persist a deployment URL."""
+
+    output_path = tmp_path / "stable-rpi-4b.img"
+    output_path.write_bytes(b"raspberrypi")
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="stable",
+        target=TARGET_RPI4B,
+        base_image_uri=str(output_path),
+        output_filename=output_path.name,
+        output_path=str(output_path),
+        sha256="",
+        size_bytes=output_path.stat().st_size,
+        download_uri="",
+        metadata={},
+    )
+
+    result = prepare_image_serve(
+        artifact_name="stable",
+        host="0.0.0.0",
+        port=8090,
+        url_host="10.42.0.138",
+    )
+
+    artifact.refresh_from_db()
+    assert isinstance(result, ServeResult)
+    assert result.url == "http://10.42.0.138:8090/stable-rpi-4b.img"
+    assert artifact.download_uri == result.url
+    assert artifact.metadata["local_serve"]["url"] == result.url
+
+
+def test_build_served_artifact_url_uses_base_url_and_quotes_filename() -> None:
+    """Regression: deployment URLs should be safe for filenames with spaces."""
+
+    assert (
+        _build_served_artifact_url(
+            output_filename="Raspberry Pi OS.img",
+            port=8090,
+            base_url="https://downloads.example.com/images/",
+        )
+        == "https://downloads.example.com/images/Raspberry%20Pi%20OS.img"
+    )
+
+
+@patch("apps.imager.management.commands.imager.serve_image_file")
+def test_imager_serve_command_prints_artifact_url(serve_mock, tmp_path: Path) -> None:
+    """Regression: the serve subcommand should expose the computed artifact URL."""
+
+    image_path = tmp_path / "stable-rpi-4b.img"
+    image_path.write_bytes(b"raspberrypi")
+    out = StringIO()
+
+    call_command(
+        "imager",
+        "serve",
+        "--image-path",
+        str(image_path),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8090",
+        "--url-host",
+        "10.42.0.138",
+        stdout=out,
+    )
+
+    assert "artifact_url=http://10.42.0.138:8090/stable-rpi-4b.img" in out.getvalue()
+    serve_mock.assert_called_once()
+
+
+@patch("apps.imager.management.commands.imager.serve_image_file", side_effect=OSError("port in use"))
+def test_imager_serve_command_reports_server_startup_errors(_serve_mock, tmp_path: Path) -> None:
+    """Regression: serve startup failures should be clean command errors."""
+
+    image_path = tmp_path / "stable-rpi-4b.img"
+    image_path.write_bytes(b"raspberrypi")
+
+    with pytest.raises(CommandError, match="Could not start image server: port in use"):
+        call_command(
+            "imager",
+            "serve",
+            "--image-path",
+            str(image_path),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8090",
+        )
+
+
+@patch("apps.imager.services.urlopen")
+@patch("apps.imager.services.subprocess.run")
+@patch("apps.imager.services.shutil.which", return_value="/usr/bin/ssh")
+@patch("apps.imager.services.socket.create_connection")
+def test_test_rpi_access_checks_ssh_and_http(
+    create_connection_mock,
+    _which_mock,
+    run_mock,
+    urlopen_mock,
+) -> None:
+    """Regression: post-burn access checks should cover recovery SSH and suite HTTP."""
+
+    create_connection_mock.return_value.__enter__.return_value = None
+    run_mock.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+    urlopen_mock.return_value.__enter__.return_value = SimpleNamespace(getcode=lambda: 200)
+
+    result = run_rpi_access_test(
+        host="10.42.0.50",
+        ssh_user="arthe",
+        http_url="http://10.42.0.50:8888/login/",
+        timeout=1,
+    )
+
+    assert result.ok is True
+    assert [check.name for check in result.checks] == ["ssh-tcp", "ssh-auth", "http"]
+    assert all(isinstance(check, AccessCheckResult) for check in result.checks)
+
+
+@patch("apps.imager.services.urlopen")
+def test_test_rpi_access_brackets_ipv6_default_http_url(urlopen_mock) -> None:
+    """Regression: IPv6 hosts need brackets in default HTTP test URLs."""
+
+    urlopen_mock.return_value.__enter__.return_value = SimpleNamespace(getcode=lambda: 200)
+
+    result = run_rpi_access_test(
+        host="2001:db8::50",
+        skip_ssh=True,
+        timeout=1,
+    )
+
+    assert result.ok is True
+    request = urlopen_mock.call_args.args[0]
+    assert request.full_url == "http://[2001:db8::50]:8888/"
 
 
 @pytest.mark.django_db
