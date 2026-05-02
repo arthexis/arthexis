@@ -15,7 +15,7 @@ Build a Raspberry Pi image artifact with first-boot bootstrap scripts:
 .venv/bin/python manage.py imager build \
   --name stable \
   --base-image-uri /path/to/raspios.img.xz \
-  --skip-recovery-ssh \
+  --recovery-authorized-key "ssh-ed25519 AAAAC3Nza... operator-laptop" \
   --download-base-uri https://downloads.example.com/images
 ```
 
@@ -27,13 +27,43 @@ Accepted base image inputs include:
 
 When bootstrap customization is enabled, the build now keeps `guestfish` temp and cache files under `build/rpi-imager` instead of relying on `/var/tmp`.
 
+Customized builds require recovery SSH keys by default. Use `--skip-recovery-ssh` only when the image is intentionally disposable or another recovery lane exists.
+
+Customized builds also inject a sanitized static source bundle from the current Arthexis checkout into `/usr/local/share/arthexis/arthexis-suite.tar.gz`. On first boot, the bootstrap service extracts that bundle into `/opt/arthexis` and starts the local copy before falling back to `git clone`. Use `--no-bundle-suite` to keep the older clone-on-first-boot behavior, or `--suite-source /path/to/arthexis` to bundle a specific checkout.
+
+To copy host Wi-Fi/Ethernet NetworkManager profiles into the image, pass one or more selected profiles:
+
+```bash
+.venv/bin/python manage.py imager build \
+  --name field-wifi \
+  --base-image-uri /path/to/raspios.img.xz \
+  --recovery-authorized-key "ssh-ed25519 AAAAC3Nza... operator-laptop" \
+  --copy-host-network "Shop WiFi"
+```
+
+Profile selectors match the NetworkManager connection id, filename, or filename stem from `/etc/NetworkManager/system-connections`. Use `--copy-all-host-networks` only when every saved profile and credential on the build host should be copied. For test rigs or nonstandard hosts, override the source directory with `--host-network-profile-dir`.
+
 List registered artifacts:
 
 ```bash
 .venv/bin/python manage.py imager list
 ```
 
-## 2) Discover candidate target devices
+## 2) Serve an artifact over HTTP
+
+Serve a registered image artifact from the CLI and persist the advertised URL on the artifact record:
+
+```bash
+.venv/bin/python manage.py imager serve \
+  --artifact stable \
+  --host 0.0.0.0 \
+  --port 8090 \
+  --url-host 10.42.0.138
+```
+
+The command prints `artifact_url=http://10.42.0.138:8090/stable-rpi-4b.img` and blocks until interrupted. Use that URL as the Raspberry Pi Connect image-release `artifact_url` or another deployment-model consumer URL. If an external reverse proxy owns the public path, pass `--base-url https://downloads.example.com/images` instead of `--url-host`.
+
+## 3) Discover candidate target devices
 
 Inspect block devices before writing:
 
@@ -50,7 +80,7 @@ This output includes:
 
 The protection check falls back to mountpoint inspection, so hosts that expose the live root disk as `/dev/root` still keep that disk marked as protected.
 
-## 3) Write an artifact to removable media
+## 4) Write an artifact to removable media
 
 Write a registered artifact to a target block device:
 
@@ -138,3 +168,17 @@ Then write the recovery-enabled artifact:
 If you write with `--image-path`, verify that the image was already built with recovery
 metadata or use a freshly built recovery artifact. The write command verifies bytes on
 the target media, but it does not retrofit recovery SSH into an arbitrary image.
+
+## Post-install access test
+
+After installing the burned SD card in the Pi and linking it by `eth0` or another network, test recovery SSH and suite HTTP reachability:
+
+```bash
+.venv/bin/python manage.py imager test-access \
+  --host 10.42.0.50 \
+  --ssh-user arthe \
+  --ssh-key ~/.ssh/id_ed25519 \
+  --http-url http://10.42.0.50:8888/login/
+```
+
+Use `--skip-http` while the suite is still bootstrapping, or `--skip-ssh` only when validating an HTTP-only deployment path.

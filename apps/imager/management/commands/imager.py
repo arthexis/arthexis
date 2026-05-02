@@ -14,6 +14,9 @@ from apps.imager.services import (
     ImagerBuildError,
     build_rpi4b_image,
     list_block_devices,
+    prepare_image_serve,
+    serve_image_file,
+    test_rpi_access,
     write_image_to_device,
 )
 
@@ -69,6 +72,32 @@ class Command(BaseCommand):
             "--skip-customize",
             action="store_true",
             help="Copy the base image without injecting bootstrap scripts.",
+        )
+        build_parser.add_argument(
+            "--no-bundle-suite",
+            action="store_true",
+            help="Do not bundle a static copy of this Arthexis checkout into the image.",
+        )
+        build_parser.add_argument(
+            "--suite-source",
+            default="",
+            help="Arthexis checkout path to bundle into the image (default: current suite base directory).",
+        )
+        build_parser.add_argument(
+            "--copy-all-host-networks",
+            action="store_true",
+            help="Copy all host NetworkManager connection profiles, including saved credentials, into the image.",
+        )
+        build_parser.add_argument(
+            "--copy-host-network",
+            action="append",
+            default=[],
+            help="Copy one host NetworkManager profile by connection id, filename, or filename stem. May be repeated.",
+        )
+        build_parser.add_argument(
+            "--host-network-profile-dir",
+            default="",
+            help="Host NetworkManager system-connections directory to read when copying network profiles.",
         )
         build_parser.add_argument(
             "--build-engine",
@@ -134,6 +163,56 @@ class Command(BaseCommand):
             help="Confirm destructive write operation.",
         )
 
+        serve_parser = subparsers.add_parser(
+            "serve",
+            help="Serve an existing image artifact over HTTP and print its deployment URL.",
+        )
+        serve_parser.add_argument("--artifact", default="", help="Registered artifact name to serve.")
+        serve_parser.add_argument(
+            "--image-path",
+            default="",
+            help="Direct local path to an image file to serve (alternative to --artifact).",
+        )
+        serve_parser.add_argument("--host", default="0.0.0.0", help="Interface to bind for serving.")
+        serve_parser.add_argument("--port", type=int, default=8088, help="TCP port to bind for serving.")
+        serve_parser.add_argument(
+            "--url-host",
+            default="",
+            help="Host/IP advertised in the generated URL. Use the address reachable by target devices.",
+        )
+        serve_parser.add_argument(
+            "--base-url",
+            default="",
+            help="Full base URL to advertise instead of composing one from --url-host and --port.",
+        )
+        serve_parser.add_argument(
+            "--no-update-artifact-url",
+            action="store_true",
+            help="Do not persist the generated URL on the artifact record.",
+        )
+
+        access_parser = subparsers.add_parser(
+            "test-access",
+            help="Test SSH and HTTP access to a burned Raspberry Pi image after it boots.",
+        )
+        access_parser.add_argument("--host", required=True, help="RPi hostname or IP address.")
+        access_parser.add_argument(
+            "--ssh-user",
+            default=DEFAULT_RECOVERY_SSH_USER,
+            help=f"Recovery SSH username to test (default: {DEFAULT_RECOVERY_SSH_USER}).",
+        )
+        access_parser.add_argument("--ssh-port", type=int, default=22, help="SSH port to test.")
+        access_parser.add_argument("--ssh-key", default="", help="Private key path for SSH auth testing.")
+        access_parser.add_argument(
+            "--http-url",
+            default="",
+            help="Suite URL to test. Defaults to http://HOST:8888/ when HTTP checks are enabled.",
+        )
+        access_parser.add_argument("--http-port", type=int, default=8888, help="Default suite HTTP port.")
+        access_parser.add_argument("--timeout", type=float, default=5.0, help="Per-check timeout in seconds.")
+        access_parser.add_argument("--skip-ssh", action="store_true", help="Skip SSH TCP/auth checks.")
+        access_parser.add_argument("--skip-http", action="store_true", help="Skip HTTP suite reachability check.")
+
     def handle(self, *args, **options) -> None:
         """Dispatch command to selected action."""
 
@@ -149,6 +228,12 @@ class Command(BaseCommand):
             return
         if action == "write":
             self._handle_write(options)
+            return
+        if action == "serve":
+            self._handle_serve(options)
+            return
+        if action == "test-access":
+            self._handle_test_access(options)
             return
         raise CommandError(f"Unsupported action '{action}'.")
 
@@ -194,6 +279,20 @@ class Command(BaseCommand):
                 profile_metadata=profile_metadata,
                 recovery_ssh_user=recovery_ssh_user,
                 recovery_authorized_keys=recovery_authorized_keys,
+                skip_recovery_ssh=bool(skip_recovery_ssh),
+                bundle_suite=not bool(options["no_bundle_suite"]),
+                suite_source_path=Path(str(options["suite_source"]))
+                if str(options["suite_source"]).strip()
+                else None,
+                copy_all_host_networks=bool(options["copy_all_host_networks"]),
+                host_network_names=[
+                    str(name)
+                    for name in options.get("copy_host_network", [])
+                    if str(name).strip()
+                ],
+                host_network_profile_dir=Path(str(options["host_network_profile_dir"]))
+                if str(options["host_network_profile_dir"]).strip()
+                else None,
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc
@@ -321,3 +420,57 @@ class Command(BaseCommand):
         self.stdout.write(f"source_sha256={result.source_sha256}")
         self.stdout.write(f"written_sha256={result.written_sha256}")
         self.stdout.write(f"verified={'yes' if result.verified else 'no'}")
+
+    def _handle_serve(self, options: dict[str, object]) -> None:
+        """Serve an image artifact over HTTP for deployment workflows."""
+
+        artifact_name = str(options["artifact"])
+        image_path = str(options["image_path"])
+        if bool(artifact_name) == bool(image_path):
+            raise CommandError("Provide exactly one of --artifact or --image-path.")
+
+        try:
+            result = prepare_image_serve(
+                artifact_name=artifact_name,
+                image_path=image_path,
+                host=str(options["host"]),
+                port=int(options["port"]),
+                url_host=str(options["url_host"]),
+                base_url=str(options["base_url"]),
+                update_artifact_url=not bool(options["no_update_artifact_url"]),
+            )
+        except ImagerBuildError as exc:
+            raise CommandError(str(exc)) from exc
+
+        self.stdout.write(self.style.SUCCESS(f"Serving image: {result.image_path}"))
+        self.stdout.write(f"artifact_url={result.url}")
+        self.stdout.write("Press Ctrl+C to stop serving.")
+        try:
+            serve_image_file(image_path=result.image_path, host=result.host, port=result.port)
+        except KeyboardInterrupt:
+            self.stdout.write("Stopped image server.")
+
+    def _handle_test_access(self, options: dict[str, object]) -> None:
+        """Test access to an installed Raspberry Pi image."""
+
+        try:
+            result = test_rpi_access(
+                host=str(options["host"]),
+                ssh_user=str(options["ssh_user"]),
+                ssh_port=int(options["ssh_port"]),
+                ssh_key=str(options["ssh_key"]),
+                http_url=str(options["http_url"]),
+                http_port=int(options["http_port"]),
+                timeout=float(options["timeout"]),
+                skip_ssh=bool(options["skip_ssh"]),
+                skip_http=bool(options["skip_http"]),
+            )
+        except ImagerBuildError as exc:
+            raise CommandError(str(exc)) from exc
+
+        for check in result.checks:
+            status = "ok" if check.ok else "failed"
+            self.stdout.write(f"{check.name}={status} {check.detail}")
+        if not result.ok:
+            raise CommandError(f"RPi access test failed for {result.host}.")
+        self.stdout.write(self.style.SUCCESS(f"RPi access test passed for {result.host}."))

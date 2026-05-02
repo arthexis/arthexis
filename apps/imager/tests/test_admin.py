@@ -76,10 +76,6 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
     mock_build.assert_not_called()
 
 @patch("apps.imager.admin.build_rpi4b_image")
-@override_settings(
-    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
-    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
-)
 def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
     """Regression: successful builds should return to the wizard with artifact URL actions."""
 
@@ -102,17 +98,22 @@ def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock
 
     mock_build.return_value = type("BuildResult", (), {"output_path": output_path})()
 
-    response = admin_client.post(
-        reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
-        data={
-            "name": "stable",
-            "base_image_uri": str(tmp_path / "base.img"),
-            "output_dir": str(output_dir),
-            "download_base_uri": "https://cdn.example.com/images",
-            "git_url": "https://github.com/arthexis/arthexis.git",
-        },
-        follow=True,
-    )
+    with override_settings(
+        IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=(str(tmp_path),),
+        IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=(str(tmp_path),),
+    ):
+        response = admin_client.post(
+            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
+            data={
+                "name": "stable",
+                "base_image_uri": str(tmp_path / "base.img"),
+                "output_dir": str(output_dir),
+                "download_base_uri": "https://cdn.example.com/images",
+                "git_url": "https://github.com/arthexis/arthexis.git",
+                "skip_recovery_ssh": "on",
+            },
+            follow=True,
+        )
 
     assert response.status_code == 200
     assert any(f"?artifact={artifact.pk}" in url for url, _status in response.redirect_chain)
@@ -120,6 +121,37 @@ def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock
     assert "Latest build artifact" in body
     assert "Test URL" in body
     assert artifact.download_uri in body
+
+
+@patch("apps.imager.admin.build_rpi4b_image")
+def test_imager_admin_create_rpi_image_view_requires_recovery_or_explicit_skip(
+    mock_build,
+    admin_client,
+    tmp_path,
+):
+    """Regression: admin image builds should not bypass recovery SSH requirements."""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    with override_settings(
+        IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=(str(tmp_path),),
+        IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=(str(tmp_path),),
+    ):
+        response = admin_client.post(
+            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
+            data={
+                "name": "stable",
+                "base_image_uri": str(tmp_path / "base.img"),
+                "output_dir": str(output_dir),
+                "download_base_uri": "",
+                "git_url": "https://github.com/arthexis/arthexis.git",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "Recovery SSH is required for customized image builds" in response.content.decode("utf-8")
+    mock_build.assert_not_called()
+
 
 @pytest.mark.parametrize(
     ("download_url", "expected_message"),
