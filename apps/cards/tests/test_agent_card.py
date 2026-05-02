@@ -125,7 +125,7 @@ def test_build_agent_card_sector_payloads_reports_overflow_once():
     )
 
     assert len(build.compatibility_notes) == 1
-    assert len(build.omitted_skill_sigils) == 2
+    assert build.omitted_skill_sigils == ["[AGENT.SKILL:s10]", "[AGENT.SKILL:s11]"]
 
 
 def test_score_soul_identity_returns_best_candidate():

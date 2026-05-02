@@ -261,15 +261,15 @@ def build_agent_card_sector_payloads(
     omitted_skill_sigils: list[str] = []
     extension_index = 1
     for raw_slug in skill_slugs:
-        if extension_index > len(EXTENSION_SECTORS):
-            if EXTENSION_OVERFLOW_NOTE not in compatibility_notes:
-                compatibility_notes.append(EXTENSION_OVERFLOW_NOTE)
-            omitted_skill_sigils.append(str(raw_slug))
-            continue
         slug = str(raw_slug or "").strip()
         if not slug:
             continue
         sigil = _skill_sigil_for_slug(slug)
+        if extension_index > len(EXTENSION_SECTORS):
+            if EXTENSION_OVERFLOW_NOTE not in compatibility_notes:
+                compatibility_notes.append(EXTENSION_OVERFLOW_NOTE)
+            omitted_skill_sigils.append(sigil)
+            continue
         record = (
             f"AC1|K{extension_index:02d}|SIG={sigil}|"
             f"H={_compact_digest(f'skill:{slug}', length=6)}"

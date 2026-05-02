@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.cards.agent_card import build_agent_card_sector_payloads
@@ -96,6 +96,18 @@ def _update_bundle_compatibility_notes(
     bundle.save(update_fields=["compatibility_notes", "updated_at"])
 
 
+def _locked_rfid_for_uid(card_uid: str) -> RFID:
+    try:
+        with transaction.atomic():
+            rfid, _created = RFID.update_or_create_from_code(card_uid)
+    except IntegrityError:
+        rfid = RFID.find_match(card_uid)
+        if rfid is None:
+            raise
+    # The RFID row is the per-card UID mutex, including the no-SoulSeedCard-yet case.
+    return RFID.objects.select_for_update().get(pk=rfid.pk)
+
+
 def _card_payload_summary(
     *,
     dry_run: bool,
@@ -172,9 +184,10 @@ def provision_soul_seed_card(
         interface_spec = AgentInterfaceSpec.objects.get(pk=bundle_result["interface_spec"]["id"])
         agent_card = _build_payload(card_uid=normalized_card_uid, bundle_result=bundle_result)
         _update_bundle_compatibility_notes(bundle, agent_card["compatibility_notes"])
-        rfid, _rfid_created = RFID.update_or_create_from_code(normalized_card_uid)
+        rfid = _locked_rfid_for_uid(normalized_card_uid)
         active_cards = list(
-            SoulSeedCard.objects.exclude(status=SoulSeedCard.Status.REVOKED)
+            SoulSeedCard.objects.select_for_update()
+            .exclude(status=SoulSeedCard.Status.REVOKED)
             .filter(card_uid=normalized_card_uid)
             .order_by("-id")
         )
