@@ -6,6 +6,7 @@ import pytest
 
 from apps.cards.agent_card import (
     AgentCardError,
+    build_agent_card_sector_payloads,
     parse_agent_card,
     plan_agent_activation,
     score_soul_identity,
@@ -83,6 +84,48 @@ def test_parse_agent_card_rejects_non_ascii_string_payloads():
 def test_parse_agent_card_rejects_non_iterable_or_scalar_payloads(sector_payloads):
     with pytest.raises(AgentCardError, match="mapping or iterable"):
         parse_agent_card(sector_payloads)
+
+
+def test_build_agent_card_sector_payloads_returns_valid_complete_payload():
+    build = build_agent_card_sector_payloads(
+        identity_sources={
+            "intent": "intent:1",
+            "bundle": "bundle:2",
+            "interface": "interface:3",
+            "card": "AABBCCDD",
+        },
+        skill_slugs=["rfid-triage"],
+    )
+
+    assert sorted(build.sector_records) == list(range(1, 16))
+    assert all(len(record.encode("ascii")) <= 48 for record in build.sector_records.values())
+    assert all(len(record.encode("ascii")) == 48 for record in build.padded_sector_records.values())
+    parsed = parse_agent_card(build.sector_records)
+    assert parsed.fingerprint == build.fingerprint
+    assert parsed.capability_sigils() == ["[AGENT.SKILL:rfid-triage]"]
+
+
+def test_build_agent_card_sector_payloads_omits_oversized_skill_sigils():
+    build = build_agent_card_sector_payloads(
+        identity_sources={"intent": "intent", "bundle": "bundle", "interface": "interface", "card": "AABB"},
+        skill_slugs=["skill-" + "x" * 80, "rfid-triage"],
+    )
+
+    assert build.omitted_skill_sigils
+    assert build.compatibility_notes
+    assert parse_agent_card(build.sector_records).capability_sigils() == [
+        "[AGENT.SKILL:rfid-triage]"
+    ]
+
+
+def test_build_agent_card_sector_payloads_reports_overflow_once():
+    build = build_agent_card_sector_payloads(
+        identity_sources={"intent": "intent", "bundle": "bundle", "interface": "interface", "card": "AABB"},
+        skill_slugs=[f"s{index}" for index in range(12)],
+    )
+
+    assert len(build.compatibility_notes) == 1
+    assert build.omitted_skill_sigils == ["[AGENT.SKILL:s10]", "[AGENT.SKILL:s11]"]
 
 
 def test_score_soul_identity_returns_best_candidate():

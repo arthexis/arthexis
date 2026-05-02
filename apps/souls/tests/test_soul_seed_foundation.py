@@ -4,14 +4,24 @@ import json
 from io import StringIO
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from apps.cards.agent_card import parse_agent_card
+from apps.cards.models import RFID
 from apps.skills.models import AgentSkill, AgentSkillFile
-from apps.souls.models import AgentInterfaceSpec, CardSession, SkillBundle, SoulIntent
+from apps.souls.models import (
+    AgentInterfaceSpec,
+    CardSession,
+    SkillBundle,
+    SoulIntent,
+    SoulSeedCard,
+)
 from apps.souls.services import (
     compose_skill_bundle,
     evict_card_session,
+    provision_soul_seed_card,
     search_agent_skills,
 )
 
@@ -122,6 +132,142 @@ def test_soul_seed_compose_command_outputs_json(skill):
 def test_soul_seed_compose_command_rejects_negative_limit(skill):
     with pytest.raises(CommandError, match="non-negative"):
         call_command("soul_seed", "compose", "--prompt", "rfid reader problem", "--limit", "-1")
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_dry_run_returns_valid_agent_card(skill):
+    summary = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="aa bb cc dd",
+        dry_run=True,
+    )
+
+    assert summary["dry_run"] is True
+    assert summary["card"]["card_uid"] == "AABBCCDD"
+    assert SoulSeedCard.objects.count() == 0
+    card = parse_agent_card(summary["sector_records"])
+    assert card.fingerprint == summary["card"]["manifest_fingerprint"]
+    assert card.capability_sigils() == ["[AGENT.SKILL:rfid-triage]"]
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_write_persists_registry_records(skill):
+    summary = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        dry_run=False,
+    )
+
+    soul_seed_card = SoulSeedCard.objects.get(pk=summary["card"]["id"])
+    assert summary["dry_run"] is False
+    assert summary["card"]["created"] is True
+    assert soul_seed_card.card_uid == "AABBCCDD"
+    assert soul_seed_card.rfid == RFID.objects.get(rfid="AABBCCDD")
+    assert soul_seed_card.intent_id == summary["intent"]["id"]
+    assert soul_seed_card.skill_bundle_id == summary["bundle"]["id"]
+    assert soul_seed_card.interface_spec_id == summary["interface_spec"]["id"]
+    assert soul_seed_card.manifest_fingerprint == parse_agent_card(
+        summary["sector_records"]
+    ).fingerprint
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_write_matches_dry_run_fingerprint(skill):
+    dry_run = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        dry_run=True,
+    )
+    written = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        dry_run=False,
+    )
+
+    assert written["sector_records"] == dry_run["sector_records"]
+    assert written["card"]["manifest_fingerprint"] == dry_run["card"]["manifest_fingerprint"]
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_write_updates_active_card_for_duplicate_uid(skill):
+    first = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    second = provision_soul_seed_card("rfid-triage", card_uid="AABBCCDD", dry_run=False)
+
+    assert second["card"]["created"] is False
+    assert second["card"]["id"] == first["card"]["id"]
+    assert SoulSeedCard.objects.filter(card_uid="AABBCCDD").count() == 1
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_preserves_owner_when_creator_missing(skill):
+    user = get_user_model().objects.create_user(username="seed-owner")
+    first = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        created_by=user,
+        dry_run=False,
+    )
+    second = provision_soul_seed_card("rfid-triage", card_uid="AABBCCDD", dry_run=False)
+
+    assert second["card"]["id"] == first["card"]["id"]
+    assert SoulSeedCard.objects.get(pk=second["card"]["id"]).owner == user
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_revokes_stale_duplicate_active_cards(skill):
+    older = SoulSeedCard.objects.create(card_uid="AABBCCDD", status=SoulSeedCard.Status.ACTIVE)
+    newer = SoulSeedCard.objects.create(card_uid="AABBCCDD", status=SoulSeedCard.Status.PREVIEW_ONLY)
+
+    summary = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    older.refresh_from_db()
+    newer.refresh_from_db()
+
+    assert summary["card"]["id"] == newer.pk
+    assert newer.status == SoulSeedCard.Status.ACTIVE
+    assert older.status == SoulSeedCard.Status.REVOKED
+    assert older.revoked_at is not None
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_records_oversized_skill_note():
+    long_skill = AgentSkill.objects.create(
+        slug="skill-" + "x" * 80,
+        title="Oversized Skill",
+        markdown="oversized card payload test",
+    )
+
+    summary = provision_soul_seed_card(long_skill.slug, card_uid="AABBCCDD", dry_run=False)
+    bundle = SkillBundle.objects.get(pk=summary["bundle"]["id"])
+
+    assert summary["omitted_skill_sigils"]
+    assert summary["compatibility_notes"]
+    assert bundle.compatibility_notes == summary["compatibility_notes"]
+    assert parse_agent_card(summary["sector_records"]).capability_sigils() == []
+
+
+@pytest.mark.django_db
+def test_soul_seed_provision_command_outputs_json_and_sector_file(skill, tmp_path):
+    stdout = StringIO()
+    sectors_path = tmp_path / "sectors.json"
+
+    call_command(
+        "soul_seed",
+        "provision",
+        "--prompt",
+        "rfid reader problem",
+        "--card-uid",
+        "AABBCCDD",
+        "--json",
+        "--sectors-json-out",
+        str(sectors_path),
+        stdout=stdout,
+    )
+    summary = json.loads(stdout.getvalue())
+    sector_records = json.loads(sectors_path.read_text(encoding="utf-8"))
+
+    assert summary["dry_run"] is True
+    assert sector_records == summary["sector_records"]
+    assert parse_agent_card(sector_records).fingerprint == summary["card"]["manifest_fingerprint"]
 
 
 def test_agent_card_inspect_command_outputs_json(tmp_path):
