@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -13,8 +14,6 @@ from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
-
 from apps.links.models import QRRedirect, Reference
 from apps.links.qr_printing import (
     DEFAULT_CHUNK_BYTES,
@@ -408,8 +407,9 @@ class Command(BaseCommand):
     def _resolve_output_path(self, output: str | None) -> Path:
         if output:
             return Path(output).expanduser().resolve()
-        stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S")
-        return Path(tempfile.gettempdir()) / f"arthexis-qr-{stamp}.png"
+        fd, path = tempfile.mkstemp(prefix="arthexis-qr-", suffix=".png")
+        os.close(fd)
+        return Path(path)
 
 
 def _extract_windows_wifi_profile_password(output: str) -> str:

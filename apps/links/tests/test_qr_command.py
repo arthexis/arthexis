@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from io import StringIO
+from pathlib import Path
+import stat
 
 import pytest
 from django.core.management import call_command
@@ -35,6 +37,29 @@ def test_qr_print_text_writes_preview_png(tmp_path) -> None:
     assert output_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert "SOURCE=text" in stdout.getvalue()
     assert "PAYLOAD_BYTES=" in stdout.getvalue()
+
+
+def test_qr_print_without_output_uses_secure_tempfile() -> None:
+    stdout = StringIO()
+
+    call_command(
+        "qr",
+        "print",
+        "--wifi-ssid",
+        "Office WiFi",
+        "--wifi-password",
+        "top-secret",
+        stdout=stdout,
+    )
+
+    preview_line = next(line for line in stdout.getvalue().splitlines() if line.startswith("PREVIEW="))
+    preview_path = preview_line.split("=", 1)[1]
+    mode = stat.S_IMODE(Path(preview_path).stat().st_mode)
+
+    assert Path(preview_path).exists()
+    assert Path(preview_path).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert Path(preview_path).name.startswith("arthexis-qr-")
+    assert mode == 0o600
 
 
 def test_qr_print_wifi_does_not_echo_password(tmp_path) -> None:
