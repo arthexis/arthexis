@@ -89,11 +89,27 @@ def _write_pid_file(pid_file: Path, pid: int, command: Sequence[str]) -> None:
 
 
 def _is_process_running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except (OSError, ValueError, SystemError):
+    if pid <= 0:
         return False
-    return True
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except (OSError, ValueError, SystemError):
+            return False
+        return True
+
+    import ctypes
+
+    process_query_limited_information = 0x1000
+    synchronize = 0x00100000
+    access = process_query_limited_information | synchronize
+    handle = ctypes.windll.kernel32.OpenProcess(access, False, pid)
+    if handle:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+
+    error_access_denied = 5
+    return ctypes.GetLastError() == error_access_denied
 
 
 def _read_pid_file(pid_file: Path) -> tuple[int | None, str | None]:
