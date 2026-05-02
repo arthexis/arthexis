@@ -248,6 +248,16 @@ class AgentSkillAdmin(admin.ModelAdmin):
             return str(entry.get("name") or "")
         return str(entry or "")
 
+    def _import_package_entry_expired(self, entry, *, now=None) -> bool:
+        if not isinstance(entry, dict):
+            return True
+        try:
+            previewed_at = float(entry.get("ts"))
+        except (TypeError, ValueError):
+            return True
+        now = now or timezone.now()
+        return previewed_at < now.timestamp() - _IMPORT_PREVIEW_TTL_SECONDS
+
     def _consume_import_package(
         self,
         request: HttpRequest,
@@ -259,6 +269,9 @@ class AgentSkillAdmin(admin.ModelAdmin):
         request.session.modified = True
         storage_name = self._import_package_entry_name(entry)
         if not storage_name:
+            return None
+        if self._import_package_entry_expired(entry):
+            self._delete_import_upload(storage_name)
             return None
         try:
             exists = default_storage.exists(storage_name)

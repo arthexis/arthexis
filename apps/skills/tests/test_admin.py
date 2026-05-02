@@ -286,6 +286,32 @@ def test_invalid_package_filename_shows_form_error_and_writes_nothing(admin_clie
     assert AgentSkillFile.objects.count() == file_count
 
 
+def test_expired_preview_token_cannot_import_package(
+    admin_client,
+    isolated_import_storage,
+):
+    url = reverse("admin:skills_agentskill_import_package")
+    preview_response = admin_client.post(
+        url,
+        {"action": "preview", "package": _valid_package_upload("admin-expired")},
+    )
+    token = preview_response.context["preview_token"]
+    session = admin_client.session
+    packages = session[skills_admin._SESSION_IMPORT_PACKAGES_KEY]
+    storage_name = packages[token]["name"]
+    packages[token]["ts"] = time.time() - skills_admin._IMPORT_PREVIEW_TTL_SECONDS - 5
+    session[skills_admin._SESSION_IMPORT_PACKAGES_KEY] = packages
+    session.save()
+
+    response = admin_client.post(url, {"action": "apply", "token": token}, follow=True)
+
+    assert response.status_code == 200
+    assert not AgentSkill.objects.filter(slug="admin-expired").exists()
+    assert not AgentSkillFile.objects.filter(skill__slug="admin-expired").exists()
+    assert not isolated_import_storage.exists(storage_name)
+    assert not admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY]
+
+
 def test_preview_cleans_expired_storage_uploads(
     admin_client,
     isolated_import_storage,
