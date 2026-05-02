@@ -26,14 +26,21 @@ def remove_product_developer_github_setup_step(apps, schema_editor):
     if not remaining_steps:
         return
 
-    existing_orders = {step.order for step in remaining_steps}
+    existing_orders = set(
+        OperatorJourneyStep.objects.filter(journey=journey).values_list(
+            "order",
+            flat=True,
+        )
+    )
     temp_start = 0
     temp_span = len(remaining_steps)
-    while any(order in existing_orders for order in range(temp_start, temp_start + temp_span)):
+    while not existing_orders.isdisjoint(range(temp_start, temp_start + temp_span)):
         temp_start += temp_span
 
     if temp_start + temp_span - 1 > MAX_POSTGRES_INTEGER:
-        raise OverflowError("Unable to allocate temporary order range for journey step resequencing")
+        raise OverflowError(
+            "Unable to allocate temporary order range for journey step resequencing"
+        )
 
     temp_steps = []
     for position, step in enumerate(remaining_steps, start=1):
