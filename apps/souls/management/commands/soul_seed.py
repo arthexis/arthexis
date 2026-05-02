@@ -63,12 +63,12 @@ class Command(BaseCommand):
             required=True,
             help="Stable console identity for session isolation.",
         )
-        activate_parser.add_argument("--reader-id", default="", help="Reader identity, when known. Optional for UID-only local activation.")
+        activate_parser.add_argument("--reader-id", default="", help="Reader identity, when known. Optional for UID-only activation.")
         activate_parser.add_argument(
             "--trust-tier",
             default=CardSession.TrustTier.UNKNOWN,
             choices=CardSession.TrustTier.values,
-            help="Trust tier assigned to this activation source; defaults to unknown for UID-only scans.",
+            help="Trust tier assigned to this activation source. Defaults to unknown for UID-only activation.",
         )
         activate_parser.add_argument(
             "--timeout-seconds",
