@@ -873,6 +873,30 @@ def test_install_listener_target_platform_controls_browser_defaults(tmp_path):
     assert "'msedge'" in payload["listen_command"]
 
 
+def test_install_listener_explicit_browser_skips_platform_channel_default(tmp_path):
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            "windows",
+            "--browser",
+            "firefox",
+            "--output-dir",
+            str(tmp_path / "install"),
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+    assert "'firefox'" in payload["listen_command"]
+    assert "--channel" not in payload["listen_command"]
+
+
 def test_systemd_quote_escapes_backslashes_without_spaces():
     assert _systemd_quote(r"/tmp/with\backslash") == r'"/tmp/with\\backslash"'
 
