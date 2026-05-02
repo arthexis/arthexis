@@ -26,10 +26,6 @@ DEFAULT_MAX_FILE_BYTES = 256 * 1024
 DEFAULT_OUTPUT_DIR = Path("work") / "error-reports"
 TEXT_SUFFIXES = {".log", ".txt", ".json", ".ndjson", ".lck", ".md", ""}
 LOG_SUFFIXES = {".log", ".txt", ".json", ".ndjson"}
-DISALLOWED_REPORT_FILENAMES = {
-    "rfid-scan.json",
-    "rfid-scans.ndjson",
-}
 STANDARD_LOG_NAMES = {
     "error.log",
     "tests-error.log",
@@ -52,6 +48,8 @@ SENSITIVE_NAMES = {
     "id_dsa",
     "id_ecdsa",
     "id_ed25519",
+    "rfid-scan.json",
+    "rfid-scans.ndjson",
 }
 SENSITIVE_SUFFIXES = {
     ".db",
@@ -349,8 +347,6 @@ def collect_log_files(base_dir: Path, config: ReportConfig, cutoff: float | None
                 continue
             if is_sensitive_path(path, base_dir=base_dir):
                 continue
-            if path.name in DISALLOWED_REPORT_FILENAMES:
-                continue
             if cutoff is not None and path.name not in STANDARD_LOG_NAMES:
                 try:
                     if path.stat().st_mtime < cutoff:
@@ -397,8 +393,6 @@ def collect_locks(builder: ReportBuilder) -> None:
         if path.suffix.lower() not in {".lck", ".json", ".txt", ".log", ""}:
             continue
         if is_sensitive_path(path, base_dir=builder.config.base_dir):
-            continue
-        if path.name in DISALLOWED_REPORT_FILENAMES:
             continue
         found = True
         relative = path.relative_to(lock_dir)
