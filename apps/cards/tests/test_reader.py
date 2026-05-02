@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -66,6 +67,48 @@ def test_initialize_reader_strategy_wraps_provided_reader():
         mfrc=fake_reader,
         cleanup_gpio=False,
         source="provided",
+    )
+
+
+def test_default_reader_strategy_suppresses_gpio_warnings(monkeypatch):
+    events: list[tuple[str, object]] = []
+
+    gpio_module = ModuleType("RPi.GPIO")
+
+    def _setwarnings(value):
+        events.append(("setwarnings", value))
+
+    gpio_module.setwarnings = _setwarnings
+
+    rpi_module = ModuleType("RPi")
+    rpi_module.GPIO = gpio_module
+
+    class _DefaultReader:
+        def __init__(self, **kwargs):
+            events.append(("reader", kwargs))
+
+    mfrc522_module = ModuleType("mfrc522")
+    mfrc522_module.MFRC522 = _DefaultReader
+
+    monkeypatch.setitem(sys.modules, "RPi", rpi_module)
+    monkeypatch.setitem(sys.modules, "RPi.GPIO", gpio_module)
+    monkeypatch.setitem(sys.modules, "mfrc522", mfrc522_module)
+    monkeypatch.setattr(reader, "resolve_spi_bus_device", lambda: (0, 0))
+
+    strategy, failure = reader._init_default_reader_strategy(cleanup=False)
+
+    assert failure is None
+    assert strategy is not None
+    assert strategy.source == "default"
+    assert events[0] == ("setwarnings", False)
+    assert events[1] == (
+        "reader",
+        {
+            "bus": 0,
+            "device": 0,
+            "pin_mode": reader.GPIO_PIN_MODE_BCM,
+            "pin_rst": reader.DEFAULT_RST_PIN,
+        },
     )
 
 
