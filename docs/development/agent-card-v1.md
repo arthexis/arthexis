@@ -277,6 +277,12 @@ python manage.py soul_seed activate --card-uid AABBCCDD --console-id terminal-1 
 Reader adapters can pass scan output as JSON instead of extracting a UID
 themselves. The payload must contain `card_uid`, `uid`, or `rfid`:
 
+UID-only activation is intentionally enabled for local console flows. When a
+reader proof is unavailable, activation still proceeds with trust tier
+`unknown` so operators can bootstrap or recover a console session. Deployments
+that require stronger assurance should run this boundary behind a trusted local
+adapter that injects `reader_id` and an explicit trusted tier.
+
 ```powershell
 python manage.py soul_seed activate --scan-json scan.json --console-id terminal-1 --reader-id desk-reader --json
 ```
