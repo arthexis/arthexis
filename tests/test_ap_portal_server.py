@@ -827,6 +827,17 @@ def test_get_encoded_dot_segment_still_404s(tmp_path):
     assert result.errors == [module.HTTPStatus.NOT_FOUND]
 
 
+def test_get_encoded_nul_path_still_404s(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+
+    result = _exercise_get(handler_class, "/foo%00bar.css")
+
+    assert result.recorded == []
+    assert result.served == []
+    assert result.errors == [module.HTTPStatus.NOT_FOUND]
+
+
 def test_get_nested_asset_path_serves_asset(tmp_path):
     module = load_portal_module()
     handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
