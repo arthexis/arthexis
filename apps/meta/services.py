@@ -713,7 +713,7 @@ def operator_idle_seconds() -> float | None:
         if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
             return None
         tick_count = ctypes.windll.kernel32.GetTickCount()
-        return max((tick_count - info.dwTime) / 1000.0, 0.0)
+        return ((tick_count - info.dwTime) & 0xFFFFFFFF) / 1000.0
     except Exception:
         logger.debug("Could not read local operator idle time.", exc_info=True)
         return None
@@ -811,7 +811,10 @@ def launch_codex_secretary_terminal(
 
     from apps.terminals.tasks import launch_command_in_terminal
 
-    command = [*shlex.split(codex_command), prompt]
+    if sys.platform == "win32":
+        command = [codex_command.strip() or "codex", prompt]
+    else:
+        command = [*shlex.split(codex_command or "codex"), prompt]
     launch_path = launch_command_in_terminal(
         command,
         title=terminal_title,
@@ -861,6 +864,7 @@ def listen_for_whatsapp_secretary_requests(
     polls = 0
     processed_batches = 0
     reader = read_messages or read_whatsapp_web_messages
+    should_store_results = max_batches is not None or max_polls is not None
 
     while True:
         if max_polls is not None and polls >= max_polls:
@@ -891,7 +895,8 @@ def listen_for_whatsapp_secretary_requests(
             )
             if event_callback:
                 event_callback(result)
-            results.append(result)
+            if should_store_results:
+                results.append(result)
             if max_batches is None:
                 sleep(daemon_poll_seconds)
                 continue
@@ -910,7 +915,6 @@ def listen_for_whatsapp_secretary_requests(
             )
             cursor_file = cursor_file_for_profile(read_result.profile_dir)
             cursor_key = cursor_key_for_profile(normalized_phone, read_result.profile_dir)
-            _write_cursor(cursor_file, cursor_key, pending[-1].fingerprint)
             detail = "Batch ignored because no Secretary trigger prefix was present."
             launched = False
             status = "ignored"
@@ -928,6 +932,7 @@ def listen_for_whatsapp_secretary_requests(
                     detail = launcher(prompt)
                     launched = True
                     status = "launched"
+            _write_cursor(cursor_file, cursor_key, pending[-1].fingerprint)
             result = WhatsAppSecretaryListenResult(
                 status=status,
                 phone=normalized_phone,
@@ -941,7 +946,8 @@ def listen_for_whatsapp_secretary_requests(
             )
             if event_callback:
                 event_callback(result)
-            results.append(result)
+            if should_store_results:
+                results.append(result)
             processed_batches += 1
             pending = []
             pending_changed_at = 0.0

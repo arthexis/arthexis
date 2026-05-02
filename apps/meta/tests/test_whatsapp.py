@@ -27,6 +27,7 @@ from apps.meta.services import (
     cursor_key_for_profile,
     detect_whatsapp_web_login_state,
     filter_whatsapp_web_messages,
+    launch_codex_secretary_terminal,
     listen_for_whatsapp_secretary_requests,
     normalize_whatsapp_phone,
     parse_cli_date,
@@ -446,6 +447,75 @@ def test_secretary_listener_ignores_and_advances_untriggered_batch(tmp_path):
     assert results[-1].status == "ignored"
     assert results[-1].launched is False
     assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "a"
+
+
+def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    message = WhatsAppWebMessage(
+        fingerprint="a",
+        index=0,
+        message_id="a",
+        direction="out",
+        sender="ARTHEXIS",
+        timestamp_raw="14:30, 2026-05-01",
+        timestamp_iso="2026-05-01T14:30:00",
+        text="secretary: open a terminal",
+    )
+    now = {"value": 60.0}
+
+    def fake_read_messages(**kwargs):
+        del kwargs
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=[message],
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    def fail_launch(prompt):
+        raise RuntimeError(f"launch failed for {prompt[:10]}")
+
+    with pytest.raises(RuntimeError, match="launch failed"):
+        listen_for_whatsapp_secretary_requests(
+            phone="5551234567",
+            idle_after_seconds=0,
+            daemon_poll_seconds=60,
+            quiet_window_seconds=60,
+            max_batches=1,
+            read_messages=fake_read_messages,
+            launch_callback=fail_launch,
+            monotonic=lambda: now["value"],
+            sleep=lambda seconds: now.update(value=now["value"] + seconds),
+            idle_seconds=lambda: 999,
+        )
+
+    cursor_key = cursor_key_for_profile("525551234567", profile_dir)
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == ""
+
+
+def test_secretary_launcher_preserves_windows_codex_path(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_launch_command_in_terminal(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return tmp_path / "terminal.pid"
+
+    monkeypatch.setattr("apps.meta.services.sys.platform", "win32")
+    monkeypatch.setattr(
+        "apps.terminals.tasks.launch_command_in_terminal",
+        fake_launch_command_in_terminal,
+    )
+
+    detail = launch_codex_secretary_terminal(
+        "prompt",
+        codex_command=r"C:\Program Files\Codex\codex.exe",
+    )
+
+    assert captured["command"] == [r"C:\Program Files\Codex\codex.exe", "prompt"]
+    assert captured["kwargs"]["state_key"] == "whatsapp-secretary"
+    assert "terminal.pid" in detail
 
 
 def test_whatsapp_login_command_outputs_json(monkeypatch, tmp_path):

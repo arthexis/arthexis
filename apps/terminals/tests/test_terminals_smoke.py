@@ -95,6 +95,30 @@ def test_launch_command_in_terminal_builds_windows_codex_command(tmp_path, monke
     assert "& 'codex' '[SECRETARY] Mara:" in script
 
 
+def test_windows_terminal_executable_supports_arguments(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tasks, "_is_windows", lambda: True)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+    launched = {}
+
+    class FakeProcess:
+        pid = 9012
+
+    def fake_popen(command):
+        launched["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", fake_popen)
+
+    tasks.launch_command_in_terminal(
+        ["codex", "prompt"],
+        executable="wt.exe -w 0",
+        state_key="custom-wt",
+    )
+
+    assert launched["command"][:5] == ["wt.exe", "-w", "0", "new-tab", "--title"]
+
+
 def test_is_process_running_handles_windows_value_error(monkeypatch):
     def raise_value_error(pid, signal_number):
         raise ValueError("invalid pid")

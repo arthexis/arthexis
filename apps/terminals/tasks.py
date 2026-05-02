@@ -128,6 +128,10 @@ def _powershell_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def _split_windows_command(value: str) -> list[str]:
+    return [part.strip("\"") for part in shlex.split(value, posix=False)]
+
+
 def _command_script(
     command: Sequence[str],
     *,
@@ -168,11 +172,14 @@ def _windows_terminal_command(
 ) -> list[str]:
     terminal = executable.strip()
     if not terminal or terminal == "x-terminal-emulator":
-        terminal = shutil.which("wt.exe") or shutil.which("wt") or ""
+        terminal_path = shutil.which("wt.exe") or shutil.which("wt") or ""
+        terminal_parts = [terminal_path] if terminal_path else []
+    else:
+        terminal_parts = _split_windows_command(terminal)
     powershell = shutil.which("powershell.exe") or "powershell.exe"
-    if terminal:
+    if terminal_parts:
         return [
-            terminal,
+            *terminal_parts,
             "new-tab",
             "--title",
             title,
@@ -215,7 +222,7 @@ def _launch_startup_script(
         if startup_script:
             command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{' '.join(command)}\n", encoding="utf-8")
+    pid_file.write_text(f"{process.pid}\n{shlex.join(command)}\n", encoding="utf-8")
     return pid_file
 
 
@@ -258,7 +265,7 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{' '.join(command)}\n", encoding="utf-8")
+    pid_file.write_text(f"{process.pid}\n{shlex.join(command)}\n", encoding="utf-8")
 
 
 def _matches_current_node_role(terminal: AgentTerminal) -> bool:

@@ -116,7 +116,10 @@ class Command(BaseCommand):
             "--idle-after",
             type=float,
             default=DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
-            help="Desktop idle seconds required before polling; 0 disables. Default: 300.",
+            help=(
+                "Desktop idle seconds required before polling (Windows only); "
+                "0 disables. Default: 300."
+            ),
         )
         listen.add_argument(
             "--poll-every",
