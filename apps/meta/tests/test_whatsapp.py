@@ -945,13 +945,11 @@ def test_install_listener_requirements_match_chromium_override(tmp_path):
     assert not any("Firefox" in item for item in payload["requirements"])
 
 
-def test_install_listener_cross_platform_requires_target_paths(tmp_path):
+def test_install_listener_cross_platform_uses_target_path_defaults(tmp_path):
     target = "linux" if sys.platform == "win32" else "windows"
+    stdout = StringIO()
 
-    with override_settings(BASE_DIR=tmp_path), pytest.raises(
-        CommandError,
-        match="Cross-platform WhatsApp listener provisioning requires --python",
-    ):
+    with override_settings(BASE_DIR=tmp_path):
         call_command(
             "whatsapp",
             "install-listener",
@@ -959,7 +957,50 @@ def test_install_listener_cross_platform_requires_target_paths(tmp_path):
             "5551234567",
             "--platform",
             target,
+            "--json",
+            stdout=stdout,
         )
+
+    payload = json.loads(stdout.getvalue())
+    assert sys.executable not in payload["listen_command"]
+    assert str(tmp_path) not in payload["listen_command"]
+    if target == "windows":
+        assert payload["base_dir"] == r"C:\Arthexis"
+        assert r"C:\Arthexis\.venv\Scripts\python.exe" in payload["listen_command"]
+        assert r"C:\Arthexis\manage.py" in payload["listen_command"]
+    else:
+        assert payload["base_dir"] == "/opt/arthexis"
+        assert "/opt/arthexis/.venv/bin/python" in payload["listen_command"]
+        assert "/opt/arthexis/manage.py" in payload["listen_command"]
+
+
+def test_install_listener_cross_platform_base_dir_controls_target_paths(tmp_path):
+    target = "linux" if sys.platform == "win32" else "windows"
+    base_dir = "/srv/arthexis" if target == "linux" else r"D:\Arthexis"
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            target,
+            "--base-dir",
+            base_dir,
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["base_dir"] == base_dir
+    if target == "windows":
+        assert r"D:\Arthexis\.venv\Scripts\python.exe" in payload["listen_command"]
+        assert r"D:\Arthexis\manage.py" in payload["listen_command"]
+    else:
+        assert "/srv/arthexis/.venv/bin/python" in payload["listen_command"]
+        assert "/srv/arthexis/manage.py" in payload["listen_command"]
 
 
 def test_systemd_quote_escapes_backslashes_without_spaces():

@@ -259,6 +259,14 @@ class Command(BaseCommand):
             help="Linux systemd user unit directory. Default: ~/.config/systemd/user.",
         )
         install.add_argument(
+            "--base-dir",
+            help=(
+                "Target suite checkout directory for the generated runner. "
+                "Defaults to this checkout, or to a target-platform convention "
+                "for cross-platform plans."
+            ),
+        )
+        install.add_argument(
             "--python",
             dest="python_executable",
             help="Python executable to place in the generated listener command.",
@@ -456,6 +464,7 @@ class Command(BaseCommand):
             secretary_name=options["secretary_name"],
             terminal_title=options["terminal_title"],
             platform=options["platform"],
+            base_dir=options["base_dir"],
             output_dir=options["output_dir"],
             systemd_user_dir=options["systemd_user_dir"],
             python_executable=options["python_executable"],

@@ -115,9 +115,13 @@ python manage.py whatsapp send --to 525551234567 --message "Hello" --cdp-url htt
 manual registration commands. It only writes helper files when `--write` is
 passed. It does not silently register startup services.
 
-Run `install-listener` on the machine that will run the listener. When using
-`--platform` to generate files for a different operating system, also pass
-`--python` and `--manage-py` with paths that exist on that target machine.
+Run `install-listener` on the machine that will run the listener when possible.
+When using `--platform` to generate files for a different operating system, the
+generated listener command uses target-platform defaults:
+`C:\Arthexis\.venv\Scripts\python.exe` plus `C:\Arthexis\manage.py` for Windows,
+or `/opt/arthexis/.venv/bin/python` plus `/opt/arthexis/manage.py` for Linux.
+Pass `--base-dir`, `--python`, or `--manage-py` when the target machine uses a
+different checkout or virtualenv path.
 
 Shared requirements:
 

@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import quote, urlparse
 
 from filelock import FileLock
@@ -875,6 +875,41 @@ def _default_listener_install_output_dir(platform: str) -> Path:
     return base / "arthexis" / "whatsapp-listener"
 
 
+def _target_path_join(platform: str, base: str | Path, *parts: str) -> str:
+    path_class = PureWindowsPath if platform == "windows" else PurePosixPath
+    return str(path_class(str(base), *parts))
+
+
+def _default_listener_target_base_dir(platform: str) -> str:
+    if platform == "windows":
+        return r"C:\Arthexis"
+    return "/opt/arthexis"
+
+
+def _default_listener_target_profile_dir(platform: str) -> str:
+    if platform == "windows":
+        return _target_path_join(
+            platform,
+            "~",
+            ".codex",
+            "whatsapp-web",
+            "playwright-profile",
+        )
+    return _target_path_join(
+        platform,
+        "~",
+        ".codex",
+        "whatsapp-web",
+        "playwright-profile",
+    )
+
+
+def _default_listener_target_python(platform: str, base_dir: str | Path) -> str:
+    if platform == "windows":
+        return _target_path_join(platform, base_dir, ".venv", "Scripts", "python.exe")
+    return _target_path_join(platform, base_dir, ".venv", "bin", "python")
+
+
 def _default_systemd_user_dir() -> Path:
     root = os.environ.get("XDG_CONFIG_HOME")
     base = Path(root) if root else Path.home() / ".config"
@@ -994,7 +1029,7 @@ def _whatsapp_listener_command(
     return command
 
 
-def _windows_listener_runner(base_dir: Path, command: list[str | Path]) -> str:
+def _windows_listener_runner(base_dir: str | Path, command: list[str | Path]) -> str:
     return "\n".join(
         [
             "$ErrorActionPreference = 'Stop'",
@@ -1029,7 +1064,7 @@ def _windows_register_task_script(service_name: str, runner_path: Path) -> str:
     )
 
 
-def _linux_listener_runner(base_dir: Path, command: list[str | Path]) -> str:
+def _linux_listener_runner(base_dir: str | Path, command: list[str | Path]) -> str:
     return "\n".join(
         [
             "#!/usr/bin/env bash",
@@ -1041,7 +1076,11 @@ def _linux_listener_runner(base_dir: Path, command: list[str | Path]) -> str:
     )
 
 
-def _linux_systemd_unit(service_name: str, base_dir: Path, runner_path: Path) -> str:
+def _linux_systemd_unit(
+    service_name: str,
+    base_dir: str | Path,
+    runner_path: Path,
+) -> str:
     return "\n".join(
         [
             "[Unit]",
@@ -1097,17 +1136,18 @@ def build_whatsapp_listener_install_plan(
     from django.conf import settings
 
     resolved_platform = _listener_install_platform(platform)
-    host_platform = _listener_install_platform()
-    if platform and resolved_platform != host_platform and (
-        not python_executable or not manage_py
-    ):
-        raise ValueError(
-            "Cross-platform WhatsApp listener provisioning requires --python and "
-            "--manage-py for paths that exist on the target machine."
-        )
+    cross_platform = bool(platform and resolved_platform != _listener_install_platform())
     safe_service = _safe_service_name(service_name)
-    resolved_base_dir = Path(base_dir or settings.BASE_DIR).resolve()
-    resolved_profile_dir = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
+    if cross_platform:
+        resolved_base_dir: str | Path = str(
+            base_dir or _default_listener_target_base_dir(resolved_platform)
+        )
+        resolved_profile_dir: str | Path = str(
+            profile_dir or _default_listener_target_profile_dir(resolved_platform)
+        )
+    else:
+        resolved_base_dir = Path(base_dir or settings.BASE_DIR).resolve()
+        resolved_profile_dir = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
     resolved_output_dir = Path(output_dir or _default_listener_install_output_dir(resolved_platform)).expanduser()
     default_browser, default_channel = _platform_browser_defaults(resolved_platform)
     explicit_browser = (browser or "").strip().lower()
@@ -1115,8 +1155,25 @@ def build_whatsapp_listener_install_plan(
     resolved_channel = (channel or "").strip()
     if not resolved_channel and not explicit_browser:
         resolved_channel = default_channel
-    resolved_python = str(python_executable or sys.executable)
-    resolved_manage_py = Path(manage_py or (resolved_base_dir / "manage.py"))
+    resolved_python = str(
+        python_executable
+        or (
+            _default_listener_target_python(resolved_platform, resolved_base_dir)
+            if cross_platform
+            else sys.executable
+        )
+    )
+    resolved_manage_py: str | Path
+    if manage_py:
+        resolved_manage_py = str(manage_py)
+    elif cross_platform:
+        resolved_manage_py = _target_path_join(
+            resolved_platform,
+            resolved_base_dir,
+            "manage.py",
+        )
+    else:
+        resolved_manage_py = Path(resolved_base_dir) / "manage.py"
     command = _whatsapp_listener_command(
         phone=phone,
         default_country_code=default_country_code,
