@@ -245,6 +245,13 @@ class CardSession(Entity):
 
     class Meta:
         ordering = ("-id",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["node_id"],
+                condition=models.Q(state="active"),
+                name="souls_one_active_session",
+            )
+        ]
         verbose_name = _("Card Session")
         verbose_name_plural = _("Card Sessions")
 

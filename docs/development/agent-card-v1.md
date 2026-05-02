@@ -263,6 +263,45 @@ They still remain in the suite-side bundle, so the operator can revise the skill
 alias or handle them through a future registry indirection instead of storing
 unsafe or oversized text on the card.
 
+## Activation command contract
+
+The console activation boundary is the `soul_seed activate` command. It does not
+write card sectors or start a long-running daemon. It resolves an already
+provisioned `SoulSeedCard`, validates the stored Agent Card payload fingerprint,
+and creates or closes a `CardSession` for one suite console:
+
+```powershell
+python manage.py soul_seed activate --card-uid AABBCCDD --console-id terminal-1 --json
+```
+
+Reader adapters can pass scan output as JSON instead of extracting a UID
+themselves. The payload must contain `card_uid`, `uid`, or `rfid`:
+
+```powershell
+python manage.py soul_seed activate --scan-json scan.json --console-id terminal-1 --reader-id desk-reader --json
+```
+
+Activation returns only the bounded session payload needed to render a CLI or UI:
+
+- Session identity, console identity, reader identity, trust tier, and runtime
+  namespace.
+- Card UID, RFID label id, and manifest fingerprint.
+- Intent summary and risk metadata.
+- Skill bundle slug, selected skill slugs, tool allowlist, compatibility notes,
+  and fallback guidance.
+- Interface mode, schema, commands, suggestions, and visible fields.
+
+Session semantics are intentionally deterministic:
+
+- Presenting a different active card at the same console evicts the previous
+  active session and clears its runtime namespace and activation plan.
+- Presenting the same active card at the same console closes the session and
+  clears runtime state.
+- Passing `--timeout-seconds` evicts this console's stale active sessions before
+  starting a new activation.
+- `soul_seed evict-stale --console-id terminal-1 --timeout-seconds 300` can be
+  used by a future daemon or watchdog to evict unattended sessions.
+
 ## Parser and writer contract
 
 Future implementation should expose a small service boundary rather than ad hoc
