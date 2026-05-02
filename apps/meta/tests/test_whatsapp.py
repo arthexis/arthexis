@@ -964,6 +964,7 @@ def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_pat
     assert not systemd_dir.exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux permission bits not supported on Windows")
 def test_whatsapp_install_listener_linux_write_restricts_runner_permissions(tmp_path):
     output_dir = tmp_path / "install"
     systemd_dir = tmp_path / "systemd-user"
