@@ -8,7 +8,7 @@ function redirectAfterDelay(url, delayMs) {
   }
   window.setTimeout(() => {
     window.location.href = url;
-  }, delayMs || 3000);
+  }, delayMs ?? 3000);
 }
 
 async function loadStatus() {

@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -405,6 +406,29 @@ def test_status_redirects_authorized_client_to_suite_login_port(tmp_path):
     assert payload["redirect_delay_ms"] == module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
 
 
+def test_status_preserves_zero_redirect_delay(tmp_path):
+    module = load_portal_module()
+    config = replace(make_config(module, tmp_path), authorized_redirect_delay_ms=0)
+    state = module.PortalState(config)
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    state.subscribe(
+        email="guest@example.com",
+        accept_terms=True,
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        host="arthexis.net",
+    )
+
+    payload = state.status_for_request(
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        path="/api/status",
+        host="arthexis.net",
+    )
+
+    assert payload["redirect_delay_ms"] == 0
+
+
 def test_suite_login_redirect_defaults_to_gateway_host():
     module = load_portal_module()
 
@@ -416,6 +440,20 @@ def test_suite_login_redirect_defaults_to_gateway_host():
             path="login/",
         )
         == "http://10.42.0.1:8888/login/"
+    )
+
+
+def test_suite_login_redirect_brackets_raw_ipv6_gateway_host():
+    module = load_portal_module()
+
+    assert (
+        module._suite_login_url(
+            "arthexis.net",
+            configured_host="fd42:0:0:42::1",
+            port=8888,
+            path="/login/",
+        )
+        == "http://[fd42:0:0:42::1]:8888/login/"
     )
 
 

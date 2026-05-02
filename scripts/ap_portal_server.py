@@ -135,10 +135,14 @@ def _normalize_url_path(value: str) -> str:
 
 
 def _host_for_suite_redirect(host: str, configured_host: str = "") -> str:
-    if configured_host:
-        host = configured_host
-    parsed = urlparse(host if "://" in host else f"//{host}")
-    hostname = parsed.hostname or "arthexis.net"
+    raw_host = (configured_host or host or "").strip()
+    if not raw_host:
+        return "arthexis.net"
+    if "://" in raw_host or raw_host.startswith("[") or raw_host.count(":") < 2:
+        parsed = urlparse(raw_host if "://" in raw_host else f"//{raw_host}")
+        hostname = parsed.hostname or "arthexis.net"
+    else:
+        hostname = raw_host
     try:
         parsed_ip = ipaddress.ip_address(hostname)
     except ValueError:
