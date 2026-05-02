@@ -11,6 +11,7 @@ from django.core.management.base import CommandError
 
 from apps.meta.management.commands import whatsapp as whatsapp_command
 from apps.meta.services import (
+    WhatsAppSecretaryListenResult,
     WhatsAppWebLoginResult,
     WhatsAppWebLoginStatus,
     WhatsAppWebMessage,
@@ -20,14 +21,18 @@ from apps.meta.services import (
     _read_cursor,
     _with_whatsapp_page,
     _write_cursor,
+    build_whatsapp_secretary_prompt,
     build_whatsapp_web_messages,
     cursor_file_for_profile,
     cursor_key_for_profile,
     detect_whatsapp_web_login_state,
     filter_whatsapp_web_messages,
+    launch_codex_secretary_terminal,
+    listen_for_whatsapp_secretary_requests,
     normalize_whatsapp_phone,
     parse_cli_date,
     read_whatsapp_web_messages,
+    secretary_request_text_from_messages,
 )
 
 
@@ -227,6 +232,49 @@ def test_filter_messages_by_date_and_cursor():
     assert filtered == [second]
 
 
+def test_secretary_request_requires_trigger_and_keeps_continuations():
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="out",
+            sender="ARTHEXIS",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="ordinary self note",
+        ),
+        WhatsAppWebMessage(
+            fingerprint="b",
+            index=1,
+            message_id="b",
+            direction="out",
+            sender="ARTHEXIS",
+            timestamp_raw="14:31, 2026-05-01",
+            timestamp_iso="2026-05-01T14:31:00",
+            text="secretary: book the maintenance visit",
+        ),
+        WhatsAppWebMessage(
+            fingerprint="c",
+            index=2,
+            message_id="c",
+            direction="out",
+            sender="ARTHEXIS",
+            timestamp_raw="14:32, 2026-05-01",
+            timestamp_iso="2026-05-01T14:32:00",
+            text="include the charger photos",
+        ),
+    ]
+
+    request = secretary_request_text_from_messages(messages, trigger_prefix="secretary:")
+    prompt = build_whatsapp_secretary_prompt(messages, secretary_name="Mara")
+
+    assert request == "book the maintenance visit\n\ninclude the charger photos"
+    assert prompt.startswith("[SECRETARY] Mara:")
+    assert "ordinary self note" not in prompt
+    assert "book the maintenance visit" in prompt
+
+
 def test_cursor_file_round_trips_atomic_payload(tmp_path):
     cursor_file = tmp_path / "message-cursors.json"
 
@@ -286,6 +334,193 @@ def test_read_new_cursor_advances_to_returned_limited_batch(monkeypatch, tmp_pat
     assert result.cursor_updated is True
     assert _read_cursor(cursor_file, cursor_key) == result.messages[-1].fingerprint
     assert result.messages[-1].fingerprint != all_messages[-1].fingerprint
+
+
+def test_secretary_listener_waits_for_quiet_window_before_launch(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="out",
+            sender="ARTHEXIS",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="secretary: summarize the quote",
+        ),
+        WhatsAppWebMessage(
+            fingerprint="b",
+            index=1,
+            message_id="b",
+            direction="out",
+            sender="ARTHEXIS",
+            timestamp_raw="14:31, 2026-05-01",
+            timestamp_iso="2026-05-01T14:31:00",
+            text="focus on pending approvals",
+        ),
+    ]
+    reads = iter(
+        [
+            [messages[0]],
+            messages,
+            messages,
+        ]
+    )
+    now = {"value": 0.0}
+    launched_prompts = []
+
+    def fake_read_messages(**kwargs):
+        assert kwargs["only_new"] is True
+        assert kwargs["update_cursor"] is False
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=next(reads),
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    def fake_sleep(seconds):
+        now["value"] += seconds
+
+    results = listen_for_whatsapp_secretary_requests(
+        phone="5551234567",
+        idle_after_seconds=0,
+        daemon_poll_seconds=60,
+        quiet_window_seconds=60,
+        max_batches=1,
+        read_messages=fake_read_messages,
+        launch_callback=lambda prompt: launched_prompts.append(prompt) or "launched",
+        monotonic=lambda: now["value"],
+        sleep=fake_sleep,
+        idle_seconds=lambda: 999,
+    )
+    cursor_key = cursor_key_for_profile("525551234567", profile_dir)
+
+    assert results[-1].status == "launched"
+    assert results[-1].message_count == 2
+    assert len(launched_prompts) == 1
+    assert "summarize the quote" in launched_prompts[0]
+    assert "focus on pending approvals" in launched_prompts[0]
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "b"
+
+
+def test_secretary_listener_ignores_and_advances_untriggered_batch(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    message = WhatsAppWebMessage(
+        fingerprint="a",
+        index=0,
+        message_id="a",
+        direction="out",
+        sender="ARTHEXIS",
+        timestamp_raw="14:30, 2026-05-01",
+        timestamp_iso="2026-05-01T14:30:00",
+        text="ordinary self note",
+    )
+    now = {"value": 60.0}
+
+    def fake_read_messages(**kwargs):
+        del kwargs
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=[message],
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    results = listen_for_whatsapp_secretary_requests(
+        phone="5551234567",
+        idle_after_seconds=0,
+        daemon_poll_seconds=60,
+        quiet_window_seconds=60,
+        max_batches=1,
+        read_messages=fake_read_messages,
+        launch_callback=lambda prompt: f"unexpected {prompt}",
+        monotonic=lambda: now["value"],
+        sleep=lambda seconds: now.update(value=now["value"] + seconds),
+        idle_seconds=lambda: 999,
+    )
+    cursor_key = cursor_key_for_profile("525551234567", profile_dir)
+
+    assert results[-1].status == "ignored"
+    assert results[-1].launched is False
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "a"
+
+
+def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    message = WhatsAppWebMessage(
+        fingerprint="a",
+        index=0,
+        message_id="a",
+        direction="out",
+        sender="ARTHEXIS",
+        timestamp_raw="14:30, 2026-05-01",
+        timestamp_iso="2026-05-01T14:30:00",
+        text="secretary: open a terminal",
+    )
+    now = {"value": 60.0}
+
+    def fake_read_messages(**kwargs):
+        del kwargs
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=[message],
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    def fail_launch(prompt):
+        raise RuntimeError(f"launch failed for {prompt[:10]}")
+
+    with pytest.raises(RuntimeError, match="launch failed"):
+        listen_for_whatsapp_secretary_requests(
+            phone="5551234567",
+            idle_after_seconds=0,
+            daemon_poll_seconds=60,
+            quiet_window_seconds=60,
+            max_batches=1,
+            read_messages=fake_read_messages,
+            launch_callback=fail_launch,
+            monotonic=lambda: now["value"],
+            sleep=lambda seconds: now.update(value=now["value"] + seconds),
+            idle_seconds=lambda: 999,
+        )
+
+    cursor_key = cursor_key_for_profile("525551234567", profile_dir)
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == ""
+
+
+def test_secretary_launcher_preserves_windows_codex_path(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_launch_command_in_terminal(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return tmp_path / "terminal.pid"
+
+    monkeypatch.setattr("apps.meta.services.sys.platform", "win32")
+    monkeypatch.setattr(
+        "apps.terminals.tasks.launch_command_in_terminal",
+        fake_launch_command_in_terminal,
+    )
+
+    detail = launch_codex_secretary_terminal(
+        "prompt",
+        codex_command=r'"C:\Program Files\Codex\codex.exe" --model gpt-5',
+    )
+
+    assert captured["command"] == [
+        r"C:\Program Files\Codex\codex.exe",
+        "--model",
+        "gpt-5",
+        "prompt",
+    ]
+    assert captured["kwargs"]["state_key"] == "whatsapp-secretary"
+    assert "terminal.pid" in detail
 
 
 def test_whatsapp_login_command_outputs_json(monkeypatch, tmp_path):
@@ -486,3 +721,51 @@ def test_whatsapp_read_command_rejects_negative_limit():
             "--limit",
             "-1",
         )
+
+
+def test_whatsapp_listen_command_outputs_json(monkeypatch, tmp_path):
+    def fake_listen_for_whatsapp_secretary_requests(**kwargs):
+        assert kwargs["phone"] == "5551234567"
+        assert kwargs["trigger_prefix"] == "secretary:"
+        assert kwargs["idle_after_seconds"] == 300
+        assert kwargs["daemon_poll_seconds"] == 60
+        assert kwargs["quiet_window_seconds"] == 60
+        assert kwargs["launch"] is False
+        assert kwargs["max_batches"] == 1
+        assert kwargs["profile_dir"] == tmp_path
+        return [
+            WhatsAppSecretaryListenResult(
+                status="matched",
+                phone="525551234567",
+                message_count=1,
+                launched=False,
+                cursor_updated=True,
+                cursor_file=tmp_path / "message-cursors.json",
+                batch_fingerprint="abc",
+                detail="Secretary request matched.",
+            )
+        ]
+
+    monkeypatch.setattr(
+        whatsapp_command,
+        "listen_for_whatsapp_secretary_requests",
+        fake_listen_for_whatsapp_secretary_requests,
+    )
+    stdout = StringIO()
+
+    call_command(
+        "whatsapp",
+        "listen",
+        "--from",
+        "5551234567",
+        "--profile-dir",
+        str(tmp_path),
+        "--once",
+        "--no-launch",
+        "--json",
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["status"] == "matched"
+    assert payload["message_count"] == 1

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
-from pathlib import Path
+import shutil
 import subprocess
+from collections.abc import Sequence
+from pathlib import Path
 
 from celery import shared_task
 from django.conf import settings
@@ -45,6 +48,11 @@ def _terminal_pid_file(terminal_pk: int) -> Path:
     return _terminal_state_dir() / f"{terminal_pk}.pid"
 
 
+def _named_terminal_pid_file(state_key: str) -> Path:
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "-", state_key).strip(".-")
+    return _terminal_state_dir() / f"{safe_key or 'terminal'}.pid"
+
+
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -70,7 +78,9 @@ def _process_commandline(pid: int) -> str:
     if not proc_cmdline.exists():
         return ""
     try:
-        return proc_cmdline.read_bytes().decode(errors="ignore").replace("\x00", " ").strip()
+        return _command_metadata(
+            proc_cmdline.read_bytes().decode(errors="ignore").split("\x00")
+        )
     except OSError:
         return ""
 
@@ -116,22 +126,152 @@ def _build_startup_script(terminal: AgentTerminal) -> str:
     return "\n".join(script_lines)
 
 
-def _launch_terminal(terminal: AgentTerminal) -> None:
+def _command_metadata(command: Sequence[str]) -> str:
+    return " ".join(" ".join(str(part).split()) for part in command if str(part).strip())
+
+
+def _powershell_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _split_windows_command(value: str) -> list[str]:
+    return [part.strip("\"") for part in shlex.split(value, posix=False)]
+
+
+def _command_script(
+    command: Sequence[str],
+    *,
+    working_directory: Path | str | None,
+    shell: str,
+) -> str:
+    if not command:
+        raise ValueError("Terminal command cannot be empty.")
+    if shell == "powershell":
+        lines = []
+        if working_directory:
+            lines.append(f"Set-Location -LiteralPath {_powershell_quote(str(working_directory))}")
+        executable, *args = [str(part) for part in command]
+        joined_args = " ".join(_powershell_quote(arg) for arg in args)
+        suffix = f" {joined_args}" if joined_args else ""
+        lines.append(f"& {_powershell_quote(executable)}{suffix}")
+        return "\n".join(lines)
+    lines = []
+    if working_directory:
+        lines.append(f"cd {shlex.quote(str(working_directory))}")
+    lines.append(shlex.join(str(part) for part in command))
+    return "\n".join(lines)
+
+
+def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
+    script_dir = _terminal_state_dir() / "scripts"
+    script_dir.mkdir(parents=True, exist_ok=True)
+    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
+    script_path.write_text(startup_script, encoding="utf-8")
+    return script_path
+
+
+def _windows_terminal_command(
+    *,
+    script_path: Path,
+    title: str,
+    executable: str = "",
+) -> list[str]:
+    terminal = executable.strip()
+    if not terminal or terminal == "x-terminal-emulator":
+        terminal_path = shutil.which("wt.exe") or shutil.which("wt") or ""
+        terminal_parts = [terminal_path] if terminal_path else []
+    else:
+        terminal_parts = _split_windows_command(terminal)
+    powershell = shutil.which("powershell.exe") or "powershell.exe"
+    if terminal_parts:
+        return [
+            *terminal_parts,
+            "new-tab",
+            "--title",
+            title,
+            powershell,
+            "-NoExit",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script_path),
+        ]
+    return [
+        powershell,
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script_path),
+    ]
+
+
+def _launch_startup_script(
+    startup_script: str,
+    *,
+    executable: str = "",
+    title: str = "Arthexis Agent Terminal",
+    state_key: str = "terminal",
+) -> Path:
     pid_dir = _terminal_state_dir()
     pid_dir.mkdir(parents=True, exist_ok=True)
-    pid_file = _terminal_pid_file(terminal.pk)
+    pid_file = _named_terminal_pid_file(state_key)
+    if _is_windows():
+        script_path = _write_windows_startup_script(state_key, startup_script)
+        command = _windows_terminal_command(
+            script_path=script_path,
+            title=title,
+            executable=executable,
+        )
+    else:
+        command = [*shlex.split(executable or "x-terminal-emulator")]
+        if startup_script:
+            command.extend(["-e", "sh", "-lc", startup_script])
+    process = subprocess.Popen(command)
+    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
+    return pid_file
+
+
+def launch_command_in_terminal(
+    command: Sequence[str],
+    *,
+    title: str = "Arthexis Agent Terminal",
+    state_key: str = "terminal",
+    working_directory: Path | str | None = None,
+    executable: str = "",
+) -> Path:
+    startup_script = _command_script(
+        command,
+        working_directory=working_directory,
+        shell="powershell" if _is_windows() else "sh",
+    )
+    return _launch_startup_script(
+        startup_script,
+        executable=executable,
+        title=title,
+        state_key=state_key,
+    )
+
+
+def _launch_terminal(terminal: AgentTerminal) -> None:
     executable = terminal.resolved_executable()
     startup_script = _build_startup_script(terminal)
     if _is_windows():
-        raise RuntimeError(
-            "_launch_terminal does not support Windows POSIX shell launch "
-            f"for terminal pk={terminal.pk!r}; startup-script-present={bool(startup_script)!r}"
+        _launch_startup_script(
+            startup_script,
+            executable=executable,
+            title=terminal.name or "Arthexis Agent Terminal",
+            state_key=str(terminal.pk),
         )
+        return
+    pid_dir = _terminal_state_dir()
+    pid_dir.mkdir(parents=True, exist_ok=True)
+    pid_file = _terminal_pid_file(terminal.pk)
     command = [*shlex.split(executable)]
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{' '.join(command)}\n")
+    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
 
 
 def _matches_current_node_role(terminal: AgentTerminal) -> bool:

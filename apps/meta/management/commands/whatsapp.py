@@ -6,10 +6,15 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.meta.services import (
+    DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
+    DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS,
+    DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS,
+    DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
     DEFAULT_WHATSAPP_WEB_BROWSER,
     DEFAULT_WHATSAPP_WEB_CHANNEL,
     DEFAULT_WHATSAPP_WEB_PROFILE_DIR,
     dataclass_payload,
+    listen_for_whatsapp_secretary_requests,
     parse_cli_date,
     read_whatsapp_web_messages,
     send_whatsapp_web_message,
@@ -18,7 +23,7 @@ from apps.meta.services import (
 
 
 class Command(BaseCommand):
-    help = "On-demand WhatsApp Web login, send, and read commands."
+    help = "WhatsApp Web login, send, read, and local listener commands."
 
     def add_arguments(self, parser):
         subparsers = parser.add_subparsers(dest="action", required=True)
@@ -83,6 +88,84 @@ class Command(BaseCommand):
         )
         read.add_argument("--json", action="store_true", help="Emit JSON output.")
 
+        listen = subparsers.add_parser(
+            "listen",
+            help="Poll an operator self-chat and launch a Codex Secretary terminal.",
+        )
+        self._add_browser_arguments(listen, default_timeout=120.0)
+        listen.add_argument(
+            "--from",
+            dest="from_phone",
+            required=True,
+            help="Operator self-chat phone number.",
+        )
+        listen.add_argument(
+            "--country-code",
+            default="52",
+            help="Country code for 10-digit local numbers. Default: 52.",
+        )
+        listen.add_argument(
+            "--trigger-prefix",
+            default=DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+            help=(
+                "Message prefix required to launch Secretary. Use an empty value "
+                "to process every new message. Default: secretary:"
+            ),
+        )
+        listen.add_argument(
+            "--idle-after",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
+            help=(
+                "Desktop idle seconds required before polling (Windows only); "
+                "0 disables. Default: 300."
+            ),
+        )
+        listen.add_argument(
+            "--poll-every",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS,
+            help="Seconds between WhatsApp read polls. Default: 60.",
+        )
+        listen.add_argument(
+            "--quiet-window",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS,
+            help="Seconds without new messages required before processing. Default: 60.",
+        )
+        listen.add_argument(
+            "--limit",
+            type=int,
+            default=50,
+            help="Maximum visible new messages to inspect per poll; 0 means all.",
+        )
+        listen.add_argument(
+            "--codex-command",
+            default="codex",
+            help="Codex executable command used in the launched terminal.",
+        )
+        listen.add_argument(
+            "--secretary-name",
+            default="Secretary",
+            help="Nickname used in the generated SECRETARY prompt.",
+        )
+        listen.add_argument(
+            "--terminal-title",
+            default="Arthexis Secretary",
+            help="Window/tab title for the launched terminal.",
+        )
+        listen.add_argument(
+            "--once",
+            action="store_true",
+            help="Exit after processing one quiet message batch.",
+        )
+        listen.add_argument(
+            "--no-launch",
+            action="store_true",
+            help="Match and advance the cursor without launching Codex.",
+        )
+        listen.add_argument("--json", action="store_true", help="Emit JSON output.")
+
     def _add_browser_arguments(self, parser, *, default_timeout: float) -> None:
         parser.add_argument(
             "--profile-dir",
@@ -140,6 +223,8 @@ class Command(BaseCommand):
                 result = self._handle_send(options)
             elif action == "read":
                 result = self._handle_read(options)
+            elif action == "listen":
+                return self._handle_listen(options)
             else:
                 raise CommandError(f"Unknown whatsapp action: {action}")
         except (RuntimeError, ValueError) as exc:
@@ -195,6 +280,42 @@ class Command(BaseCommand):
             limit=options["limit"],
             **self._browser_options(options),
         )
+
+    def _handle_listen(self, options):
+        if options["limit"] < 0:
+            raise CommandError("--limit must be >= 0. Use 0 to return all visible messages.")
+        if options["idle_after"] < 0:
+            raise CommandError("--idle-after must be >= 0.")
+        if options["poll_every"] < 1:
+            raise CommandError("--poll-every must be >= 1.")
+        if options["quiet_window"] < 1:
+            raise CommandError("--quiet-window must be >= 1.")
+
+        def write_event(result) -> None:
+            if options.get("json"):
+                self.stdout.write(json.dumps(dataclass_payload(result), indent=2))
+            else:
+                self._write_text_result(result)
+
+        results = listen_for_whatsapp_secretary_requests(
+            phone=options["from_phone"],
+            default_country_code=options["country_code"],
+            trigger_prefix=options["trigger_prefix"],
+            idle_after_seconds=options["idle_after"],
+            daemon_poll_seconds=options["poll_every"],
+            quiet_window_seconds=options["quiet_window"],
+            limit=options["limit"],
+            launch=not options["no_launch"],
+            codex_command=options["codex_command"],
+            secretary_name=options["secretary_name"],
+            terminal_title=options["terminal_title"],
+            max_batches=1 if options["once"] else None,
+            event_callback=None if options["once"] else write_event,
+            **self._browser_options(options),
+        )
+        if options["once"] and results:
+            write_event(results[-1])
+        return None
 
     def _write_text_result(self, result) -> None:
         payload = dataclass_payload(result)
