@@ -153,6 +153,39 @@ def test_imager_admin_create_rpi_image_view_requires_recovery_or_explicit_skip(
     mock_build.assert_not_called()
 
 
+@patch("apps.imager.admin.build_rpi4b_image")
+def test_imager_admin_create_rpi_image_view_rejects_malformed_recovery_key(
+    mock_build,
+    admin_client,
+    tmp_path,
+):
+    """Regression: admin recovery SSH keys should use the same validation as CLI builds."""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    with override_settings(
+        IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=(str(tmp_path),),
+        IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=(str(tmp_path),),
+    ):
+        response = admin_client.post(
+            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
+            data={
+                "name": "stable",
+                "base_image_uri": str(tmp_path / "base.img"),
+                "output_dir": str(output_dir),
+                "download_base_uri": "",
+                "git_url": "https://github.com/arthexis/arthexis.git",
+                "recovery_authorized_keys": "not-a-public-key",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "Line 1" in body
+    assert "unrecognized key line" in body
+    mock_build.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("download_url", "expected_message"),
     [

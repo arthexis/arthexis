@@ -23,6 +23,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import ParseResult, quote, unquote, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -33,6 +35,20 @@ TARGET_RPI4B = "rpi-4b"
 DEFAULT_RECOVERY_SSH_USER = "arthe"
 RECOVERY_SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
 RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
+VALID_PUBLIC_KEY_PREFIXES = (
+    "ecdsa-sha2-nistp256",
+    "ecdsa-sha2-nistp384",
+    "ecdsa-sha2-nistp521",
+    "sk-ecdsa-sha2-nistp256@openssh.com",
+    "sk-ssh-ed25519@openssh.com",
+    "ssh-ed25519",
+    "ssh-rsa",
+)
+VALID_PUBLIC_KEY_PATTERN = re.compile(
+    r"^(?:"
+    + "|".join(re.escape(prefix) for prefix in VALID_PUBLIC_KEY_PREFIXES)
+    + r")\s+[A-Za-z0-9+/=]+(?:\s+.+)?$"
+)
 SUITE_BUNDLE_REMOTE_PATH = "/usr/local/share/arthexis/arthexis-suite.tar.gz"
 NETWORK_MANAGER_CONNECTIONS_REMOTE_PATH = "/etc/NetworkManager/system-connections"
 DEFAULT_HOST_NETWORK_PROFILE_DIR = "/etc/NetworkManager/system-connections"
@@ -192,6 +208,10 @@ fi"""
 
 class ImagerBuildError(RuntimeError):
     """Raised when a Raspberry Pi image build cannot complete."""
+
+
+class RecoveryAuthorizedKeyError(ValueError):
+    """Raised when a recovery authorized-key line is malformed."""
 
 
 @dataclass
@@ -487,6 +507,21 @@ def _ensure_guestfish() -> None:
     )
 
 
+def normalize_recovery_authorized_key_line(line: str) -> str | None:
+    """Normalize one recovery authorized-key line or raise a validation error."""
+
+    normalized = line.strip()
+    if not normalized or normalized.startswith("#"):
+        return None
+    if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
+        raise RecoveryAuthorizedKeyError("unrecognized key line")
+    try:
+        load_ssh_public_key(normalized.encode("utf-8"))
+    except (TypeError, ValueError, UnsupportedAlgorithm) as exc:
+        raise RecoveryAuthorizedKeyError("malformed public key line") from exc
+    return normalized
+
+
 def _should_exclude_suite_bundle_path(relative_path: Path) -> bool:
     """Return whether a repo path should be excluded from the static image bundle."""
 
@@ -585,7 +620,11 @@ def select_host_network_profiles(
 
     candidates: list[tuple[Path, str, set[str]]] = []
     for path in sorted(source_dir.iterdir(), key=lambda item: item.name):
-        if not path.is_file() or path.name.startswith("."):
+        if path.name.startswith(".") or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            path.resolve().relative_to(source_dir)
+        except ValueError:
             continue
         profile_id = _parse_network_profile_id(path)
         candidates.append(
@@ -1191,6 +1230,12 @@ def _network_profiles_metadata(network_profiles: tuple[NetworkProfileInfo, ...])
     }
 
 
+def _format_url_host(host: str) -> str:
+    """Bracket IPv6 hosts for URL construction."""
+
+    return f"[{host}]" if ":" in host and not host.startswith("[") else host
+
+
 def _build_served_artifact_url(
     *,
     output_filename: str,
@@ -1207,9 +1252,7 @@ def _build_served_artifact_url(
         normalized_path = f"{parsed_base.path.rstrip('/')}/{quote(output_filename)}"
         return parsed_base._replace(path=normalized_path).geturl()
 
-    advertised_host = (url_host or "127.0.0.1").strip()
-    if ":" in advertised_host and not advertised_host.startswith("["):
-        advertised_host = f"[{advertised_host}]"
+    advertised_host = _format_url_host((url_host or "127.0.0.1").strip())
     return f"http://{advertised_host}:{port}/{quote(output_filename)}"
 
 
@@ -1379,7 +1422,7 @@ def test_rpi_access(
             )
         )
     if not skip_http:
-        target_url = http_url or f"http://{host}:{http_port}/"
+        target_url = http_url or f"http://{_format_url_host(host)}:{http_port}/"
         checks.append(_http_access_check(url=target_url, timeout=timeout))
     if not checks:
         raise ImagerBuildError("Enable at least one access check.")

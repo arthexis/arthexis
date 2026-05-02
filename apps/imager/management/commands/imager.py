@@ -1,38 +1,22 @@
 """Management command for Raspberry Pi image artifact workflows."""
 
 import json
-import re
 from pathlib import Path
 
-from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
     DEFAULT_RECOVERY_SSH_USER,
     ImagerBuildError,
+    RecoveryAuthorizedKeyError,
     build_rpi4b_image,
     list_block_devices,
+    normalize_recovery_authorized_key_line,
     prepare_image_serve,
     serve_image_file,
     test_rpi_access,
     write_image_to_device,
-)
-
-VALID_PUBLIC_KEY_PREFIXES = (
-    "ecdsa-sha2-nistp256",
-    "ecdsa-sha2-nistp384",
-    "ecdsa-sha2-nistp521",
-    "sk-ecdsa-sha2-nistp256@openssh.com",
-    "sk-ssh-ed25519@openssh.com",
-    "ssh-ed25519",
-    "ssh-rsa",
-)
-VALID_PUBLIC_KEY_PATTERN = re.compile(
-    r"^(?:"
-    + "|".join(re.escape(prefix) for prefix in VALID_PUBLIC_KEY_PREFIXES)
-    + r")\s+[A-Za-z0-9+/=]+(?:\s+.+)?$"
 )
 
 
@@ -343,26 +327,17 @@ class Command(BaseCommand):
     def _append_recovery_key_line(self, *, keys: list[str], source: str, line: str) -> None:
         """Normalize and append a single recovery authorized-key line when valid."""
 
-        normalized = line.strip()
-        if not normalized or normalized.startswith("#"):
-            return
-        if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
-            self.stderr.write(
-                self.style.WARNING(
-                    f"Skipping unrecognized key line from {source}."
-                )
-            )
-            return
         try:
-            load_ssh_public_key(normalized.encode("utf-8"))
-        except (TypeError, ValueError, UnsupportedAlgorithm):
+            normalized = normalize_recovery_authorized_key_line(line)
+        except RecoveryAuthorizedKeyError as exc:
             self.stderr.write(
                 self.style.WARNING(
-                    f"Skipping malformed public key line from {source}."
+                    f"Skipping {exc} from {source}."
                 )
             )
             return
-        keys.append(normalized)
+        if normalized:
+            keys.append(normalized)
 
     def _handle_list(self) -> None:
         """Print known Raspberry Pi image artifacts."""
@@ -449,6 +424,8 @@ class Command(BaseCommand):
             serve_image_file(image_path=result.image_path, host=result.host, port=result.port)
         except KeyboardInterrupt:
             self.stdout.write("Stopped image server.")
+        except OSError as exc:
+            raise CommandError(f"Could not start image server: {exc}") from exc
 
     def _handle_test_access(self, options: dict[str, object]) -> None:
         """Test access to an installed Raspberry Pi image."""

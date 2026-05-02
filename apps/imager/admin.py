@@ -1,9 +1,9 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
+import socket
 from contextlib import contextmanager, nullcontext
 from ipaddress import ip_address
 from pathlib import Path
-import socket
 from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlparse
@@ -21,7 +21,12 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import ImagerBuildError, build_rpi4b_image
+from apps.imager.services import (
+    ImagerBuildError,
+    RecoveryAuthorizedKeyError,
+    build_rpi4b_image,
+    normalize_recovery_authorized_key_line,
+)
 
 BLOCKED_ADDRESS_FLAGS = (
     "is_link_local",
@@ -173,16 +178,29 @@ class RaspberryPiImageBuildForm(forms.Form):
         return name
 
     def clean_recovery_authorized_keys(self) -> list[str]:
-        """Normalize admin-entered recovery authorized keys."""
+        """Normalize and validate admin-entered recovery authorized keys."""
 
         raw_value = self.cleaned_data.get("recovery_authorized_keys", "")
         if not raw_value:
             return []
-        return [
-            line.strip()
-            for line in raw_value.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
+        keys: list[str] = []
+        errors: list[ValidationError] = []
+        for line_number, line in enumerate(raw_value.splitlines(), start=1):
+            try:
+                normalized = normalize_recovery_authorized_key_line(line)
+            except RecoveryAuthorizedKeyError as exc:
+                errors.append(
+                    ValidationError(
+                        _("Line %(line_number)d: %(error)s."),
+                        params={"line_number": line_number, "error": str(exc)},
+                    )
+                )
+                continue
+            if normalized:
+                keys.append(normalized)
+        if errors:
+            raise ValidationError(errors)
+        return keys
 
     def clean(self) -> dict[str, object]:
         cleaned = super().clean()

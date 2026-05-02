@@ -785,6 +785,28 @@ def test_customize_image_writes_suite_bundle_and_selected_network_profiles(tmp_p
     assert "/usr/local/share/arthexis/arthexis-suite.tar.gz" in flattened_commands
 
 
+def test_select_host_network_profiles_skips_symlinked_profiles(tmp_path: Path) -> None:
+    """Regression: host network copying should not follow symlinks out of the profile directory."""
+
+    network_dir = tmp_path / "networks"
+    network_dir.mkdir()
+    real_profile = network_dir / "home.nmconnection"
+    real_profile.write_text("[connection]\nid=Home WiFi\n", encoding="utf-8")
+    outside_profile = tmp_path / "outside.nmconnection"
+    outside_profile.write_text("[connection]\nid=Outside WiFi\n", encoding="utf-8")
+    try:
+        (network_dir / "outside-link.nmconnection").symlink_to(outside_profile)
+    except OSError as exc:
+        pytest.skip(f"Symlink creation is unavailable on this host: {exc}")
+
+    selected_profiles = select_host_network_profiles(
+        profile_dir=network_dir,
+        copy_all=True,
+    )
+
+    assert [profile.name for profile in selected_profiles] == ["Home WiFi"]
+
+
 def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path) -> None:
     """Regression: recovery SSH usernames must be Linux-safe for first-boot scripting."""
 
@@ -1424,6 +1446,26 @@ def test_imager_serve_command_prints_artifact_url(serve_mock, tmp_path: Path) ->
     serve_mock.assert_called_once()
 
 
+@patch("apps.imager.management.commands.imager.serve_image_file", side_effect=OSError("port in use"))
+def test_imager_serve_command_reports_server_startup_errors(_serve_mock, tmp_path: Path) -> None:
+    """Regression: serve startup failures should be clean command errors."""
+
+    image_path = tmp_path / "stable-rpi-4b.img"
+    image_path.write_bytes(b"raspberrypi")
+
+    with pytest.raises(CommandError, match="Could not start image server: port in use"):
+        call_command(
+            "imager",
+            "serve",
+            "--image-path",
+            str(image_path),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8090",
+        )
+
+
 @patch("apps.imager.services.urlopen")
 @patch("apps.imager.services.subprocess.run")
 @patch("apps.imager.services.shutil.which", return_value="/usr/bin/ssh")
@@ -1450,6 +1492,23 @@ def test_test_rpi_access_checks_ssh_and_http(
     assert result.ok is True
     assert [check.name for check in result.checks] == ["ssh-tcp", "ssh-auth", "http"]
     assert all(isinstance(check, AccessCheckResult) for check in result.checks)
+
+
+@patch("apps.imager.services.urlopen")
+def test_test_rpi_access_brackets_ipv6_default_http_url(urlopen_mock) -> None:
+    """Regression: IPv6 hosts need brackets in default HTTP test URLs."""
+
+    urlopen_mock.return_value.__enter__.return_value = SimpleNamespace(getcode=lambda: 200)
+
+    result = run_rpi_access_test(
+        host="2001:db8::50",
+        skip_ssh=True,
+        timeout=1,
+    )
+
+    assert result.ok is True
+    request = urlopen_mock.call_args.args[0]
+    assert request.full_url == "http://[2001:db8::50]:8888/"
 
 
 @pytest.mark.django_db
