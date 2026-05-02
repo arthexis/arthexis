@@ -158,7 +158,7 @@ jobs:
       - name: Run Windows install smoke
         shell: pwsh
         run: |
-          .\scripts\ci\install-windows-smoke.ps1
+          .\scripts\ci\install-windows-smoke.ps1 --cold
 
   upgrade:
     name: Upgrade safety gate

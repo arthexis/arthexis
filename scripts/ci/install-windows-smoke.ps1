@@ -1,3 +1,7 @@
+param(
+    [string] $Mode = ""
+)
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -5,9 +9,9 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
 Set-Location $repoRoot
 
-$env:PYTHONDONTWRITEBYTECODE = "1"
-$env:NODE_OPTIONS = "--no-deprecation"
-$env:ARTHEXIS_DB_BACKEND = "sqlite"
+if (-not $env:PYTHONDONTWRITEBYTECODE) { $env:PYTHONDONTWRITEBYTECODE = "1" }
+if (-not $env:NODE_OPTIONS) { $env:NODE_OPTIONS = "--no-deprecation" }
+if (-not $env:ARTHEXIS_DB_BACKEND) { $env:ARTHEXIS_DB_BACKEND = "sqlite" }
 if ($env:pythonLocation) {
     $env:Path = "$env:pythonLocation;$env:pythonLocation\Scripts;$env:Path"
 }
@@ -32,6 +36,28 @@ if ($gtkDllDirs.Count -eq 0) {
 }
 $env:WEASYPRINT_DLL_DIRECTORIES = $gtkDllDirs -join ";"
 
+if ($Mode -eq "--cold") {
+    Remove-Item -LiteralPath ".venv" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ".locks\requirements.bundle.sha256" -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ".locks\requirements.hashes" -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ".locks\requirements.install-ts" -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ".locks\pip.version" -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "db*.sqlite3" -Force -ErrorAction SilentlyContinue
+} elseif ($Mode) {
+    throw "Unknown option: $Mode"
+}
+
+$bootstrapPython = (Get-Command python -ErrorAction Stop).Source
+& $bootstrapPython scripts\sort_pyproject_deps.py --check
+if ($LASTEXITCODE -ne 0) {
+    throw "pyproject dependency ordering check failed with exit code $LASTEXITCODE"
+}
+
+& $bootstrapPython scripts\generate_requirements.py --check
+if ($LASTEXITCODE -ne 0) {
+    throw "generated requirements check failed with exit code $LASTEXITCODE"
+}
+
 cmd.exe /c install.bat
 if ($LASTEXITCODE -ne 0) {
     throw "install.bat failed with exit code $LASTEXITCODE"
@@ -45,6 +71,21 @@ if (-not (Test-Path $python)) {
 & $python scripts\check_editable_install_import.py
 if ($LASTEXITCODE -ne 0) {
     throw "Editable install import check failed with exit code $LASTEXITCODE"
+}
+
+& $python scripts\check_migration_conflicts.py
+if ($LASTEXITCODE -ne 0) {
+    throw "Migration conflict check failed with exit code $LASTEXITCODE"
+}
+
+& $python manage.py migrations check
+if ($LASTEXITCODE -ne 0) {
+    throw "Django migrations check failed with exit code $LASTEXITCODE"
+}
+
+& $python manage.py migrate --noinput --database default
+if ($LASTEXITCODE -ne 0) {
+    throw "Django migrate failed with exit code $LASTEXITCODE"
 }
 
 & $python manage.py check --fail-level ERROR

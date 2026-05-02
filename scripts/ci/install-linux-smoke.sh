@@ -32,6 +32,7 @@ python "$REPO_ROOT/scripts/generate_requirements.py" --check
 
 source .venv/bin/activate
 python scripts/check_editable_install_import.py
+python manage.py check --fail-level ERROR
 python scripts/check_migration_conflicts.py
 python manage.py migrations check
 python manage.py migrate --noinput --database default
