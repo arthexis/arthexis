@@ -18,6 +18,8 @@ from apps.video.services.capture import apply_image_rotation
 from apps.video.utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
+    OPENCV_CAMERA_IDENTIFIER_PREFIX,
+    _cv2_camera_index,
     capture_cv2_snapshot,
     capture_rpi_snapshot,
     detect_cv2_camera_devices,
@@ -141,6 +143,29 @@ class VideoDevice(Ownable):
         detected: list[DetectedVideoDevice] = []
         if is_feature_active_for_node(node=node, slug="video-cam"):
             detected = cls.detect_devices()
+            existing_identifiers = set(
+                cls.objects.filter(node=node).values_list("identifier", flat=True)
+            )
+            compatible_detected: list[DetectedVideoDevice] = []
+            for device in detected:
+                identifier = device.identifier
+                index = _cv2_camera_index(identifier)
+                legacy_identifier = str(index) if index is not None else None
+                if (
+                    identifier.startswith(OPENCV_CAMERA_IDENTIFIER_PREFIX)
+                    and legacy_identifier in existing_identifiers
+                    and identifier not in existing_identifiers
+                ):
+                    compatible_detected.append(
+                        DetectedVideoDevice(
+                            identifier=legacy_identifier,
+                            description=device.description,
+                            raw_info=device.raw_info,
+                        )
+                    )
+                    continue
+                compatible_detected.append(device)
+            detected = compatible_detected
         result = sync_detected_devices(
             model_cls=cls,
             node=node,

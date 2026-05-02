@@ -125,6 +125,42 @@ def test_refresh_from_system_updates_returned_default_state(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_refresh_from_system_keeps_legacy_cv2_identifier(monkeypatch):
+    node = Node.objects.create(
+        hostname="video-legacy-identifier",
+        public_endpoint="video-legacy-identifier",
+    )
+    legacy_device = VideoDevice.objects.create(node=node, identifier="0")
+    monkeypatch.setattr(
+        device_module,
+        "is_feature_active_for_node",
+        lambda *, node, slug: True,
+    )
+    monkeypatch.setattr(
+        VideoDevice,
+        "detect_devices",
+        classmethod(
+            lambda cls: [
+                DetectedVideoDevice(
+                    identifier="opencv:0",
+                    description="OpenCV Camera 0",
+                    raw_info="device_index=0 backend=FAKE frame_size=640x480",
+                )
+            ]
+        ),
+    )
+
+    created, updated = VideoDevice.refresh_from_system(node=node)
+
+    assert (created, updated) == (0, 1)
+    legacy_device.refresh_from_db()
+    assert legacy_device.description == "OpenCV Camera 0"
+    assert VideoDevice.objects.filter(node=node).values_list("identifier", flat=True) == [
+        "0"
+    ]
+
+
+@pytest.mark.django_db
 def test_ensure_single_default_clears_extra_defaults():
     node = Node.objects.create(
         hostname="video-extra-defaults",
