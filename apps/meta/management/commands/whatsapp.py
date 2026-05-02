@@ -171,7 +171,20 @@ class Command(BaseCommand):
             "install-listener",
             help="Plan or write OS startup artifacts for WhatsApp listener mode.",
         )
-        self._add_browser_arguments(install, default_timeout=120.0)
+        self._add_browser_arguments(
+            install,
+            default_timeout=120.0,
+            default_browser=None,
+            default_channel=None,
+            browser_help=(
+                "Browser engine to place in the generated listener command. "
+                "Defaults from --platform."
+            ),
+            channel_help=(
+                "Optional Playwright Chromium channel. Defaults to msedge for "
+                "Windows Edge plans."
+            ),
+        )
         install.add_argument(
             "--from",
             dest="from_phone",
@@ -261,7 +274,16 @@ class Command(BaseCommand):
         )
         install.add_argument("--json", action="store_true", help="Emit JSON output.")
 
-    def _add_browser_arguments(self, parser, *, default_timeout: float) -> None:
+    def _add_browser_arguments(
+        self,
+        parser,
+        *,
+        default_timeout: float,
+        default_browser: str | None = DEFAULT_WHATSAPP_WEB_BROWSER,
+        default_channel: str | None = DEFAULT_WHATSAPP_WEB_CHANNEL,
+        browser_help: str | None = None,
+        channel_help: str | None = None,
+    ) -> None:
         parser.add_argument(
             "--profile-dir",
             default=str(DEFAULT_WHATSAPP_WEB_PROFILE_DIR),
@@ -272,17 +294,15 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--browser",
-            default=DEFAULT_WHATSAPP_WEB_BROWSER,
+            default=default_browser,
             choices=("edge", "firefox", "chromium"),
-            help=(
-                "Browser engine to use. Defaults to Edge on Windows and Firefox "
-                "elsewhere."
-            ),
+            help=browser_help
+            or "Browser engine to use. Defaults to Edge on Windows and Firefox elsewhere.",
         )
         parser.add_argument(
             "--channel",
-            default=DEFAULT_WHATSAPP_WEB_CHANNEL,
-            help="Optional Playwright Chromium channel, for example msedge.",
+            default=default_channel,
+            help=channel_help or "Optional Playwright Chromium channel, for example msedge.",
         )
         parser.add_argument(
             "--cdp-url",
@@ -339,9 +359,9 @@ class Command(BaseCommand):
             "timeout_seconds": options["timeout"],
             "poll_interval_seconds": options["poll_interval"],
             "headless": options["headless"],
-            "browser": options["browser"],
-            "channel": options["channel"].strip(),
-            "cdp_url": options["cdp_url"].strip(),
+            "browser": options.get("browser") or "",
+            "channel": (options.get("channel") or "").strip(),
+            "cdp_url": (options.get("cdp_url") or "").strip(),
         }
 
     def _handle_login(self, options):

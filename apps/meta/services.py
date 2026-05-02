@@ -901,9 +901,15 @@ def _shell_command(command: list[str | Path]) -> str:
 
 def _systemd_quote(value: str | Path) -> str:
     raw = str(value)
-    if not raw or re.search(r"\s", raw):
+    if not raw or re.search(r"[\s\\\"']", raw):
         return '"' + raw.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return raw
+
+
+def _platform_browser_defaults(platform: str) -> tuple[str, str]:
+    if platform == "windows":
+        return "edge", "msedge"
+    return "firefox", ""
 
 
 def _whatsapp_listener_command(
@@ -1054,8 +1060,8 @@ def build_whatsapp_listener_install_plan(
     secretary_name: str = "Secretary",
     terminal_title: str = "Arthexis Secretary",
     profile_dir: Path | str | None = None,
-    browser: str = DEFAULT_WHATSAPP_WEB_BROWSER,
-    channel: str = DEFAULT_WHATSAPP_WEB_CHANNEL,
+    browser: str | None = None,
+    channel: str | None = None,
     cdp_url: str = "",
     timeout_seconds: float = 120.0,
     poll_interval_seconds: float = 1.0,
@@ -1078,6 +1084,12 @@ def build_whatsapp_listener_install_plan(
     resolved_base_dir = Path(base_dir or settings.BASE_DIR).resolve()
     resolved_profile_dir = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
     resolved_output_dir = Path(output_dir or _default_listener_install_output_dir(resolved_platform)).expanduser()
+    default_browser, default_channel = _platform_browser_defaults(resolved_platform)
+    explicit_browser = (browser or "").strip().lower()
+    resolved_browser = explicit_browser or default_browser
+    resolved_channel = (channel or "").strip()
+    if not resolved_channel and not explicit_browser:
+        resolved_channel = default_channel
     resolved_python = str(python_executable or sys.executable)
     resolved_manage_py = Path(manage_py or (resolved_base_dir / "manage.py"))
     command = _whatsapp_listener_command(
@@ -1092,8 +1104,8 @@ def build_whatsapp_listener_install_plan(
         secretary_name=secretary_name,
         terminal_title=terminal_title,
         profile_dir=resolved_profile_dir,
-        browser=browser,
-        channel=channel,
+        browser=resolved_browser,
+        channel=resolved_channel,
         cdp_url=cdp_url,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,

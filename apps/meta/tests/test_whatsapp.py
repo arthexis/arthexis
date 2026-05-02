@@ -20,6 +20,7 @@ from apps.meta.services import (
     WhatsAppWebSendResult,
     _is_whatsapp_web_url,
     _read_cursor,
+    _systemd_quote,
     _with_whatsapp_page,
     _write_cursor,
     build_whatsapp_secretary_prompt,
@@ -830,8 +831,6 @@ def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_pat
             str(output_dir),
             "--systemd-user-dir",
             str(systemd_dir),
-            "--browser",
-            "firefox",
             "--headless",
             "--json",
             stdout=stdout,
@@ -848,6 +847,34 @@ def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_pat
     assert "--headless" in payload["listen_command"]
     assert not output_dir.exists()
     assert not systemd_dir.exists()
+
+
+def test_install_listener_target_platform_controls_browser_defaults(tmp_path):
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            "windows",
+            "--output-dir",
+            str(tmp_path / "install"),
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+    assert "--browser" in payload["listen_command"]
+    assert "'edge'" in payload["listen_command"]
+    assert "--channel" in payload["listen_command"]
+    assert "'msedge'" in payload["listen_command"]
+
+
+def test_systemd_quote_escapes_backslashes_without_spaces():
+    assert _systemd_quote(r"/tmp/with\backslash") == r'"/tmp/with\\backslash"'
 
 
 def test_whatsapp_install_listener_rejects_bad_timing():
