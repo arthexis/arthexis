@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from io import StringIO
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.utils import timezone
 
 from apps.cards.agent_card import parse_agent_card
 from apps.cards.models import RFID
@@ -19,8 +21,10 @@ from apps.souls.models import (
     SoulSeedCard,
 )
 from apps.souls.services import (
+    activate_soul_seed_card,
     compose_skill_bundle,
     evict_card_session,
+    evict_stale_card_sessions,
     provision_soul_seed_card,
     search_agent_skills,
 )
@@ -115,6 +119,123 @@ def test_evict_card_session_clears_runtime_fields():
     assert session.runtime_namespace == ""
     assert session.eviction_reason == "card switch"
     assert session.ended_at is not None
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_starts_bounded_console_session(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+
+    summary = activate_soul_seed_card(
+        "aa bb cc dd",
+        console_id="console-a",
+        reader_id="reader-1",
+        trust_tier=CardSession.TrustTier.TRUSTED_OPERATOR_CONSOLE,
+    )
+    session = CardSession.objects.get(session_id=summary["session"]["session_id"])
+
+    assert summary["action"] == "activated"
+    assert session.state == CardSession.State.ACTIVE
+    assert session.node_id == "console-a"
+    assert session.reader_id == "reader-1"
+    assert session.runtime_namespace.startswith("soul-seed:console-a:")
+    assert summary["card"]["card_uid"] == "AABBCCDD"
+    assert summary["bundle"]["skill_slugs"] == [skill.slug]
+    assert summary["interface"]["commands"] == ["suggest_next_action", "show_context"]
+    assert summary["interface"]["suggestions"]
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_rejects_missing_or_revoked_cards(skill):
+    with pytest.raises(ValueError, match="No active Soul Seed card"):
+        activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+    provision = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    SoulSeedCard.objects.filter(pk=provision["card"]["id"]).update(
+        status=SoulSeedCard.Status.REVOKED,
+        revoked_at=timezone.now(),
+    )
+
+    with pytest.raises(ValueError, match="No active Soul Seed card"):
+        activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_rejects_payload_fingerprint_mismatch(skill):
+    provision = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    SoulSeedCard.objects.filter(pk=provision["card"]["id"]).update(
+        manifest_fingerprint="0" * 64,
+    )
+
+    with pytest.raises(ValueError, match="fingerprint does not match"):
+        activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_same_card_closes_existing_session(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    first = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+    second = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+    session = CardSession.objects.get(session_id=first["session"]["session_id"])
+
+    assert second["action"] == "closed"
+    assert second["session"]["session_id"] == first["session"]["session_id"]
+    assert session.state == CardSession.State.CLOSED
+    assert session.activation_plan == {}
+    assert session.runtime_namespace == ""
+    assert session.eviction_reason == "same card presented"
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_switch_evicts_previous_console_session(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    provision_soul_seed_card("rfid-triage", card_uid="11223344", dry_run=False)
+    first = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+    second = activate_soul_seed_card("11223344", console_id="console-a")
+    first_session = CardSession.objects.get(session_id=first["session"]["session_id"])
+    second_session = CardSession.objects.get(session_id=second["session"]["session_id"])
+
+    assert second["action"] == "activated"
+    assert second["evicted_sessions"] == 1
+    assert first_session.state == CardSession.State.EVICTED
+    assert first_session.eviction_reason == "card switch"
+    assert second_session.state == CardSession.State.ACTIVE
+    assert second_session.card.card_uid == "11223344"
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_timeout_evicts_stale_session_before_start(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    provision_soul_seed_card("rfid-triage", card_uid="11223344", dry_run=False)
+    first = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+    stale_at = timezone.now() - timedelta(minutes=10)
+    CardSession.objects.filter(session_id=first["session"]["session_id"]).update(
+        last_seen_at=stale_at,
+    )
+
+    second = activate_soul_seed_card("11223344", console_id="console-a", timeout_seconds=60)
+    first_session = CardSession.objects.get(session_id=first["session"]["session_id"])
+
+    assert second["evicted_sessions"] == 1
+    assert first_session.state == CardSession.State.EVICTED
+    assert first_session.eviction_reason == "timeout"
+
+
+@pytest.mark.django_db
+def test_evict_stale_card_sessions_evicts_by_console_timeout(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    active = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+    CardSession.objects.filter(session_id=active["session"]["session_id"]).update(
+        last_seen_at=timezone.now() - timedelta(minutes=5),
+    )
+
+    evicted = evict_stale_card_sessions(console_id="console-a", timeout_seconds=60)
+    session = CardSession.objects.get(session_id=active["session"]["session_id"])
+
+    assert evicted == 1
+    assert session.state == CardSession.State.EVICTED
+    assert session.activation_plan == {}
 
 
 @pytest.mark.django_db
@@ -268,6 +389,57 @@ def test_soul_seed_provision_command_outputs_json_and_sector_file(skill, tmp_pat
     assert summary["dry_run"] is True
     assert sector_records == summary["sector_records"]
     assert parse_agent_card(sector_records).fingerprint == summary["card"]["manifest_fingerprint"]
+
+
+@pytest.mark.django_db
+def test_soul_seed_activate_command_outputs_json_from_scan_payload(skill, tmp_path):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    scan_path = tmp_path / "scan.json"
+    scan_path.write_text(json.dumps({"rfid": "aa bb cc dd"}), encoding="utf-8")
+    stdout = StringIO()
+
+    call_command(
+        "soul_seed",
+        "activate",
+        "--scan-json",
+        str(scan_path),
+        "--console-id",
+        "console-a",
+        "--reader-id",
+        "reader-1",
+        "--json",
+        stdout=stdout,
+    )
+    summary = json.loads(stdout.getvalue())
+
+    assert summary["action"] == "activated"
+    assert summary["card"]["card_uid"] == "AABBCCDD"
+    assert summary["session"]["console_id"] == "console-a"
+    assert summary["interface"]["visible_fields"] == ["intent", "matches", "commands", "suggestions"]
+
+
+@pytest.mark.django_db
+def test_soul_seed_evict_stale_command_outputs_json(skill):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    active = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+    CardSession.objects.filter(session_id=active["session"]["session_id"]).update(
+        last_seen_at=timezone.now() - timedelta(minutes=5),
+    )
+    stdout = StringIO()
+
+    call_command(
+        "soul_seed",
+        "evict-stale",
+        "--console-id",
+        "console-a",
+        "--timeout-seconds",
+        "60",
+        "--json",
+        stdout=stdout,
+    )
+    summary = json.loads(stdout.getvalue())
+
+    assert summary == {"action": "evict-stale", "evicted_sessions": 1}
 
 
 def test_agent_card_inspect_command_outputs_json(tmp_path):
