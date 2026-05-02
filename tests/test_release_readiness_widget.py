@@ -62,3 +62,24 @@ def test_readiness_ignores_unresolved_tickets_for_other_releases() -> None:
 
     assert summary.go_no_go == "go"
     assert summary.unresolved_blockers == ()
+
+
+def test_readiness_counts_unresolved_untagged_tickets_as_blockers() -> None:
+    summary = summarize_release_readiness(
+        current_release="2026.04",
+        tickets=[
+            BlockerTicket(
+                key="PR-103",
+                title="Investigate intermittent charger disconnects",
+                url="https://example.test/pr/103",
+                status="open",
+                tags=(),
+            )
+        ],
+        checklist_items=[ChecklistItem(name="Smoke test", owner="QA", verified=True)],
+        blocker_list_url="https://example.test/blockers",
+        checklist_admin_url="https://example.test/checklist",
+    )
+
+    assert summary.go_no_go == "no-go"
+    assert len(summary.unresolved_blockers) == 1
