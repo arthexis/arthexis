@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% translate "Import package" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    {% if preview %}
+      <div class="module">
+        <h2>{% trans "Package preview" %}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{% trans "Skill slug" %}</th>
+              <th scope="col">{% trans "Files" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for skill in preview.skills %}
+              <tr>
+                <td>{{ skill.slug }}</td>
+                <td>{{ skill.files }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2">{% trans "The package does not contain any skills." %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="apply" />
+        <input type="hidden" name="token" value="{{ preview_token }}" />
+        <div class="submit-row">
+          <input type="submit" value="{% trans 'Import package' %}" class="default" />
+          <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
+        </div>
+      </form>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="module aligned">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="preview" />
+      <fieldset class="module aligned">
+        {% if form.non_field_errors %}
+          <div class="form-row errors">{{ form.non_field_errors }}</div>
+        {% endif %}
+        <div class="form-row{% if form.package.errors %} errors{% endif %}">
+          {{ form.package.errors }}
+          {{ form.package.label_tag }}
+          {{ form.package }}
+          {% if form.package.help_text %}
+            <div class="help">{{ form.package.help_text }}</div>
+          {% endif %}
+        </div>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Preview package' %}" class="default" />
+        <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -63,3 +63,22 @@ To preserve raw SIGILS for inspection instead of resolving them:
 ```bash
 python manage.py codex_skill_packages materialize --target ~/.codex/skills --no-resolve-sigils
 ```
+
+## Admin Package Import
+
+Staff users with both add and change permission for Agent Skills can import a
+Codex skill package from **Admin > Agent Skills > Import**.
+
+The admin upload first previews the package with the same dry-run validation as
+the command-line importer. The preview shows each skill slug and the number of
+manifest files that will be processed. No `AgentSkill` or `AgentSkillFile` rows
+are written until the operator confirms the preview.
+
+Preview uploads are stored under the configured Django default storage backend
+with a one-hour expiry, so the follow-up apply request can run on another web
+worker as long as the deployment's default storage is shared by those workers.
+
+The apply step calls the same package importer without dry-run mode. Package
+service validation still owns the safety boundary: unsafe paths, invalid UTF-8,
+unsupported manifests, blocked secrets, portability reclassification, and
+soft-deleted slug restoration all follow the command-line import behavior.

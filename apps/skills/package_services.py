@@ -4,7 +4,9 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
+from os import PathLike
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import BinaryIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.conf import settings
@@ -54,6 +56,10 @@ OPERATOR_PATH_MARKERS = (
 )
 
 
+class CodexSkillPackageImportError(ValueError):
+    """Raised when an uploaded Codex skill package fails validation."""
+
+
 @dataclass(frozen=True)
 class SkillFileClassification:
     portability: str
@@ -76,6 +82,8 @@ def normalize_package_path(path: Path) -> str:
 
 
 def validate_package_relative_path(relative_path: str) -> str:
+    if not isinstance(relative_path, str):
+        raise ValueError(f"Unsafe package path: {relative_path}")
     normalized = relative_path.replace("\\", "/")
     path = PurePosixPath(normalized)
     windows_path = PureWindowsPath(relative_path)
@@ -400,38 +408,76 @@ def _read_package_text(package: ZipFile, archive_path: str) -> str:
     try:
         content = package.read(archive_path)
     except KeyError as error:
-        raise ValueError(f"Missing package file: {archive_path}") from error
+        raise CodexSkillPackageImportError(
+            f"Missing package file: {archive_path}"
+        ) from error
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise ValueError(f"Invalid UTF-8 package file: {archive_path}") from error
+        raise CodexSkillPackageImportError(
+            f"Invalid UTF-8 package file: {archive_path}"
+        ) from error
 
 
 def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
+    if not isinstance(manifest, dict):
+        raise CodexSkillPackageImportError("Package manifest must be an object")
+    skills = manifest.get("skills", [])
+    if not isinstance(skills, list):
+        raise CodexSkillPackageImportError("Package manifest skills must be a list")
     validated_skills = []
     seen_slugs = set()
-    for skill_entry in manifest.get("skills", []):
-        slug = validate_package_skill_slug(skill_entry["slug"])
+    for skill_entry in skills:
+        if not isinstance(skill_entry, dict):
+            raise CodexSkillPackageImportError("Package skill entries must be objects")
+        try:
+            slug = validate_package_skill_slug(skill_entry["slug"])
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required package skill slug"
+            ) from error
+        except ValueError as error:
+            raise CodexSkillPackageImportError(str(error)) from error
         if slug in seen_slugs:
-            raise ValueError(f"Duplicate package skill slug: {slug}")
+            raise CodexSkillPackageImportError(
+                f"Duplicate package skill slug: {slug}"
+            )
         seen_slugs.add(slug)
         seen_paths = set()
         content_by_path = {}
-        validated_files = [
-            {
-                **file_info,
-                "path": validate_package_relative_path(file_info["path"]),
-            }
-            for file_info in skill_entry.get("files", [])
-        ]
+        files = skill_entry.get("files", [])
+        if not isinstance(files, list):
+            raise CodexSkillPackageImportError("Package files must be a list")
+        try:
+            validated_files = [
+                {
+                    **file_info,
+                    "path": validate_package_relative_path(file_info["path"]),
+                }
+                for file_info in files
+            ]
+        except TypeError as error:
+            raise CodexSkillPackageImportError(
+                "Package file entries must be objects"
+            ) from error
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required package file path"
+            ) from error
+        except ValueError as error:
+            raise CodexSkillPackageImportError(str(error)) from error
         for file_info in validated_files:
             if file_info["path"] in seen_paths:
-                raise ValueError(f"Duplicate package file path: {file_info['path']}")
+                raise CodexSkillPackageImportError(
+                    f"Duplicate package file path: {file_info['path']}"
+                )
             if (
                 file_info["path"] == SKILL_MARKDOWN
                 and file_info.get("included_by_default") is False
             ):
-                raise ValueError(f"{SKILL_MARKDOWN} must be included")
+                raise CodexSkillPackageImportError(
+                    f"{SKILL_MARKDOWN} must be included"
+                )
             seen_paths.add(file_info["path"])
             archive_path = f"skills/{slug}/{file_info['path']}"
             content_by_path[file_info["path"]] = _read_package_text(
@@ -439,7 +485,9 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
                 archive_path,
             )
         if SKILL_MARKDOWN not in content_by_path:
-            raise ValueError(f"Missing required {SKILL_MARKDOWN} for skill: {slug}")
+            raise CodexSkillPackageImportError(
+                f"Missing required {SKILL_MARKDOWN} for skill: {slug}"
+            )
         validated_skills.append(
             {
                 **skill_entry,
@@ -683,15 +731,35 @@ def materialize_codex_skill_files(
     return summary
 
 
-def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> dict:
-    package_path = Path(package_path)
-    with ZipFile(package_path) as package:
-        manifest = json.loads(package.read("manifest.json").decode("utf-8"))
+def import_codex_skill_package(
+    package_path: str | PathLike[str] | BinaryIO,
+    *,
+    dry_run: bool = True,
+) -> dict:
+    if isinstance(package_path, (str, PathLike)):
+        package_source = Path(package_path)
+        package_label = str(package_source)
+    else:
+        package_source = package_path
+        package_label = str(getattr(package_path, "name", "<uploaded package>"))
+
+    with ZipFile(package_source) as package:
+        try:
+            manifest_bytes = package.read("manifest.json")
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required manifest.json"
+            ) from error
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, dict):
+            raise CodexSkillPackageImportError("Package manifest must be an object")
         if manifest.get("format") != PACKAGE_FORMAT:
-            raise ValueError("Unsupported Codex skill package format")
+            raise CodexSkillPackageImportError(
+                "Unsupported Codex skill package format"
+            )
         validated_skills = _validate_manifest_skill_entries(package, manifest)
         summary = {
-            "package": str(package_path),
+            "package": package_label,
             "dry_run": dry_run,
             "skills": [],
         }
