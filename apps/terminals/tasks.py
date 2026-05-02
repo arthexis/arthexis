@@ -53,6 +53,12 @@ def _named_terminal_pid_file(state_key: str) -> Path:
     return _terminal_state_dir() / f"{safe_key or 'terminal'}.pid"
 
 
+def _ensure_private_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(path, 0o700)
+
+
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -164,9 +170,18 @@ def _command_script(
 
 def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
     script_dir = _terminal_state_dir() / "scripts"
-    script_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_directory(script_dir)
     script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
     script_path.write_text(startup_script, encoding="utf-8")
+    return script_path
+
+
+def _write_posix_startup_script(state_key: str, startup_script: str) -> Path:
+    script_dir = _terminal_state_dir() / "scripts"
+    _ensure_private_directory(script_dir)
+    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.sh"
+    script_path.write_text(startup_script, encoding="utf-8")
+    os.chmod(script_path, 0o700)
     return script_path
 
 
@@ -214,7 +229,7 @@ def _launch_startup_script(
     state_key: str = "terminal",
 ) -> Path:
     pid_dir = _terminal_state_dir()
-    pid_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_directory(pid_dir)
     pid_file = _named_terminal_pid_file(state_key)
     if _is_windows():
         script_path = _write_windows_startup_script(state_key, startup_script)
@@ -226,9 +241,12 @@ def _launch_startup_script(
     else:
         command = [*shlex.split(executable or "x-terminal-emulator")]
         if startup_script:
-            command.extend(["-e", "sh", "-lc", startup_script])
+            script_path = _write_posix_startup_script(state_key, startup_script)
+            command.extend(["-e", "sh", str(script_path)])
     process = subprocess.Popen(command)
     pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
+    if os.name != "nt":
+        os.chmod(pid_file, 0o600)
     return pid_file
 
 
@@ -265,13 +283,15 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
         )
         return
     pid_dir = _terminal_state_dir()
-    pid_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_directory(pid_dir)
     pid_file = _terminal_pid_file(terminal.pk)
     command = [*shlex.split(executable)]
     if startup_script:
-        command.extend(["-e", "sh", "-lc", startup_script])
+        script_path = _write_posix_startup_script(str(terminal.pk), startup_script)
+        command.extend(["-e", "sh", str(script_path)])
     process = subprocess.Popen(command)
     pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
+    os.chmod(pid_file, 0o600)
 
 
 def _matches_current_node_role(terminal: AgentTerminal) -> bool:
