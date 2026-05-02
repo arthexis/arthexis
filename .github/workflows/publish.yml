@@ -163,11 +163,6 @@ jobs:
               return f"{epoch}!{value}" if epoch else value
 
 
-          def bump_patch(parts):
-              epoch, major, minor, patch = parts
-              return epoch, major, minor, patch + 1
-
-
           try:
               with urlopen(pypi_url, timeout=15) as response:
                   releases = json.load(response).get("releases", {})
@@ -198,9 +193,12 @@ jobs:
           resolved_version = serialize_version(resolved_parts)
           published = {serialize_version(parts) for parts in published_parts}
 
-          while resolved_version in published:
-              resolved_parts = bump_patch(parse_version(resolved_version))
-              resolved_version = serialize_version(resolved_parts)
+          if resolved_version in published:
+              raise SystemExit(
+                  "Release publish blocked: VERSION already exists on PyPI "
+                  f"(VERSION={resolved_version!r}). Bump VERSION in source control, then "
+                  "create a matching tag from that reviewed commit."
+              )
 
           version_path.write_text(f"{resolved_version}\n", encoding="utf-8")
 
