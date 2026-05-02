@@ -436,6 +436,7 @@ def test_suite_login_redirect_defaults_to_gateway_host():
         module._suite_login_url(
             "arthexis.net",
             configured_host=module.DEFAULT_SUITE_LOGIN_HOST,
+            scheme=module.DEFAULT_SUITE_LOGIN_SCHEME,
             port=8888,
             path="login/",
         )
@@ -450,6 +451,7 @@ def test_suite_login_redirect_brackets_raw_ipv6_gateway_host():
         module._suite_login_url(
             "arthexis.net",
             configured_host="fd42:0:0:42::1",
+            scheme=module.DEFAULT_SUITE_LOGIN_SCHEME,
             port=8888,
             path="/login/",
         )
@@ -461,9 +463,43 @@ def test_suite_login_redirect_can_reuse_current_host_without_existing_port():
     module = load_portal_module()
 
     assert (
-        module._suite_login_url("127.0.0.1:9080", configured_host="", port=8888, path="login/")
+        module._suite_login_url(
+            "127.0.0.1:9080",
+            configured_host="",
+            scheme=module.DEFAULT_SUITE_LOGIN_SCHEME,
+            port=8888,
+            path="login/",
+        )
         == "http://127.0.0.1:8888/login/"
     )
+
+
+def test_suite_login_redirect_scheme_is_configurable():
+    module = load_portal_module()
+
+    assert (
+        module._suite_login_url(
+            "arthexis.net",
+            configured_host="10.42.0.1",
+            scheme="https",
+            port=443,
+            path="/login/",
+        )
+        == "https://10.42.0.1:443/login/"
+    )
+
+
+def test_suite_login_redirect_rejects_invalid_scheme():
+    module = load_portal_module()
+
+    with pytest.raises(ValueError, match="--suite-login-scheme"):
+        module._suite_login_url(
+            "arthexis.net",
+            configured_host="10.42.0.1",
+            scheme="ftp",
+            port=8888,
+            path="/login/",
+        )
 
 
 def test_read_events_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
@@ -652,6 +688,7 @@ def test_skip_firewall_sync_defaults_loopback_to_development_mac(tmp_path):
         assets_dir=str(tmp_path),
         state_dir=str(tmp_path / "state"),
         source_url="",
+        suite_login_scheme=module.DEFAULT_SUITE_LOGIN_SCHEME,
         suite_login_host=module.DEFAULT_SUITE_LOGIN_HOST,
         suite_login_port=module.DEFAULT_SUITE_LOGIN_PORT,
         suite_login_path=module.DEFAULT_SUITE_LOGIN_PATH,

@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = BASE_DIR / "config" / "data" / "ap_portal"
 DEFAULT_STATE_DIR = BASE_DIR / ".state" / "ap_portal"
 DEFAULT_SOURCE_URL = "https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py"
+DEFAULT_SUITE_LOGIN_SCHEME = "http"
 DEFAULT_SUITE_LOGIN_HOST = "10.42.0.1"
 DEFAULT_SUITE_LOGIN_PORT = 8888
 DEFAULT_SUITE_LOGIN_PATH = "/login/"
@@ -62,6 +63,7 @@ class PortalConfig:
     consents_path: Path
     activity_path: Path
     source_url: str
+    suite_login_scheme: str = DEFAULT_SUITE_LOGIN_SCHEME
     suite_login_host: str = DEFAULT_SUITE_LOGIN_HOST
     suite_login_port: int = DEFAULT_SUITE_LOGIN_PORT
     suite_login_path: str = DEFAULT_SUITE_LOGIN_PATH
@@ -134,6 +136,13 @@ def _normalize_url_path(value: str) -> str:
     return path
 
 
+def _normalize_url_scheme(value: str) -> str:
+    scheme = str(value or DEFAULT_SUITE_LOGIN_SCHEME).strip().lower().removesuffix("://")
+    if scheme not in {"http", "https"}:
+        raise ValueError("--suite-login-scheme must be http or https.")
+    return scheme
+
+
 def _host_for_suite_redirect(host: str, configured_host: str = "") -> str:
     raw_host = (configured_host or host or "").strip()
     if not raw_host:
@@ -152,8 +161,19 @@ def _host_for_suite_redirect(host: str, configured_host: str = "") -> str:
     return hostname
 
 
-def _suite_login_url(host: str, *, configured_host: str = "", port: int, path: str) -> str:
-    return f"http://{_host_for_suite_redirect(host, configured_host)}:{port}{_normalize_url_path(path)}"
+def _suite_login_url(
+    host: str,
+    *,
+    configured_host: str = "",
+    scheme: str,
+    port: int,
+    path: str,
+) -> str:
+    return (
+        f"{_normalize_url_scheme(scheme)}://"
+        f"{_host_for_suite_redirect(host, configured_host)}:{port}"
+        f"{_normalize_url_path(path)}"
+    )
 
 
 class FirewallManager:
@@ -421,6 +441,7 @@ class PortalState:
         return _suite_login_url(
             host,
             configured_host=self.config.suite_login_host,
+            scheme=self.config.suite_login_scheme,
             port=self.config.suite_login_port,
             path=self.config.suite_login_path,
         )
@@ -760,6 +781,7 @@ def build_config(args: argparse.Namespace) -> PortalConfig:
         consents_path=state_dir / "consents.jsonl",
         activity_path=state_dir / "activity.jsonl",
         source_url=source_url,
+        suite_login_scheme=_normalize_url_scheme(args.suite_login_scheme),
         suite_login_host=args.suite_login_host,
         suite_login_port=args.suite_login_port,
         suite_login_path=_normalize_url_path(args.suite_login_path),
@@ -776,6 +798,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--assets-dir", default=str(ASSETS_DIR))
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     parser.add_argument("--source-url", default="")
+    parser.add_argument("--suite-login-scheme", default=DEFAULT_SUITE_LOGIN_SCHEME)
     parser.add_argument("--suite-login-host", default=DEFAULT_SUITE_LOGIN_HOST)
     parser.add_argument("--suite-login-port", type=int, default=DEFAULT_SUITE_LOGIN_PORT)
     parser.add_argument("--suite-login-path", default=DEFAULT_SUITE_LOGIN_PATH)
