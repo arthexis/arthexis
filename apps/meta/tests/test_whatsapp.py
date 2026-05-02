@@ -895,6 +895,33 @@ def test_install_listener_explicit_browser_skips_platform_channel_default(tmp_pa
     payload = json.loads(stdout.getvalue())
     assert "'firefox'" in payload["listen_command"]
     assert "--channel" not in payload["listen_command"]
+    assert any("Playwright Firefox" in item for item in payload["requirements"])
+    assert not any("Microsoft Edge" in item for item in payload["requirements"])
+
+
+def test_install_listener_requirements_match_chromium_override(tmp_path):
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            "linux",
+            "--browser",
+            "chromium",
+            "--output-dir",
+            str(tmp_path / "install"),
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+    assert "--browser chromium" in payload["listen_command"]
+    assert any("Playwright Chromium" in item for item in payload["requirements"])
+    assert not any("Firefox" in item for item in payload["requirements"])
 
 
 def test_systemd_quote_escapes_backslashes_without_spaces():

@@ -912,6 +912,23 @@ def _platform_browser_defaults(platform: str) -> tuple[str, str]:
     return "firefox", ""
 
 
+def _browser_install_requirement(browser: str, platform: str, channel: str) -> str:
+    if browser == "edge":
+        channel_text = f" through the {channel} channel" if channel else ""
+        return f"Microsoft Edge installed and available to Playwright{channel_text}."
+    if browser == "firefox":
+        return (
+            "Playwright Firefox installed; run `python -m playwright install firefox` "
+            "if needed."
+        )
+    if browser == "chromium":
+        return (
+            "Playwright Chromium installed; run `python -m playwright install chromium` "
+            "if needed."
+        )
+    return f"Playwright browser assets installed for {platform} browser {browser!r}."
+
+
 def _whatsapp_listener_command(
     *,
     phone: str,
@@ -1132,8 +1149,11 @@ def build_whatsapp_listener_install_plan(
         )
         requirements = [
             "Windows interactive user session; do not provision as a non-interactive Windows service.",
-            "Microsoft Edge installed and available to Playwright through the msedge channel.",
-            "Run `python -m playwright install chromium` if Playwright browser assets are missing.",
+            _browser_install_requirement(
+                resolved_browser,
+                resolved_platform,
+                resolved_channel,
+            ),
             "`whatsapp login` completed for the same persistent profile before unattended startup.",
             "`codex` available on PATH, or pass --codex-command with its full executable path.",
         ]
@@ -1161,7 +1181,11 @@ def build_whatsapp_listener_install_plan(
         uninstall_command = f"systemctl --user disable --now {shlex.quote(unit_name)}"
         requirements = [
             "Linux graphical user session with systemd --user available.",
-            "Firefox installed through Playwright; run `python -m playwright install firefox` if needed.",
+            _browser_install_requirement(
+                resolved_browser,
+                resolved_platform,
+                resolved_channel,
+            ),
             "`loginctl enable-linger <user>` if the listener must survive logout.",
             "`whatsapp login` completed for the same persistent profile before unattended startup.",
             "`codex` available on PATH, or pass --codex-command with its full executable path.",
