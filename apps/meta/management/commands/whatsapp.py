@@ -13,6 +13,7 @@ from apps.meta.services import (
     DEFAULT_WHATSAPP_WEB_BROWSER,
     DEFAULT_WHATSAPP_WEB_CHANNEL,
     DEFAULT_WHATSAPP_WEB_PROFILE_DIR,
+    build_whatsapp_listener_install_plan,
     dataclass_payload,
     listen_for_whatsapp_secretary_requests,
     parse_cli_date,
@@ -166,6 +167,100 @@ class Command(BaseCommand):
         )
         listen.add_argument("--json", action="store_true", help="Emit JSON output.")
 
+        install = subparsers.add_parser(
+            "install-listener",
+            help="Plan or write OS startup artifacts for WhatsApp listener mode.",
+        )
+        self._add_browser_arguments(install, default_timeout=120.0)
+        install.add_argument(
+            "--from",
+            dest="from_phone",
+            required=True,
+            help="Operator self-chat phone number.",
+        )
+        install.add_argument(
+            "--country-code",
+            default="52",
+            help="Country code for 10-digit local numbers. Default: 52.",
+        )
+        install.add_argument(
+            "--trigger-prefix",
+            default=DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+            help="Message prefix required to launch Secretary. Default: secretary:",
+        )
+        install.add_argument(
+            "--idle-after",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
+            help="Desktop idle seconds required before polling. Default: 300.",
+        )
+        install.add_argument(
+            "--poll-every",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS,
+            help="Seconds between WhatsApp read polls. Default: 60.",
+        )
+        install.add_argument(
+            "--quiet-window",
+            type=float,
+            default=DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS,
+            help="Seconds without new messages required before processing. Default: 60.",
+        )
+        install.add_argument(
+            "--limit",
+            type=int,
+            default=50,
+            help="Maximum visible new messages to inspect per poll; 0 means all.",
+        )
+        install.add_argument(
+            "--codex-command",
+            default="codex",
+            help="Codex executable command used in the launched terminal.",
+        )
+        install.add_argument(
+            "--secretary-name",
+            default="Secretary",
+            help="Nickname used in the generated SECRETARY prompt.",
+        )
+        install.add_argument(
+            "--terminal-title",
+            default="Arthexis Secretary",
+            help="Window/tab title for the launched terminal.",
+        )
+        install.add_argument(
+            "--platform",
+            choices=("windows", "win32", "linux"),
+            help="Override target platform for generated artifacts.",
+        )
+        install.add_argument(
+            "--service-name",
+            default="arthexis-whatsapp-listener",
+            help="Scheduled Task or systemd unit base name.",
+        )
+        install.add_argument(
+            "--output-dir",
+            help="Directory for generated listener runner files.",
+        )
+        install.add_argument(
+            "--systemd-user-dir",
+            help="Linux systemd user unit directory. Default: ~/.config/systemd/user.",
+        )
+        install.add_argument(
+            "--python",
+            dest="python_executable",
+            help="Python executable to place in the generated listener command.",
+        )
+        install.add_argument(
+            "--manage-py",
+            help="Path to manage.py. Defaults to this suite checkout.",
+        )
+        install.add_argument(
+            "--write",
+            action="store_true",
+            help="Write helper files. Without this, only print the install plan.",
+        )
+        install.add_argument("--json", action="store_true", help="Emit JSON output.")
+
     def _add_browser_arguments(self, parser, *, default_timeout: float) -> None:
         parser.add_argument(
             "--profile-dir",
@@ -225,6 +320,8 @@ class Command(BaseCommand):
                 result = self._handle_read(options)
             elif action == "listen":
                 return self._handle_listen(options)
+            elif action == "install-listener":
+                return self._handle_install_listener(options)
             else:
                 raise CommandError(f"Unknown whatsapp action: {action}")
         except (RuntimeError, ValueError) as exc:
@@ -316,6 +413,75 @@ class Command(BaseCommand):
         if options["once"] and results:
             write_event(results[-1])
         return None
+
+    def _handle_install_listener(self, options):
+        if options["limit"] < 0:
+            raise CommandError("--limit must be >= 0. Use 0 to return all visible messages.")
+        if options["idle_after"] < 0:
+            raise CommandError("--idle-after must be >= 0.")
+        if options["poll_every"] < 1:
+            raise CommandError("--poll-every must be >= 1.")
+        if options["quiet_window"] < 1:
+            raise CommandError("--quiet-window must be >= 1.")
+
+        plan = build_whatsapp_listener_install_plan(
+            phone=options["from_phone"],
+            default_country_code=options["country_code"],
+            trigger_prefix=options["trigger_prefix"],
+            idle_after_seconds=options["idle_after"],
+            daemon_poll_seconds=options["poll_every"],
+            quiet_window_seconds=options["quiet_window"],
+            limit=options["limit"],
+            codex_command=options["codex_command"],
+            secretary_name=options["secretary_name"],
+            terminal_title=options["terminal_title"],
+            platform=options["platform"],
+            output_dir=options["output_dir"],
+            systemd_user_dir=options["systemd_user_dir"],
+            python_executable=options["python_executable"],
+            manage_py=options["manage_py"],
+            service_name=options["service_name"],
+            write_files=options["write"],
+            **self._browser_options(options),
+        )
+        if options.get("json"):
+            self.stdout.write(json.dumps(dataclass_payload(plan), indent=2))
+        else:
+            self._write_install_plan(plan)
+        return None
+
+    def _write_install_plan(self, plan) -> None:
+        payload = dataclass_payload(plan)
+        for key in (
+            "status",
+            "platform",
+            "service_name",
+            "base_dir",
+            "profile_dir",
+            "output_dir",
+            "runner_path",
+            "service_path",
+            "wrote_files",
+            "detail",
+        ):
+            self.stdout.write(f"{key}={payload[key]}")
+        self.stdout.write("listen_command:")
+        self.stdout.write(str(payload["listen_command"]))
+        self.stdout.write("requirements:")
+        for requirement in payload["requirements"]:
+            self.stdout.write(f"- {requirement}")
+        self.stdout.write("manual_commands:")
+        for key in (
+            "install_command",
+            "start_command",
+            "status_command",
+            "stop_command",
+            "uninstall_command",
+        ):
+            self.stdout.write(f"{key}={payload[key]}")
+        self.stdout.write("instructions:")
+        for instruction in payload["instructions"]:
+            self.stdout.write(f"- {instruction}")
 
     def _write_text_result(self, result) -> None:
         payload = dataclass_payload(result)

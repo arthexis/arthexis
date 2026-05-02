@@ -132,6 +132,28 @@ class WhatsAppSecretaryListenResult:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class WhatsAppListenerInstallPlan:
+    status: str
+    platform: str
+    service_name: str
+    base_dir: Path
+    profile_dir: Path
+    output_dir: Path
+    runner_path: Path
+    service_path: Path
+    listen_command: str
+    install_command: str
+    start_command: str
+    status_command: str
+    stop_command: str
+    uninstall_command: str
+    wrote_files: bool
+    requirements: list[str]
+    instructions: list[str]
+    detail: str = ""
+
+
 def dataclass_payload(value) -> dict[str, object]:
     payload = asdict(value)
     for key, item in list(payload.items()):
@@ -827,6 +849,351 @@ def launch_codex_secretary_terminal(
         working_directory=Path(settings.BASE_DIR),
     )
     return f"Codex Secretary terminal launch requested; pid file: {launch_path}"
+
+
+def _listener_install_platform(platform: str | None = None) -> str:
+    raw = (platform or sys.platform).lower()
+    if raw.startswith("win"):
+        return "windows"
+    if raw.startswith("linux"):
+        return "linux"
+    raise ValueError("WhatsApp listener install provisioning supports Windows and Linux.")
+
+
+def _safe_service_name(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.@-]+", "-", (value or "").strip()).strip(".-")
+    return safe or "arthexis-whatsapp-listener"
+
+
+def _default_listener_install_output_dir(platform: str) -> Path:
+    if platform == "windows":
+        root = os.environ.get("LOCALAPPDATA")
+        base = Path(root) if root else Path.home() / "AppData" / "Local"
+        return base / "Arthexis" / "whatsapp-listener"
+    root = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(root) if root else Path.home() / ".config"
+    return base / "arthexis" / "whatsapp-listener"
+
+
+def _default_systemd_user_dir() -> Path:
+    root = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(root) if root else Path.home() / ".config"
+    return base / "systemd" / "user"
+
+
+def _option_value(value: float | int | str) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _powershell_quote(value: str | Path) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _powershell_command(command: list[str | Path]) -> str:
+    return "& " + " ".join(_powershell_quote(part) for part in command)
+
+
+def _shell_command(command: list[str | Path]) -> str:
+    return shlex.join(str(part) for part in command)
+
+
+def _systemd_quote(value: str | Path) -> str:
+    raw = str(value)
+    if not raw or re.search(r"\s", raw):
+        return '"' + raw.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return raw
+
+
+def _whatsapp_listener_command(
+    *,
+    phone: str,
+    default_country_code: str,
+    trigger_prefix: str,
+    idle_after_seconds: float,
+    daemon_poll_seconds: float,
+    quiet_window_seconds: float,
+    limit: int,
+    codex_command: str,
+    secretary_name: str,
+    terminal_title: str,
+    profile_dir: Path,
+    browser: str,
+    channel: str,
+    cdp_url: str,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+    headless: bool,
+    python_executable: str | Path,
+    manage_py: str | Path,
+) -> list[str | Path]:
+    command: list[str | Path] = [
+        python_executable,
+        manage_py,
+        "whatsapp",
+        "listen",
+        "--from",
+        phone,
+        "--country-code",
+        default_country_code,
+        "--profile-dir",
+        profile_dir,
+        "--browser",
+        browser,
+        "--timeout",
+        _option_value(timeout_seconds),
+        "--poll-interval",
+        _option_value(poll_interval_seconds),
+        "--trigger-prefix",
+        trigger_prefix,
+        "--idle-after",
+        _option_value(idle_after_seconds),
+        "--poll-every",
+        _option_value(daemon_poll_seconds),
+        "--quiet-window",
+        _option_value(quiet_window_seconds),
+        "--limit",
+        str(limit),
+        "--codex-command",
+        codex_command,
+        "--secretary-name",
+        secretary_name,
+        "--terminal-title",
+        terminal_title,
+    ]
+    if channel:
+        command.extend(["--channel", channel])
+    if cdp_url:
+        command.extend(["--cdp-url", cdp_url])
+    if headless:
+        command.append("--headless")
+    return command
+
+
+def _windows_listener_runner(base_dir: Path, command: list[str | Path]) -> str:
+    return "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            f"Set-Location -LiteralPath {_powershell_quote(base_dir)}",
+            _powershell_command(command),
+            "",
+        ]
+    )
+
+
+def _windows_register_task_script(service_name: str, runner_path: Path) -> str:
+    task_arg = f'-NoProfile -ExecutionPolicy Bypass -File "{runner_path}"'
+    return "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            f"$TaskName = {_powershell_quote(service_name)}",
+            f"$Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument {_powershell_quote(task_arg)}",
+            "$Trigger = New-ScheduledTaskTrigger -AtLogOn",
+            (
+                "$Settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew "
+                "-RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) "
+                "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries"
+            ),
+            (
+                "Register-ScheduledTask -TaskName $TaskName -Action $Action "
+                "-Trigger $Trigger -Settings $Settings "
+                "-Description 'Runs the Arthexis WhatsApp Secretary listener after interactive login.' "
+                "-Force"
+            ),
+            "",
+        ]
+    )
+
+
+def _linux_listener_runner(base_dir: Path, command: list[str | Path]) -> str:
+    return "\n".join(
+        [
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            f"cd {shlex.quote(str(base_dir))}",
+            f"exec {_shell_command(command)}",
+            "",
+        ]
+    )
+
+
+def _linux_systemd_unit(service_name: str, base_dir: Path, runner_path: Path) -> str:
+    return "\n".join(
+        [
+            "[Unit]",
+            f"Description=Arthexis WhatsApp Secretary Listener ({service_name})",
+            "After=graphical-session.target",
+            "Wants=graphical-session.target",
+            "",
+            "[Service]",
+            "Type=simple",
+            f"WorkingDirectory={_systemd_quote(base_dir)}",
+            f"ExecStart={_systemd_quote(runner_path)}",
+            "Restart=always",
+            "RestartSec=30",
+            "Environment=PYTHONUNBUFFERED=1",
+            "",
+            "[Install]",
+            "WantedBy=default.target",
+            "",
+        ]
+    )
+
+
+def build_whatsapp_listener_install_plan(
+    *,
+    phone: str,
+    default_country_code: str = "52",
+    trigger_prefix: str = DEFAULT_WHATSAPP_SECRETARY_TRIGGER_PREFIX,
+    idle_after_seconds: float = DEFAULT_WHATSAPP_SECRETARY_IDLE_AFTER_SECONDS,
+    daemon_poll_seconds: float = DEFAULT_WHATSAPP_SECRETARY_POLL_SECONDS,
+    quiet_window_seconds: float = DEFAULT_WHATSAPP_SECRETARY_QUIET_SECONDS,
+    limit: int = 50,
+    codex_command: str = "codex",
+    secretary_name: str = "Secretary",
+    terminal_title: str = "Arthexis Secretary",
+    profile_dir: Path | str | None = None,
+    browser: str = DEFAULT_WHATSAPP_WEB_BROWSER,
+    channel: str = DEFAULT_WHATSAPP_WEB_CHANNEL,
+    cdp_url: str = "",
+    timeout_seconds: float = 120.0,
+    poll_interval_seconds: float = 1.0,
+    headless: bool = False,
+    platform: str | None = None,
+    base_dir: Path | str | None = None,
+    python_executable: str | Path | None = None,
+    manage_py: Path | str | None = None,
+    service_name: str = "arthexis-whatsapp-listener",
+    output_dir: Path | str | None = None,
+    systemd_user_dir: Path | str | None = None,
+    write_files: bool = False,
+) -> WhatsAppListenerInstallPlan:
+    """Build and optionally write manual provisioning artifacts for listener startup."""
+
+    from django.conf import settings
+
+    resolved_platform = _listener_install_platform(platform)
+    safe_service = _safe_service_name(service_name)
+    resolved_base_dir = Path(base_dir or settings.BASE_DIR).resolve()
+    resolved_profile_dir = Path(profile_dir or DEFAULT_WHATSAPP_WEB_PROFILE_DIR).expanduser()
+    resolved_output_dir = Path(output_dir or _default_listener_install_output_dir(resolved_platform)).expanduser()
+    resolved_python = str(python_executable or sys.executable)
+    resolved_manage_py = Path(manage_py or (resolved_base_dir / "manage.py"))
+    command = _whatsapp_listener_command(
+        phone=phone,
+        default_country_code=default_country_code,
+        trigger_prefix=trigger_prefix,
+        idle_after_seconds=idle_after_seconds,
+        daemon_poll_seconds=daemon_poll_seconds,
+        quiet_window_seconds=quiet_window_seconds,
+        limit=limit,
+        codex_command=codex_command,
+        secretary_name=secretary_name,
+        terminal_title=terminal_title,
+        profile_dir=resolved_profile_dir,
+        browser=browser,
+        channel=channel,
+        cdp_url=cdp_url,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        headless=headless,
+        python_executable=resolved_python,
+        manage_py=resolved_manage_py,
+    )
+
+    wrote_files = False
+    if resolved_platform == "windows":
+        runner_path = resolved_output_dir / f"{safe_service}.ps1"
+        service_path = resolved_output_dir / f"Register-{safe_service}.ps1"
+        listen_command = _powershell_command(command)
+        install_command = (
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass -File "
+            f"{_powershell_quote(service_path)}"
+        )
+        start_command = f"Start-ScheduledTask -TaskName {_powershell_quote(safe_service)}"
+        status_command = f"Get-ScheduledTask -TaskName {_powershell_quote(safe_service)}"
+        stop_command = f"Stop-ScheduledTask -TaskName {_powershell_quote(safe_service)}"
+        uninstall_command = (
+            "Unregister-ScheduledTask -Confirm:$false -TaskName "
+            f"{_powershell_quote(safe_service)}"
+        )
+        requirements = [
+            "Windows interactive user session; do not provision as a non-interactive Windows service.",
+            "Microsoft Edge installed and available to Playwright through the msedge channel.",
+            "Run `python -m playwright install chromium` if Playwright browser assets are missing.",
+            "`whatsapp login` completed for the same persistent profile before unattended startup.",
+            "`codex` available on PATH, or pass --codex-command with its full executable path.",
+        ]
+        instructions = [
+            "Run `python manage.py whatsapp login --timeout 300` in a headed session first.",
+            "Run the install command to register the generated Scheduled Task.",
+            "Use the start command to launch the task immediately, or sign out and back in.",
+            "Use the status command to inspect task registration and the stop/uninstall commands for rollback.",
+        ]
+        if write_files:
+            resolved_output_dir.mkdir(parents=True, exist_ok=True)
+            runner_path.write_text(_windows_listener_runner(resolved_base_dir, command), encoding="utf-8")
+            service_path.write_text(_windows_register_task_script(safe_service, runner_path), encoding="utf-8")
+            wrote_files = True
+    else:
+        runner_path = resolved_output_dir / f"{safe_service}.sh"
+        unit_name = safe_service if safe_service.endswith(".service") else f"{safe_service}.service"
+        service_dir = Path(systemd_user_dir or _default_systemd_user_dir()).expanduser()
+        service_path = service_dir / unit_name
+        listen_command = _shell_command(command)
+        install_command = f"systemctl --user daemon-reload && systemctl --user enable {shlex.quote(unit_name)}"
+        start_command = f"systemctl --user start {shlex.quote(unit_name)}"
+        status_command = f"systemctl --user status {shlex.quote(unit_name)}"
+        stop_command = f"systemctl --user stop {shlex.quote(unit_name)}"
+        uninstall_command = f"systemctl --user disable --now {shlex.quote(unit_name)}"
+        requirements = [
+            "Linux graphical user session with systemd --user available.",
+            "Firefox installed through Playwright; run `python -m playwright install firefox` if needed.",
+            "`loginctl enable-linger <user>` if the listener must survive logout.",
+            "`whatsapp login` completed for the same persistent profile before unattended startup.",
+            "`codex` available on PATH, or pass --codex-command with its full executable path.",
+        ]
+        instructions = [
+            "Run `python manage.py whatsapp login --timeout 300` in a headed graphical session first.",
+            "Run the install command after writing files to enable the generated user unit.",
+            "Use the start command to launch the listener immediately.",
+            "Use the status command for logs and the stop/uninstall commands for rollback.",
+        ]
+        if write_files:
+            resolved_output_dir.mkdir(parents=True, exist_ok=True)
+            service_path.parent.mkdir(parents=True, exist_ok=True)
+            runner_path.write_text(_linux_listener_runner(resolved_base_dir, command), encoding="utf-8")
+            runner_path.chmod(0o755)
+            service_path.write_text(_linux_systemd_unit(unit_name, resolved_base_dir, runner_path), encoding="utf-8")
+            wrote_files = True
+
+    status = "written" if wrote_files else "planned"
+    detail = (
+        "Provisioning files were written; run the install command manually."
+        if wrote_files
+        else "Dry run only; pass --write to create provisioning files."
+    )
+    return WhatsAppListenerInstallPlan(
+        status=status,
+        platform=resolved_platform,
+        service_name=safe_service,
+        base_dir=resolved_base_dir,
+        profile_dir=resolved_profile_dir,
+        output_dir=resolved_output_dir,
+        runner_path=runner_path,
+        service_path=service_path,
+        listen_command=listen_command,
+        install_command=install_command,
+        start_command=start_command,
+        status_command=status_command,
+        stop_command=stop_command,
+        uninstall_command=uninstall_command,
+        wrote_files=wrote_files,
+        requirements=requirements,
+        instructions=instructions,
+        detail=detail,
+    )
 
 
 def listen_for_whatsapp_secretary_requests(

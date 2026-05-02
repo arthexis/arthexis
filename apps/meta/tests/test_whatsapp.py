@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 
 from apps.meta.management.commands import whatsapp as whatsapp_command
 from apps.meta.services import (
@@ -769,3 +770,93 @@ def test_whatsapp_listen_command_outputs_json(monkeypatch, tmp_path):
     payload = json.loads(stdout.getvalue())
     assert payload["status"] == "matched"
     assert payload["message_count"] == 1
+
+
+def test_whatsapp_install_listener_windows_writes_manual_artifacts(tmp_path):
+    output_dir = tmp_path / "install"
+    profile_dir = tmp_path / "profile"
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            "windows",
+            "--output-dir",
+            str(output_dir),
+            "--profile-dir",
+            str(profile_dir),
+            "--codex-command",
+            r"C:\Program Files\Codex\codex.exe",
+            "--write",
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+    runner_path = Path(payload["runner_path"])
+    service_path = Path(payload["service_path"])
+
+    assert payload["status"] == "written"
+    assert payload["platform"] == "windows"
+    assert payload["wrote_files"] is True
+    assert runner_path.exists()
+    assert service_path.exists()
+    assert "--from" in payload["listen_command"]
+    assert "5551234567" in payload["listen_command"]
+    assert "C:\\Program Files\\Codex\\codex.exe" in payload["listen_command"]
+    assert "Register-ScheduledTask" in service_path.read_text(encoding="utf-8")
+    assert "whatsapp" in runner_path.read_text(encoding="utf-8")
+    assert "listen" in runner_path.read_text(encoding="utf-8")
+
+
+def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_path):
+    output_dir = tmp_path / "install"
+    systemd_dir = tmp_path / "systemd-user"
+    stdout = StringIO()
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--platform",
+            "linux",
+            "--output-dir",
+            str(output_dir),
+            "--systemd-user-dir",
+            str(systemd_dir),
+            "--browser",
+            "firefox",
+            "--headless",
+            "--json",
+            stdout=stdout,
+        )
+
+    payload = json.loads(stdout.getvalue())
+
+    assert payload["status"] == "planned"
+    assert payload["platform"] == "linux"
+    assert payload["wrote_files"] is False
+    assert payload["service_path"] == str(systemd_dir / "arthexis-whatsapp-listener.service")
+    assert "systemctl --user enable arthexis-whatsapp-listener.service" in payload["install_command"]
+    assert "--browser firefox" in payload["listen_command"]
+    assert "--headless" in payload["listen_command"]
+    assert not output_dir.exists()
+    assert not systemd_dir.exists()
+
+
+def test_whatsapp_install_listener_rejects_bad_timing():
+    with pytest.raises(CommandError, match="--quiet-window must be >= 1"):
+        call_command(
+            "whatsapp",
+            "install-listener",
+            "--from",
+            "5551234567",
+            "--quiet-window",
+            "0",
+        )
