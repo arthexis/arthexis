@@ -143,15 +143,10 @@ def test_superuser_can_import_valid_package(admin_client, isolated_import_storag
     skill = AgentSkill.objects.get(slug="admin-import")
     assert skill.title == "Admin Upload"
     assert skill.markdown == "---\nname: admin-upload\n---\n"
-    assert list(
-        skill.package_files.order_by("relative_path").values_list(
-            "relative_path",
-            "content",
-        )
-    ) == [
-        ("SKILL.md", "---\nname: admin-upload\n---\n"),
-        ("references/rules.md", "portable rules"),
-    ]
+    assert dict(skill.package_files.values_list("relative_path", "content")) == {
+        "SKILL.md": "---\nname: admin-upload\n---\n",
+        "references/rules.md": "portable rules",
+    }
     assert not isolated_import_storage.exists(storage_name)
 
 
