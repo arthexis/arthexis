@@ -117,13 +117,21 @@ jobs:
                   "Release publish blocked: tag 'v' does not include a version."
               )
 
-          resolved_seed = tag_version or version_seed
+          expected_version = version_seed
 
-          if not resolved_seed:
+          if not expected_version:
               raise SystemExit(
-                  "Release publish blocked: neither tag nor VERSION file provide a seed version."
+                  "Release publish blocked: VERSION file is empty."
               )
 
+          if tag_version and tag_version != expected_version:
+              raise SystemExit(
+                  "Release publish blocked: tag and VERSION mismatch "
+                  f"(tag={tag_version!r}, VERSION={expected_version!r}). "
+                  "Create tags from VERSION to preserve reviewed release intent."
+              )
+
+          resolved_seed = expected_version
 
           def parse_version(value: str):
               match = semver_re.match(value.strip())
@@ -177,18 +185,13 @@ jobs:
                   continue
               published_parts.append(parsed)
 
-          if tag_version:
-              resolved_version = serialize_version(base_parts)
-          else:
-              resolved_parts = base_parts
-              if published_parts:
-                  resolved_parts = max([base_parts] + published_parts)
-              resolved_version = serialize_version(resolved_parts)
-              published = {serialize_version(parts) for parts in published_parts}
+          resolved_parts = base_parts
+          resolved_version = serialize_version(resolved_parts)
+          published = {serialize_version(parts) for parts in published_parts}
 
-              while resolved_version in published:
-                  resolved_parts = bump_patch(parse_version(resolved_version))
-                  resolved_version = serialize_version(resolved_parts)
+          while resolved_version in published:
+              resolved_parts = bump_patch(parse_version(resolved_version))
+              resolved_version = serialize_version(resolved_parts)
 
           version_path.write_text(f"{resolved_version}\n", encoding="utf-8")
 
