@@ -35,10 +35,16 @@ on:
       - "tests/**"
       - "manage.py"
       - "configure.sh"
+      - "env-refresh.bat"
       - "env-refresh.sh"
+      - "install.bat"
       - "install.sh"
+      - "service.bat"
+      - "start.bat"
       - "start.sh"
+      - "stop.bat"
       - "stop.sh"
+      - "upgrade.bat"
       - "upgrade.sh"
   push:
     branches:
@@ -56,14 +62,99 @@ on:
       - 'tests/**'
       - 'manage.py'
       - 'configure.sh'
+      - 'env-refresh.bat'
       - 'env-refresh.sh'
+      - 'install.bat'
       - 'install.sh'
+      - 'service.bat'
+      - 'start.bat'
       - 'start.sh'
+      - 'stop.bat'
       - 'stop.sh'
+      - 'upgrade.bat'
       - 'upgrade.sh'
   workflow_dispatch:
 
 jobs:
+  cold_install_smoke:
+    name: Cold Linux install smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install base system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl git python3-venv \
+            libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
+            libpangocairo-1.0-0 shared-mime-info
+
+      - name: Run cold install smoke
+        run: |
+          ./scripts/ci/install-linux-smoke.sh --cold
+
+  windows_install_smoke:
+    name: Windows install.bat smoke
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      ARTHEXIS_DB_BACKEND: sqlite
+      PYTHONDONTWRITEBYTECODE: '1'
+      NODE_OPTIONS: '--no-deprecation'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install GTK runtime for WeasyPrint
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-gdk-pixbuf2
+            mingw-w64-x86_64-libffi
+            mingw-w64-x86_64-pango
+
+      - name: Add GTK runtime to PATH
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Run Windows install smoke
+        shell: pwsh
+        run: |
+          .\scripts\ci\install-windows-smoke.ps1
+
   upgrade:
     name: Upgrade safety gate
     runs-on: ubuntu-latest
