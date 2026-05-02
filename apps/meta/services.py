@@ -801,6 +801,10 @@ def _merge_message_batches(
     return merged, changed
 
 
+def _split_windows_command_line(value: str) -> list[str]:
+    return [part.strip("\"") for part in shlex.split(value, posix=False)]
+
+
 def launch_codex_secretary_terminal(
     prompt: str,
     *,
@@ -812,7 +816,8 @@ def launch_codex_secretary_terminal(
     from apps.terminals.tasks import launch_command_in_terminal
 
     if sys.platform == "win32":
-        command = [codex_command.strip() or "codex", prompt]
+        command = _split_windows_command_line(codex_command.strip() or "codex")
+        command.append(prompt)
     else:
         command = [*shlex.split(codex_command or "codex"), prompt]
     launch_path = launch_command_in_terminal(

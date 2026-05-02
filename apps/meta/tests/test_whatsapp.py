@@ -510,10 +510,15 @@ def test_secretary_launcher_preserves_windows_codex_path(monkeypatch, tmp_path):
 
     detail = launch_codex_secretary_terminal(
         "prompt",
-        codex_command=r"C:\Program Files\Codex\codex.exe",
+        codex_command=r'"C:\Program Files\Codex\codex.exe" --model gpt-5',
     )
 
-    assert captured["command"] == [r"C:\Program Files\Codex\codex.exe", "prompt"]
+    assert captured["command"] == [
+        r"C:\Program Files\Codex\codex.exe",
+        "--model",
+        "gpt-5",
+        "prompt",
+    ]
     assert captured["kwargs"]["state_key"] == "whatsapp-secretary"
     assert "terminal.pid" in detail
 
