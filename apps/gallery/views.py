@@ -1,13 +1,15 @@
-from datetime import datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db.models import Count, IntegerField, Q, Sum, Value
 from django.db.models.functions import Coalesce
@@ -20,6 +22,11 @@ from django.views import View
 from apps.shop.models import ShopProduct
 from apps.sites.utils import landing
 
+from .constants import (
+    GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE,
+    GALLERY_AP_GUEST_PAGE_SIZE,
+    GALLERY_AP_GUEST_SESSION_KEY,
+)
 from .forms import (
     GalleryCategoryForm,
     GalleryCreditForm,
@@ -30,7 +37,6 @@ from .forms import (
     GalleryTraitForm,
     GalleryUploadForm,
 )
-from .constants import GALLERY_AP_GUEST_SESSION_KEY
 from .models import GalleryImage, GalleryImageReaction
 from .permissions import can_manage_gallery
 from .services import create_gallery_image, create_guest_gallery_image
@@ -225,27 +231,22 @@ def _ap_guest_key(request) -> str:
     return guest_key
 
 
-def _ap_gallery_redirect(sort_key: str):
+def _ap_gallery_redirect(sort_key: str, *, page_number=None):
     url = reverse("gallery:ap")
+    params = {}
     if sort_key:
-        url = f"{url}?{urlencode({'sort': sort_key})}"
+        params["sort"] = sort_key
+    if page_number and str(page_number) != "1":
+        params["page"] = page_number
+    if params:
+        url = f"{url}?{urlencode(params)}"
     return redirect(url)
 
 
-def _ap_guest_upload_window(*, now=None):
-    current_time = timezone.localtime(now or timezone.now())
-    current_date = current_time.date()
-    current_zone = timezone.get_current_timezone()
-    start = timezone.make_aware(datetime.combine(current_date, time.min), current_zone)
-    return start, start + timedelta(days=1)
-
-
 def _ap_guest_uploaded_today(guest_key: str) -> bool:
-    start, end = _ap_guest_upload_window()
     return GalleryImage.objects.filter(
         guest_key=guest_key,
-        media_file__uploaded_at__gte=start,
-        media_file__uploaded_at__lt=end,
+        guest_upload_date=timezone.localdate(),
     ).exists()
 
 
@@ -286,10 +287,37 @@ def _sort_ap_gallery_images(queryset, sort_key: str):
     return queryset.order_by("-media_file__uploaded_at", "-id")
 
 
-def _render_ap_gallery_guest(request, *, guest_key: str, sort_key: str, upload_form):
+def _ap_gallery_page_size() -> int:
+    try:
+        page_size = int(
+            getattr(settings, "GALLERY_AP_GUEST_PAGE_SIZE", GALLERY_AP_GUEST_PAGE_SIZE)
+        )
+    except (TypeError, ValueError):
+        return GALLERY_AP_GUEST_PAGE_SIZE
+    return max(1, page_size)
+
+
+def _validation_error_messages(exc: ValidationError):
+    if hasattr(exc, "message_dict"):
+        for field_messages in exc.message_dict.values():
+            for message in field_messages:
+                yield str(message)
+        return
+    for message in exc.messages:
+        yield str(message)
+
+
+def _render_ap_gallery_guest(
+    request, *, guest_key: str, sort_key: str, upload_form, page_number=None
+):
     upload_allowed = not _ap_guest_uploaded_today(guest_key)
     show_upload_form = upload_allowed or bool(upload_form.errors)
-    images = list(_sort_ap_gallery_images(_ap_gallery_images(), sort_key))
+    paginator = Paginator(
+        _sort_ap_gallery_images(_ap_gallery_images(), sort_key),
+        _ap_gallery_page_size(),
+    )
+    page_obj = paginator.get_page(page_number)
+    images = list(page_obj.object_list)
     reactions = dict(
         GalleryImageReaction.objects.filter(
             image_id__in=[image.id for image in images],
@@ -298,12 +326,15 @@ def _render_ap_gallery_guest(request, *, guest_key: str, sort_key: str, upload_f
     )
     for image in images:
         image.guest_reaction = reactions.get(image.id)
+    page_obj.object_list = images
 
     return render(
         request,
         "gallery/ap_guest.html",
         {
-            "images": images,
+            "images": page_obj,
+            "is_paginated": page_obj.has_other_pages(),
+            "page_obj": page_obj,
             "sort_key": sort_key,
             "sort_options": (
                 ("date", "Date"),
@@ -329,25 +360,32 @@ class GalleryApGuestView(View):
             guest_key=guest_key,
             sort_key=sort_key,
             upload_form=GalleryGuestUploadForm(),
+            page_number=request.GET.get("page"),
         )
 
     def post(self, request):
         guest_key = _ap_guest_key(request)
         sort_key = _ap_gallery_sort_key(request.POST.get("sort"))
+        page_number = request.POST.get("page")
         upload_form = GalleryGuestUploadForm()
         action = request.POST.get("action", "")
         if action == "upload":
             upload_form = GalleryGuestUploadForm(request.POST, request.FILES)
             if _ap_guest_uploaded_today(guest_key):
-                upload_form.add_error(None, "You can upload one image per day.")
+                upload_form.add_error(None, GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE)
             elif upload_form.is_valid():
-                create_guest_gallery_image(
-                    uploaded_file=upload_form.cleaned_data["image"],
-                    title=upload_form.cleaned_data["title"],
-                    guest_key=guest_key,
-                )
-                messages.success(request, "Image uploaded.")
-                return _ap_gallery_redirect(sort_key)
+                try:
+                    create_guest_gallery_image(
+                        uploaded_file=upload_form.cleaned_data["image"],
+                        title=upload_form.cleaned_data["title"],
+                        guest_key=guest_key,
+                    )
+                except ValidationError as exc:
+                    for message in _validation_error_messages(exc):
+                        upload_form.add_error(None, message)
+                else:
+                    messages.success(request, "Image uploaded for gallery review.")
+                    return _ap_gallery_redirect(sort_key)
         elif action == "react":
             reaction_value = {
                 "like": GalleryImageReaction.LIKE,
@@ -355,21 +393,26 @@ class GalleryApGuestView(View):
             }.get(request.POST.get("reaction", ""))
             if reaction_value is None:
                 return JsonResponse({"detail": "invalid reaction"}, status=400)
+            try:
+                image_slug = UUID((request.POST.get("image_slug") or "").strip())
+            except (AttributeError, TypeError, ValueError):
+                return JsonResponse({"detail": "invalid image"}, status=400)
             image = get_object_or_404(
                 GalleryImage.objects.filter(public_release_at__lte=timezone.now()),
-                slug=request.POST.get("image_slug", ""),
+                slug=image_slug,
             )
             GalleryImageReaction.objects.update_or_create(
                 image=image,
                 guest_key=guest_key,
                 defaults={"value": reaction_value},
             )
-            return _ap_gallery_redirect(sort_key)
+            return _ap_gallery_redirect(sort_key, page_number=page_number)
         return _render_ap_gallery_guest(
             request,
             guest_key=guest_key,
             sort_key=sort_key,
             upload_form=upload_form,
+            page_number=page_number,
         )
 
 

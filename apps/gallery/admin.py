@@ -31,8 +31,9 @@ class GalleryImageAdmin(admin.ModelAdmin):
         "owner_user",
         "owner_group",
         "guest_key",
+        "guest_upload_date",
     )
-    list_filter = ("public_release_at", "categories")
+    list_filter = ("public_release_at", "guest_upload_date", "categories")
     search_fields = ("title", "description", "guest_key")
     filter_horizontal = ("categories",)
     inlines = (GalleryCreditInline, GalleryImageTraitInline)

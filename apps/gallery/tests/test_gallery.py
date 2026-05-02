@@ -1,11 +1,12 @@
 import json
-from pathlib import Path
-from io import BytesIO
 from datetime import timedelta
+from io import BytesIO
+from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import signing
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -26,7 +27,7 @@ from ..models import (
     GalleryImageTrait,
     GalleryTrait,
 )
-from ..services import create_gallery_image
+from ..services import create_gallery_image, create_guest_gallery_image
 from ..views import _apply_gallery_search
 
 
@@ -450,7 +451,7 @@ class GalleryApGuestTests(TestCase):
             public_release_at=timezone.now(),
         )
 
-    def test_ap_guest_can_upload_public_image_with_title_only(self):
+    def test_ap_guest_can_upload_image_with_title_only_for_review(self):
         response = self.client.post(
             reverse("gallery:ap"),
             {
@@ -464,9 +465,50 @@ class GalleryApGuestTests(TestCase):
         image = GalleryImage.objects.get(title="Guest Mural")
         self.assertEqual(image.description, "")
         self.assertTrue(image.guest_key)
+        self.assertEqual(image.guest_upload_date, timezone.localdate())
         self.assertIsNone(image.owner_user_id)
         self.assertIsNone(image.owner_group_id)
-        self.assertTrue(image.is_publicly_visible())
+        self.assertFalse(image.is_publicly_visible())
+
+        gallery_response = self.client.get(reverse("gallery:ap"))
+        self.assertNotContains(gallery_response, "Guest Mural")
+
+    def test_ap_guest_upload_service_enforces_daily_uniqueness(self):
+        first = create_guest_gallery_image(
+            uploaded_file=self._upload("first.jpg"),
+            title="First",
+            guest_key="same-guest",
+        )
+
+        with self.assertRaises(ValidationError):
+            create_guest_gallery_image(
+                uploaded_file=self._upload("second.jpg"),
+                title="Second",
+                guest_key=first.guest_key,
+            )
+
+        self.assertEqual(
+            GalleryImage.objects.filter(guest_key=first.guest_key).count(),
+            1,
+        )
+        self.assertFalse(GalleryImage.objects.filter(title="Second").exists())
+
+    def test_ap_guest_upload_failure_cleans_up_media_file(self):
+        before_count = MediaFile.objects.count()
+
+        with mock.patch(
+            "apps.gallery.services.GalleryImage.objects.create",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                create_guest_gallery_image(
+                    uploaded_file=self._upload("cleanup-guest.jpg"),
+                    title="Cleanup Guest",
+                    guest_key="cleanup-guest",
+                )
+
+        self.assertEqual(MediaFile.objects.count(), before_count)
+        self.assertFalse(GalleryImage.objects.filter(title="Cleanup Guest").exists())
 
     def test_ap_guest_upload_is_limited_to_one_image_per_day(self):
         first_response = self.client.post(
@@ -584,6 +626,44 @@ class GalleryApGuestTests(TestCase):
 
         date_response = self.client.get(reverse("gallery:ap"), {"sort": "date"})
         self.assertEqual(date_response.context["images"][0].title, "Quiet")
+
+    def test_ap_guest_reaction_rejects_malformed_image_slug(self):
+        response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "react",
+                "image_slug": "not-a-uuid",
+                "reaction": "like",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertJSONEqual(response.content, {"detail": "invalid image"})
+        self.assertFalse(GalleryImageReaction.objects.exists())
+
+    @override_settings(GALLERY_AP_GUEST_PAGE_SIZE=2)
+    def test_ap_guest_gallery_paginates_public_images(self):
+        self._create_public_image("Alpha", color="red")
+        self._create_public_image("Bravo", color="green")
+        self._create_public_image("Charlie", color="blue")
+
+        first_page = self.client.get(reverse("gallery:ap"), {"sort": "title"})
+        second_page = self.client.get(
+            reverse("gallery:ap"),
+            {"sort": "title", "page": "2"},
+        )
+
+        self.assertEqual(
+            [image.title for image in first_page.context["images"]],
+            ["Alpha", "Bravo"],
+        )
+        self.assertTrue(first_page.context["is_paginated"])
+        self.assertContains(first_page, "Next")
+        self.assertNotContains(first_page, "Charlie")
+        self.assertEqual(
+            [image.title for image in second_page.context["images"]],
+            ["Charlie"],
+        )
 
 
 def test_gallery_module_fixture_exposes_ap_guest_landing():

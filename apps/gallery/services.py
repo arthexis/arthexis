@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.content.models import ContentSample
@@ -10,7 +10,7 @@ from apps.content.utils import save_content_sample
 from apps.groups.models import SecurityGroup
 from apps.media.utils import create_media_file, ensure_media_bucket
 
-from .constants import GALLERY_BUCKET_SLUG
+from .constants import GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE, GALLERY_BUCKET_SLUG
 from .models import GalleryImage
 
 
@@ -109,18 +109,29 @@ def create_guest_gallery_image(
     if not guest_key:
         raise ValidationError({"guest": "Guest session is required."})
 
-    bucket = get_gallery_bucket()
-    media_file = create_media_file(bucket=bucket, uploaded_file=uploaded_file)
+    media_file = None
     try:
-        return GalleryImage.objects.create(
-            media_file=media_file,
-            title=title,
-            description="",
-            public_release_at=timezone.now(),
-            guest_key=guest_key,
-        )
+        with transaction.atomic():
+            bucket = get_gallery_bucket()
+            media_file = create_media_file(bucket=bucket, uploaded_file=uploaded_file)
+            return GalleryImage.objects.create(
+                media_file=media_file,
+                title=title,
+                description="",
+                # Guest uploads reuse the existing release timestamp as the review gate.
+                public_release_at=None,
+                guest_key=guest_key,
+                guest_upload_date=timezone.localdate(),
+            )
+    except IntegrityError as exc:
+        if media_file is not None:
+            if media_file.file:
+                media_file.file.delete(save=False)
+            media_file.delete()
+        raise ValidationError({"guest": GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE}) from exc
     except Exception:
-        if media_file.file:
+        if media_file is not None and media_file.file:
             media_file.file.delete(save=False)
-        media_file.delete()
+        if media_file is not None:
+            media_file.delete()
         raise

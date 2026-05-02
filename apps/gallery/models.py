@@ -96,6 +96,13 @@ class GalleryImage(Entity):
         db_index=True,
         help_text=_("Anonymous AP guest session key for public guest uploads."),
     )
+    guest_upload_date = models.DateField(
+        null=True,
+        blank=True,
+        editable=False,
+        db_index=True,
+        help_text=_("Local AP guest upload date used to enforce daily limits."),
+    )
 
     class Meta:
         verbose_name = _("Gallery Image")
@@ -120,7 +127,19 @@ class GalleryImage(Entity):
                     )
                 ),
                 name="gallery_image_single_owner",
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (Q(guest_key="") & Q(guest_upload_date__isnull=True))
+                    | (~Q(guest_key="") & Q(guest_upload_date__isnull=False))
+                ),
+                name="gallery_image_guest_upload_date_required",
+            ),
+            models.UniqueConstraint(
+                condition=~Q(guest_key="") & Q(guest_upload_date__isnull=False),
+                fields=("guest_key", "guest_upload_date"),
+                name="gallery_image_one_guest_upload_per_day",
+            ),
         ]
 
     def __str__(self) -> str:

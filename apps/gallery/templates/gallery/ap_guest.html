@@ -11,13 +11,6 @@
     object-fit: cover;
   }
 
-  .ap-gallery-toolbar {
-    gap: 0.5rem;
-  }
-
-  .ap-gallery-reactions {
-    gap: 0.5rem;
-  }
 </style>
 {% endblock %}
 
@@ -25,7 +18,7 @@
 <div class="container py-4">
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <h1 class="h3 mb-0">{% trans "Gallery" %}</h1>
-    <form class="d-flex flex-wrap ap-gallery-toolbar" method="get">
+    <form class="d-flex flex-wrap gap-2" method="get">
       {% for value, label in sort_options %}
         <button
           class="btn btn-sm {% if sort_key == value %}btn-primary{% else %}btn-outline-primary{% endif %}"
@@ -87,10 +80,11 @@
             <p class="text-muted small mb-3">
               {% blocktrans with likes=image.like_count dislikes=image.dislike_count score=image.popularity_score %}{{ likes }} likes, {{ dislikes }} dislikes, score {{ score }}{% endblocktrans %}
             </p>
-            <form method="post" class="d-flex ap-gallery-reactions mt-auto">
+            <form method="post" class="d-flex gap-2 mt-auto">
               {% csrf_token %}
               <input type="hidden" name="action" value="react">
               <input type="hidden" name="sort" value="{{ sort_key }}">
+              <input type="hidden" name="page" value="{{ page_obj.number }}">
               <input type="hidden" name="image_slug" value="{{ image.slug }}">
               <button
                 class="btn btn-sm {% if image.guest_reaction == 1 %}btn-success{% else %}btn-outline-success{% endif %}"
@@ -118,5 +112,31 @@
       </div>
     {% endfor %}
   </div>
+
+  {% if is_paginated %}
+    <nav class="mt-4" aria-label="{% trans "Gallery pages" %}">
+      <ul class="pagination justify-content-center mb-0">
+        <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+          {% if page_obj.has_previous %}
+            <a class="page-link" href="?sort={{ sort_key }}&page={{ page_obj.previous_page_number }}">{% trans "Previous" %}</a>
+          {% else %}
+            <span class="page-link">{% trans "Previous" %}</span>
+          {% endif %}
+        </li>
+        <li class="page-item active" aria-current="page">
+          <span class="page-link">
+            {% blocktrans with page=page_obj.number pages=page_obj.paginator.num_pages %}Page {{ page }} of {{ pages }}{% endblocktrans %}
+          </span>
+        </li>
+        <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+          {% if page_obj.has_next %}
+            <a class="page-link" href="?sort={{ sort_key }}&page={{ page_obj.next_page_number }}">{% trans "Next" %}</a>
+          {% else %}
+            <span class="page-link">{% trans "Next" %}</span>
+          {% endif %}
+        </li>
+      </ul>
+    </nav>
+  {% endif %}
 </div>
 {% endblock %}
