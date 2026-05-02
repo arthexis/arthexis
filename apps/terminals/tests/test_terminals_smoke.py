@@ -118,7 +118,9 @@ def test_launch_command_in_terminal_uses_script_file_on_posix(tmp_path, monkeypa
     assert script_path.exists()
     assert launched["command"][-3:] == ["sh", "-lc", f". {tasks.shlex.quote(str(script_path))}"]
     assert "super-secret-value" not in " ".join(launched["command"])
-    assert pid_file.read_text(encoding="utf-8").splitlines()[1].endswith(str(script_path))
+    metadata = pid_file.read_text(encoding="utf-8").splitlines()[1]
+    assert str(script_path) in metadata
+    assert "super-secret-value" not in metadata
 
 
 def test_windows_terminal_executable_supports_arguments(tmp_path, monkeypatch):
