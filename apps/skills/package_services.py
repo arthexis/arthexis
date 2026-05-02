@@ -54,6 +54,11 @@ OPERATOR_PATH_MARKERS = (
     ".codex\\",
     ".codex/",
 )
+MAX_PACKAGE_FILES = 256
+MAX_PACKAGE_MANIFEST_BYTES = 1024 * 1024
+MAX_PACKAGE_FILE_BYTES = 2 * 1024 * 1024
+MAX_PACKAGE_TOTAL_BYTES = 16 * 1024 * 1024
+MAX_PACKAGE_COMPRESSION_RATIO = 200
 
 
 class CodexSkillPackageImportError(ValueError):
@@ -404,13 +409,35 @@ def _import_file_spec(file_info: dict, content: str) -> dict:
     }
 
 
-def _read_package_text(package: ZipFile, archive_path: str) -> str:
+def _package_entry_info(package: ZipFile, archive_path: str):
     try:
-        content = package.read(archive_path)
+        return package.getinfo(archive_path)
     except KeyError as error:
         raise CodexSkillPackageImportError(
             f"Missing package file: {archive_path}"
         ) from error
+
+
+def _validate_package_entry_size(info, archive_path: str, *, max_size_bytes: int) -> None:
+    if info.file_size > max_size_bytes:
+        raise CodexSkillPackageImportError(f"Package file too large: {archive_path}")
+    if info.compress_size > 0:
+        ratio = info.file_size / info.compress_size
+        if ratio > MAX_PACKAGE_COMPRESSION_RATIO:
+            raise CodexSkillPackageImportError(
+                f"Suspicious package compression ratio: {archive_path}"
+            )
+
+
+def _read_package_text(
+    package: ZipFile,
+    archive_path: str,
+    *,
+    max_size_bytes: int = MAX_PACKAGE_FILE_BYTES,
+) -> str:
+    info = _package_entry_info(package, archive_path)
+    _validate_package_entry_size(info, archive_path, max_size_bytes=max_size_bytes)
+    content = package.read(archive_path)
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -427,6 +454,8 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
         raise CodexSkillPackageImportError("Package manifest skills must be a list")
     validated_skills = []
     seen_slugs = set()
+    total_file_bytes = 0
+    file_count = 0
     for skill_entry in skills:
         if not isinstance(skill_entry, dict):
             raise CodexSkillPackageImportError("Package skill entries must be objects")
@@ -480,6 +509,16 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
                 )
             seen_paths.add(file_info["path"])
             archive_path = f"skills/{slug}/{file_info['path']}"
+            info = _package_entry_info(package, archive_path)
+            _validate_package_entry_size(
+                info, archive_path, max_size_bytes=MAX_PACKAGE_FILE_BYTES
+            )
+            total_file_bytes += info.file_size
+            file_count += 1
+            if file_count > MAX_PACKAGE_FILES:
+                raise CodexSkillPackageImportError("Package contains too many files")
+            if total_file_bytes > MAX_PACKAGE_TOTAL_BYTES:
+                raise CodexSkillPackageImportError("Package content exceeds size limit")
             content_by_path[file_info["path"]] = _read_package_text(
                 package,
                 archive_path,
@@ -744,13 +783,12 @@ def import_codex_skill_package(
         package_label = str(getattr(package_path, "name", "<uploaded package>"))
 
     with ZipFile(package_source) as package:
-        try:
-            manifest_bytes = package.read("manifest.json")
-        except KeyError as error:
-            raise CodexSkillPackageImportError(
-                "Missing required manifest.json"
-            ) from error
-        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        manifest_text = _read_package_text(
+            package,
+            "manifest.json",
+            max_size_bytes=MAX_PACKAGE_MANIFEST_BYTES,
+        )
+        manifest = json.loads(manifest_text)
         if not isinstance(manifest, dict):
             raise CodexSkillPackageImportError("Package manifest must be an object")
         if manifest.get("format") != PACKAGE_FORMAT:

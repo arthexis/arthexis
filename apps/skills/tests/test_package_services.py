@@ -606,6 +606,38 @@ def test_import_dry_run_rejects_non_utf8_package_files(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_dry_run_rejects_oversized_manifest(tmp_path):
+    package_path = tmp_path / "oversized-manifest.zip"
+    huge_manifest = "{" + ('"x":' + '"' + ("a" * (1024 * 1024)) + '"') + "}"
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", huge_manifest)
+
+    with pytest.raises(ValueError, match="Package file too large: manifest.json"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
+def test_import_dry_run_rejects_oversized_package_file(tmp_path):
+    package_path = tmp_path / "oversized-file.zip"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "large-file",
+                "title": "Large File",
+                "files": [{"path": "SKILL.md", "included_by_default": True}],
+            }
+        ],
+    }
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+        package.writestr("skills/large-file/SKILL.md", "a" * ((2 * 1024 * 1024) + 1))
+
+    with pytest.raises(ValueError, match="Package file too large"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
 def test_import_rejects_duplicate_manifest_paths(tmp_path):
     package_path = tmp_path / "duplicate-path.zip"
     manifest = {
