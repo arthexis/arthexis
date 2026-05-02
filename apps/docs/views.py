@@ -15,6 +15,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
 from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
 from apps.gallery.models import GalleryImage
