@@ -34,9 +34,11 @@ jobs:
           --health-retries 5
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
+      RELEASE_REF: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ env.RELEASE_REF }}
           clean: false
       - uses: actions/setup-python@v6
         with:
@@ -90,17 +92,19 @@ jobs:
     name: Build distributions
     needs: test
     runs-on: ubuntu-latest
+    env:
+      RELEASE_REF: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
 
       - name: Resolve publish version against PyPI
         id: resolve_publish_version
         env:
-          RELEASE_TAG: ${{ inputs.release_tag || '' }}
+          RELEASE_TAG: ${{ env.RELEASE_REF }}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -119,9 +123,12 @@ jobs:
           version_path = root / "VERSION"
           version_seed = version_path.read_text(encoding="utf-8").strip()
           ref_name = os.environ.get("RELEASE_TAG") or os.environ["GITHUB_REF_NAME"].strip()
-          tag_version = ref_name[1:] if ref_name.startswith("v") else ""
-
-          if ref_name.startswith("v") and not tag_version:
+          if not ref_name.startswith("v"):
+              raise SystemExit(
+                  "Release publish blocked: release ref must be a version tag like 'v1.2.3'."
+              )
+          tag_version = ref_name[1:]
+          if not tag_version:
               raise SystemExit(
                   "Release publish blocked: tag 'v' does not include a version."
               )
@@ -133,7 +140,7 @@ jobs:
                   "Release publish blocked: VERSION file is empty."
               )
 
-          if tag_version and tag_version != expected_version:
+          if tag_version != expected_version:
               raise SystemExit(
                   "Release publish blocked: tag and VERSION mismatch "
                   f"(tag={tag_version!r}, VERSION={expected_version!r}). "
