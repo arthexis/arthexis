@@ -174,6 +174,46 @@ def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritabl
     assert tasks._terminal_state_dir() == tmp_path / "tmp" / "arthexis-agent-terminals"
 
 
+def test_launch_terminal_rejects_symlinked_pid_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tasks, "_is_windows", lambda: False)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("ORIGINAL", encoding="utf-8")
+    (tmp_path / "None.pid").symlink_to(victim)
+    terminal = AgentTerminal(name="symlink-test", launch_command="echo ready")
+
+    class FakeProcess:
+        pid = 1234
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", lambda command: FakeProcess())
+
+    with pytest.raises(OSError):
+        tasks._launch_terminal(terminal)
+
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL"
+
+
+def test_launch_terminal_rejects_symlinked_state_dir(tmp_path, monkeypatch):
+    target = tmp_path / "target"
+    target.mkdir()
+    state_dir = tmp_path / "state-link"
+    try:
+        state_dir.symlink_to(target, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("directory symlinks are unavailable")
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(state_dir))
+    monkeypatch.setattr(tasks, "_is_windows", lambda: False)
+    terminal = AgentTerminal(name="symlink-state", launch_command="echo ready")
+
+    class FakeProcess:
+        pid = 1234
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", lambda command: FakeProcess())
+
+    with pytest.raises(PermissionError, match="state dir must not be a symlink"):
+        tasks._launch_terminal(terminal)
+
+
 def test_command_metadata_is_unquoted_and_single_line():
     metadata = tasks._command_metadata(
         ["x-terminal-emulator", "-e", "sh", "-lc", "echo ready\nprintf done"]
