@@ -60,7 +60,7 @@ def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
 
     assert result["authorized"] is True
     assert result["mac_address"] == "aa:bb:cc:dd:ee:ff"
-    assert result["redirect_url"] == "http://10.42.0.1:8888/login/"
+    assert result["redirect_url"] == "https://10.42.0.1:8888/login/"
     assert "ARE being monitored" in result["monitoring_notice"]
     assert state.config.authorized_macs_path.read_text(encoding="utf-8") == "aa:bb:cc:dd:ee:ff\n"
 
@@ -402,7 +402,7 @@ def test_status_redirects_authorized_client_to_suite_login_port(tmp_path):
     )
 
     assert payload["authorized"] is True
-    assert payload["authorized_redirect_url"] == "http://10.42.0.1:8888/login/"
+    assert payload["authorized_redirect_url"] == "https://10.42.0.1:8888/login/"
     assert payload["redirect_delay_ms"] == module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
 
 
@@ -440,7 +440,7 @@ def test_suite_login_redirect_defaults_to_gateway_host():
             port=8888,
             path="login/",
         )
-        == "http://10.42.0.1:8888/login/"
+        == "https://10.42.0.1:8888/login/"
     )
 
 
@@ -455,7 +455,7 @@ def test_suite_login_redirect_brackets_raw_ipv6_gateway_host():
             port=8888,
             path="/login/",
         )
-        == "http://[fd42:0:0:42::1]:8888/login/"
+        == "https://[fd42:0:0:42::1]:8888/login/"
     )
 
 
@@ -470,7 +470,7 @@ def test_suite_login_redirect_can_reuse_current_host_without_existing_port():
             port=8888,
             path="login/",
         )
-        == "http://127.0.0.1:8888/login/"
+        == "https://127.0.0.1:8888/login/"
     )
 
 

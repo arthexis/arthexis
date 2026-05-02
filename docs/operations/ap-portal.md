@@ -29,7 +29,7 @@ the portal synchronize nftables authorization rules. In this local-only mode,
 loopback clients use a deterministic development MAC (`02:00:00:00:00:01`) so
 the consent flow can be previewed from a browser without an AP neighbor table.
 Authorized clients wait three seconds on the portal status message, then redirect
-to the suite login at `http://10.42.0.1:8888/login/` by default. Override
+to the suite login at `https://10.42.0.1:8888/login/` by default. Override
 `--suite-login-scheme`, `--suite-login-host`, `--suite-login-port`, or
 `--suite-login-path` only for gateways that use a different AP-side suite
 address. Override `--authorized-redirect-delay-ms` when authorized clients
