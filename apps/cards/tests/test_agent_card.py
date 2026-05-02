@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from apps.cards.agent_card import (
+    _expected_reader_proof,
     AgentCardError,
     build_agent_card_sector_payloads,
     parse_agent_card,
@@ -167,6 +169,7 @@ def test_plan_agent_activation_rejects_unknown_reader_trust():
 
 def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface():
     card = parse_agent_card(valid_agent_card_records())
+    observed_at = datetime.now(timezone.utc).isoformat()
 
     plan = plan_agent_activation(
         card,
@@ -174,8 +177,14 @@ def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface(
             "reader_id": "reader-1",
             "node_id": "node-1",
             "trust_tier": "trusted_operator_console",
-            "observed_at": datetime.now(timezone.utc).isoformat(),
-            "proof": "signed",
+            "observed_at": observed_at,
+            "proof": _expected_reader_proof(
+                trust_tier="trusted_operator_console",
+                reader_id="reader-1",
+                node_id="node-1",
+                observed_at=observed_at,
+                manifest_fingerprint=card.fingerprint,
+            ),
         },
         skill_bundle_id=1,
         interface_spec_id=2,
@@ -186,8 +195,9 @@ def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface(
     assert plan.capability_sigils
 
 
-def test_plan_agent_activation_rejects_future_reader_timestamp():
+def test_plan_agent_activation_accepts_datetime_reader_timestamp():
     card = parse_agent_card(valid_agent_card_records())
+    observed_at = datetime.now(timezone.utc)
 
     plan = plan_agent_activation(
         card,
@@ -195,8 +205,41 @@ def test_plan_agent_activation_rejects_future_reader_timestamp():
             "reader_id": "reader-1",
             "node_id": "node-1",
             "trust_tier": "trusted_operator_console",
-            "observed_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
-            "proof": "signed",
+            "observed_at": observed_at,
+            "proof": _expected_reader_proof(
+                trust_tier="trusted_operator_console",
+                reader_id="reader-1",
+                node_id="node-1",
+                observed_at=observed_at,
+                manifest_fingerprint=card.fingerprint,
+            ),
+        },
+        skill_bundle_id=1,
+        interface_spec_id=2,
+    )
+
+    assert plan.accepted is True
+    assert plan.status == "ready"
+
+
+def test_plan_agent_activation_rejects_future_reader_timestamp():
+    card = parse_agent_card(valid_agent_card_records())
+    observed_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    plan = plan_agent_activation(
+        card,
+        {
+            "reader_id": "reader-1",
+            "node_id": "node-1",
+            "trust_tier": "trusted_operator_console",
+            "observed_at": observed_at,
+            "proof": _expected_reader_proof(
+                trust_tier="trusted_operator_console",
+                reader_id="reader-1",
+                node_id="node-1",
+                observed_at=observed_at,
+                manifest_fingerprint=card.fingerprint,
+            ),
         },
         skill_bundle_id=1,
         interface_spec_id=2,
@@ -205,3 +248,55 @@ def test_plan_agent_activation_rejects_future_reader_timestamp():
     assert plan.accepted is False
     assert plan.status == "rejected"
     assert "future" in plan.reason
+
+
+def test_plan_agent_activation_rejects_unbound_reader_proof():
+    card = parse_agent_card(valid_agent_card_records())
+
+    plan = plan_agent_activation(
+        card,
+        {
+            "reader_id": "reader-1",
+            "node_id": "node-1",
+            "trust_tier": "trusted_operator_console",
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "proof": "not-a-signature",
+        },
+        skill_bundle_id=1,
+        interface_spec_id=2,
+    )
+
+    assert plan.accepted is False
+    assert plan.status == "rejected"
+    assert "invalid" in plan.reason
+
+
+def test_plan_agent_activation_rejects_plain_hash_reader_proof():
+    card = parse_agent_card(valid_agent_card_records())
+    observed_at = datetime.now(timezone.utc).isoformat()
+    payload = "|".join(
+        (
+            "trusted_operator_console",
+            "reader-1",
+            "node-1",
+            observed_at,
+            card.fingerprint,
+        )
+    )
+
+    plan = plan_agent_activation(
+        card,
+        {
+            "reader_id": "reader-1",
+            "node_id": "node-1",
+            "trust_tier": "trusted_operator_console",
+            "observed_at": observed_at,
+            "proof": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+        },
+        skill_bundle_id=1,
+        interface_spec_id=2,
+    )
+
+    assert plan.accepted is False
+    assert plan.status == "rejected"
+    assert "invalid" in plan.reason

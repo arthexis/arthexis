@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from django.conf import settings
 
 AGENT_CARD_PREFIX = "AC1"
 APPLICATION_SECTORS = range(1, 16)
@@ -16,6 +20,7 @@ PRINTABLE_ASCII_MIN = 32
 PRINTABLE_ASCII_MAX = 126
 FRESH_READER_EVENT_SECONDS = 300
 FUTURE_READER_EVENT_SKEW_SECONDS = 30
+READER_PROOF_SECRET_SETTING = "AGENT_CARD_READER_PROOF_SECRET"
 
 TRUST_TIERS = {
     "unknown",
@@ -417,6 +422,45 @@ def _candidate_id(candidate: Mapping[str, Any] | object) -> str:
     return str(getattr(candidate, "id", None) or getattr(candidate, "soul_id", "") or getattr(candidate, "name", ""))
 
 
+def _expected_reader_proof(
+    *,
+    trust_tier: str,
+    reader_id: str,
+    node_id: str,
+    observed_at: str | datetime,
+    manifest_fingerprint: str,
+    secret: str | bytes | None = None,
+) -> str:
+    payload = {
+        "manifest_fingerprint": str(manifest_fingerprint),
+        "node_id": str(node_id),
+        "observed_at": _reader_observed_at_value(observed_at),
+        "reader_id": str(reader_id),
+        "trust_tier": str(trust_tier),
+    }
+    canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(_reader_proof_secret(secret), canonical_payload, hashlib.sha256).hexdigest()
+
+
+def _reader_proof_secret(secret: str | bytes | None = None) -> bytes:
+    raw_secret = secret
+    if raw_secret is None:
+        raw_secret = getattr(
+            settings,
+            READER_PROOF_SECRET_SETTING,
+            getattr(settings, "SECRET_KEY", ""),
+        )
+    if isinstance(raw_secret, bytes):
+        return raw_secret
+    return str(raw_secret).encode("utf-8")
+
+
+def _reader_observed_at_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value or "").strip()
+
+
 def _confidence_for_count(count: int) -> str:
     if count <= 0:
         return "no_match"
@@ -457,33 +501,50 @@ def score_soul_identity(
     return best
 
 
-def validate_reader_event(reader_event: Mapping[str, Any]) -> ReaderTrustResult:
+def validate_reader_event(
+    reader_event: Mapping[str, Any],
+    *,
+    manifest_fingerprint: str,
+) -> ReaderTrustResult:
     trust_tier = str(reader_event.get("trust_tier") or "unknown").strip()
     if trust_tier not in TRUST_TIERS:
         return ReaderTrustResult(False, "unknown", "unknown reader trust tier")
     if trust_tier not in ACTIVATING_TRUST_TIERS:
         return ReaderTrustResult(False, trust_tier, "reader is not trusted for activation")
-    observed_at = reader_event.get("observed_at")
-    if observed_at:
-        try:
-            observed = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
-        except ValueError:
-            return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        observed = observed.astimezone(timezone.utc)
-        if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
-            return ReaderTrustResult(False, trust_tier, "reader event timestamp is in the future")
-        age = now - observed
-        if age > timedelta(seconds=FRESH_READER_EVENT_SECONDS):
-            return ReaderTrustResult(False, trust_tier, "reader event is stale")
-    if not reader_event.get("reader_id"):
+    observed_at = _reader_observed_at_value(reader_event.get("observed_at"))
+    if not observed_at:
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is required")
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    observed = observed.astimezone(timezone.utc)
+    if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
+        return ReaderTrustResult(False, trust_tier, "reader event timestamp is in the future")
+    age = now - observed
+    if age > timedelta(seconds=FRESH_READER_EVENT_SECONDS):
+        return ReaderTrustResult(False, trust_tier, "reader event is stale")
+    reader_id = str(reader_event.get("reader_id") or "").strip()
+    node_id = str(reader_event.get("node_id") or "").strip()
+    if not reader_id:
         return ReaderTrustResult(False, trust_tier, "reader_id is required")
-    if not reader_event.get("node_id"):
+    if not node_id:
         return ReaderTrustResult(False, trust_tier, "node_id is required")
-    if not reader_event.get("proof"):
+    proof = str(reader_event.get("proof") or "").strip()
+    if not proof:
         return ReaderTrustResult(False, trust_tier, "reader proof is required")
+    expected_proof = _expected_reader_proof(
+        trust_tier=trust_tier,
+        reader_id=reader_id,
+        node_id=node_id,
+        observed_at=observed_at,
+        manifest_fingerprint=manifest_fingerprint,
+    )
+    if not hmac.compare_digest(proof, expected_proof):
+        return ReaderTrustResult(False, trust_tier, "reader proof is invalid")
     return ReaderTrustResult(True, trust_tier)
 
 
@@ -494,7 +555,7 @@ def plan_agent_activation(
     skill_bundle_id: str | int | None = None,
     interface_spec_id: str | int | None = None,
 ) -> ActivationPlan:
-    trust = validate_reader_event(reader_event)
+    trust = validate_reader_event(reader_event, manifest_fingerprint=card.fingerprint)
     if not trust.trusted:
         return ActivationPlan(
             status="rejected",
