@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import re
 import shlex
 import shutil
@@ -51,6 +52,40 @@ def _terminal_pid_file(terminal_pk: int) -> Path:
 def _named_terminal_pid_file(state_key: str) -> Path:
     safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "-", state_key).strip(".-")
     return _terminal_state_dir() / f"{safe_key or 'terminal'}.pid"
+
+
+def _ensure_private_state_dir(path: Path) -> None:
+    if path.is_symlink():
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+    if _is_windows():
+        return
+    if path.is_symlink():
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    stats = path.lstat()
+    if stat.S_ISLNK(stats.st_mode):
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None and stats.st_uid != getuid():
+        raise PermissionError(f"Terminal state dir must be owned by current user: {path}")
+    current_mode = stat.S_IMODE(stats.st_mode)
+    if current_mode != 0o700:
+        path.chmod(0o700)
+
+
+def _write_pid_file(pid_file: Path, pid: int, command: Sequence[str]) -> None:
+    content = f"{pid}\n{_command_metadata(command)}\n"
+    if _is_windows():
+        pid_file.write_text(content, encoding="utf-8")
+        return
+    if pid_file.is_symlink():
+        raise PermissionError(f"Terminal pid file must not be a symlink: {pid_file}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(pid_file, flags, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as output:
+        output.write(content)
 
 
 def _is_process_running(pid: int) -> bool:
@@ -214,7 +249,7 @@ def _launch_startup_script(
     state_key: str = "terminal",
 ) -> Path:
     pid_dir = _terminal_state_dir()
-    pid_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_state_dir(pid_dir)
     pid_file = _named_terminal_pid_file(state_key)
     if _is_windows():
         script_path = _write_windows_startup_script(state_key, startup_script)
@@ -228,7 +263,7 @@ def _launch_startup_script(
         if startup_script:
             command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
+    _write_pid_file(pid_file, process.pid, command)
     return pid_file
 
 
@@ -265,13 +300,13 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
         )
         return
     pid_dir = _terminal_state_dir()
-    pid_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_state_dir(pid_dir)
     pid_file = _terminal_pid_file(terminal.pk)
     command = [*shlex.split(executable)]
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
+    _write_pid_file(pid_file, process.pid, command)
 
 
 def _matches_current_node_role(terminal: AgentTerminal) -> bool:
