@@ -137,6 +137,61 @@ def test_is_process_running_handles_windows_system_error(monkeypatch):
     assert tasks._is_process_running(1234) is False
 
 
+def test_is_process_running_uses_pointer_sized_windows_handle(monkeypatch):
+    import ctypes
+    from ctypes import wintypes
+
+    class FakeKernelFunction:
+        def __init__(self, result):
+            self.result = result
+            self.calls = []
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, *args):
+            self.calls.append(args)
+            return self.result
+
+    class FakeKernel32:
+        def __init__(self):
+            self.OpenProcess = FakeKernelFunction(0x100000000)
+            self.CloseHandle = FakeKernelFunction(True)
+            self.GetLastError = FakeKernelFunction(0)
+
+    kernel32 = FakeKernel32()
+    monkeypatch.setattr(tasks.os, "name", "nt", raising=False)
+    monkeypatch.setattr(ctypes, "windll", type("FakeWindll", (), {"kernel32": kernel32})(), raising=False)
+
+    assert tasks._is_process_running(1234) is True
+    assert kernel32.OpenProcess.argtypes == [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    assert kernel32.OpenProcess.restype is wintypes.HANDLE
+    assert kernel32.CloseHandle.calls == [(0x100000000,)]
+
+
+def test_is_process_running_treats_windows_access_denied_as_running(monkeypatch):
+    import ctypes
+
+    class FakeKernelFunction:
+        def __init__(self, result):
+            self.result = result
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, *args):
+            return self.result
+
+    class FakeKernel32:
+        def __init__(self):
+            self.OpenProcess = FakeKernelFunction(0)
+            self.CloseHandle = FakeKernelFunction(True)
+            self.GetLastError = FakeKernelFunction(5)
+
+    monkeypatch.setattr(tasks.os, "name", "nt", raising=False)
+    monkeypatch.setattr(ctypes, "windll", type("FakeWindll", (), {"kernel32": FakeKernel32()})(), raising=False)
+
+    assert tasks._is_process_running(1234) is True
+
+
 def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritable(tmp_path, monkeypatch):
     monkeypatch.delenv("ARTHEXIS_TERMINAL_STATE_DIR", raising=False)
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)

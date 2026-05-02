@@ -99,17 +99,26 @@ def _is_process_running(pid: int) -> bool:
         return True
 
     import ctypes
+    from ctypes import wintypes
 
     process_query_limited_information = 0x1000
     synchronize = 0x00100000
     access = process_query_limited_information | synchronize
-    handle = ctypes.windll.kernel32.OpenProcess(access, False, pid)
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetLastError.argtypes = []
+    kernel32.GetLastError.restype = wintypes.DWORD
+
+    handle = kernel32.OpenProcess(access, False, pid)
     if handle:
-        ctypes.windll.kernel32.CloseHandle(handle)
+        kernel32.CloseHandle(handle)
         return True
 
     error_access_denied = 5
-    return ctypes.GetLastError() == error_access_denied
+    return kernel32.GetLastError() == error_access_denied
 
 
 def _read_pid_file(pid_file: Path) -> tuple[int | None, str | None]:
