@@ -4,7 +4,7 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.cards.agent_card import AgentCardError, parse_agent_card
@@ -26,7 +26,7 @@ def _console_id(value: str) -> str:
 
 def _runtime_namespace(console_id: str, session_id: str) -> str:
     safe_console = re.sub(r"[^A-Za-z0-9_.:-]+", "-", console_id).strip("-") or "console"
-    return f"soul-seed:{safe_console}:{session_id}"[:128]
+    return f"soul-seed:{session_id}:{safe_console}"[:128]
 
 
 def evict_card_session(session: CardSession, *, reason: str = "") -> CardSession:
@@ -219,37 +219,42 @@ def activate_soul_seed_card(
     if trust_tier not in CardSession.TrustTier.values:
         raise ValueError(f"Unsupported trust tier: {trust_tier}")
 
-    with transaction.atomic():
-        evicted_count = _evict_stale_sessions_locked(
-            console_id=normalized_console_id,
-            timeout_seconds=timeout_seconds,
-        )
-        active_sessions = list(_active_console_sessions(normalized_console_id))
-        current_session = active_sessions[0] if active_sessions else None
-        if current_session and current_session.card and current_session.card.card_uid == normalized_card_uid:
-            close_card_session(current_session, reason=SAME_CARD_REASON)
-            return _session_payload(current_session, action="closed", evicted=evicted_count)
+    for attempt in range(2):
+        try:
+            with transaction.atomic():
+                evicted_count = _evict_stale_sessions_locked(
+                    console_id=normalized_console_id,
+                    timeout_seconds=timeout_seconds,
+                )
+                active_sessions = list(_active_console_sessions(normalized_console_id))
+                current_session = active_sessions[0] if active_sessions else None
+                if current_session and current_session.card and current_session.card.card_uid == normalized_card_uid:
+                    close_card_session(current_session, reason=SAME_CARD_REASON)
+                    return _session_payload(current_session, action="closed", evicted=evicted_count)
 
-        card = _resolve_active_card(normalized_card_uid)
-        for session in active_sessions:
-            evict_card_session(session, reason=DEFAULT_SWITCH_REASON)
-            evicted_count += 1
+                card = _resolve_active_card(normalized_card_uid)
+                for session in active_sessions:
+                    evict_card_session(session, reason=DEFAULT_SWITCH_REASON)
+                    evicted_count += 1
 
-        started_at = timezone.now()
-        session = CardSession.objects.create(
-            card=card,
-            rfid=card.rfid,
-            reader_id=normalized_reader_id,
-            node_id=normalized_console_id,
-            trust_tier=trust_tier,
-            state=CardSession.State.ACTIVE,
-            started_at=started_at,
-            last_seen_at=started_at,
-        )
-        session.runtime_namespace = _runtime_namespace(normalized_console_id, session.session_id)
-        session.activation_plan = _interface_payload(card)
-        session.save(update_fields=["runtime_namespace", "activation_plan", "updated_at"])
-        return _session_payload(session, action="activated", evicted=evicted_count)
+                started_at = timezone.now()
+                session = CardSession(
+                    card=card,
+                    rfid=card.rfid,
+                    reader_id=normalized_reader_id,
+                    node_id=normalized_console_id,
+                    trust_tier=trust_tier,
+                    state=CardSession.State.ACTIVE,
+                    started_at=started_at,
+                    last_seen_at=started_at,
+                )
+                session.runtime_namespace = _runtime_namespace(normalized_console_id, session.session_id)
+                session.activation_plan = _interface_payload(card)
+                session.save()
+                return _session_payload(session, action="activated", evicted=evicted_count)
+        except IntegrityError:
+            if attempt:
+                raise
 
 
 def evict_stale_card_sessions(

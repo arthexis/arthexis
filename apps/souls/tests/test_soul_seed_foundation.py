@@ -8,6 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.cards.agent_card import parse_agent_card
@@ -137,11 +138,44 @@ def test_activate_soul_seed_card_starts_bounded_console_session(skill):
     assert session.state == CardSession.State.ACTIVE
     assert session.node_id == "console-a"
     assert session.reader_id == "reader-1"
-    assert session.runtime_namespace.startswith("soul-seed:console-a:")
+    assert session.runtime_namespace == f"soul-seed:{session.session_id}:console-a"
     assert summary["card"]["card_uid"] == "AABBCCDD"
     assert summary["bundle"]["skill_slugs"] == [skill.slug]
     assert summary["interface"]["commands"] == ["suggest_next_action", "show_context"]
     assert summary["interface"]["suggestions"]
+
+
+@pytest.mark.django_db
+def test_card_session_allows_only_one_active_session_per_console():
+    CardSession.objects.create(node_id="console-a", state=CardSession.State.ACTIVE)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            CardSession.objects.create(node_id="console-a", state=CardSession.State.ACTIVE)
+
+    CardSession.objects.create(node_id="console-a", state=CardSession.State.CLOSED)
+    CardSession.objects.create(node_id="console-b", state=CardSession.State.ACTIVE)
+
+
+@pytest.mark.django_db
+def test_activate_soul_seed_card_retries_empty_console_insert_race(skill, monkeypatch):
+    provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    original_save = CardSession.save
+    calls = {"blocked": 0}
+
+    def flaky_save(self, *args, **kwargs):
+        if self.pk is None and self.state == CardSession.State.ACTIVE and calls["blocked"] == 0:
+            calls["blocked"] += 1
+            raise IntegrityError("simulated active console session race")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(CardSession, "save", flaky_save)
+
+    summary = activate_soul_seed_card("AABBCCDD", console_id="console-a")
+
+    assert calls["blocked"] == 1
+    assert summary["action"] == "activated"
+    assert CardSession.objects.filter(node_id="console-a", state=CardSession.State.ACTIVE).count() == 1
 
 
 @pytest.mark.django_db
