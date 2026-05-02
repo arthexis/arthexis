@@ -9,9 +9,12 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.utils import OperationalError
 from django.test import override_settings
 
+from apps.meta import models as meta_models
 from apps.meta.management.commands import whatsapp as whatsapp_command
+from apps.meta.models import WhatsAppSecretaryAuthorizedPhone
 from apps.meta.services import (
     WhatsAppSecretaryListenResult,
     WhatsAppWebLoginResult,
@@ -19,6 +22,7 @@ from apps.meta.services import (
     WhatsAppWebMessage,
     WhatsAppWebReadResult,
     WhatsAppWebSendResult,
+    WhatsAppSecretaryAuthorizationUnavailable,
     _is_whatsapp_web_url,
     _read_cursor,
     _systemd_quote,
@@ -35,6 +39,7 @@ from apps.meta.services import (
     normalize_whatsapp_phone,
     parse_cli_date,
     read_whatsapp_web_messages,
+    registered_whatsapp_secretary_phones,
     secretary_request_text_from_messages,
 )
 
@@ -398,6 +403,7 @@ def test_secretary_listener_waits_for_quiet_window_before_launch(tmp_path):
         monotonic=lambda: now["value"],
         sleep=fake_sleep,
         idle_seconds=lambda: 999,
+        authorized_phones={"525551234567"},
     )
     cursor_key = cursor_key_for_profile("525551234567", profile_dir)
 
@@ -407,6 +413,100 @@ def test_secretary_listener_waits_for_quiet_window_before_launch(tmp_path):
     assert "summarize the quote" in launched_prompts[0]
     assert "focus on pending approvals" in launched_prompts[0]
     assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "b"
+
+
+def test_secretary_listener_refreshes_authorized_phones_during_poll(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    message = WhatsAppWebMessage(
+        fingerprint="a",
+        index=0,
+        message_id="a",
+        direction="out",
+        sender="You",
+        timestamp_raw="14:30, 2026-05-01",
+        timestamp_iso="2026-05-01T14:30:00",
+        text="secretary: open a terminal",
+    )
+    calls = []
+    now = {"value": 60.0}
+
+    def fake_read_messages(**kwargs):
+        del kwargs
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=[message],
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    def authorized_phones():
+        calls.append("refresh")
+        return {"525551234567"}
+
+    results = listen_for_whatsapp_secretary_requests(
+        phone="5551234567",
+        idle_after_seconds=0,
+        daemon_poll_seconds=60,
+        quiet_window_seconds=60,
+        max_batches=1,
+        read_messages=fake_read_messages,
+        launch=False,
+        monotonic=lambda: now["value"],
+        sleep=lambda seconds: now.update(value=now["value"] + seconds),
+        idle_seconds=lambda: 999,
+        authorized_phones=authorized_phones,
+    )
+
+    assert calls == ["refresh"]
+    assert results[-1].status == "matched"
+
+
+def test_secretary_listener_keeps_cursor_when_authorization_lookup_fails(tmp_path):
+    profile_dir = tmp_path / "profile-a"
+    message = WhatsAppWebMessage(
+        fingerprint="a",
+        index=0,
+        message_id="a",
+        direction="out",
+        sender="You",
+        timestamp_raw="14:30, 2026-05-01",
+        timestamp_iso="2026-05-01T14:30:00",
+        text="secretary: open a terminal",
+    )
+    now = {"value": 60.0}
+
+    def fake_read_messages(**kwargs):
+        del kwargs
+        return WhatsAppWebReadResult(
+            status="ok",
+            phone="525551234567",
+            profile_dir=profile_dir,
+            messages=[message],
+            cursor_file=cursor_file_for_profile(profile_dir),
+        )
+
+    def broken_authorized_phones():
+        raise WhatsAppSecretaryAuthorizationUnavailable("lookup unavailable")
+
+    results = listen_for_whatsapp_secretary_requests(
+        phone="5551234567",
+        idle_after_seconds=0,
+        daemon_poll_seconds=60,
+        quiet_window_seconds=60,
+        max_batches=1,
+        read_messages=fake_read_messages,
+        launch=False,
+        monotonic=lambda: now["value"],
+        sleep=lambda seconds: now.update(value=now["value"] + seconds),
+        idle_seconds=lambda: 999,
+        authorized_phones=broken_authorized_phones,
+    )
+    cursor_key = cursor_key_for_profile("525551234567", profile_dir)
+
+    assert results[-1].status == "authorization_unavailable"
+    assert results[-1].cursor_updated is False
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == ""
 
 
 def test_secretary_listener_ignores_and_advances_untriggered_batch(tmp_path):
@@ -444,6 +544,7 @@ def test_secretary_listener_ignores_and_advances_untriggered_batch(tmp_path):
         monotonic=lambda: now["value"],
         sleep=lambda seconds: now.update(value=now["value"] + seconds),
         idle_seconds=lambda: 999,
+        authorized_phones={"525551234567"},
     )
     cursor_key = cursor_key_for_profile("525551234567", profile_dir)
 
@@ -491,6 +592,7 @@ def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
             monotonic=lambda: now["value"],
             sleep=lambda seconds: now.update(value=now["value"] + seconds),
             idle_seconds=lambda: 999,
+            authorized_phones={"525551234567"},
         )
 
     cursor_key = cursor_key_for_profile("525551234567", profile_dir)
@@ -736,6 +838,8 @@ def test_whatsapp_listen_command_outputs_json(monkeypatch, tmp_path):
         assert kwargs["launch"] is False
         assert kwargs["max_batches"] == 1
         assert kwargs["profile_dir"] == tmp_path
+        assert callable(kwargs["authorized_phones"])
+        assert kwargs["authorized_phones"]() == {"525551234567"}
         return [
             WhatsAppSecretaryListenResult(
                 status="matched",
@@ -754,6 +858,7 @@ def test_whatsapp_listen_command_outputs_json(monkeypatch, tmp_path):
         "listen_for_whatsapp_secretary_requests",
         fake_listen_for_whatsapp_secretary_requests,
     )
+    monkeypatch.setattr(whatsapp_command, "registered_whatsapp_secretary_phones", lambda **kwargs: {"525551234567"})
     stdout = StringIO()
 
     call_command(
@@ -1050,3 +1155,252 @@ def test_whatsapp_install_listener_rejects_bad_timing():
             "--quiet-window",
             "0",
         )
+
+
+def test_secretary_request_ignores_non_authorized_senders():
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="in",
+            sender="15551234567",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="secretary: do not run",
+        ),
+        WhatsAppWebMessage(
+            fingerprint="b",
+            index=1,
+            message_id="b",
+            direction="out",
+            sender="+52 55 5123 4567",
+            timestamp_raw="14:31, 2026-05-01",
+            timestamp_iso="2026-05-01T14:31:00",
+            text="secretary: run this",
+        ),
+    ]
+
+    request = secretary_request_text_from_messages(
+        messages,
+        trigger_prefix="secretary:",
+        authorized_phones={"525551234567"},
+    )
+
+    assert request == "run this"
+
+
+def test_secretary_request_uses_fallback_phone_for_display_sender():
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="out",
+            sender="You",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="secretary: run alias",
+        ),
+    ]
+
+    request = secretary_request_text_from_messages(
+        messages,
+        trigger_prefix="secretary:",
+        authorized_phones={"525551234567"},
+        fallback_sender_phone="5551234567",
+    )
+
+    assert request == "run alias"
+
+
+def test_secretary_request_rejects_display_sender_without_fallback_phone():
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="out",
+            sender="You",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="secretary: run alias",
+        ),
+    ]
+
+    request = secretary_request_text_from_messages(
+        messages,
+        trigger_prefix="secretary:",
+        authorized_phones={"525551234567"},
+    )
+
+    assert request == ""
+
+
+def test_secretary_request_rejects_inbound_display_sender_with_fallback_phone():
+    messages = [
+        WhatsAppWebMessage(
+            fingerprint="a",
+            index=0,
+            message_id="a",
+            direction="in",
+            sender="Alice",
+            timestamp_raw="14:30, 2026-05-01",
+            timestamp_iso="2026-05-01T14:30:00",
+            text="secretary: run alias",
+        ),
+    ]
+
+    request = secretary_request_text_from_messages(
+        messages,
+        trigger_prefix="secretary:",
+        authorized_phones={"525551234567"},
+        fallback_sender_phone="5551234567",
+    )
+
+    assert request == ""
+
+
+def test_whatsapp_register_phone_command_creates_authorization(monkeypatch):
+    class User:
+        def __str__(self):
+            return "ops"
+
+    class Query:
+        def __init__(self, user):
+            self.user = user
+
+        def first(self):
+            return self.user
+
+    class UserManager:
+        def filter(self, *args, **kwargs):
+            del args, kwargs
+            return Query(User())
+
+    class PhoneManager:
+        def __init__(self):
+            self.kwargs = {}
+
+        def update_or_create(self, **kwargs):
+            self.kwargs = kwargs
+            auth = type("Auth", (), {"phone": kwargs["phone"], "label": kwargs["defaults"]["label"]})()
+            return auth, True
+
+    manager = PhoneManager()
+    monkeypatch.setattr(whatsapp_command, "get_user_model", lambda: type("U", (), {"objects": UserManager()})())
+    monkeypatch.setattr(whatsapp_command, "WhatsAppSecretaryAuthorizedPhone", type("P", (), {"objects": manager}))
+
+    stdout = StringIO()
+    call_command("whatsapp", "register-phone", "--user", "ops", "--phone", "5551234567", "--json", stdout=stdout)
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["status"] == "created"
+    assert manager.kwargs["phone"] == "525551234567"
+    assert manager.kwargs["defaults"]["is_deleted"] is False
+
+
+def test_whatsapp_register_phone_command_rejects_sender_alias(monkeypatch):
+    class User:
+        def __str__(self):
+            return "ops"
+
+    class Query:
+        def first(self):
+            return User()
+
+    class UserManager:
+        def filter(self, *args, **kwargs):
+            del args, kwargs
+            return Query()
+
+    class PhoneManager:
+        def __init__(self):
+            self.kwargs = {}
+
+        def update_or_create(self, **kwargs):
+            self.kwargs = kwargs
+            auth = type("Auth", (), {"phone": kwargs["phone"], "label": kwargs["defaults"]["label"]})()
+            return auth, False
+
+    manager = PhoneManager()
+    monkeypatch.setattr(whatsapp_command, "get_user_model", lambda: type("U", (), {"objects": UserManager()})())
+    monkeypatch.setattr(whatsapp_command, "WhatsAppSecretaryAuthorizedPhone", type("P", (), {"objects": manager}))
+
+    stdout = StringIO()
+    with pytest.raises(CommandError, match="valid WhatsApp phone number"):
+        call_command(
+            "whatsapp",
+            "register-phone",
+            "--user",
+            "ops",
+            "--phone",
+            "You",
+            "--label",
+            "self-chat",
+            "--json",
+            stdout=stdout,
+        )
+    assert manager.kwargs == {}
+
+
+@pytest.mark.django_db
+def test_registered_whatsapp_secretary_phones_excludes_soft_deleted(django_user_model):
+    user = django_user_model.objects.create_user(username="ops")
+    WhatsAppSecretaryAuthorizedPhone.all_objects.create(
+        user=user,
+        phone="525551234567",
+        is_active=True,
+    )
+    WhatsAppSecretaryAuthorizedPhone.all_objects.create(
+        user=user,
+        phone="525551234568",
+        is_active=True,
+        is_deleted=True,
+    )
+    WhatsAppSecretaryAuthorizedPhone.all_objects.create(
+        user=user,
+        phone="525551234569",
+        is_active=False,
+    )
+
+    assert registered_whatsapp_secretary_phones() == {"525551234567"}
+
+
+def test_registered_whatsapp_secretary_phones_handles_lazy_queryset_errors(monkeypatch):
+    class BrokenQuerySet:
+        def __iter__(self):
+            raise OperationalError("missing authorization table")
+
+    class Manager:
+        def filter(self, **kwargs):
+            del kwargs
+            return BrokenQuerySet()
+
+    monkeypatch.setattr(
+        meta_models,
+        "WhatsAppSecretaryAuthorizedPhone",
+        type("P", (), {"objects": Manager()}),
+    )
+
+    assert registered_whatsapp_secretary_phones() == set()
+
+
+def test_registered_whatsapp_secretary_phones_can_raise_lazy_queryset_errors(monkeypatch):
+    class BrokenQuerySet:
+        def __iter__(self):
+            raise OperationalError("missing authorization table")
+
+    class Manager:
+        def filter(self, **kwargs):
+            del kwargs
+            return BrokenQuerySet()
+
+    monkeypatch.setattr(
+        meta_models,
+        "WhatsAppSecretaryAuthorizedPhone",
+        type("P", (), {"objects": Manager()}),
+    )
+
+    with pytest.raises(WhatsAppSecretaryAuthorizationUnavailable):
+        registered_whatsapp_secretary_phones(raise_on_error=True)
