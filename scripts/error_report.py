@@ -48,6 +48,8 @@ SENSITIVE_NAMES = {
     "id_dsa",
     "id_ecdsa",
     "id_ed25519",
+    "rfid-scan.json",
+    "rfid-scans.ndjson",
 }
 SENSITIVE_SUFFIXES = {
     ".db",

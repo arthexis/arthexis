@@ -51,6 +51,31 @@ def test_build_report_redacts_text_and_excludes_sensitive_files(tmp_path: Path) 
     assert "Bearer <redacted>" in payload
 
 
+def test_build_report_excludes_sensitive_rfid_artifacts(tmp_path: Path) -> None:
+    base_dir = tmp_path
+    (base_dir / "logs").mkdir()
+    (base_dir / ".locks").mkdir()
+    log_artifact = base_dir / "logs" / "RFID-SCANS.NDJSON"
+    lock_artifact = base_dir / ".locks" / "RFID-SCAN.JSON"
+    log_artifact.write_text('{"rfid":"123","keys":"secret"}\n', encoding="utf-8")
+    lock_artifact.write_text('{"rfid":"123","dump":"secret"}\n', encoding="utf-8")
+
+    result = error_report.build_report(
+        error_report.ReportConfig(
+            base_dir=base_dir,
+            output_dir=base_dir / "work" / "error-reports",
+        )
+    )
+
+    with zipfile.ZipFile(result.path) as archive:
+        names = set(archive.namelist())
+
+    assert error_report.is_sensitive_path(log_artifact, base_dir=base_dir) is True
+    assert error_report.is_sensitive_path(lock_artifact, base_dir=base_dir) is True
+    assert "logs/RFID-SCANS.NDJSON" not in names
+    assert "arthexis/locks/RFID-SCAN.JSON" not in names
+
+
 def test_build_report_writes_manifest_with_entry_hashes(tmp_path: Path) -> None:
     base_dir = tmp_path
     (base_dir / "logs").mkdir()
