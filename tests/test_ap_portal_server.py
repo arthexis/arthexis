@@ -5,9 +5,9 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ap_portal_server.py"
 
@@ -59,6 +59,7 @@ def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
 
     assert result["authorized"] is True
     assert result["mac_address"] == "aa:bb:cc:dd:ee:ff"
+    assert result["redirect_url"] == "http://10.42.0.1:8888/login/"
     assert "ARE being monitored" in result["monitoring_notice"]
     assert state.config.authorized_macs_path.read_text(encoding="utf-8") == "aa:bb:cc:dd:ee:ff\n"
 
@@ -380,6 +381,53 @@ def test_status_records_activity_and_exposes_monitoring_paths(tmp_path):
     assert activity["monitoring_notice"] == module.MONITORING_NOTICE
 
 
+def test_status_redirects_authorized_client_to_suite_login_port(tmp_path):
+    module = load_portal_module()
+    state = module.PortalState(make_config(module, tmp_path))
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    state.subscribe(
+        email="guest@example.com",
+        accept_terms=True,
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        host="arthexis.net",
+    )
+
+    payload = state.status_for_request(
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        path="/api/status",
+        host="arthexis.net",
+    )
+
+    assert payload["authorized"] is True
+    assert payload["authorized_redirect_url"] == "http://10.42.0.1:8888/login/"
+    assert payload["redirect_delay_ms"] == module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
+
+
+def test_suite_login_redirect_defaults_to_gateway_host():
+    module = load_portal_module()
+
+    assert (
+        module._suite_login_url(
+            "arthexis.net",
+            configured_host=module.DEFAULT_SUITE_LOGIN_HOST,
+            port=8888,
+            path="login/",
+        )
+        == "http://10.42.0.1:8888/login/"
+    )
+
+
+def test_suite_login_redirect_can_reuse_current_host_without_existing_port():
+    module = load_portal_module()
+
+    assert (
+        module._suite_login_url("127.0.0.1:9080", configured_host="", port=8888, path="login/")
+        == "http://127.0.0.1:8888/login/"
+    )
+
+
 def test_read_events_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
@@ -549,6 +597,37 @@ def test_resolve_mac_reads_ipv6_neighbor_cache(tmp_path, monkeypatch):
 
     assert state.resolve_mac("fd42:0:0:42::25") == "aa:bb:cc:dd:ee:ff"
     assert state.resolve_mac("fd42:0:0:42::26") is None
+
+
+def test_loopback_client_requires_explicit_local_development_mac(tmp_path):
+    module = load_portal_module()
+    state = module.PortalState(make_config(module, tmp_path))
+
+    assert state.resolve_mac("127.0.0.1") is None
+
+
+def test_skip_firewall_sync_defaults_loopback_to_development_mac(tmp_path):
+    module = load_portal_module()
+    args = SimpleNamespace(
+        bind="127.0.0.1",
+        port=9080,
+        assets_dir=str(tmp_path),
+        state_dir=str(tmp_path / "state"),
+        source_url="",
+        suite_login_host=module.DEFAULT_SUITE_LOGIN_HOST,
+        suite_login_port=module.DEFAULT_SUITE_LOGIN_PORT,
+        suite_login_path=module.DEFAULT_SUITE_LOGIN_PATH,
+        authorized_redirect_delay_ms=module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS,
+        skip_firewall_sync=True,
+        local_development_mac="",
+    )
+
+    config = module.build_config(args)
+    state = module.PortalState(config)
+
+    assert config.sync_firewall is False
+    assert config.local_development_mac == module.LOCAL_DEVELOPMENT_MAC
+    assert state.resolve_mac("127.0.0.1") == module.LOCAL_DEVELOPMENT_MAC
 
 
 def test_read_limited_request_body_rejects_large_payload():

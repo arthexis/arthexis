@@ -19,11 +19,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = BASE_DIR / "config" / "data" / "ap_portal"
 DEFAULT_STATE_DIR = BASE_DIR / ".state" / "ap_portal"
 DEFAULT_SOURCE_URL = "https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py"
+DEFAULT_SUITE_LOGIN_HOST = "10.42.0.1"
+DEFAULT_SUITE_LOGIN_PORT = 8888
+DEFAULT_SUITE_LOGIN_PATH = "/login/"
+DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS = 3000
 AUTHORIZED_MACS_PATH = DEFAULT_STATE_DIR / "authorized_macs.txt"
 CONSENTS_PATH = DEFAULT_STATE_DIR / "consents.jsonl"
 ACTIVITY_PATH = DEFAULT_STATE_DIR / "activity.jsonl"
@@ -33,6 +36,7 @@ TERMS_VERSION = "qol-recording-v2"
 MAX_PAYLOAD_BYTES = 1024 * 1024
 ARP_TABLE_PATH = Path("/proc/net/arp")
 NDISC_CACHE_PATH = Path("/proc/net/ndisc_cache")
+LOCAL_DEVELOPMENT_MAC = "02:00:00:00:00:01"
 TERMS_STATEMENT = (
     "I accept that my internet experience may be altered and recorded "
     "for quality of life purposes while using this access point."
@@ -58,7 +62,12 @@ class PortalConfig:
     consents_path: Path
     activity_path: Path
     source_url: str
+    suite_login_host: str = DEFAULT_SUITE_LOGIN_HOST
+    suite_login_port: int = DEFAULT_SUITE_LOGIN_PORT
+    suite_login_path: str = DEFAULT_SUITE_LOGIN_PATH
+    authorized_redirect_delay_ms: int = DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
     sync_firewall: bool = True
+    local_development_mac: str | None = None
 
 
 class FirewallSyncError(RuntimeError):
@@ -109,6 +118,38 @@ def _ip_addresses_match(left: str, right: str) -> bool:
         return ipaddress.ip_address(left) == ipaddress.ip_address(right)
     except ValueError:
         return left == right
+
+
+def _is_loopback_ip(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value).is_loopback
+    except ValueError:
+        return value in {"localhost"}
+
+
+def _normalize_url_path(value: str) -> str:
+    path = str(value or DEFAULT_SUITE_LOGIN_PATH).strip() or DEFAULT_SUITE_LOGIN_PATH
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return path
+
+
+def _host_for_suite_redirect(host: str, configured_host: str = "") -> str:
+    if configured_host:
+        host = configured_host
+    parsed = urlparse(host if "://" in host else f"//{host}")
+    hostname = parsed.hostname or "arthexis.net"
+    try:
+        parsed_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return hostname
+    if parsed_ip.version == 6:
+        return f"[{hostname}]"
+    return hostname
+
+
+def _suite_login_url(host: str, *, configured_host: str = "", port: int, path: str) -> str:
+    return f"http://{_host_for_suite_redirect(host, configured_host)}:{port}{_normalize_url_path(path)}"
 
 
 class FirewallManager:
@@ -320,6 +361,9 @@ class PortalState:
         mac_address = self.resolve_mac(ip_address)
         with self._lock:
             authorized = bool(mac_address and mac_address in self._authorized)
+        authorized_redirect_url = (
+            self.suite_login_url(host) if authorized else ""
+        )
         self.activity.record(
             "status_check",
             ip_address=ip_address,
@@ -332,6 +376,8 @@ class PortalState:
         return {
             "authorized": authorized,
             "mac_address": mac_address,
+            "authorized_redirect_url": authorized_redirect_url,
+            "redirect_delay_ms": self.config.authorized_redirect_delay_ms,
             "terms_version": TERMS_VERSION,
             "terms_statement": TERMS_STATEMENT,
             "monitoring_notice": MONITORING_NOTICE,
@@ -365,6 +411,14 @@ class PortalState:
             path=path,
             host=host,
             referer=referer,
+        )
+
+    def suite_login_url(self, host: str) -> str:
+        return _suite_login_url(
+            host,
+            configured_host=self.config.suite_login_host,
+            port=self.config.suite_login_port,
+            path=self.config.suite_login_path,
         )
 
     def subscribe(
@@ -426,7 +480,7 @@ class PortalState:
                         user_agent=user_agent,
                         host=host,
                     )
-                except OSError:
+                except OSError as consent_error:
                     rollback_error = None
                     try:
                         self._restore_consent_log(consent_rollback_position)
@@ -447,7 +501,7 @@ class PortalState:
                             exc.add_note(f"file rollback failed: {rollback_error}")
                         raise
                     if rollback_error is not None:
-                        raise rollback_error
+                        raise rollback_error from consent_error
                     raise
                 self._authorized = next_authorized
             else:
@@ -473,12 +527,15 @@ class PortalState:
             "mac_address": mac_address,
             "monitoring_notice": MONITORING_NOTICE,
             "source_code_url": self.config.source_url,
-            "redirect_url": "http://neverssl.com/",
+            "redirect_url": self.suite_login_url(host),
+            "redirect_delay_ms": self.config.authorized_redirect_delay_ms,
         }
 
     def resolve_mac(self, ip_address: str | None) -> str | None:
         if not ip_address:
             return None
+        if self.config.local_development_mac and _is_loopback_ip(ip_address):
+            return self.config.local_development_mac
 
         mac_address = self._resolve_mac_from_arp(ip_address)
         if mac_address:
@@ -681,6 +738,15 @@ def build_config(args: argparse.Namespace) -> PortalConfig:
     state_dir = Path(args.state_dir).expanduser().resolve()
     assets_dir = Path(args.assets_dir).expanduser().resolve()
     source_url = args.source_url or os.environ.get("ARTHEXIS_AP_SOURCE_URL") or DEFAULT_SOURCE_URL
+    local_development_mac = (
+        args.local_development_mac
+        or os.environ.get("ARTHEXIS_AP_LOCAL_DEVELOPMENT_MAC")
+        or (LOCAL_DEVELOPMENT_MAC if args.skip_firewall_sync else "")
+    )
+    if local_development_mac:
+        local_development_mac = _normalize_mac(local_development_mac)
+        if not MAC_RE.fullmatch(local_development_mac):
+            raise ValueError(f"Invalid local development MAC: {local_development_mac}")
     return PortalConfig(
         bind=args.bind,
         port=args.port,
@@ -690,7 +756,12 @@ def build_config(args: argparse.Namespace) -> PortalConfig:
         consents_path=state_dir / "consents.jsonl",
         activity_path=state_dir / "activity.jsonl",
         source_url=source_url,
+        suite_login_host=args.suite_login_host,
+        suite_login_port=args.suite_login_port,
+        suite_login_path=_normalize_url_path(args.suite_login_path),
+        authorized_redirect_delay_ms=args.authorized_redirect_delay_ms,
         sync_firewall=not args.skip_firewall_sync,
+        local_development_mac=local_development_mac or None,
     )
 
 
@@ -701,6 +772,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--assets-dir", default=str(ASSETS_DIR))
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     parser.add_argument("--source-url", default="")
+    parser.add_argument("--suite-login-host", default=DEFAULT_SUITE_LOGIN_HOST)
+    parser.add_argument("--suite-login-port", type=int, default=DEFAULT_SUITE_LOGIN_PORT)
+    parser.add_argument("--suite-login-path", default=DEFAULT_SUITE_LOGIN_PATH)
+    parser.add_argument(
+        "--authorized-redirect-delay-ms",
+        type=int,
+        default=DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS,
+    )
+    parser.add_argument(
+        "--local-development-mac",
+        default="",
+        help=(
+            "Loopback MAC used only for local preview clients. When omitted, "
+            f"{LOCAL_DEVELOPMENT_MAC} is used with --skip-firewall-sync."
+        ),
+    )
     parser.add_argument(
         "--skip-firewall-sync",
         action="store_true",
