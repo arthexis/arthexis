@@ -344,6 +344,7 @@ include-package-data = true
 "apps.sites.templatetags" = [ "**/*",]
 "apps.sites.tests" = [ "**/*",]
 "apps.sites.views" = [ "**/*",]
+"apps.souls" = [ "**/*",]
 "apps.summary" = [ "**/*",]
 "apps.summary.migrations" = [ "**/*",]
 "apps.tasks" = [ "**/*",]
