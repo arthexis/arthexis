@@ -32,6 +32,7 @@ from apps.imager.services import (
     _guestfish_symlink,
     _guestfish_write,
     _resolve_root_disk_path,
+    _should_exclude_suite_bundle_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
     list_block_devices,
@@ -206,6 +207,27 @@ def test_guestfish_symlink_uses_guestfish_ln_sf(tmp_path: Path) -> None:
     assert env["TMPDIR"].startswith(str(tmp_path))
     assert env["LIBGUESTFS_TMPDIR"] == env["TMPDIR"]
     assert env["LIBGUESTFS_CACHEDIR"] == str(tmp_path / ".libguestfs-cache")
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "expected"),
+    [
+        (Path(".env.production"), True),
+        (Path(".envrc"), True),
+        (Path("cache/token.txt"), True),
+        (Path("locks/private.lock"), True),
+        (Path("env/secret.txt"), True),
+        (Path("venv/private.txt"), True),
+        (Path("config/.env.local"), True),
+        (Path("apps/imager/services.py"), False),
+    ],
+)
+def test_should_exclude_suite_bundle_path_covers_ignored_runtime_paths(
+    relative_path: Path, expected: bool
+) -> None:
+    """Regression: suite bundle filtering should exclude common local runtime/secret paths."""
+
+    assert _should_exclude_suite_bundle_path(relative_path) is expected
 
 
 @pytest.mark.django_db

@@ -64,16 +64,21 @@ SUITE_BUNDLE_EXCLUDED_TOP_LEVEL = frozenset(
         ".venv",
         "backups",
         "build",
+        "cache",
+        "env",
         "logs",
+        "locks",
         "media",
         "node_modules",
         "staticfiles",
+        "venv",
         "work",
     }
 )
 SUITE_BUNDLE_EXCLUDED_NAMES = frozenset(
     {
         ".env",
+        ".envrc",
         "__pycache__",
         "db.sqlite3",
         "test_db.sqlite3",
@@ -533,7 +538,7 @@ def _should_exclude_suite_bundle_path(relative_path: Path) -> bool:
     if any(part in SUITE_BUNDLE_EXCLUDED_NAMES for part in parts):
         return True
     name = relative_path.name
-    return name.endswith((".env", ".pyc", ".pyo"))
+    return name == ".envrc" or name.startswith(".env.") or name.endswith((".env", ".pyc", ".pyo"))
 
 
 def _create_suite_bundle(source_path: Path, archive_path: Path) -> SuiteBundleInfo:
