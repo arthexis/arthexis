@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from io import BytesIO
+from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from apps.skills import admin as skills_admin
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import PACKAGE_FORMAT
 
@@ -165,6 +169,58 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
         assert AgentSkillFile.objects.count() == file_count
         if slug:
             assert not AgentSkill.objects.filter(slug=slug).exists()
+
+
+def test_invalid_package_filename_shows_form_error_and_writes_nothing(admin_client):
+    url = reverse("admin:skills_agentskill_import_package")
+    skill_count = AgentSkill.objects.count()
+    file_count = AgentSkillFile.objects.count()
+
+    response = admin_client.post(
+        url,
+        {
+            "action": "preview",
+            "package": SimpleUploadedFile(
+                "notazip.txt",
+                b"not a zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert "package" in response.context["form"].errors
+    assert "zip" in str(response.context["form"].errors["package"]).lower()
+    assert AgentSkill.objects.count() == skill_count
+    assert AgentSkillFile.objects.count() == file_count
+
+
+def test_preview_cleans_expired_temp_uploads(
+    admin_client,
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(skills_admin, "gettempdir", lambda: str(tmp_path))
+    old_upload = tmp_path / f"{skills_admin._IMPORT_UPLOAD_PREFIX}old.zip"
+    old_upload.write_bytes(b"stale")
+    expired_at = time.time() - skills_admin._IMPORT_PREVIEW_TTL_SECONDS - 5
+    os.utime(old_upload, (expired_at, expired_at))
+
+    response = admin_client.post(
+        reverse("admin:skills_agentskill_import_package"),
+        {"action": "preview", "package": _valid_package_upload("admin-cleanup")},
+    )
+
+    assert response.status_code == 200
+    assert not old_upload.exists()
+    token = response.context["preview_token"]
+    session_entry = admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY][
+        token
+    ]
+    preview_upload = Path(session_entry["path"])
+    assert preview_upload.exists()
+    assert preview_upload.parent == tmp_path
+    preview_upload.unlink(missing_ok=True)
 
 
 def test_import_package_blocks_staff_without_add_and_change_permissions(

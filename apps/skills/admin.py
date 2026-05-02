@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, gettempdir
 from uuid import uuid4
 from zipfile import BadZipFile
 
@@ -15,15 +16,19 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from .forms import CodexSkillPackageImportForm
 from .models import AgentSkill, AgentSkillFile
-from .package_services import import_codex_skill_package
+from .package_services import (
+    CodexSkillPackageImportError,
+    import_codex_skill_package,
+)
 
 _SESSION_IMPORT_PACKAGES_KEY = "skills_agentskill_import_packages"
+_IMPORT_UPLOAD_PREFIX = "agentskill-package-"
+_IMPORT_PREVIEW_TTL_SECONDS = 60 * 60
 _PACKAGE_IMPORT_ERRORS = (
     BadZipFile,
-    KeyError,
-    UnicodeDecodeError,
-    ValueError,
     json.JSONDecodeError,
+    UnicodeDecodeError,
+    CodexSkillPackageImportError,
 )
 
 
@@ -76,6 +81,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
         if request.method == "POST" and request.POST.get("action") == "apply":
             return self._apply_import_package(request)
 
+        self._cleanup_expired_import_uploads()
         form = CodexSkillPackageImportForm()
         preview = None
         preview_token = ""
@@ -168,27 +174,47 @@ class AgentSkillAdmin(admin.ModelAdmin):
     def _store_import_upload(self, uploaded_file) -> Path:
         with NamedTemporaryFile(
             delete=False,
-            prefix="agentskill-package-",
+            dir=gettempdir(),
+            prefix=_IMPORT_UPLOAD_PREFIX,
             suffix=".zip",
         ) as temp_file:
             for chunk in uploaded_file.chunks():
                 temp_file.write(chunk)
             return Path(temp_file.name)
 
+    def _cleanup_expired_import_uploads(self, now: float | None = None) -> None:
+        now = now or time.time()
+        cutoff = now - _IMPORT_PREVIEW_TTL_SECONDS
+        for package_path in Path(gettempdir()).glob(f"{_IMPORT_UPLOAD_PREFIX}*.zip"):
+            try:
+                if package_path.stat().st_mtime < cutoff:
+                    package_path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
     def _remember_import_package(
         self,
         request: HttpRequest,
         package_path: Path,
     ) -> str:
+        now = time.time()
+        self._cleanup_expired_import_uploads(now=now)
         packages = dict(request.session.get(_SESSION_IMPORT_PACKAGES_KEY, {}))
-        for existing_path in packages.values():
-            Path(existing_path).unlink(missing_ok=True)
+        for existing_entry in packages.values():
+            existing_path = self._import_package_entry_path(existing_entry)
+            if existing_path:
+                Path(existing_path).unlink(missing_ok=True)
         packages = {}
         token = uuid4().hex
-        packages[token] = str(package_path)
+        packages[token] = {"path": str(package_path), "ts": now}
         request.session[_SESSION_IMPORT_PACKAGES_KEY] = packages
         request.session.modified = True
         return token
+
+    def _import_package_entry_path(self, entry) -> str:
+        if isinstance(entry, dict):
+            return str(entry.get("path") or "")
+        return str(entry or "")
 
     def _consume_import_package(
         self,
@@ -196,9 +222,10 @@ class AgentSkillAdmin(admin.ModelAdmin):
         token: str,
     ) -> Path | None:
         packages = dict(request.session.get(_SESSION_IMPORT_PACKAGES_KEY, {}))
-        raw_path = packages.pop(token, None)
+        entry = packages.pop(token, None)
         request.session[_SESSION_IMPORT_PACKAGES_KEY] = packages
         request.session.modified = True
+        raw_path = self._import_package_entry_path(entry)
         if not raw_path:
             return None
         package_path = Path(raw_path)
