@@ -148,6 +148,16 @@ def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritabl
     assert tasks._terminal_state_dir() == tmp_path / "tmp" / "arthexis-agent-terminals"
 
 
+def test_command_metadata_is_unquoted_and_single_line():
+    metadata = tasks._command_metadata(
+        ["x-terminal-emulator", "-e", "sh", "-lc", "echo ready\nprintf done"]
+    )
+
+    assert metadata == "x-terminal-emulator -e sh -lc echo ready printf done"
+    assert "\n" not in metadata
+    assert "'" not in metadata
+
+
 def test_admin_owner_fields_remain_editable_for_ownable_validation(db):
     admin = AgentTerminalAdmin(AgentTerminal, AdminSite())
     request = RequestFactory().get("/admin/terminals/agentterminal/")

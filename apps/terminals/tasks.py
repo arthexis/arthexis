@@ -78,7 +78,9 @@ def _process_commandline(pid: int) -> str:
     if not proc_cmdline.exists():
         return ""
     try:
-        return proc_cmdline.read_bytes().decode(errors="ignore").replace("\x00", " ").strip()
+        return _command_metadata(
+            proc_cmdline.read_bytes().decode(errors="ignore").split("\x00")
+        )
     except OSError:
         return ""
 
@@ -122,6 +124,10 @@ def _build_startup_script(terminal: AgentTerminal) -> str:
             continue
         script_lines.append(text)
     return "\n".join(script_lines)
+
+
+def _command_metadata(command: Sequence[str]) -> str:
+    return " ".join(" ".join(str(part).split()) for part in command if str(part).strip())
 
 
 def _powershell_quote(value: str) -> str:
@@ -222,7 +228,7 @@ def _launch_startup_script(
         if startup_script:
             command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{shlex.join(command)}\n", encoding="utf-8")
+    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
     return pid_file
 
 
@@ -265,7 +271,7 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     if startup_script:
         command.extend(["-e", "sh", "-lc", startup_script])
     process = subprocess.Popen(command)
-    pid_file.write_text(f"{process.pid}\n{shlex.join(command)}\n", encoding="utf-8")
+    pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
 
 
 def _matches_current_node_role(terminal: AgentTerminal) -> bool:
