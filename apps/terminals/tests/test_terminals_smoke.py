@@ -95,6 +95,34 @@ def test_launch_command_in_terminal_builds_windows_codex_command(tmp_path, monke
     assert "& 'codex' '[SECRETARY] Mara:" in script
 
 
+def test_launch_command_in_terminal_uses_script_file_on_posix(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
+    monkeypatch.setattr(tasks, "_is_windows", lambda: False)
+    launched = {}
+
+    class FakeProcess:
+        pid = 9999
+
+    def fake_popen(command):
+        launched["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(tasks.subprocess, "Popen", fake_popen)
+
+    pid_file = tasks.launch_command_in_terminal(
+        ["echo", "super-secret-value"],
+        state_key="linux-secret",
+    )
+
+    script_path = tmp_path / "scripts" / "linux-secret.sh"
+    assert script_path.exists()
+    assert launched["command"][-3:] == ["sh", "-lc", f". {tasks.shlex.quote(str(script_path))}"]
+    assert "super-secret-value" not in " ".join(launched["command"])
+    metadata = pid_file.read_text(encoding="utf-8").splitlines()[1]
+    assert str(script_path) in metadata
+    assert "super-secret-value" not in metadata
+
+
 def test_windows_terminal_executable_supports_arguments(tmp_path, monkeypatch):
     monkeypatch.setenv("ARTHEXIS_TERMINAL_STATE_DIR", str(tmp_path))
     monkeypatch.setattr(tasks, "_is_windows", lambda: True)
