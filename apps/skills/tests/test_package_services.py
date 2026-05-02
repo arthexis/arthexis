@@ -279,6 +279,7 @@ def test_materialize_does_not_resolve_node_sigils_by_default(tmp_path):
     )
 
 
+@pytest.mark.django_db
 def test_materialize_legacy_skill_preserves_existing_portable_tree(tmp_path):
     target_root = tmp_path / "codex-skills"
     skill_root = target_root / "legacy-skill"
