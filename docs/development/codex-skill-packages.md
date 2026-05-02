@@ -18,7 +18,7 @@ does not store their sensitive payloads.
 
 Use **SIGILS** when a suite-owned skill or document needs local customization on
 each installed device. SIGILS are bracketed suite expressions such as
-`[CONF.BASE_DIR]`, `[SYS.NODE_ROLE]`, or `[NODE.ROLE]`.
+`[CONF.BASE_DIR]` or `[SYS.NODE_ROLE]`.
 
 Portable package storage keeps SIGILS unresolved. The suite resolves allowed
 SIGILS only when package files are materialized into a local directory. This
@@ -28,7 +28,6 @@ operator's local paths.
 Default materialization allows non-secret local context:
 
 - `SYS`: suite system metadata such as role or upgrade state.
-- `NODE`: local node records when the node sigil root is configured.
 - A small allow-list of simple `CONF` keys such as `[CONF.BASE_DIR]` and
   `[CONF.NODE_ROLE]`.
 

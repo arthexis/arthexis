@@ -19,7 +19,7 @@ from apps.skills.models import AgentSkill, AgentSkillFile
 PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
 SKILL_MARKDOWN = "SKILL.md"
 EMPTY_CONTENT_SHA256 = hashlib.sha256(b"").hexdigest()
-DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"NODE", "SYS"})
+DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"SYS"})
 SAFE_MATERIALIZE_CONF_KEYS = frozenset({"BASE_DIR", "NODE_ROLE"})
 CONF_DOT_SIGIL_RE = re.compile(r"\[CONF\.([A-Za-z0-9_-]+)\]")
 
