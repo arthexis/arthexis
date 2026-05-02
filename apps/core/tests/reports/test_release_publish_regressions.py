@@ -22,7 +22,7 @@ def _publish_workflow_jobs() -> dict[str, object]:
 def _workflow_data(filename: str) -> dict[str, object]:
     repo_root = Path(__file__).resolve().parents[4]
     workflow_path = repo_root / ".github" / "workflows" / filename
-    return pipeline.yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    return pipeline.yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
 
 
 def _workflow_on(workflow: dict[str, object]) -> object:
@@ -514,14 +514,13 @@ def test_tag_from_version_workflow_creates_release_tag_and_dispatches_publish() 
     assert workflow["concurrency"]["cancel-in-progress"] is False
 
     job = workflow["jobs"]["tag-from-version"]
-    steps_by_name = {step["name"]: step for step in job["steps"]}
 
-    create_tag_run = steps_by_name["Create tag when missing"]["run"]
+    create_tag_run = _workflow_step(job, "Create tag when missing")["run"]
     assert 'tag="v${VERSION}"' in create_tag_run
     assert 'git tag -a "$tag" -m "Release ${tag}"' in create_tag_run
     assert 'git push origin "$tag"' in create_tag_run
 
-    dispatch_step = steps_by_name["Dispatch publish workflow for created tag"]
+    dispatch_step = _workflow_step(job, "Dispatch publish workflow for created tag")
     assert dispatch_step["if"] == "steps.create_tag.outputs.created == 'true'"
     dispatch_run = dispatch_step["run"]
     assert 'tag="v${VERSION}"' in dispatch_run
