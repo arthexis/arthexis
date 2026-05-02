@@ -185,6 +185,10 @@ def _write_posix_startup_script(state_key: str, startup_script: str) -> Path:
     return script_path
 
 
+def _posix_startup_command(script_path: Path) -> list[str]:
+    return ["sh", "-lc", f". {shlex.quote(str(script_path))}"]
+
+
 def _windows_terminal_command(
     *,
     script_path: Path,
@@ -242,7 +246,7 @@ def _launch_startup_script(
         command = [*shlex.split(executable or "x-terminal-emulator")]
         if startup_script:
             script_path = _write_posix_startup_script(state_key, startup_script)
-            command.extend(["-e", "sh", str(script_path)])
+            command.extend(["-e", *_posix_startup_command(script_path)])
     process = subprocess.Popen(command)
     pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
     if os.name != "nt":
@@ -288,7 +292,7 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     command = [*shlex.split(executable)]
     if startup_script:
         script_path = _write_posix_startup_script(str(terminal.pk), startup_script)
-        command.extend(["-e", "sh", str(script_path)])
+        command.extend(["-e", *_posix_startup_command(script_path)])
     process = subprocess.Popen(command)
     pid_file.write_text(f"{process.pid}\n{_command_metadata(command)}\n", encoding="utf-8")
     os.chmod(pid_file, 0o600)
