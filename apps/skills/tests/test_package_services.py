@@ -8,7 +8,7 @@ from zipfile import ZipFile
 import pytest
 from django.test import override_settings
 
-from apps.nodes.models import NodeRole
+from apps.nodes.models import Node, NodeRole
 from apps.sigils.models import SigilRoot
 from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import (
@@ -247,6 +247,36 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     ) == "Write-Output '[CONF.BASE_DIR]'"
     assert not (unresolved_skill_root / "credentials" / "token.txt").exists()
     assert not (unresolved_skill_root / "workgroup.md").exists()
+
+
+@pytest.mark.django_db
+def test_materialize_does_not_resolve_node_sigils_by_default(tmp_path):
+    SigilRoot.objects.get_or_create(
+        prefix="NODE",
+        defaults={"context_type": SigilRoot.Context.ENTITY},
+    )
+    Node.objects.create(hostname="materialize-safe-node")
+    skill = AgentSkill.objects.create(
+        slug="node-sigil-safety",
+        title="Node Sigil Safety",
+        markdown="Node sigil [NODE.hostname] should stay literal by default.",
+    )
+    AgentSkillFile.objects.create(
+        skill=skill,
+        relative_path="SKILL.md",
+        content=skill.markdown,
+        content_sha256=hashlib.sha256(skill.markdown.encode("utf-8")).hexdigest(),
+        portability=AgentSkillFile.Portability.PORTABLE,
+        included_by_default=True,
+        size_bytes=len(skill.markdown.encode("utf-8")),
+    )
+
+    target_root = tmp_path / "codex-skills"
+    materialize_codex_skill_files(target_root)
+
+    assert (target_root / "node-sigil-safety" / "SKILL.md").read_text(encoding="utf-8") == (
+        "Node sigil [NODE.hostname] should stay literal by default."
+    )
 
 
 @pytest.mark.django_db
