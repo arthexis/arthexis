@@ -62,7 +62,9 @@ def _ensure_private_state_dir(path: Path) -> None:
         return
     if path.is_symlink():
         raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
-    stats = path.stat()
+    stats = path.lstat()
+    if stat.S_ISLNK(stats.st_mode):
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
     getuid = getattr(os, "getuid", None)
     if getuid is not None and stats.st_uid != getuid():
         raise PermissionError(f"Terminal state dir must be owned by current user: {path}")
@@ -82,10 +84,8 @@ def _write_pid_file(pid_file: Path, pid: int, command: Sequence[str]) -> None:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(pid_file, flags, 0o600)
-    try:
-        os.write(fd, content.encode("utf-8"))
-    finally:
-        os.close(fd)
+    with os.fdopen(fd, "w", encoding="utf-8") as output:
+        output.write(content)
 
 
 def _is_process_running(pid: int) -> bool:
