@@ -2,32 +2,44 @@ from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.db.models import Q
+from django.db.models import Count, IntegerField, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views import View
 
 from apps.shop.models import ShopProduct
+from apps.sites.utils import landing
 
+from .constants import (
+    GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE,
+    GALLERY_AP_GUEST_PAGE_SIZE,
+    GALLERY_AP_GUEST_SESSION_KEY,
+)
 from .forms import (
     GalleryCategoryForm,
     GalleryCreditForm,
+    GalleryGuestUploadForm,
     GalleryImageForm,
     GalleryShareForm,
     GalleryTraitAssignmentForm,
     GalleryTraitForm,
     GalleryUploadForm,
 )
-from .models import GalleryImage
+from .models import GalleryImage, GalleryImageReaction
 from .permissions import can_manage_gallery
-from .services import create_gallery_image
+from .services import create_gallery_image, create_guest_gallery_image
 
 _STAGED_UPLOAD_MAX_AGE_SECONDS = 60 * 60
 _STAGED_UPLOAD_SIGNER = TimestampSigner(salt="gallery-upload")
@@ -147,7 +159,9 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
     if normalized_query in {"public", "published"}:
         direct_fields_q |= Q(public_release_at__lte=now)
     if normalized_query == "private":
-        direct_fields_q |= Q(public_release_at__isnull=True) | Q(public_release_at__gt=now)
+        direct_fields_q |= Q(public_release_at__isnull=True) | Q(
+            public_release_at__gt=now
+        )
     try:
         metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
     except ValueError:
@@ -155,9 +169,13 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
 
     direct_match_ids = queryset.filter(direct_fields_q).values_list("id", flat=True)
     metadata_queryset = queryset.filter(_metadata_visibility_filter_for_user(user))
-    metadata_direct_match_ids = metadata_queryset.filter(metadata_direct_fields_q).values_list("id", flat=True)
+    metadata_direct_match_ids = metadata_queryset.filter(
+        metadata_direct_fields_q
+    ).values_list("id", flat=True)
     metadata_related_match_ids = (
-        metadata_queryset.filter(metadata_related_fields_q).values_list("id", flat=True).distinct()
+        metadata_queryset.filter(metadata_related_fields_q)
+        .values_list("id", flat=True)
+        .distinct()
     )
     return queryset.filter(
         Q(id__in=direct_match_ids)
@@ -173,12 +191,16 @@ def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: st
         if filtered_queryset.filter(pk=image.pk).exists():
             queryset = filtered_queryset
     previous_image = (
-        queryset.filter(Q(title__lt=image.title) | Q(title=image.title, id__lt=image.id))
+        queryset.filter(
+            Q(title__lt=image.title) | Q(title=image.title, id__lt=image.id)
+        )
         .order_by("-title", "-id")
         .first()
     )
     next_image = (
-        queryset.filter(Q(title__gt=image.title) | Q(title=image.title, id__gt=image.id))
+        queryset.filter(
+            Q(title__gt=image.title) | Q(title=image.title, id__gt=image.id)
+        )
         .order_by("title", "id")
         .first()
     )
@@ -197,9 +219,211 @@ def _rf_card_store_url_for_image(image: GalleryImage) -> str:
     return f"{reverse('shop:index')}?gallery_image={image.id}"
 
 
+def _ap_guest_key(request) -> str:
+    session = getattr(request, "session", None)
+    if not hasattr(session, "get"):
+        return uuid4().hex
+    guest_key = (session.get(GALLERY_AP_GUEST_SESSION_KEY) or "").strip()
+    if guest_key:
+        return guest_key
+    guest_key = uuid4().hex
+    session[GALLERY_AP_GUEST_SESSION_KEY] = guest_key
+    return guest_key
+
+
+def _ap_gallery_redirect(sort_key: str, *, page_number=None):
+    url = reverse("gallery:ap")
+    params = {}
+    if sort_key:
+        params["sort"] = sort_key
+    if page_number and str(page_number) != "1":
+        params["page"] = page_number
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    return redirect(url)
+
+
+def _ap_guest_uploaded_today(guest_key: str) -> bool:
+    return GalleryImage.objects.filter(
+        guest_key=guest_key,
+        guest_upload_date=timezone.localdate(),
+    ).exists()
+
+
+def _ap_gallery_images():
+    return (
+        GalleryImage.objects.filter(public_release_at__lte=timezone.now())
+        .select_related("media_file")
+        .annotate(
+            like_count=Count(
+                "reactions",
+                filter=Q(reactions__value=GalleryImageReaction.LIKE),
+            ),
+            dislike_count=Count(
+                "reactions",
+                filter=Q(reactions__value=GalleryImageReaction.DISLIKE),
+            ),
+            popularity_score=Coalesce(
+                Sum("reactions__value"),
+                Value(0),
+                output_field=IntegerField(),
+            ),
+        )
+    )
+
+
+def _ap_gallery_sort_key(value: str) -> str:
+    sort_key = (value or "").strip().lower()
+    if sort_key not in {"date", "popularity", "title"}:
+        return "date"
+    return sort_key
+
+
+def _sort_ap_gallery_images(queryset, sort_key: str):
+    if sort_key == "title":
+        return queryset.order_by("title", "id")
+    if sort_key == "popularity":
+        return queryset.order_by("-popularity_score", "-like_count", "title", "id")
+    return queryset.order_by("-media_file__uploaded_at", "-id")
+
+
+def _ap_gallery_page_size() -> int:
+    try:
+        page_size = int(
+            getattr(settings, "GALLERY_AP_GUEST_PAGE_SIZE", GALLERY_AP_GUEST_PAGE_SIZE)
+        )
+    except (TypeError, ValueError):
+        return GALLERY_AP_GUEST_PAGE_SIZE
+    return max(1, page_size)
+
+
+def _validation_error_messages(exc: ValidationError):
+    if hasattr(exc, "message_dict"):
+        for field_messages in exc.message_dict.values():
+            for message in field_messages:
+                yield str(message)
+        return
+    for message in exc.messages:
+        yield str(message)
+
+
+def _render_ap_gallery_guest(
+    request, *, guest_key: str, sort_key: str, upload_form, page_number=None
+):
+    upload_allowed = not _ap_guest_uploaded_today(guest_key)
+    show_upload_form = upload_allowed or bool(upload_form.errors)
+    paginator = Paginator(
+        _sort_ap_gallery_images(_ap_gallery_images(), sort_key),
+        _ap_gallery_page_size(),
+    )
+    page_obj = paginator.get_page(page_number)
+    images = list(page_obj.object_list)
+    reactions = dict(
+        GalleryImageReaction.objects.filter(
+            image_id__in=[image.id for image in images],
+            guest_key=guest_key,
+        ).values_list("image_id", "value")
+    )
+    for image in images:
+        image.guest_reaction = reactions.get(image.id)
+    page_obj.object_list = images
+
+    return render(
+        request,
+        "gallery/ap_guest.html",
+        {
+            "images": page_obj,
+            "is_paginated": page_obj.has_other_pages(),
+            "page_obj": page_obj,
+            "sort_key": sort_key,
+            "sort_options": (
+                ("date", "Date"),
+                ("popularity", "Popularity"),
+                ("title", "Title"),
+            ),
+            "show_upload_form": show_upload_form,
+            "upload_allowed": upload_allowed,
+            "upload_form": upload_form,
+            "max_upload_bytes": upload_form.max_upload_bytes,
+        },
+    )
+
+
+class GalleryApGuestView(View):
+    http_method_names = ["get", "post"]
+
+    def get(self, request):
+        guest_key = _ap_guest_key(request)
+        sort_key = _ap_gallery_sort_key(request.GET.get("sort"))
+        return _render_ap_gallery_guest(
+            request,
+            guest_key=guest_key,
+            sort_key=sort_key,
+            upload_form=GalleryGuestUploadForm(),
+            page_number=request.GET.get("page"),
+        )
+
+    def post(self, request):
+        guest_key = _ap_guest_key(request)
+        sort_key = _ap_gallery_sort_key(request.POST.get("sort"))
+        page_number = request.POST.get("page")
+        upload_form = GalleryGuestUploadForm()
+        action = request.POST.get("action", "")
+        if action == "upload":
+            upload_form = GalleryGuestUploadForm(request.POST, request.FILES)
+            if _ap_guest_uploaded_today(guest_key):
+                upload_form.add_error(None, GALLERY_AP_GUEST_DAILY_LIMIT_MESSAGE)
+            elif upload_form.is_valid():
+                try:
+                    create_guest_gallery_image(
+                        uploaded_file=upload_form.cleaned_data["image"],
+                        title=upload_form.cleaned_data["title"],
+                        guest_key=guest_key,
+                    )
+                except ValidationError as exc:
+                    for message in _validation_error_messages(exc):
+                        upload_form.add_error(None, message)
+                else:
+                    messages.success(request, "Image uploaded for gallery review.")
+                    return _ap_gallery_redirect(sort_key)
+        elif action == "react":
+            reaction_value = {
+                "like": GalleryImageReaction.LIKE,
+                "dislike": GalleryImageReaction.DISLIKE,
+            }.get(request.POST.get("reaction", ""))
+            if reaction_value is None:
+                return JsonResponse({"detail": "invalid reaction"}, status=400)
+            try:
+                image_slug = UUID((request.POST.get("image_slug") or "").strip())
+            except (AttributeError, TypeError, ValueError):
+                return JsonResponse({"detail": "invalid image"}, status=400)
+            image = get_object_or_404(
+                GalleryImage.objects.filter(public_release_at__lte=timezone.now()),
+                slug=image_slug,
+            )
+            GalleryImageReaction.objects.update_or_create(
+                image=image,
+                guest_key=guest_key,
+                defaults={"value": reaction_value},
+            )
+            return _ap_gallery_redirect(sort_key, page_number=page_number)
+        return _render_ap_gallery_guest(
+            request,
+            guest_key=guest_key,
+            sort_key=sort_key,
+            upload_form=upload_form,
+            page_number=page_number,
+        )
+
+
+gallery_ap_guest = landing("Gallery")(GalleryApGuestView.as_view())
+
+
 def gallery_index(request):
     search_query = (request.GET.get("q") or "").strip()
-    images = _apply_gallery_search(_visible_images_for_user(request.user), search_query, user=request.user).order_by(
+    images = _apply_gallery_search(
+        _visible_images_for_user(request.user), search_query, user=request.user
+    ).order_by(
         "title",
         "id",
     )
@@ -234,7 +458,9 @@ def gallery_detail(request, slug):
 
     can_view_metadata = image.can_view_metadata(request.user)
     can_share = image.can_share(request.user)
-    image_form = GalleryImageForm(instance=image) if can_manage_gallery(request.user) else None
+    image_form = (
+        GalleryImageForm(instance=image) if can_manage_gallery(request.user) else None
+    )
     share_form = GalleryShareForm()
     trait_form = GalleryTraitAssignmentForm()
     credit_form = GalleryCreditForm()
@@ -274,7 +500,9 @@ def gallery_detail(request, slug):
                     qualitative_value=trait_form.cleaned_data["qualitative_value"],
                     defaults={"float_value": trait_form.cleaned_data["float_value"]},
                 )
-                messages.success(request, "Trait added." if created else "Trait updated.")
+                messages.success(
+                    request, "Trait added." if created else "Trait updated."
+                )
                 return redirect("gallery:detail", slug=image.slug)
         elif action == "add-credit" and can_manage_gallery(request.user):
             credit_form = GalleryCreditForm(request.POST)
@@ -296,7 +524,9 @@ def gallery_detail(request, slug):
         "image_form": image_form,
         "trait_form": trait_form,
         "credit_form": credit_form,
-        "gallery_query_string": f"?{urlencode({'q': search_query})}" if search_query else "",
+        "gallery_query_string": (
+            f"?{urlencode({'q': search_query})}" if search_query else ""
+        ),
         "next_image": next_image,
         "previous_image": previous_image,
         "rf_card_store_url": _rf_card_store_url_for_image(image),
@@ -306,7 +536,12 @@ def gallery_detail(request, slug):
 
 
 def gallery_metadata(request, slug):
-    image = get_object_or_404(GalleryImage.objects.prefetch_related("trait_values__trait", "trait_values__category", "categories"), slug=slug)
+    image = get_object_or_404(
+        GalleryImage.objects.prefetch_related(
+            "trait_values__trait", "trait_values__category", "categories"
+        ),
+        slug=slug,
+    )
     if not image.can_view_metadata(request.user):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
@@ -336,17 +571,26 @@ def gallery_upload(request):
         owner_user = None
         owner_username = form.cleaned_data.get("owner_user")
         if owner_username:
-            owner_user = get_user_model().objects.filter(username=owner_username).first()
+            owner_user = (
+                get_user_model().objects.filter(username=owner_username).first()
+            )
             if owner_user is None:
                 form.add_error("owner_user", "User not found.")
                 return render(request, "gallery/upload.html", {"form": form})
 
         staged_upload_key = form.cleaned_data.get("staged_upload_key") or ""
         staged_path = (
-            _resolve_staged_upload(staged_upload_key=staged_upload_key, user_id=request.user.pk) if staged_upload_key else None
+            _resolve_staged_upload(
+                staged_upload_key=staged_upload_key, user_id=request.user.pk
+            )
+            if staged_upload_key
+            else None
         )
         if staged_upload_key and staged_path is None:
-            form.add_error("image", "The previously uploaded image has expired or is invalid. Please upload it again.")
+            form.add_error(
+                "image",
+                "The previously uploaded image has expired or is invalid. Please upload it again.",
+            )
             return render(request, "gallery/upload.html", {"form": form})
         uploaded_file = form.cleaned_data.get("image")
         staged_handle = None
@@ -360,7 +604,9 @@ def gallery_upload(request):
                 title=form.cleaned_data["title"],
                 description=form.cleaned_data.get("description", ""),
                 public_release_at=form.cleaned_data.get("public_release_at"),
-                create_content_sample=form.cleaned_data.get("create_content_sample", False),
+                create_content_sample=form.cleaned_data.get(
+                    "create_content_sample", False
+                ),
                 owner_user=owner_user,
                 owner_group=form.cleaned_data.get("owner_group"),
             )
@@ -371,10 +617,18 @@ def gallery_upload(request):
         messages.success(request, "Image uploaded successfully.")
         return redirect("gallery:detail", slug=image.slug)
 
-    if request.method == "POST" and request.FILES.get("image") and "image" not in form.errors:
-        previous_staged_upload_key = (request.POST.get("staged_upload_key") or "").strip()
+    if (
+        request.method == "POST"
+        and request.FILES.get("image")
+        and "image" not in form.errors
+    ):
+        previous_staged_upload_key = (
+            request.POST.get("staged_upload_key") or ""
+        ).strip()
         previous_staged_path = (
-            _resolve_staged_upload(staged_upload_key=previous_staged_upload_key, user_id=request.user.pk)
+            _resolve_staged_upload(
+                staged_upload_key=previous_staged_upload_key, user_id=request.user.pk
+            )
             if previous_staged_upload_key
             else None
         )

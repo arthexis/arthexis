@@ -1,11 +1,15 @@
-from io import BytesIO
+import json
 from datetime import timedelta
+from io import BytesIO
+from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import signing
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
@@ -19,17 +23,22 @@ from ..models import (
     GalleryCategory,
     GalleryCredit,
     GalleryImage,
+    GalleryImageReaction,
     GalleryImageTrait,
     GalleryTrait,
 )
-from ..services import create_gallery_image
+from ..services import create_gallery_image, create_guest_gallery_image
 from ..views import _apply_gallery_search
 
 
 class GalleryVisibilityTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="owner", password="pw")
-        self.other = get_user_model().objects.create_user(username="other", password="pw")
+        self.user = get_user_model().objects.create_user(
+            username="owner", password="pw"
+        )
+        self.other = get_user_model().objects.create_user(
+            username="other", password="pw"
+        )
 
     def _upload(self, name="a.jpg"):
         buffer = BytesIO()
@@ -37,7 +46,11 @@ class GalleryVisibilityTests(TestCase):
         return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
 
     def test_public_flag_controls_visibility(self):
-        private = create_gallery_image(uploaded_file=self._upload("private.jpg"), title="Private", owner_user=self.user)
+        private = create_gallery_image(
+            uploaded_file=self._upload("private.jpg"),
+            title="Private",
+            owner_user=self.user,
+        )
         public = create_gallery_image(
             uploaded_file=self._upload("public.jpg"),
             title="Public",
@@ -83,7 +96,10 @@ class GalleryVisibilityTests(TestCase):
 
     def test_content_sample_failure_cleans_up_media_file(self):
         before_count = MediaFile.objects.count()
-        with mock.patch("apps.gallery.services._save_gallery_content_sample", side_effect=RuntimeError("boom")):
+        with mock.patch(
+            "apps.gallery.services._save_gallery_content_sample",
+            side_effect=RuntimeError("boom"),
+        ):
             with self.assertRaises(RuntimeError):
                 create_gallery_image(
                     uploaded_file=self._upload("cleanup.jpg"),
@@ -97,7 +113,9 @@ class GalleryVisibilityTests(TestCase):
 
 class GalleryIndexTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="gallery-search-owner", password="pw")
+        self.user = get_user_model().objects.create_user(
+            username="gallery-search-owner", password="pw"
+        )
 
     def _upload(self, name="gallery.jpg"):
         buffer = BytesIO()
@@ -168,7 +186,11 @@ class GalleryIndexTests(TestCase):
             display_name="Citrine Archive",
         )
 
-        matches = list(_apply_gallery_search(GalleryImage.objects.all(), "citrine").order_by("title"))
+        matches = list(
+            _apply_gallery_search(GalleryImage.objects.all(), "citrine").order_by(
+                "title"
+            )
+        )
 
         self.assertEqual(matches, [direct_match, related_match])
         self.assertNotIn(hidden, matches)
@@ -181,7 +203,9 @@ class GalleryIndexTests(TestCase):
             last_name="Owner",
             password="pw",
         )
-        recipient = get_user_model().objects.create_user(username="metadata-recipient", password="pw")
+        recipient = get_user_model().objects.create_user(
+            username="metadata-recipient", password="pw"
+        )
         image = create_gallery_image(
             uploaded_file=self._upload("shared-metadata.jpg"),
             title="Shared Plain Title",
@@ -192,7 +216,9 @@ class GalleryIndexTests(TestCase):
         image.content_sample.content = "internal citrine sample"
         image.content_sample.path = "private/citrine/path"
         image.content_sample.save()
-        category = GalleryCategory.objects.create(name="Citrine Category", slug="citrine-category")
+        category = GalleryCategory.objects.create(
+            name="Citrine Category", slug="citrine-category"
+        )
         trait = GalleryTrait.objects.create(name="Citrine Trait", slug="citrine-trait")
         image.categories.add(category)
         GalleryImageTrait.objects.create(
@@ -234,14 +260,21 @@ class GalleryIndexTests(TestCase):
         )
         image.content_sample.content = "public hidden citrine sample"
         image.content_sample.save()
-        category = GalleryCategory.objects.create(name="Public Citrine", slug="public-citrine")
+        category = GalleryCategory.objects.create(
+            name="Public Citrine", slug="public-citrine"
+        )
         image.categories.add(category)
         GalleryCredit.objects.create(
             image=image,
             display_name="Public Citrine Credit",
         )
 
-        for query in ["gallery-search-owner", "Public Citrine", "Public Citrine Credit", "public hidden citrine"]:
+        for query in [
+            "gallery-search-owner",
+            "Public Citrine",
+            "Public Citrine Credit",
+            "public hidden citrine",
+        ]:
             with self.subTest(query=query):
                 response = self.client.get("/gallery/", {"q": query})
                 self.assertEqual(response.status_code, 200)
@@ -257,7 +290,9 @@ class GalleryIndexTests(TestCase):
             title="Owner Metadata Image",
             owner_user=self.user,
         )
-        category = GalleryCategory.objects.create(name="Owner Citrine", slug="owner-citrine")
+        category = GalleryCategory.objects.create(
+            name="Owner Citrine", slug="owner-citrine"
+        )
         image.categories.add(category)
         self.client.force_login(self.user)
 
@@ -292,7 +327,9 @@ class GalleryIndexTests(TestCase):
             public_release_at=timezone.now(),
         )
 
-        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.id)))
+        matches = list(
+            _apply_gallery_search(GalleryImage.objects.all(), str(visible.id))
+        )
 
         self.assertIn(visible, matches)
         self.assertNotIn(other, matches)
@@ -311,7 +348,9 @@ class GalleryIndexTests(TestCase):
             public_release_at=timezone.now(),
         )
 
-        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.slug)))
+        matches = list(
+            _apply_gallery_search(GalleryImage.objects.all(), str(visible.slug))
+        )
 
         self.assertEqual(matches, [visible])
         self.assertNotIn(other, matches)
@@ -335,7 +374,10 @@ class GalleryIndexTests(TestCase):
             owner_user=self.user,
         )
 
-        self.assertEqual(list(_apply_gallery_search(GalleryImage.objects.all(), "yes")), [title_match])
+        self.assertEqual(
+            list(_apply_gallery_search(GalleryImage.objects.all(), "yes")),
+            [title_match],
+        )
         for query in ["no", "true", "false"]:
             with self.subTest(query=query):
                 matches = list(_apply_gallery_search(GalleryImage.objects.all(), query))
@@ -382,7 +424,7 @@ class GalleryIndexTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Image ID")
-        self.assertContains(response, f"data-feedback-context=\"Image ID: {current.id}")
+        self.assertContains(response, f'data-feedback-context="Image ID: {current.id}')
         self.assertContains(response, f"/gallery/images/{first.slug}/")
         self.assertContains(response, f"/gallery/images/{same_title_next.slug}/")
         self.assertNotContains(response, f"/gallery/images/{last.slug}/")
@@ -390,10 +432,263 @@ class GalleryIndexTests(TestCase):
         self.assertContains(response, f"/shop/?gallery_image={current.id}")
 
 
+class GalleryApGuestTests(TestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user(
+            username="ap-gallery-owner", password="pw"
+        )
+
+    def _upload(self, name="guest.jpg", color="cyan"):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), color).save(buffer, format="JPEG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
+
+    def _create_public_image(self, title, *, color="blue"):
+        return create_gallery_image(
+            uploaded_file=self._upload(f"{title}.jpg", color=color),
+            title=title,
+            owner_user=self.owner,
+            public_release_at=timezone.now(),
+        )
+
+    def test_ap_guest_can_upload_image_with_title_only_for_review(self):
+        response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Guest Mural",
+                "image": self._upload(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        image = GalleryImage.objects.get(title="Guest Mural")
+        self.assertEqual(image.description, "")
+        self.assertTrue(image.guest_key)
+        self.assertEqual(image.guest_upload_date, timezone.localdate())
+        self.assertIsNone(image.owner_user_id)
+        self.assertIsNone(image.owner_group_id)
+        self.assertFalse(image.is_publicly_visible())
+
+        gallery_response = self.client.get(reverse("gallery:ap"))
+        self.assertNotContains(gallery_response, "Guest Mural")
+
+    def test_ap_guest_upload_service_enforces_daily_uniqueness(self):
+        first = create_guest_gallery_image(
+            uploaded_file=self._upload("first.jpg"),
+            title="First",
+            guest_key="same-guest",
+        )
+
+        with self.assertRaises(ValidationError):
+            create_guest_gallery_image(
+                uploaded_file=self._upload("second.jpg"),
+                title="Second",
+                guest_key=first.guest_key,
+            )
+
+        self.assertEqual(
+            GalleryImage.objects.filter(guest_key=first.guest_key).count(),
+            1,
+        )
+        self.assertFalse(GalleryImage.objects.filter(title="Second").exists())
+
+    def test_ap_guest_upload_failure_cleans_up_media_file(self):
+        before_count = MediaFile.objects.count()
+
+        with mock.patch(
+            "apps.gallery.services.GalleryImage.objects.create",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                create_guest_gallery_image(
+                    uploaded_file=self._upload("cleanup-guest.jpg"),
+                    title="Cleanup Guest",
+                    guest_key="cleanup-guest",
+                )
+
+        self.assertEqual(MediaFile.objects.count(), before_count)
+        self.assertFalse(GalleryImage.objects.filter(title="Cleanup Guest").exists())
+
+    def test_ap_guest_upload_is_limited_to_one_image_per_day(self):
+        first_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Morning",
+                "image": self._upload("morning.jpg"),
+            },
+        )
+        self.assertEqual(first_response.status_code, 302)
+
+        second_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Evening",
+                "image": self._upload("evening.jpg"),
+            },
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "You can upload one image per day.")
+        self.assertTrue(GalleryImage.objects.filter(title="Morning").exists())
+        self.assertFalse(GalleryImage.objects.filter(title="Evening").exists())
+
+    @override_settings(GALLERY_AP_GUEST_MAX_UPLOAD_BYTES=10)
+    def test_ap_guest_upload_enforces_size_limit(self):
+        response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Large",
+                "image": self._upload("large.jpg"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Image must be 10 bytes or smaller.")
+        self.assertFalse(GalleryImage.objects.filter(title="Large").exists())
+
+    def test_ap_guest_upload_enforces_title_limit(self):
+        response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "x" * 41,
+                "image": self._upload("title.jpg"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ensure this value has at most 40 characters")
+        self.assertFalse(GalleryImage.objects.filter(title="x" * 41).exists())
+
+    def test_ap_guest_reactions_and_sorting(self):
+        alpha = self._create_public_image("Alpha", color="red")
+        popular = self._create_public_image("Popular", color="green")
+        quiet = self._create_public_image("Quiet", color="yellow")
+        now = timezone.now()
+        alpha.media_file.uploaded_at = now - timedelta(days=2)
+        alpha.media_file.save(update_fields=["uploaded_at"])
+        popular.media_file.uploaded_at = now - timedelta(days=1)
+        popular.media_file.save(update_fields=["uploaded_at"])
+        quiet.media_file.uploaded_at = now
+        quiet.media_file.save(update_fields=["uploaded_at"])
+        GalleryImageReaction.objects.create(
+            image=popular,
+            guest_key="other-guest",
+            value=GalleryImageReaction.LIKE,
+        )
+        GalleryImageReaction.objects.create(
+            image=quiet,
+            guest_key="third-guest",
+            value=GalleryImageReaction.DISLIKE,
+        )
+
+        reaction_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "react",
+                "image_slug": alpha.slug,
+                "reaction": "like",
+                "sort": "title",
+            },
+        )
+        self.assertEqual(reaction_response.status_code, 302)
+        self.assertEqual(
+            reaction_response["Location"], f"{reverse('gallery:ap')}?sort=title"
+        )
+        self.assertTrue(
+            GalleryImageReaction.objects.filter(
+                image=alpha, value=GalleryImageReaction.LIKE
+            ).exists()
+        )
+
+        title_response = self.client.get(reverse("gallery:ap"), {"sort": "title"})
+        self.assertEqual(
+            [image.title for image in title_response.context["images"]],
+            ["Alpha", "Popular", "Quiet"],
+        )
+        self.assertEqual(
+            title_response.context["images"][0].guest_reaction,
+            GalleryImageReaction.LIKE,
+        )
+
+        popularity_response = self.client.get(
+            reverse("gallery:ap"), {"sort": "popularity"}
+        )
+        self.assertEqual(popularity_response.context["images"][0].title, "Alpha")
+        self.assertIn(
+            popularity_response.context["images"][1].title,
+            {"Popular", "Quiet"},
+        )
+
+        date_response = self.client.get(reverse("gallery:ap"), {"sort": "date"})
+        self.assertEqual(date_response.context["images"][0].title, "Quiet")
+
+    def test_ap_guest_reaction_rejects_malformed_image_slug(self):
+        response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "react",
+                "image_slug": "not-a-uuid",
+                "reaction": "like",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertJSONEqual(response.content, {"detail": "invalid image"})
+        self.assertFalse(GalleryImageReaction.objects.exists())
+
+    @override_settings(GALLERY_AP_GUEST_PAGE_SIZE=2)
+    def test_ap_guest_gallery_paginates_public_images(self):
+        self._create_public_image("Alpha", color="red")
+        self._create_public_image("Bravo", color="green")
+        self._create_public_image("Charlie", color="blue")
+
+        first_page = self.client.get(reverse("gallery:ap"), {"sort": "title"})
+        second_page = self.client.get(
+            reverse("gallery:ap"),
+            {"sort": "title", "page": "2"},
+        )
+
+        self.assertEqual(
+            [image.title for image in first_page.context["images"]],
+            ["Alpha", "Bravo"],
+        )
+        self.assertTrue(first_page.context["is_paginated"])
+        self.assertContains(first_page, "Next")
+        self.assertNotContains(first_page, "Charlie")
+        self.assertEqual(
+            [image.title for image in second_page.context["images"]],
+            ["Charlie"],
+        )
+
+
+def test_gallery_module_fixture_exposes_ap_guest_landing():
+    fixture_path = Path("apps/sites/fixtures/default__modules_gallery.json")
+    fixture_data = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    module = next(
+        item for item in fixture_data if item.get("model") == "modules.module"
+    )
+    landing = next(
+        item for item in fixture_data if item.get("model") == "pages.landing"
+    )
+
+    assert module["fields"]["path"] == "/gallery/"
+    assert module["fields"]["roles"] == [["Control"], ["Satellite"]]
+    assert landing["fields"]["module"] == ["/gallery/"]
+    assert landing["fields"]["path"] == reverse("gallery:ap")
+
+
 class GalleryManagementPermissionTests(TestCase):
     def setUp(self):
         self.group = SecurityGroup.objects.create(name=GALLERY_MANAGER_GROUP_NAME)
-        self.manager = get_user_model().objects.create_user(username="manager", password="pw")
+        self.manager = get_user_model().objects.create_user(
+            username="manager", password="pw"
+        )
         self.manager.groups.add(self.group)
 
     def _upload(self, name="u.jpg"):
@@ -422,7 +717,9 @@ class GalleryManagementPermissionTests(TestCase):
         self.assertContains(response, f'<option value="{self.group.pk}" selected>')
 
     def test_non_manager_cannot_upload(self):
-        non_manager = get_user_model().objects.create_user(username="non-manager", password="pw")
+        non_manager = get_user_model().objects.create_user(
+            username="non-manager", password="pw"
+        )
         self.client.force_login(non_manager)
         response = self.client.post(
             "/gallery/upload/",
@@ -466,8 +763,12 @@ class GalleryManagementPermissionTests(TestCase):
             },
         )
         self.assertEqual(initial_response.status_code, 200)
-        self.assertContains(initial_response, "Image file is retained from your previous attempt.")
-        staged_upload_key = initial_response.context["form"]["staged_upload_key"].value()
+        self.assertContains(
+            initial_response, "Image file is retained from your previous attempt."
+        )
+        staged_upload_key = initial_response.context["form"][
+            "staged_upload_key"
+        ].value()
         self.assertTrue(staged_upload_key)
 
         retry_response = self.client.post(
@@ -488,7 +789,9 @@ class GalleryManagementPermissionTests(TestCase):
         response = self.client.post(
             "/gallery/upload/",
             {
-                "image": SimpleUploadedFile("not-image.txt", b"not-an-image", content_type="text/plain"),
+                "image": SimpleUploadedFile(
+                    "not-image.txt", b"not-an-image", content_type="text/plain"
+                ),
                 "title": "Invalid Image",
                 "description": "",
                 "owner_user": self.manager.username,
@@ -507,23 +810,34 @@ class GalleryManagementPermissionTests(TestCase):
                 "title": "Retry Fails",
                 "description": "",
                 "owner_user": self.manager.username,
-                "staged_upload_key": signing.TimestampSigner(salt="gallery-upload").sign("gallery/staged/999/missing.jpg"),
+                "staged_upload_key": signing.TimestampSigner(
+                    salt="gallery-upload"
+                ).sign("gallery/staged/999/missing.jpg"),
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "The previously uploaded image has expired or is invalid. Please upload it again.")
+        self.assertContains(
+            response,
+            "The previously uploaded image has expired or is invalid. Please upload it again.",
+        )
         self.assertFalse(GalleryImage.objects.filter(title="Retry Fails").exists())
 
     def test_gallery_manager_can_view_private_image(self):
         image = create_gallery_image(
             uploaded_file=self._upload("managed-private.jpg"),
             title="Managed Private",
-            owner_user=get_user_model().objects.create_user(username="owned", password="pw"),
+            owner_user=get_user_model().objects.create_user(
+                username="owned", password="pw"
+            ),
         )
         self.assertTrue(image.can_view(self.manager))
 
     def test_trait_assignment_allows_category_trait_pair(self):
-        image = create_gallery_image(uploaded_file=self._upload("meta.jpg"), title="Meta", owner_user=self.manager)
+        image = create_gallery_image(
+            uploaded_file=self._upload("meta.jpg"),
+            title="Meta",
+            owner_user=self.manager,
+        )
         category = GalleryCategory.objects.create(name="Style", slug="style")
         trait = GalleryTrait.objects.create(name="Tone", slug="tone")
         assignment = GalleryImageTrait.objects.create(
@@ -536,7 +850,9 @@ class GalleryManagementPermissionTests(TestCase):
 
     def test_duplicate_trait_submission_updates_existing_assignment(self):
         self.client.force_login(self.manager)
-        image = create_gallery_image(uploaded_file=self._upload("dup.jpg"), title="Dup", owner_user=self.manager)
+        image = create_gallery_image(
+            uploaded_file=self._upload("dup.jpg"), title="Dup", owner_user=self.manager
+        )
         category = GalleryCategory.objects.create(name="Palette", slug="palette")
         trait = GalleryTrait.objects.create(name="Mood", slug="mood")
 
@@ -584,7 +900,9 @@ class GalleryManagementPermissionTests(TestCase):
 class GalleryCategoryDefaultsTests(TestCase):
     def test_default_gallery_categories_are_seeded(self):
         self.assertQuerySetEqual(
-            GalleryCategory.objects.filter(slug__in=("artist", "designer", "developer", "template")).order_by("slug"),
+            GalleryCategory.objects.filter(
+                slug__in=("artist", "designer", "developer", "template")
+            ).order_by("slug"),
             ["artist", "designer", "developer", "template"],
             transform=lambda category: category.slug,
         )
@@ -592,9 +910,15 @@ class GalleryCategoryDefaultsTests(TestCase):
 
 class GalleryImageSharingTests(TestCase):
     def setUp(self):
-        self.owner = get_user_model().objects.create_user(username="owner-share", password="pw")
-        self.recipient = get_user_model().objects.create_user(username="recipient-share", password="pw")
-        self.other = get_user_model().objects.create_user(username="other-share", password="pw")
+        self.owner = get_user_model().objects.create_user(
+            username="owner-share", password="pw"
+        )
+        self.recipient = get_user_model().objects.create_user(
+            username="recipient-share", password="pw"
+        )
+        self.other = get_user_model().objects.create_user(
+            username="other-share", password="pw"
+        )
         self.image = create_gallery_image(
             uploaded_file=self._upload("shared.jpg"),
             title="Shared",
@@ -616,7 +940,9 @@ class GalleryImageSharingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.image.refresh_from_db()
         self.assertEqual(self.image.owner_user_id, self.owner.pk)
-        self.assertTrue(self.image.shared_with_users.filter(pk=self.recipient.pk).exists())
+        self.assertTrue(
+            self.image.shared_with_users.filter(pk=self.recipient.pk).exists()
+        )
         self.assertTrue(self.image.can_view(self.recipient))
 
     def test_shared_user_cannot_reshare_image(self):

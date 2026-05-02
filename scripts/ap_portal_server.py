@@ -22,11 +22,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 BASE_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = BASE_DIR / "config" / "data" / "ap_portal"
 DEFAULT_STATE_DIR = BASE_DIR / ".state" / "ap_portal"
-DEFAULT_SOURCE_URL = "https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py"
+DEFAULT_SOURCE_URL = (
+    "https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py"
+)
 DEFAULT_SUITE_LOGIN_SCHEME = "http"
 DEFAULT_SUITE_LOGIN_HOST = "10.42.0.1"
 DEFAULT_SUITE_LOGIN_PORT = 8888
-DEFAULT_SUITE_LOGIN_PATH = "/login/"
+DEFAULT_SUITE_LOGIN_PATH = "/gallery/ap/"
 DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS = 3000
 AUTHORIZED_MACS_PATH = DEFAULT_STATE_DIR / "authorized_macs.txt"
 CONSENTS_PATH = DEFAULT_STATE_DIR / "consents.jsonl"
@@ -161,7 +163,9 @@ def _normalize_url_path(value: str) -> str:
 
 
 def _normalize_url_scheme(value: str) -> str:
-    scheme = str(value or DEFAULT_SUITE_LOGIN_SCHEME).strip().lower().removesuffix("://")
+    scheme = (
+        str(value or DEFAULT_SUITE_LOGIN_SCHEME).strip().lower().removesuffix("://")
+    )
     if scheme not in {"http", "https"}:
         raise ValueError("--suite-login-scheme must be http or https.")
     return scheme
@@ -273,7 +277,9 @@ class ActivityRecorder:
             "terms_version": TERMS_VERSION,
             "monitoring_notice": MONITORING_NOTICE,
         }
-        event.update({key: value for key, value in fields.items() if value not in (None, "")})
+        event.update(
+            {key: value for key, value in fields.items() if value not in (None, "")}
+        )
         _append_jsonl(self.config.activity_path, event)
         return event
 
@@ -346,7 +352,9 @@ class ActivityRecorder:
 
         return sorted(
             clients.values(),
-            key=lambda item: str(item.get("last_event_at") or item.get("accepted_at") or ""),
+            key=lambda item: str(
+                item.get("last_event_at") or item.get("accepted_at") or ""
+            ),
             reverse=True,
         )
 
@@ -409,9 +417,7 @@ class PortalState:
         mac_address = self.resolve_mac(ip_address)
         with self._lock:
             authorized = bool(mac_address and mac_address in self._authorized)
-        authorized_redirect_url = (
-            self.suite_login_url(host) if authorized else ""
-        )
+        authorized_redirect_url = self.suite_login_url(host) if authorized else ""
         self.activity.record(
             "status_check",
             ip_address=ip_address,
@@ -536,7 +542,9 @@ class PortalState:
                     except OSError as exc:
                         rollback_error = exc
                     try:
-                        self._restore_authorized_macs(previous_authorized, existed=authorized_file_existed)
+                        self._restore_authorized_macs(
+                            previous_authorized, existed=authorized_file_existed
+                        )
                     except OSError as exc:
                         if rollback_error is not None:
                             rollback_error.add_note(str(exc))
@@ -724,7 +732,9 @@ class PortalApplication:
                     data = self._read_payload()
                     result = app.state.subscribe(
                         email=str(data.get("email") or ""),
-                        accept_terms=_accept_terms_is_explicit(data.get("accept_terms")),
+                        accept_terms=_accept_terms_is_explicit(
+                            data.get("accept_terms")
+                        ),
                         ip_address=self._client_ip(),
                         user_agent=self.headers.get("User-Agent", ""),
                         host=self.headers.get("Host", ""),
@@ -735,14 +745,20 @@ class PortalApplication:
                 except FirewallSyncError as exc:
                     LOGGER.exception("Firewall sync failed")
                     self._json(
-                        {"error": "Unable to authorize this device right now.", "details": str(exc)},
+                        {
+                            "error": "Unable to authorize this device right now.",
+                            "details": str(exc),
+                        },
                         status=HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
                     return
                 except OSError as exc:
                     LOGGER.exception("Consent audit logging failed")
                     self._json(
-                        {"error": "Unable to record consent right now.", "details": str(exc)},
+                        {
+                            "error": "Unable to record consent right now.",
+                            "details": str(exc),
+                        },
                         status=HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
                     return
@@ -754,7 +770,9 @@ class PortalApplication:
 
             def _is_direct_local_request(self) -> bool:
                 fallback = self.client_address[0] if self.client_address else ""
-                return fallback in {"127.0.0.1", "::1"} and not self.headers.get("X-Forwarded-For")
+                return fallback in {"127.0.0.1", "::1"} and not self.headers.get(
+                    "X-Forwarded-For"
+                )
 
             def _record_request(self, path: str) -> None:
                 app.state.record_request(
@@ -783,7 +801,9 @@ class PortalApplication:
                     return False
                 if not path.exists() or not path.is_file():
                     return False
-                content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                content_type = (
+                    mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                )
                 body = _read_text(path)
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", content_type)
@@ -803,7 +823,9 @@ class PortalApplication:
                     return parsed
                 return _parse_form_payload(raw)
 
-            def _json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
+            def _json(
+                self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK
+            ) -> None:
                 body = json.dumps(payload, sort_keys=True).encode("utf-8")
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
@@ -818,7 +840,11 @@ class PortalApplication:
 def build_config(args: argparse.Namespace) -> PortalConfig:
     state_dir = Path(args.state_dir).expanduser().resolve()
     assets_dir = Path(args.assets_dir).expanduser().resolve()
-    source_url = args.source_url or os.environ.get("ARTHEXIS_AP_SOURCE_URL") or DEFAULT_SOURCE_URL
+    source_url = (
+        args.source_url
+        or os.environ.get("ARTHEXIS_AP_SOURCE_URL")
+        or DEFAULT_SOURCE_URL
+    )
     local_development_mac = (
         args.local_development_mac
         or os.environ.get("ARTHEXIS_AP_LOCAL_DEVELOPMENT_MAC")
@@ -848,7 +874,9 @@ def build_config(args: argparse.Namespace) -> PortalConfig:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Arthexis AP consent and monitoring portal.")
+    parser = argparse.ArgumentParser(
+        description="Run the Arthexis AP consent and monitoring portal."
+    )
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9080)
     parser.add_argument("--assets-dir", default=str(ASSETS_DIR))
@@ -856,7 +884,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-url", default="")
     parser.add_argument("--suite-login-scheme", default=DEFAULT_SUITE_LOGIN_SCHEME)
     parser.add_argument("--suite-login-host", default=DEFAULT_SUITE_LOGIN_HOST)
-    parser.add_argument("--suite-login-port", type=int, default=DEFAULT_SUITE_LOGIN_PORT)
+    parser.add_argument(
+        "--suite-login-port", type=int, default=DEFAULT_SUITE_LOGIN_PORT
+    )
     parser.add_argument("--suite-login-path", default=DEFAULT_SUITE_LOGIN_PATH)
     parser.add_argument(
         "--authorized-redirect-delay-ms",
@@ -880,7 +910,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     config = build_config(parse_args())
     app = PortalApplication(config)
     server = ThreadingHTTPServer((config.bind, config.port), app.handler_class())

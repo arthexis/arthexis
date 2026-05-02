@@ -28,6 +28,7 @@ DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "energy": "Support for Energy processes and monetization.",
     "flows": "Workflow orchestration and pipelines.",
     "ftp": "FTP connectivity and file transfer helpers.",
+    "gallery": "Public image galleries and guest art uploads.",
     "groups": "Shared group definitions and permissions.",
     "nodes": "System and Node-level operations.",
     "links": "Link management and redirects.",

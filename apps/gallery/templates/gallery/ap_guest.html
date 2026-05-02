@@ -1,0 +1,142 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Gallery" %}{% endblock %}
+
+{% block extra_head %}
+{{ block.super }}
+<style>
+  .ap-gallery-grid .card-img-top {
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <h1 class="h3 mb-0">{% trans "Gallery" %}</h1>
+    <form class="d-flex flex-wrap gap-2" method="get">
+      {% for value, label in sort_options %}
+        <button
+          class="btn btn-sm {% if sort_key == value %}btn-primary{% else %}btn-outline-primary{% endif %}"
+          type="submit"
+          name="sort"
+          value="{{ value }}"
+        >
+          {{ label }}
+        </button>
+      {% endfor %}
+    </form>
+  </div>
+
+  <section class="mb-4">
+    <h2 class="h5">{% trans "Upload Art" %}</h2>
+    {% if show_upload_form %}
+      <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload">
+        <input type="hidden" name="sort" value="{{ sort_key }}">
+        <div class="col-md-5">
+          <label class="form-label" for="{{ upload_form.title.id_for_label }}">{% trans "Title" %}</label>
+          {{ upload_form.title }}
+          {% for error in upload_form.title.errors %}
+            <div class="text-danger small">{{ error }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-md-5">
+          <label class="form-label" for="{{ upload_form.image.id_for_label }}">{% trans "Image" %}</label>
+          {{ upload_form.image }}
+          <div class="form-text">{% blocktrans with size=max_upload_bytes|filesizeformat %}Maximum {{ size }}.{% endblocktrans %}</div>
+          {% for error in upload_form.image.errors %}
+            <div class="text-danger small">{{ error }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-md-2 d-grid">
+          <button class="btn btn-primary" type="submit">{% trans "Upload" %}</button>
+        </div>
+        {% if upload_form.non_field_errors %}
+          <div class="col-12">
+            {% for error in upload_form.non_field_errors %}
+              <div class="alert alert-warning mb-0">{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </form>
+    {% else %}
+      <div class="alert alert-info mb-0">{% trans "Daily upload recorded." %}</div>
+    {% endif %}
+  </section>
+
+  <div class="row g-4 ap-gallery-grid">
+    {% for image in images %}
+      <div class="col-md-6 col-lg-4">
+        <article class="card h-100 shadow-sm">
+          <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="card-img-top">
+          <div class="card-body d-flex flex-column">
+            <h2 class="h6">{{ image.title }}</h2>
+            <p class="text-muted small mb-3">
+              {% blocktrans with likes=image.like_count dislikes=image.dislike_count score=image.popularity_score %}{{ likes }} likes, {{ dislikes }} dislikes, score {{ score }}{% endblocktrans %}
+            </p>
+            <form method="post" class="d-flex gap-2 mt-auto">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="react">
+              <input type="hidden" name="sort" value="{{ sort_key }}">
+              <input type="hidden" name="page" value="{{ page_obj.number }}">
+              <input type="hidden" name="image_slug" value="{{ image.slug }}">
+              <button
+                class="btn btn-sm {% if image.guest_reaction == 1 %}btn-success{% else %}btn-outline-success{% endif %}"
+                type="submit"
+                name="reaction"
+                value="like"
+              >
+                {% trans "Like" %}
+              </button>
+              <button
+                class="btn btn-sm {% if image.guest_reaction == -1 %}btn-danger{% else %}btn-outline-danger{% endif %}"
+                type="submit"
+                name="reaction"
+                value="dislike"
+              >
+                {% trans "Dislike" %}
+              </button>
+            </form>
+          </div>
+        </article>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <div class="alert alert-info">{% trans "No images yet." %}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if is_paginated %}
+    <nav class="mt-4" aria-label="{% trans "Gallery pages" %}">
+      <ul class="pagination justify-content-center mb-0">
+        <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+          {% if page_obj.has_previous %}
+            <a class="page-link" href="?sort={{ sort_key }}&page={{ page_obj.previous_page_number }}">{% trans "Previous" %}</a>
+          {% else %}
+            <span class="page-link">{% trans "Previous" %}</span>
+          {% endif %}
+        </li>
+        <li class="page-item active" aria-current="page">
+          <span class="page-link">
+            {% blocktrans with page=page_obj.number pages=page_obj.paginator.num_pages %}Page {{ page }} of {{ pages }}{% endblocktrans %}
+          </span>
+        </li>
+        <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+          {% if page_obj.has_next %}
+            <a class="page-link" href="?sort={{ sort_key }}&page={{ page_obj.next_page_number }}">{% trans "Next" %}</a>
+          {% else %}
+            <span class="page-link">{% trans "Next" %}</span>
+          {% endif %}
+        </li>
+      </ul>
+    </nav>
+  {% endif %}
+</div>
+{% endblock %}

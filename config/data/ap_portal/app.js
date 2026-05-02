@@ -21,7 +21,7 @@ async function loadStatus() {
     sourceLink.href = payload.source_code_url;
   }
   if (payload.authorized) {
-    statusEl.textContent = "This device is already authorized. Opening suite login.";
+    statusEl.textContent = "This device is already authorized. Opening gallery.";
     form.hidden = true;
     redirectAfterDelay(payload.authorized_redirect_url, payload.redirect_delay_ms);
   }
@@ -47,7 +47,7 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) {
       throw new Error(result.error || "Unable to authorize this device.");
     }
-    statusEl.textContent = "Access recorded. Opening suite login.";
+    statusEl.textContent = "Access recorded. Opening gallery.";
     redirectAfterDelay(result.redirect_url || "/", result.redirect_delay_ms);
   } catch (error) {
     statusEl.textContent = error.message;

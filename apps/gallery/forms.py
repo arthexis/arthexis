@@ -1,18 +1,34 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.template.defaultfilters import filesizeformat
 
 from apps.groups.models import SecurityGroup
 
-from .constants import GALLERY_MANAGER_GROUP_NAME
-from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTrait, GalleryTrait
+from .constants import (
+    GALLERY_AP_GUEST_MAX_TITLE_LENGTH,
+    GALLERY_AP_GUEST_MAX_UPLOAD_BYTES,
+    GALLERY_MANAGER_GROUP_NAME,
+)
+from .models import (
+    GalleryCategory,
+    GalleryCredit,
+    GalleryImage,
+    GalleryImageTrait,
+    GalleryTrait,
+)
 
 
 class GalleryUploadForm(forms.Form):
     image = forms.ImageField(
         required=False,
-        widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+        widget=forms.ClearableFileInput(
+            attrs={"class": "form-control", "accept": "image/*"}
+        ),
     )
-    title = forms.CharField(max_length=255, widget=forms.TextInput(attrs={"class": "form-control"}))
+    title = forms.CharField(
+        max_length=255, widget=forms.TextInput(attrs={"class": "form-control"})
+    )
     description = forms.CharField(
         required=False,
         widget=forms.Textarea(
@@ -37,7 +53,9 @@ class GalleryUploadForm(forms.Form):
         label="Also create a Content Sample record",
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
-    owner_user = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
+    owner_user = forms.CharField(
+        required=False, widget=forms.TextInput(attrs={"class": "form-control"})
+    )
     owner_group = forms.ModelChoiceField(
         queryset=SecurityGroup.objects.order_by("name"),
         required=False,
@@ -50,7 +68,9 @@ class GalleryUploadForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        default_owner_group = SecurityGroup.objects.filter(name=GALLERY_MANAGER_GROUP_NAME).first()
+        default_owner_group = SecurityGroup.objects.filter(
+            name=GALLERY_MANAGER_GROUP_NAME
+        ).first()
         if default_owner_group and not self.is_bound:
             self.fields["owner_group"].initial = default_owner_group.pk
 
@@ -66,6 +86,44 @@ class GalleryUploadForm(forms.Form):
         if bool(owner_user) == bool(owner_group):
             raise forms.ValidationError("Choose exactly one owner user or owner group.")
         return cleaned
+
+
+class GalleryGuestUploadForm(forms.Form):
+    image = forms.ImageField(
+        widget=forms.ClearableFileInput(
+            attrs={"class": "form-control", "accept": "image/*"}
+        ),
+    )
+    title = forms.CharField(
+        max_length=GALLERY_AP_GUEST_MAX_TITLE_LENGTH,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "maxlength": str(GALLERY_AP_GUEST_MAX_TITLE_LENGTH),
+            }
+        ),
+    )
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return int(
+            getattr(
+                settings,
+                "GALLERY_AP_GUEST_MAX_UPLOAD_BYTES",
+                GALLERY_AP_GUEST_MAX_UPLOAD_BYTES,
+            )
+        )
+
+    def clean_image(self):
+        image = self.cleaned_data["image"]
+        max_upload_bytes = self.max_upload_bytes
+        if getattr(image, "size", 0) > max_upload_bytes:
+            formatted_size = filesizeformat(max_upload_bytes).replace("\xa0", " ")
+            raise forms.ValidationError(f"Image must be {formatted_size} or smaller.")
+        content_type = getattr(image, "content_type", "") or ""
+        if content_type and not content_type.startswith("image/"):
+            raise forms.ValidationError("Upload an image file.")
+        return image
 
 
 class GalleryCategoryForm(forms.ModelForm):
@@ -115,7 +173,9 @@ class GalleryImageForm(forms.ModelForm):
 
 
 class GalleryShareForm(forms.Form):
-    username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={"class": "form-control"}))
+    username = forms.CharField(
+        max_length=150, widget=forms.TextInput(attrs={"class": "form-control"})
+    )
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
