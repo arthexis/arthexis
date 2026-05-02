@@ -18,6 +18,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+  RELEASE_REF: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
 jobs:
   test:
     name: Run full test suite
@@ -37,6 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ env.RELEASE_REF }}
           clean: false
       - uses: actions/setup-python@v6
         with:
@@ -94,13 +99,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
 
       - name: Resolve publish version against PyPI
         id: resolve_publish_version
         env:
-          RELEASE_TAG: ${{ inputs.release_tag || '' }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -119,9 +124,12 @@ jobs:
           version_path = root / "VERSION"
           version_seed = version_path.read_text(encoding="utf-8").strip()
           ref_name = os.environ.get("RELEASE_TAG") or os.environ["GITHUB_REF_NAME"].strip()
-          tag_version = ref_name[1:] if ref_name.startswith("v") else ""
-
-          if ref_name.startswith("v") and not tag_version:
+          if not ref_name.startswith("v"):
+              raise SystemExit(
+                  "Release publish blocked: release ref must be a version tag like 'v1.2.3'."
+              )
+          tag_version = ref_name[1:]
+          if not tag_version:
               raise SystemExit(
                   "Release publish blocked: tag 'v' does not include a version."
               )
@@ -133,7 +141,7 @@ jobs:
                   "Release publish blocked: VERSION file is empty."
               )
 
-          if tag_version and tag_version != expected_version:
+          if tag_version != expected_version:
               raise SystemExit(
                   "Release publish blocked: tag and VERSION mismatch "
                   f"(tag={tag_version!r}, VERSION={expected_version!r}). "
@@ -340,17 +348,17 @@ jobs:
             exit 1
           fi
 
-          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${artifacts[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${artifacts[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
           else
-            gh release create "${GITHUB_REF_NAME}" "${artifacts[@]}" \
+            gh release create "${RELEASE_TAG}" "${artifacts[@]}" \
               --repo "${GITHUB_REPOSITORY}" \
               --verify-tag \
-              --title "${GITHUB_REF_NAME}" \
+              --title "${RELEASE_TAG}" \
               --generate-notes
           fi
 
-          printf 'Published GitHub Release assets for %s:\n' "${GITHUB_REF_NAME}"
+          printf 'Published GitHub Release assets for %s:\n' "${RELEASE_TAG}"
           printf ' - %s\n' "${artifacts[@]}"
 
   publish-to-pypi:
