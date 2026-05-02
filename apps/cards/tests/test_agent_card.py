@@ -118,6 +118,16 @@ def test_build_agent_card_sector_payloads_omits_oversized_skill_sigils():
     ]
 
 
+def test_build_agent_card_sector_payloads_reports_overflow_once():
+    build = build_agent_card_sector_payloads(
+        identity_sources={"intent": "intent", "bundle": "bundle", "interface": "interface", "card": "AABB"},
+        skill_slugs=[f"s{index}" for index in range(12)],
+    )
+
+    assert len(build.compatibility_notes) == 1
+    assert len(build.omitted_skill_sigils) == 2
+
+
 def test_score_soul_identity_returns_best_candidate():
     card = parse_agent_card(valid_agent_card_records())
 

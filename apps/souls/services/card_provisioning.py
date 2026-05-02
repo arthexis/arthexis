@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 
 from apps.cards.agent_card import build_agent_card_sector_payloads
 from apps.cards.models import RFID
@@ -32,24 +34,31 @@ def _validated_created_by(created_by):
     return None
 
 
+def _stable_identity_value(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
 def _identity_sources(
     *,
     card_uid: str,
     bundle_result: dict[str, Any],
-    bundle: SkillBundle | None = None,
-    interface_spec: AgentInterfaceSpec | None = None,
 ) -> dict[str, object]:
-    intent_id = bundle.intent_id if bundle else bundle_result["intent"].get("id")
-    bundle_id = bundle.pk if bundle else bundle_result["bundle"].get("id")
-    interface_id = (
-        interface_spec.pk
-        if interface_spec
-        else bundle_result["interface_spec"].get("id")
-    )
+    bundle_identity = {
+        "match_score": bundle_result["bundle"].get("match_score"),
+        "match_strategy": bundle_result["bundle"].get("match_strategy"),
+        "primary_skill": bundle_result["bundle"].get("primary_skill"),
+        "skill_slugs": bundle_result["bundle"].get("skill_slugs", []),
+        "summary": bundle_result["bundle"].get("summary"),
+    }
+    interface_identity = {
+        "commands": bundle_result["interface_spec"].get("commands", []),
+        "schema": bundle_result["interface_spec"].get("schema", {}),
+        "visible_fields": bundle_result["interface_spec"].get("visible_fields", []),
+    }
     return {
-        "intent": intent_id or bundle_result["intent"].get("normalized_intent"),
-        "bundle": bundle_id or bundle_result["bundle"].get("slug"),
-        "interface": interface_id or bundle_result["interface_spec"]["schema"],
+        "intent": bundle_result["intent"].get("normalized_intent"),
+        "bundle": _stable_identity_value(bundle_identity),
+        "interface": _stable_identity_value(interface_identity),
         "card": card_uid,
     }
 
@@ -58,16 +67,12 @@ def _build_payload(
     *,
     card_uid: str,
     bundle_result: dict[str, Any],
-    bundle: SkillBundle | None = None,
-    interface_spec: AgentInterfaceSpec | None = None,
 ) -> dict[str, Any]:
     skill_slugs = bundle_result["bundle"].get("skill_slugs", [])
     build_result = build_agent_card_sector_payloads(
         identity_sources=_identity_sources(
             card_uid=card_uid,
             bundle_result=bundle_result,
-            bundle=bundle,
-            interface_spec=interface_spec,
         ),
         skill_slugs=skill_slugs,
     )
@@ -165,20 +170,21 @@ def provision_soul_seed_card(
             .get(pk=bundle_result["bundle"]["id"])
         )
         interface_spec = AgentInterfaceSpec.objects.get(pk=bundle_result["interface_spec"]["id"])
-        agent_card = _build_payload(
-            card_uid=normalized_card_uid,
-            bundle_result=bundle_result,
-            bundle=bundle,
-            interface_spec=interface_spec,
-        )
+        agent_card = _build_payload(card_uid=normalized_card_uid, bundle_result=bundle_result)
         _update_bundle_compatibility_notes(bundle, agent_card["compatibility_notes"])
         rfid, _rfid_created = RFID.update_or_create_from_code(normalized_card_uid)
-        card = (
+        active_cards = list(
             SoulSeedCard.objects.exclude(status=SoulSeedCard.Status.REVOKED)
             .filter(card_uid=normalized_card_uid)
             .order_by("-id")
-            .first()
         )
+        card = active_cards[0] if active_cards else None
+        stale_card_ids = [existing_card.pk for existing_card in active_cards[1:]]
+        if stale_card_ids:
+            SoulSeedCard.objects.filter(pk__in=stale_card_ids).update(
+                status=SoulSeedCard.Status.REVOKED,
+                revoked_at=timezone.now(),
+            )
         created = card is None
         if card is None:
             card = SoulSeedCard(card_uid=normalized_card_uid)
@@ -186,7 +192,8 @@ def provision_soul_seed_card(
         card.intent = bundle.intent
         card.skill_bundle = bundle
         card.interface_spec = interface_spec
-        card.owner = created_by
+        if created_by is not None or card.owner_id is None:
+            card.owner = created_by
         card.status = SoulSeedCard.Status.ACTIVE
         card.manifest_fingerprint = agent_card["fingerprint"]
         card.card_payload = {

@@ -34,6 +34,7 @@ CREDENTIAL_RE = re.compile(
     re.IGNORECASE,
 )
 UNRESTRICTED_URL_RE = re.compile(r"https?://", re.IGNORECASE)
+EXTENSION_OVERFLOW_NOTE = "Additional skill sigils were omitted because the card has ten extension slots."
 
 
 class AgentCardError(ValueError):
@@ -261,7 +262,8 @@ def build_agent_card_sector_payloads(
     extension_index = 1
     for raw_slug in skill_slugs:
         if extension_index > len(EXTENSION_SECTORS):
-            compatibility_notes.append("Additional skill sigils were omitted because the card has ten extension slots.")
+            if EXTENSION_OVERFLOW_NOTE not in compatibility_notes:
+                compatibility_notes.append(EXTENSION_OVERFLOW_NOTE)
             omitted_skill_sigils.append(str(raw_slug))
             continue
         slug = str(raw_slug or "").strip()

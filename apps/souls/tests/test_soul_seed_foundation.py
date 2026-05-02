@@ -4,6 +4,7 @@ import json
 from io import StringIO
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
@@ -171,6 +172,23 @@ def test_provision_soul_seed_card_write_persists_registry_records(skill):
 
 
 @pytest.mark.django_db
+def test_provision_soul_seed_card_write_matches_dry_run_fingerprint(skill):
+    dry_run = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        dry_run=True,
+    )
+    written = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        dry_run=False,
+    )
+
+    assert written["sector_records"] == dry_run["sector_records"]
+    assert written["card"]["manifest_fingerprint"] == dry_run["card"]["manifest_fingerprint"]
+
+
+@pytest.mark.django_db
 def test_provision_soul_seed_card_write_updates_active_card_for_duplicate_uid(skill):
     first = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
     second = provision_soul_seed_card("rfid-triage", card_uid="AABBCCDD", dry_run=False)
@@ -178,6 +196,36 @@ def test_provision_soul_seed_card_write_updates_active_card_for_duplicate_uid(sk
     assert second["card"]["created"] is False
     assert second["card"]["id"] == first["card"]["id"]
     assert SoulSeedCard.objects.filter(card_uid="AABBCCDD").count() == 1
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_preserves_owner_when_creator_missing(skill):
+    user = get_user_model().objects.create_user(username="seed-owner")
+    first = provision_soul_seed_card(
+        "rfid reader problem",
+        card_uid="AABBCCDD",
+        created_by=user,
+        dry_run=False,
+    )
+    second = provision_soul_seed_card("rfid-triage", card_uid="AABBCCDD", dry_run=False)
+
+    assert second["card"]["id"] == first["card"]["id"]
+    assert SoulSeedCard.objects.get(pk=second["card"]["id"]).owner == user
+
+
+@pytest.mark.django_db
+def test_provision_soul_seed_card_revokes_stale_duplicate_active_cards(skill):
+    older = SoulSeedCard.objects.create(card_uid="AABBCCDD", status=SoulSeedCard.Status.ACTIVE)
+    newer = SoulSeedCard.objects.create(card_uid="AABBCCDD", status=SoulSeedCard.Status.PREVIEW_ONLY)
+
+    summary = provision_soul_seed_card("rfid reader problem", card_uid="AABBCCDD", dry_run=False)
+    older.refresh_from_db()
+    newer.refresh_from_db()
+
+    assert summary["card"]["id"] == newer.pk
+    assert newer.status == SoulSeedCard.Status.ACTIVE
+    assert older.status == SoulSeedCard.Status.REVOKED
+    assert older.revoked_at is not None
 
 
 @pytest.mark.django_db
