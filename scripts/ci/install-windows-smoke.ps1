@@ -9,15 +9,26 @@ $env:PYTHONDONTWRITEBYTECODE = "1"
 $env:NODE_OPTIONS = "--no-deprecation"
 $env:ARTHEXIS_DB_BACKEND = "sqlite"
 
-$gtkCandidates = @(
+$gtkCandidates = @()
+if ($env:WEASYPRINT_DLL_DIRECTORIES) {
+    $gtkCandidates += $env:WEASYPRINT_DLL_DIRECTORIES -split ";" | Where-Object { $_ }
+}
+$gtkCandidates += @(
     "C:\Program Files\GTK3-Runtime Win64\bin",
     "C:\msys64\mingw64\bin"
 )
+$gtkCandidates = $gtkCandidates | Select-Object -Unique
+$gtkDllDirs = @()
 foreach ($candidate in $gtkCandidates) {
     if (Test-Path $candidate) {
+        $gtkDllDirs += $candidate
         $env:Path = "$candidate;$env:Path"
     }
 }
+if ($gtkDllDirs.Count -eq 0) {
+    throw "No GTK runtime bin directory found for WeasyPrint."
+}
+$env:WEASYPRINT_DLL_DIRECTORIES = $gtkDllDirs -join ";"
 
 cmd.exe /c install.bat
 if ($LASTEXITCODE -ne 0) {
