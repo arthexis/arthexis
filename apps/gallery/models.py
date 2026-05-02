@@ -45,7 +45,9 @@ class GalleryTrait(Entity):
 
 class GalleryImage(Entity):
     slug = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    media_file = models.ForeignKey(MediaFile, on_delete=models.PROTECT, related_name="gallery_images")
+    media_file = models.ForeignKey(
+        MediaFile, on_delete=models.PROTECT, related_name="gallery_images"
+    )
     content_sample = models.ForeignKey(
         ContentSample,
         on_delete=models.SET_NULL,
@@ -58,7 +60,9 @@ class GalleryImage(Entity):
     public_release_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text=_("When set, this image becomes public at the scheduled date and time."),
+        help_text=_(
+            "When set, this image becomes public at the scheduled date and time."
+        ),
     )
     owner_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -79,8 +83,19 @@ class GalleryImage(Entity):
         blank=True,
         related_name="shared_gallery_images",
     )
-    categories = models.ManyToManyField(GalleryCategory, blank=True, related_name="images")
-    traits = models.ManyToManyField(GalleryTrait, through="GalleryImageTrait", related_name="images")
+    categories = models.ManyToManyField(
+        GalleryCategory, blank=True, related_name="images"
+    )
+    traits = models.ManyToManyField(
+        GalleryTrait, through="GalleryImageTrait", related_name="images"
+    )
+    guest_key = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text=_("Anonymous AP guest session key for public guest uploads."),
+    )
 
     class Meta:
         verbose_name = _("Gallery Image")
@@ -88,8 +103,21 @@ class GalleryImage(Entity):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    (Q(owner_user__isnull=False) & Q(owner_group__isnull=True))
-                    | (Q(owner_user__isnull=True) & Q(owner_group__isnull=False))
+                    (
+                        Q(owner_user__isnull=False)
+                        & Q(owner_group__isnull=True)
+                        & Q(guest_key="")
+                    )
+                    | (
+                        Q(owner_user__isnull=True)
+                        & Q(owner_group__isnull=False)
+                        & Q(guest_key="")
+                    )
+                    | (
+                        Q(owner_user__isnull=True)
+                        & Q(owner_group__isnull=True)
+                        & ~Q(guest_key="")
+                    )
                 ),
                 name="gallery_image_single_owner",
             )
@@ -116,9 +144,13 @@ class GalleryImage(Entity):
             return True
         if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
             return True
-        prefetched_shared_users = getattr(self, "_prefetched_objects_cache", {}).get("shared_with_users")
+        prefetched_shared_users = getattr(self, "_prefetched_objects_cache", {}).get(
+            "shared_with_users"
+        )
         if prefetched_shared_users is not None:
-            if any(shared_user.pk == user.pk for shared_user in prefetched_shared_users):
+            if any(
+                shared_user.pk == user.pk for shared_user in prefetched_shared_users
+            ):
                 return True
         elif self.shared_with_users.filter(pk=user.pk).exists():
             return True
@@ -147,8 +179,45 @@ class GalleryImage(Entity):
         return False
 
 
+class GalleryImageReaction(Entity):
+    LIKE = 1
+    DISLIKE = -1
+    VALUE_CHOICES = (
+        (LIKE, _("Like")),
+        (DISLIKE, _("Dislike")),
+    )
+
+    image = models.ForeignKey(
+        GalleryImage, on_delete=models.CASCADE, related_name="reactions"
+    )
+    guest_key = models.CharField(max_length=64, db_index=True)
+    value = models.SmallIntegerField(choices=VALUE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "id")
+        verbose_name = _("Gallery Image Reaction")
+        verbose_name_plural = _("Gallery Image Reactions")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("image", "guest_key"),
+                name="gallery_image_reaction_one_per_guest",
+            ),
+            models.CheckConstraint(
+                condition=Q(value__in=(-1, 1)),
+                name="gallery_image_reaction_valid_value",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.image_id}:{self.guest_key}:{self.value}"
+
+
 class GalleryCredit(Entity):
-    image = models.ForeignKey(GalleryImage, on_delete=models.CASCADE, related_name="credits")
+    image = models.ForeignKey(
+        GalleryImage, on_delete=models.CASCADE, related_name="credits"
+    )
     display_name = models.CharField(max_length=255)
     artist = models.CharField(max_length=255, blank=True, default="")
     series = models.CharField(max_length=255, blank=True, default="")
@@ -168,7 +237,9 @@ class GalleryCredit(Entity):
 
 
 class GalleryImageTrait(Entity):
-    image = models.ForeignKey(GalleryImage, on_delete=models.CASCADE, related_name="trait_values")
+    image = models.ForeignKey(
+        GalleryImage, on_delete=models.CASCADE, related_name="trait_values"
+    )
     category = models.ForeignKey(
         GalleryCategory,
         on_delete=models.SET_NULL,
@@ -176,7 +247,9 @@ class GalleryImageTrait(Entity):
         blank=True,
         related_name="trait_values",
     )
-    trait = models.ForeignKey(GalleryTrait, on_delete=models.CASCADE, related_name="trait_values")
+    trait = models.ForeignKey(
+        GalleryTrait, on_delete=models.CASCADE, related_name="trait_values"
+    )
     qualitative_value = models.CharField(max_length=120, blank=True, default="")
     float_value = models.FloatField(default=1.0)
 
@@ -193,7 +266,7 @@ class GalleryImageTrait(Entity):
                 condition=Q(category__isnull=False),
                 fields=("image", "category", "trait", "qualitative_value"),
                 name="gallery_image_trait_unique_assignment_with_category",
-            )
+            ),
         ]
 
     def __str__(self) -> str:

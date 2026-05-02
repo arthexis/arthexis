@@ -1,0 +1,40 @@
+[
+  {
+    "model": "modules.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [
+        [
+          "Control"
+        ],
+        [
+          "Satellite"
+        ]
+      ],
+      "application": [
+        "gallery"
+      ],
+      "path": "/gallery/",
+      "menu": "Gallery",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/gallery/"
+      ],
+      "path": "/gallery/ap/",
+      "label": "Gallery",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  }
+]

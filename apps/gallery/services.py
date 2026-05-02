@@ -34,7 +34,9 @@ def resolve_owner(owner_username: str | None, owner_group_name: str | None):
     return owner_user, owner_group
 
 
-def _save_gallery_content_sample(*, media_path: str, owner_user=None) -> ContentSample | None:
+def _save_gallery_content_sample(
+    *, media_path: str, owner_user=None
+) -> ContentSample | None:
     return save_content_sample(
         path=Path(media_path),
         kind=ContentSample.IMAGE,
@@ -57,7 +59,9 @@ def create_gallery_image(
     owner_group=None,
 ) -> GalleryImage:
     if bool(owner_user) == bool(owner_group):
-        raise ValidationError({"owner": "Choose exactly one owner user or owner group."})
+        raise ValidationError(
+            {"owner": "Choose exactly one owner user or owner group."}
+        )
     if include_in_public_gallery is not None and public_release_at is not None:
         raise ValidationError(
             {
@@ -88,6 +92,33 @@ def create_gallery_image(
                 owner_user=owner_user,
                 owner_group=owner_group,
             )
+    except Exception:
+        if media_file.file:
+            media_file.file.delete(save=False)
+        media_file.delete()
+        raise
+
+
+def create_guest_gallery_image(
+    *,
+    uploaded_file,
+    title: str,
+    guest_key: str,
+) -> GalleryImage:
+    guest_key = (guest_key or "").strip()
+    if not guest_key:
+        raise ValidationError({"guest": "Guest session is required."})
+
+    bucket = get_gallery_bucket()
+    media_file = create_media_file(bucket=bucket, uploaded_file=uploaded_file)
+    try:
+        return GalleryImage.objects.create(
+            media_file=media_file,
+            title=title,
+            description="",
+            public_release_at=timezone.now(),
+            guest_key=guest_key,
+        )
     except Exception:
         if media_file.file:
             media_file.file.delete(save=False)

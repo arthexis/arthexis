@@ -1,0 +1,12 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "gallery",
+      "description": "Public image galleries and guest art uploads.",
+      "importance": "baseline"
+    }
+  }
+]

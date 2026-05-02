@@ -60,16 +60,24 @@ def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
 
     assert result["authorized"] is True
     assert result["mac_address"] == "aa:bb:cc:dd:ee:ff"
-    assert result["redirect_url"] == "http://10.42.0.1:8888/login/"
+    assert result["redirect_url"] == "http://10.42.0.1:8888/gallery/ap/"
     assert "ARE being monitored" in result["monitoring_notice"]
-    assert state.config.authorized_macs_path.read_text(encoding="utf-8") == "aa:bb:cc:dd:ee:ff\n"
+    assert (
+        state.config.authorized_macs_path.read_text(encoding="utf-8")
+        == "aa:bb:cc:dd:ee:ff\n"
+    )
 
-    consent = json.loads(state.config.consents_path.read_text(encoding="utf-8").splitlines()[0])
+    consent = json.loads(
+        state.config.consents_path.read_text(encoding="utf-8").splitlines()[0]
+    )
     assert consent["email"] == "guest@example.com"
     assert consent["mac_address"] == "aa:bb:cc:dd:ee:ff"
     assert consent["source_code_url"].startswith("https://github.com/arthexis/arthexis")
 
-    activity = [json.loads(line) for line in state.config.activity_path.read_text(encoding="utf-8").splitlines()]
+    activity = [
+        json.loads(line)
+        for line in state.config.activity_path.read_text(encoding="utf-8").splitlines()
+    ]
     assert activity[-1]["event_type"] == "consent_accepted"
     assert activity[-1]["ip_address"] == "10.42.0.25"
 
@@ -102,7 +110,9 @@ def test_form_payload_accepts_only_html_checkbox_literal():
         "email": "guest@example.com",
         "accept_terms": True,
     }
-    assert module._parse_form_payload("email=guest%40example.com&accept_terms=true") == {
+    assert module._parse_form_payload(
+        "email=guest%40example.com&accept_terms=true"
+    ) == {
         "email": "guest@example.com",
         "accept_terms": False,
     }
@@ -221,7 +231,9 @@ def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path
     state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
     synced_macs = []
     state._firewall.sync = lambda macs: synced_macs.append(set(macs))
-    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        OSError("activity log unavailable")
+    )
 
     with pytest.raises(OSError, match="activity log unavailable"):
         state.subscribe(
@@ -257,8 +269,12 @@ def test_subscribe_resyncs_firewall_when_file_rollback_fails(tmp_path):
     state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
     synced_macs = []
     state._firewall.sync = lambda macs: synced_macs.append(set(macs))
-    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
-    state._restore_consent_log = lambda _position: (_ for _ in ()).throw(OSError("consent rollback failed"))
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        OSError("activity log unavailable")
+    )
+    state._restore_consent_log = lambda _position: (_ for _ in ()).throw(
+        OSError("consent rollback failed")
+    )
 
     with pytest.raises(OSError, match="consent rollback failed"):
         state.subscribe(
@@ -315,7 +331,9 @@ def test_subscribe_rolls_back_new_authorization_when_authorized_write_fails(tmp_
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 
-def test_subscribe_rolls_back_existing_authorization_consent_when_activity_log_fails(tmp_path):
+def test_subscribe_rolls_back_existing_authorization_consent_when_activity_log_fails(
+    tmp_path,
+):
     module = load_portal_module()
     config = make_config(module, tmp_path)
     state = module.PortalState(config)
@@ -328,7 +346,9 @@ def test_subscribe_rolls_back_existing_authorization_consent_when_activity_log_f
         host="arthexis.net",
     )
     original_consents = state.config.consents_path.read_text(encoding="utf-8")
-    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        OSError("activity log unavailable")
+    )
 
     with pytest.raises(OSError, match="activity log unavailable"):
         state.subscribe(
@@ -340,7 +360,10 @@ def test_subscribe_rolls_back_existing_authorization_consent_when_activity_log_f
         )
 
     assert state.config.consents_path.read_text(encoding="utf-8") == original_consents
-    assert state.config.authorized_macs_path.read_text(encoding="utf-8") == "aa:bb:cc:dd:ee:ff\n"
+    assert (
+        state.config.authorized_macs_path.read_text(encoding="utf-8")
+        == "aa:bb:cc:dd:ee:ff\n"
+    )
     assert "aa:bb:cc:dd:ee:ff" in state._authorized
 
 
@@ -377,12 +400,14 @@ def test_status_records_activity_and_exposes_monitoring_paths(tmp_path):
     assert payload["mac_address"] == "aa:bb:cc:dd:ee:ff"
     assert "activity.jsonl" in payload["activity_recording"]["activity_log"]
 
-    activity = json.loads(state.config.activity_path.read_text(encoding="utf-8").splitlines()[0])
+    activity = json.loads(
+        state.config.activity_path.read_text(encoding="utf-8").splitlines()[0]
+    )
     assert activity["event_type"] == "status_check"
     assert activity["monitoring_notice"] == module.MONITORING_NOTICE
 
 
-def test_status_redirects_authorized_client_to_suite_login_port(tmp_path):
+def test_status_redirects_authorized_client_to_gallery_port(tmp_path):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
     state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
@@ -402,7 +427,7 @@ def test_status_redirects_authorized_client_to_suite_login_port(tmp_path):
     )
 
     assert payload["authorized"] is True
-    assert payload["authorized_redirect_url"] == "http://10.42.0.1:8888/login/"
+    assert payload["authorized_redirect_url"] == "http://10.42.0.1:8888/gallery/ap/"
     assert payload["redirect_delay_ms"] == module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
 
 
@@ -438,9 +463,9 @@ def test_suite_login_redirect_defaults_to_gateway_host():
             configured_host=module.DEFAULT_SUITE_LOGIN_HOST,
             scheme=module.DEFAULT_SUITE_LOGIN_SCHEME,
             port=8888,
-            path="login/",
+            path=module.DEFAULT_SUITE_LOGIN_PATH,
         )
-        == "http://10.42.0.1:8888/login/"
+        == "http://10.42.0.1:8888/gallery/ap/"
     )
 
 
@@ -502,7 +527,9 @@ def test_suite_login_redirect_rejects_invalid_scheme():
         )
 
 
-def test_read_events_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
+def test_read_events_uses_bounded_tail_without_reading_whole_file(
+    tmp_path, monkeypatch
+):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
     lines = [
@@ -572,7 +599,9 @@ def test_client_summary_does_not_treat_consent_history_as_authorization(tmp_path
 
 def test_firewall_ruleset_keeps_authorized_clients_and_redirects_unapproved_http():
     module = load_portal_module()
-    ruleset = module.FirewallManager(interface="wlan0")._render_ruleset(["aa:bb:cc:dd:ee:ff"])
+    ruleset = module.FirewallManager(interface="wlan0")._render_ruleset(
+        ["aa:bb:cc:dd:ee:ff"]
+    )
 
     assert "table inet arthexis_ap_portal" in ruleset
     assert "elements = { aa:bb:cc:dd:ee:ff }" in ruleset
@@ -638,7 +667,9 @@ def test_resolve_mac_reads_proc_arp_without_subprocess(tmp_path, monkeypatch):
     )
 
     def fail_run(*_args, **_kwargs):
-        raise AssertionError("resolve_mac should not spawn neighbor lookup subprocesses")
+        raise AssertionError(
+            "resolve_mac should not spawn neighbor lookup subprocesses"
+        )
 
     monkeypatch.setattr(module, "ARP_TABLE_PATH", arp_table)
     monkeypatch.setattr(module.subprocess, "run", fail_run)
@@ -662,7 +693,9 @@ def test_resolve_mac_reads_ipv6_neighbor_cache(tmp_path, monkeypatch):
     )
 
     def fail_run(*_args, **_kwargs):
-        raise AssertionError("resolve_mac should not spawn neighbor lookup subprocesses")
+        raise AssertionError(
+            "resolve_mac should not spawn neighbor lookup subprocesses"
+        )
 
     monkeypatch.setattr(module, "ARP_TABLE_PATH", arp_table)
     monkeypatch.setattr(module, "NDISC_CACHE_PATH", ndisc_cache)
@@ -718,7 +751,9 @@ def test_read_limited_request_body_rejects_negative_length_before_reading():
     headers = {"Content-Length": "-1"}
 
     with pytest.raises(ValueError, match="Invalid Content-Length"):
-        module._read_limited_request_body(headers, io.BytesIO(b"email=guest@example.com"))
+        module._read_limited_request_body(
+            headers, io.BytesIO(b"email=guest@example.com")
+        )
 
 
 def _exercise_get(handler_class, path: str, *, asset_exists: bool = True):
@@ -741,7 +776,9 @@ def _exercise_get(handler_class, path: str, *, asset_exists: bool = True):
 
 def test_get_probe_path_returns_portal_page(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/connecttest.txt")
 
@@ -752,7 +789,9 @@ def test_get_probe_path_returns_portal_page(tmp_path):
 
 def test_get_nested_unknown_path_returns_portal_page(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/soul/register/")
 
@@ -763,7 +802,9 @@ def test_get_nested_unknown_path_returns_portal_page(tmp_path):
 
 def test_get_unknown_api_path_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/api/unknown")
 
@@ -774,7 +815,9 @@ def test_get_unknown_api_path_still_404s(tmp_path):
 
 def test_get_missing_literal_asset_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/missing.css", asset_exists=False)
 
@@ -785,7 +828,9 @@ def test_get_missing_literal_asset_still_404s(tmp_path):
 
 def test_get_hidden_asset_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/.env")
 
@@ -796,7 +841,9 @@ def test_get_hidden_asset_still_404s(tmp_path):
 
 def test_get_nested_hidden_asset_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/foo/.env")
 
@@ -807,7 +854,9 @@ def test_get_nested_hidden_asset_still_404s(tmp_path):
 
 def test_get_encoded_nested_hidden_asset_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/foo/%2eenv")
 
@@ -818,7 +867,9 @@ def test_get_encoded_nested_hidden_asset_still_404s(tmp_path):
 
 def test_get_encoded_dot_segment_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/foo/%2e%2e/admin")
 
@@ -829,7 +880,9 @@ def test_get_encoded_dot_segment_still_404s(tmp_path):
 
 def test_get_encoded_nul_path_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/foo%00bar.css")
 
@@ -840,7 +893,9 @@ def test_get_encoded_nul_path_still_404s(tmp_path):
 
 def test_get_nested_asset_path_serves_asset(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/css/style.css")
 
@@ -851,7 +906,9 @@ def test_get_nested_asset_path_serves_asset(tmp_path):
 
 def test_get_missing_nested_asset_path_still_404s(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
 
     result = _exercise_get(handler_class, "/css/missing.css", asset_exists=False)
 
@@ -862,7 +919,9 @@ def test_get_missing_nested_asset_path_still_404s(tmp_path):
 
 def test_subscribe_post_returns_json_error_when_request_logging_fails(tmp_path):
     module = load_portal_module()
-    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler_class = module.PortalApplication(
+        make_config(module, tmp_path)
+    ).handler_class()
     handler = object.__new__(handler_class)
     handler.path = "/api/subscribe"
     responses = []
@@ -871,14 +930,21 @@ def test_subscribe_post_returns_json_error_when_request_logging_fails(tmp_path):
         raise OSError("activity log unavailable")
 
     handler._record_request = fail_record
-    handler._json = lambda payload, status=module.HTTPStatus.OK: responses.append((payload, status))
-    handler._read_payload = lambda: (_ for _ in ()).throw(AssertionError("payload should not be read"))
+    handler._json = lambda payload, status=module.HTTPStatus.OK: responses.append(
+        (payload, status)
+    )
+    handler._read_payload = lambda: (_ for _ in ()).throw(
+        AssertionError("payload should not be read")
+    )
 
     handler.do_POST()
 
     assert responses == [
         (
-            {"error": "Unable to record consent right now.", "details": "activity log unavailable"},
+            {
+                "error": "Unable to record consent right now.",
+                "details": "activity log unavailable",
+            },
             module.HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     ]

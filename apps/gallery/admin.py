@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTrait, GalleryTrait
+from .models import (
+    GalleryCategory,
+    GalleryCredit,
+    GalleryImage,
+    GalleryImageReaction,
+    GalleryImageTrait,
+    GalleryTrait,
+)
 
 
 class GalleryCreditInline(admin.TabularInline):
@@ -23,9 +30,10 @@ class GalleryImageAdmin(admin.ModelAdmin):
         "content_sample",
         "owner_user",
         "owner_group",
+        "guest_key",
     )
     list_filter = ("public_release_at", "categories")
-    search_fields = ("title", "description")
+    search_fields = ("title", "description", "guest_key")
     filter_horizontal = ("categories",)
     inlines = (GalleryCreditInline, GalleryImageTraitInline)
     change_form_template = "admin/gallery/galleryimage/change_form.html"
@@ -45,3 +53,10 @@ class GalleryCategoryAdmin(admin.ModelAdmin):
 class GalleryTraitAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
     search_fields = ("name", "slug")
+
+
+@admin.register(GalleryImageReaction)
+class GalleryImageReactionAdmin(admin.ModelAdmin):
+    list_display = ("image", "guest_key", "value", "updated_at")
+    list_filter = ("value",)
+    search_fields = ("image__title", "guest_key")
