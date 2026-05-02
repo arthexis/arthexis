@@ -179,7 +179,7 @@ local image creation plus either a local writer or a burner attached to GWAY:
 
 ```bat
 gway-imager.bat devices-local
-gway-imager.bat create-burn-local --name field-kit --base-image-uri C:\images\raspios.img.xz --device \\.\PhysicalDrive3 --yes
+gway-imager.bat create-burn-local --name field-kit --base-image-uri C:\images\raspios.img.xz --device \\.\PhysicalDrive3 --copy-windows-wlan-profile IZZI-158E-5G --copy-windows-wlan-profile arthexis-1 --yes
 ```
 
 The helper runs the local suite's `manage.py imager` command, sets `--suite-source` to the
@@ -187,13 +187,23 @@ current checkout by default, and uses the first available public key from
 `%USERPROFILE%\.ssh\id_ed25519.pub`, `id_ecdsa.pub`, or `id_rsa.pub` for recovery SSH unless
 you pass `--recovery-authorized-key-file`, `--recovery-authorized-key`, or
 `--skip-recovery-ssh`. Set `GWAY_IMAGER_RECOVERY_KEY_FILE` to force a specific public key.
+Customized builds still need `guestfish` available on the Windows host path before the
+helper downloads a base image or writes media.
+
+Use `--copy-windows-wlan-profile` to copy selected saved Windows WLAN profiles into the
+image as NetworkManager profiles. The helper exports the selected profiles with
+`netsh wlan export profile key=clear`, converts them in a temporary directory, and passes
+only selected connection names to the suite build. The temporary files contain Wi-Fi
+credentials and are deleted when the build exits; the helper does not print PSKs or persist
+them in artifact metadata. Repeat the option for every profile the field image should join,
+including open profiles such as `arthexis-1`.
 
 When the SD-card writer is connected to the GWAY bastion instead of the Windows host, inspect
 remote devices and burn through the remote suite writer:
 
 ```bat
 gway-imager.bat devices-gway --gway arthe@10.42.0.1
-gway-imager.bat create-burn-gway --name field-kit --base-image-uri C:\images\raspios.img.xz --device /dev/sdb --gway arthe@10.42.0.1 --yes
+gway-imager.bat create-burn-gway --name field-kit --base-image-uri C:\images\raspios.img.xz --device /dev/sdb --gway arthe@10.42.0.1 --copy-windows-wlan-profile IZZI-158E-5G --copy-windows-wlan-profile arthexis-1 --yes
 ```
 
 The GWAY path builds the image locally, uploads the generated `.img` to

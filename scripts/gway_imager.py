@@ -7,10 +7,15 @@ import os
 import posixpath
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 TARGET_RPI4B = "rpi-4b"
 DEFAULT_OUTPUT_DIR = "build/rpi-imager"
@@ -27,6 +32,17 @@ DEFAULT_RECOVERY_KEY_NAMES = (
 
 class ImagerScriptError(RuntimeError):
     """Raised when the helper cannot safely prepare a requested operation."""
+
+
+@dataclass(frozen=True)
+class WindowsWlanProfile:
+    """A saved Windows WLAN profile converted for NetworkManager injection."""
+
+    name: str
+    ssid: str
+    authentication: str
+    encryption: str
+    key_material: str = ""
 
 
 class CommandRunner:
@@ -61,6 +77,259 @@ def has_option(args: Sequence[str], *names: str) -> bool:
 
     prefixes = tuple(f"{name}=" for name in names)
     return any(arg in names or arg.startswith(prefixes) for arg in args)
+
+
+def build_uses_customization(args: Sequence[str]) -> bool:
+    """Return True when a build needs local image customization tooling."""
+
+    return not has_option(args, "--skip-customize")
+
+
+def ensure_customization_toolchain(args: Sequence[str]) -> None:
+    """Fail before downloading images when local customization tools are absent."""
+
+    if not build_uses_customization(args):
+        return
+    if shutil.which("guestfish"):
+        return
+    raise ImagerScriptError(
+        "guestfish is required to customize Raspberry Pi images with suite, network, "
+        "or recovery SSH files. Install libguestfs-tools/guestfish on this host or "
+        "build on a host where guestfish is available before writing media."
+    )
+
+
+def _local_xml_name(tag: str) -> str:
+    """Return the namespace-free name for an XML tag."""
+
+    return tag.rsplit("}", 1)[-1]
+
+
+def _first_descendant(element: ET.Element | None, tag_name: str) -> ET.Element | None:
+    """Find the first descendant by local tag name, ignoring XML namespaces."""
+
+    if element is None:
+        return None
+    for candidate in element.iter():
+        if _local_xml_name(candidate.tag) == tag_name:
+            return candidate
+    return None
+
+
+def _text_from_descendant(element: ET.Element | None, tag_name: str) -> str:
+    """Return stripped text from the first matching descendant."""
+
+    candidate = _first_descendant(element, tag_name)
+    if candidate is None or candidate.text is None:
+        return ""
+    return candidate.text.strip()
+
+
+def _validate_keyfile_value(value: str, *, label: str) -> str:
+    """Reject values that would break NetworkManager keyfile structure."""
+
+    if any(character in value for character in ("\x00", "\n", "\r")):
+        raise ImagerScriptError(f"Windows WLAN {label} contains unsupported control characters.")
+    return value
+
+
+def parse_windows_wlan_profile_xml(profile_xml: Path) -> WindowsWlanProfile:
+    """Parse a ``netsh wlan export profile`` XML file."""
+
+    try:
+        root = ET.parse(profile_xml).getroot()
+    except ET.ParseError as exc:
+        raise ImagerScriptError(f"Unable to parse exported Windows WLAN profile: {profile_xml}") from exc
+    profile_name = _text_from_descendant(root, "name")
+    ssid_config = _first_descendant(root, "SSIDConfig")
+    ssid = _text_from_descendant(ssid_config, "name") or profile_name
+    auth_encryption = _first_descendant(root, "authEncryption")
+    authentication = _text_from_descendant(auth_encryption, "authentication").upper()
+    encryption = _text_from_descendant(auth_encryption, "encryption").upper()
+    shared_key = _first_descendant(root, "sharedKey")
+    key_material = _text_from_descendant(shared_key, "keyMaterial")
+
+    if not ssid:
+        raise ImagerScriptError(f"Windows WLAN profile did not include an SSID: {profile_xml}")
+    if not authentication:
+        raise ImagerScriptError(f"Windows WLAN profile did not include authentication metadata: {profile_xml}")
+
+    return WindowsWlanProfile(
+        name=_validate_keyfile_value(profile_name or ssid, label="profile name"),
+        ssid=_validate_keyfile_value(ssid, label="SSID"),
+        authentication=authentication,
+        encryption=encryption,
+        key_material=_validate_keyfile_value(key_material, label="password"),
+    )
+
+
+def _networkmanager_keyfile_content(profile: WindowsWlanProfile) -> str:
+    """Render a NetworkManager keyfile for a Windows WLAN profile."""
+
+    security_lines: list[str] = []
+    if profile.authentication in {"OPEN", "OPENSYSTEM"}:
+        security_lines = []
+    elif profile.authentication in {"WPAPSK", "WPA2PSK"}:
+        if not profile.key_material:
+            raise ImagerScriptError(
+                f"Windows WLAN profile '{profile.name}' does not expose a saved Wi-Fi key."
+            )
+        security_lines = ["", "[wifi-security]", "key-mgmt=wpa-psk", f"psk={profile.key_material}"]
+    elif profile.authentication == "WPA3SAE":
+        if not profile.key_material:
+            raise ImagerScriptError(
+                f"Windows WLAN profile '{profile.name}' does not expose a saved Wi-Fi key."
+            )
+        security_lines = ["", "[wifi-security]", "key-mgmt=sae", f"psk={profile.key_material}"]
+    else:
+        raise ImagerScriptError(
+            f"Windows WLAN profile '{profile.name}' uses unsupported authentication '{profile.authentication}'."
+        )
+
+    lines = [
+        "[connection]",
+        f"id={profile.ssid}",
+        "type=wifi",
+        "autoconnect=true",
+        "",
+        "[wifi]",
+        "mode=infrastructure",
+        f"ssid={profile.ssid}",
+        "",
+        "[ipv4]",
+        "method=auto",
+        "",
+        "[ipv6]",
+        "method=auto",
+        *security_lines,
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _windows_wlan_profile_fingerprint(profile: WindowsWlanProfile) -> tuple[str, str, str, str]:
+    """Return the fields that must match for duplicate interface exports."""
+
+    return (
+        profile.ssid,
+        profile.authentication,
+        profile.encryption,
+        profile.key_material,
+    )
+
+
+def select_exported_windows_wlan_profile(
+    profile_name: str,
+    profile_xmls: Sequence[Path],
+) -> WindowsWlanProfile:
+    """Select one exported profile, accepting equivalent per-interface duplicates."""
+
+    if not profile_xmls:
+        raise ImagerScriptError(f"Windows WLAN export for '{profile_name}' did not produce an XML file.")
+    parsed_profiles = [parse_windows_wlan_profile_xml(path) for path in profile_xmls]
+    fingerprints = {
+        _windows_wlan_profile_fingerprint(profile)
+        for profile in parsed_profiles
+    }
+    if len(fingerprints) == 1:
+        return parsed_profiles[0]
+    raise ImagerScriptError(
+        f"Windows WLAN export for '{profile_name}' matched multiple interface profiles with different settings."
+    )
+
+
+def _safe_networkmanager_filename(profile_name: str) -> str:
+    """Return a conservative NetworkManager keyfile filename."""
+
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", profile_name.strip()) or "windows-wlan"
+    if not name.endswith(".nmconnection"):
+        name = f"{name}.nmconnection"
+    return name
+
+
+def export_windows_wlan_profile(
+    profile_name: str,
+    *,
+    export_dir: Path,
+    runner: CommandRunner,
+) -> WindowsWlanProfile:
+    """Export one saved Windows WLAN profile using ``netsh`` and parse it."""
+
+    if os.name != "nt":
+        raise ImagerScriptError("--copy-windows-wlan-profile can only run on Windows.")
+    before = {path.resolve() for path in export_dir.glob("*.xml")}
+    try:
+        runner.run(
+            [
+                "netsh",
+                "wlan",
+                "export",
+                "profile",
+                f"name={profile_name}",
+                "key=clear",
+                f"folder={export_dir}",
+            ]
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ImagerScriptError(
+            f"Unable to export saved Windows WLAN profile '{profile_name}'."
+        ) from exc
+    after = sorted(path for path in export_dir.glob("*.xml") if path.resolve() not in before)
+    return select_exported_windows_wlan_profile(profile_name, after)
+
+
+def _dedupe_names(names: Sequence[str]) -> list[str]:
+    """Preserve the first occurrence of each nonblank name."""
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for raw_name in names:
+        name = str(raw_name).strip()
+        if name and name not in seen:
+            seen.add(name)
+            unique.append(name)
+    return unique
+
+
+@contextmanager
+def windows_wlan_build_args(
+    profile_names: Sequence[str],
+    *,
+    runner: CommandRunner,
+):
+    """Yield build arguments that inject selected Windows WLAN profiles."""
+
+    selected_names = _dedupe_names(profile_names)
+    if not selected_names:
+        yield []
+        return
+
+    with TemporaryDirectory(prefix="arthexis-wlan-") as temp_directory:
+        root = Path(temp_directory)
+        export_dir = root / "windows-export"
+        profile_dir = root / "networkmanager"
+        export_dir.mkdir()
+        profile_dir.mkdir()
+        copied_names: list[str] = []
+        for profile_name in selected_names:
+            profile = export_windows_wlan_profile(
+                profile_name,
+                export_dir=export_dir,
+                runner=runner,
+            )
+            filename = _safe_networkmanager_filename(profile.ssid)
+            output_path = profile_dir / filename
+            counter = 2
+            while output_path.exists():
+                output_path = profile_dir / f"{Path(filename).stem}-{counter}.nmconnection"
+                counter += 1
+            output_path.write_text(_networkmanager_keyfile_content(profile), encoding="utf-8")
+            copied_names.append(profile.ssid)
+
+        args: list[str] = ["--host-network-profile-dir", str(profile_dir)]
+        for profile_name in copied_names:
+            args.extend(["--copy-host-network", profile_name])
+        yield args
 
 
 def find_default_recovery_key(
@@ -149,6 +418,33 @@ def run_local_imager(
     )
 
 
+def run_local_build(
+    build_args: Sequence[str],
+    *,
+    windows_wlan_profiles: Sequence[str],
+    repo_root: Path,
+    runner: CommandRunner,
+) -> None:
+    """Run an imager build with helper-provided defaults and temp profiles."""
+
+    enriched_args = enrich_build_args(build_args, repo_root=repo_root)
+    selected_windows_profiles = _dedupe_names(windows_wlan_profiles)
+    if selected_windows_profiles and not build_uses_customization(enriched_args):
+        raise ImagerScriptError("--copy-windows-wlan-profile requires image customization.")
+    if selected_windows_profiles and has_option(
+        enriched_args,
+        "--copy-all-host-networks",
+        "--host-network-profile-dir",
+    ):
+        raise ImagerScriptError(
+            "--copy-windows-wlan-profile cannot be combined with --copy-all-host-networks "
+            "or an explicit --host-network-profile-dir."
+        )
+    ensure_customization_toolchain(enriched_args)
+    with windows_wlan_build_args(selected_windows_profiles, runner=runner) as wlan_args:
+        run_local_imager(["build", *enriched_args, *wlan_args], repo_root=repo_root, runner=runner)
+
+
 def gway_remote_command(
     *,
     suite_path: str,
@@ -185,8 +481,12 @@ def upload_image_to_gway(
 def handle_build(args: argparse.Namespace, extra: list[str], *, repo_root: Path, runner: CommandRunner) -> None:
     """Build an image using the local suite checkout."""
 
-    build_args = enrich_build_args(extra, repo_root=repo_root)
-    run_local_imager(["build", *build_args], repo_root=repo_root, runner=runner)
+    run_local_build(
+        extra,
+        windows_wlan_profiles=args.copy_windows_wlan_profile,
+        repo_root=repo_root,
+        runner=runner,
+    )
 
 
 def handle_devices_local(
@@ -239,8 +539,12 @@ def handle_create_burn_local(
         args.output_dir,
         *extra,
     ]
-    build_args = enrich_build_args(build_args, repo_root=repo_root)
-    run_local_imager(["build", *build_args], repo_root=repo_root, runner=runner)
+    run_local_build(
+        build_args,
+        windows_wlan_profiles=args.copy_windows_wlan_profile,
+        repo_root=repo_root,
+        runner=runner,
+    )
     image_path = output_image_path(repo_root, output_dir=args.output_dir, name=args.name)
     write_args = ["write", "--image-path", str(image_path), "--device", args.device]
     if args.yes:
@@ -345,8 +649,12 @@ def handle_create_burn_gway(
         args.output_dir,
         *extra,
     ]
-    build_args = enrich_build_args(build_args, repo_root=repo_root)
-    run_local_imager(["build", *build_args], repo_root=repo_root, runner=runner)
+    run_local_build(
+        build_args,
+        windows_wlan_profiles=args.copy_windows_wlan_profile,
+        repo_root=repo_root,
+        runner=runner,
+    )
     image_path = output_image_path(repo_root, output_dir=args.output_dir, name=args.name)
     burn_gway_image(
         image_path=image_path,
@@ -397,6 +705,20 @@ def add_gway_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_windows_wlan_options(parser: argparse.ArgumentParser) -> None:
+    """Add Windows WLAN profile-copying options to a build-style subparser."""
+
+    parser.add_argument(
+        "--copy-windows-wlan-profile",
+        action="append",
+        default=[],
+        help=(
+            "Export a saved Windows WLAN profile with netsh and copy it into the image "
+            "as a NetworkManager profile. May be repeated."
+        ),
+    )
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
 
@@ -409,6 +731,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "build",
         help="Build an image with local-suite and recovery-key defaults.",
     )
+    add_windows_wlan_options(build)
     build.set_defaults(handler=handle_build)
 
     devices_local = subparsers.add_parser("devices-local", help="List local writer devices.")
@@ -436,6 +759,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     create_burn_local.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Build output directory.")
     create_burn_local.add_argument("--device", required=True, help="Local writer device path.")
     create_burn_local.add_argument("--yes", action="store_true", help="Confirm destructive write.")
+    add_windows_wlan_options(create_burn_local)
     create_burn_local.set_defaults(handler=handle_create_burn_local)
 
     devices_gway = subparsers.add_parser("devices-gway", help="List writer devices on GWAY.")
@@ -467,6 +791,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     create_burn_gway.add_argument("--device", required=True, help="Remote writer device, for example /dev/sdb.")
     create_burn_gway.add_argument("--yes", action="store_true", help="Confirm destructive remote write.")
     add_gway_options(create_burn_gway)
+    add_windows_wlan_options(create_burn_gway)
     create_burn_gway.set_defaults(handler=handle_create_burn_gway)
 
     access = subparsers.add_parser("test-access", help="Pass through to imager test-access.")
