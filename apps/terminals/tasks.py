@@ -75,15 +75,22 @@ def _ensure_private_state_dir(path: Path) -> None:
 
 def _write_pid_file(pid_file: Path, pid: int, command: Sequence[str]) -> None:
     content = f"{pid}\n{_command_metadata(command)}\n"
+    _write_private_file(pid_file, content, 0o600, "Terminal pid file")
+
+
+def _write_private_file(path: Path, content: str, mode: int, description: str) -> None:
     if _is_windows():
-        pid_file.write_text(content, encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
         return
-    if pid_file.is_symlink():
-        raise PermissionError(f"Terminal pid file must not be a symlink: {pid_file}")
+    if path.is_symlink():
+        raise PermissionError(f"{description} must not be a symlink: {path}")
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    fd = os.open(pid_file, flags, 0o600)
+    fd = os.open(path, flags, mode)
+    fchmod = getattr(os, "fchmod", None)
+    if fchmod is not None:
+        fchmod(fd, mode)
     with os.fdopen(fd, "w", encoding="utf-8") as output:
         output.write(content)
 
@@ -201,7 +208,7 @@ def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
     script_dir = _terminal_state_dir() / "scripts"
     _ensure_private_state_dir(script_dir)
     script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
-    script_path.write_text(startup_script, encoding="utf-8")
+    _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
     return script_path
 
 
@@ -209,8 +216,7 @@ def _write_posix_startup_script(state_key: str, startup_script: str) -> Path:
     script_dir = _terminal_state_dir() / "scripts"
     _ensure_private_state_dir(script_dir)
     script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.sh"
-    script_path.write_text(startup_script, encoding="utf-8")
-    os.chmod(script_path, 0o700)
+    _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
     return script_path
 
 
