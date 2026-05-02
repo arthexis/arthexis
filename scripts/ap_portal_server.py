@@ -58,6 +58,10 @@ def _path_looks_like_asset(path: str) -> bool:
     return bool(Path(path).suffix)
 
 
+def _path_has_nul_byte(path: str) -> bool:
+    return "\x00" in path
+
+
 TERMS_STATEMENT = (
     "I accept that my internet experience may be altered and recorded "
     "for quality of life purposes while using this access point."
@@ -661,6 +665,9 @@ class PortalApplication:
             def do_GET(self) -> None:
                 parsed = urlparse(self.path)
                 request_path = unquote(parsed.path)
+                if _path_has_nul_byte(request_path):
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
                 if request_path == "/health":
                     self._json({"ok": True})
                     return
@@ -765,8 +772,11 @@ class PortalApplication:
                     self.send_error(HTTPStatus.NOT_FOUND)
 
             def _serve_asset(self, name: str) -> bool:
-                assets_dir = app.config.assets_dir.resolve()
-                path = (assets_dir / name).resolve()
+                try:
+                    assets_dir = app.config.assets_dir.resolve()
+                    path = (assets_dir / name).resolve()
+                except (OSError, ValueError):
+                    return False
                 try:
                     path.relative_to(assets_dir)
                 except ValueError:
