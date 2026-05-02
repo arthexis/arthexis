@@ -1239,7 +1239,10 @@ def build_whatsapp_listener_install_plan(
         service_dir = Path(systemd_user_dir or _default_systemd_user_dir()).expanduser()
         service_path = service_dir / unit_name
         listen_command = _shell_command(command)
-        install_command = f"systemctl --user daemon-reload && systemctl --user enable {shlex.quote(unit_name)}"
+        install_command = (
+            "systemctl --user daemon-reload && systemctl --user enable "
+            f"{shlex.quote(str(service_path))}"
+        )
         start_command = f"systemctl --user start {shlex.quote(unit_name)}"
         status_command = f"systemctl --user status {shlex.quote(unit_name)}"
         stop_command = f"systemctl --user stop {shlex.quote(unit_name)}"

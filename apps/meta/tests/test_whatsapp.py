@@ -851,7 +851,8 @@ def test_whatsapp_install_listener_linux_dry_run_plans_systemd_user_unit(tmp_pat
     assert payload["platform"] == "linux"
     assert payload["wrote_files"] is False
     assert payload["service_path"] == str(systemd_dir / "arthexis-whatsapp-listener.service")
-    assert "systemctl --user enable arthexis-whatsapp-listener.service" in payload["install_command"]
+    assert "systemctl --user enable" in payload["install_command"]
+    assert str(systemd_dir / "arthexis-whatsapp-listener.service") in payload["install_command"]
     assert "--browser firefox" in payload["listen_command"]
     assert "--headless" in payload["listen_command"]
     assert not output_dir.exists()
@@ -1001,6 +1002,38 @@ def test_install_listener_cross_platform_base_dir_controls_target_paths(tmp_path
     else:
         assert "/srv/arthexis/.venv/bin/python" in payload["listen_command"]
         assert "/srv/arthexis/manage.py" in payload["listen_command"]
+
+
+def test_install_listener_cross_platform_written_runner_uses_target_base_dir(tmp_path):
+    target = "linux" if sys.platform == "win32" else "windows"
+    output_dir = tmp_path / "install"
+    stdout = StringIO()
+    args = [
+        "whatsapp",
+        "install-listener",
+        "--from",
+        "5551234567",
+        "--platform",
+        target,
+        "--output-dir",
+        str(output_dir),
+        "--write",
+        "--json",
+    ]
+    if target == "linux":
+        args.extend(["--systemd-user-dir", str(tmp_path / "systemd")])
+
+    with override_settings(BASE_DIR=tmp_path):
+        call_command(*args, stdout=stdout)
+
+    payload = json.loads(stdout.getvalue())
+    runner_text = Path(payload["runner_path"]).read_text(encoding="utf-8")
+    assert str(tmp_path) not in payload["listen_command"]
+    assert str(tmp_path) not in runner_text
+    if target == "windows":
+        assert r"C:\Arthexis" in runner_text
+    else:
+        assert "/opt/arthexis" in runner_text
 
 
 def test_systemd_quote_escapes_backslashes_without_spaces():
