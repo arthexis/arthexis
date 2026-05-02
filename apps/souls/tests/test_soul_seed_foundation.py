@@ -447,8 +447,6 @@ def test_soul_seed_activate_command_outputs_json_from_scan_payload(skill, tmp_pa
         str(scan_path),
         "--console-id",
         "console-a",
-        "--reader-id",
-        "reader-1",
         "--json",
         stdout=stdout,
     )
@@ -457,6 +455,8 @@ def test_soul_seed_activate_command_outputs_json_from_scan_payload(skill, tmp_pa
     assert summary["action"] == "activated"
     assert summary["card"]["card_uid"] == "AABBCCDD"
     assert summary["session"]["console_id"] == "console-a"
+    assert summary["session"]["reader_id"] == ""
+    assert summary["session"]["trust_tier"] == CardSession.TrustTier.UNKNOWN
     assert summary["interface"]["visible_fields"] == ["intent", "matches", "commands", "suggestions"]
 
 
