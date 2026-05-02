@@ -8,6 +8,8 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -16,6 +18,13 @@ from apps.skills.models import AgentSkill, AgentSkillFile
 from apps.skills.package_services import PACKAGE_FORMAT
 
 pytestmark = [pytest.mark.django_db]
+
+
+@pytest.fixture(autouse=True)
+def isolated_import_storage(monkeypatch, tmp_path):
+    storage = FileSystemStorage(location=tmp_path / "media")
+    monkeypatch.setattr(skills_admin, "default_storage", storage)
+    return storage
 
 
 def _zip_upload(
@@ -87,7 +96,10 @@ def test_agent_skill_changelist_links_import_package(admin_client):
     )
 
 
-def test_superuser_can_preview_valid_package_without_db_writes(admin_client):
+def test_superuser_can_preview_valid_package_without_db_writes(
+    admin_client,
+    isolated_import_storage,
+):
     response = admin_client.post(
         reverse("admin:skills_agentskill_import_package"),
         {"action": "preview", "package": _valid_package_upload("admin-preview")},
@@ -99,17 +111,27 @@ def test_superuser_can_preview_valid_package_without_db_writes(admin_client):
     ]
     assert response.context["preview_token"]
     assert "admin-preview" in response.rendered_content
+    session_entry = admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY][
+        response.context["preview_token"]
+    ]
+    assert "name" in session_entry
+    assert isolated_import_storage.exists(session_entry["name"])
     assert not AgentSkill.objects.filter(slug="admin-preview").exists()
     assert not AgentSkillFile.objects.filter(skill__slug="admin-preview").exists()
 
 
-def test_superuser_can_import_valid_package(admin_client):
+def test_superuser_can_import_valid_package(admin_client, isolated_import_storage):
     url = reverse("admin:skills_agentskill_import_package")
     preview_response = admin_client.post(
         url,
         {"action": "preview", "package": _valid_package_upload("admin-import")},
     )
     token = preview_response.context["preview_token"]
+    session_entry = admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY][
+        token
+    ]
+    storage_name = session_entry["name"]
+    assert isolated_import_storage.exists(storage_name)
 
     response = admin_client.post(url, {"action": "apply", "token": token}, follow=True)
 
@@ -129,6 +151,7 @@ def test_superuser_can_import_valid_package(admin_client):
         ("SKILL.md", "---\nname: admin-upload\n---\n"),
         ("references/rules.md", "portable rules"),
     ]
+    assert not isolated_import_storage.exists(storage_name)
 
 
 def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
@@ -263,14 +286,16 @@ def test_invalid_package_filename_shows_form_error_and_writes_nothing(admin_clie
     assert AgentSkillFile.objects.count() == file_count
 
 
-def test_preview_cleans_expired_temp_uploads(
+def test_preview_cleans_expired_storage_uploads(
     admin_client,
-    monkeypatch,
-    tmp_path,
+    isolated_import_storage,
 ):
-    monkeypatch.setattr(skills_admin, "gettempdir", lambda: str(tmp_path))
-    old_upload = tmp_path / f"{skills_admin._IMPORT_UPLOAD_PREFIX}old.zip"
-    old_upload.write_bytes(b"stale")
+    old_upload_name = (
+        f"{skills_admin._IMPORT_UPLOAD_STORAGE_DIR}/"
+        f"{skills_admin._IMPORT_UPLOAD_PREFIX}old.zip"
+    )
+    isolated_import_storage.save(old_upload_name, ContentFile(b"stale"))
+    old_upload = Path(isolated_import_storage.path(old_upload_name))
     expired_at = time.time() - skills_admin._IMPORT_PREVIEW_TTL_SECONDS - 5
     os.utime(old_upload, (expired_at, expired_at))
 
@@ -280,15 +305,18 @@ def test_preview_cleans_expired_temp_uploads(
     )
 
     assert response.status_code == 200
-    assert not old_upload.exists()
+    assert not isolated_import_storage.exists(old_upload_name)
     token = response.context["preview_token"]
     session_entry = admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY][
         token
     ]
-    preview_upload = Path(session_entry["path"])
-    assert preview_upload.exists()
-    assert preview_upload.parent == tmp_path
-    preview_upload.unlink(missing_ok=True)
+    preview_upload_name = session_entry["name"]
+    assert preview_upload_name.startswith(
+        f"{skills_admin._IMPORT_UPLOAD_STORAGE_DIR}/"
+        f"{skills_admin._IMPORT_UPLOAD_PREFIX}"
+    )
+    assert isolated_import_storage.exists(preview_upload_name)
+    isolated_import_storage.delete(preview_upload_name)
 
 
 def test_import_package_blocks_staff_without_add_and_change_permissions(

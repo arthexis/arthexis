@@ -4,7 +4,9 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
+from os import PathLike
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import BinaryIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.conf import settings
@@ -729,9 +731,19 @@ def materialize_codex_skill_files(
     return summary
 
 
-def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> dict:
-    package_path = Path(package_path)
-    with ZipFile(package_path) as package:
+def import_codex_skill_package(
+    package_path: str | PathLike[str] | BinaryIO,
+    *,
+    dry_run: bool = True,
+) -> dict:
+    if isinstance(package_path, (str, PathLike)):
+        package_source = Path(package_path)
+        package_label = str(package_source)
+    else:
+        package_source = package_path
+        package_label = str(getattr(package_path, "name", "<uploaded package>"))
+
+    with ZipFile(package_source) as package:
         try:
             manifest_bytes = package.read("manifest.json")
         except KeyError as error:
@@ -747,7 +759,7 @@ def import_codex_skill_package(package_path: Path, *, dry_run: bool = True) -> d
             )
         validated_skills = _validate_manifest_skill_entries(package, manifest)
         summary = {
-            "package": str(package_path),
+            "package": package_label,
             "dry_run": dry_run,
             "skills": [],
         }

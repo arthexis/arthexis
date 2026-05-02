@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import json
-import time
-from pathlib import Path
-from tempfile import NamedTemporaryFile, gettempdir
+from datetime import timedelta
 from uuid import uuid4
 from zipfile import BadZipFile
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from .forms import CodexSkillPackageImportForm
@@ -22,6 +22,7 @@ from .package_services import (
 )
 
 _SESSION_IMPORT_PACKAGES_KEY = "skills_agentskill_import_packages"
+_IMPORT_UPLOAD_STORAGE_DIR = "skills/imports"
 _IMPORT_UPLOAD_PREFIX = "agentskill-package-"
 _IMPORT_PREVIEW_TTL_SECONDS = 60 * 60
 _PACKAGE_IMPORT_ERRORS = (
@@ -88,11 +89,12 @@ class AgentSkillAdmin(admin.ModelAdmin):
         if request.method == "POST":
             form = CodexSkillPackageImportForm(request.POST, request.FILES)
             if form.is_valid():
-                upload_path = self._store_import_upload(form.cleaned_data["package"])
+                upload_name = self._store_import_upload(form.cleaned_data["package"])
                 try:
-                    preview = import_codex_skill_package(upload_path, dry_run=True)
+                    with default_storage.open(upload_name, "rb") as upload_file:
+                        preview = import_codex_skill_package(upload_file, dry_run=True)
                 except _PACKAGE_IMPORT_ERRORS as error:
-                    upload_path.unlink(missing_ok=True)
+                    self._delete_import_upload(upload_name)
                     self.message_user(
                         request,
                         _("Could not preview Codex skill package: %(error)s")
@@ -102,7 +104,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
                 else:
                     preview_token = self._remember_import_package(
                         request,
-                        upload_path,
+                        upload_name,
                     )
                     self.message_user(
                         request,
@@ -148,8 +150,17 @@ class AgentSkillAdmin(admin.ModelAdmin):
             return HttpResponseRedirect(import_url)
 
         try:
-            import_codex_skill_package(package_path, dry_run=True)
-            summary = import_codex_skill_package(package_path, dry_run=False)
+            with default_storage.open(package_path, "rb") as upload_file:
+                import_codex_skill_package(upload_file, dry_run=True)
+            with default_storage.open(package_path, "rb") as upload_file:
+                summary = import_codex_skill_package(upload_file, dry_run=False)
+        except FileNotFoundError:
+            self.message_user(
+                request,
+                _("The package preview expired. Upload the package again."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(import_url)
         except _PACKAGE_IMPORT_ERRORS as error:
             self.message_user(
                 request,
@@ -158,7 +169,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
             )
             return HttpResponseRedirect(import_url)
         finally:
-            package_path.unlink(missing_ok=True)
+            self._delete_import_upload(package_path)
 
         self.message_user(
             request,
@@ -171,67 +182,91 @@ class AgentSkillAdmin(admin.ModelAdmin):
         )
         return HttpResponseRedirect(reverse("admin:skills_agentskill_changelist"))
 
-    def _store_import_upload(self, uploaded_file) -> Path:
-        with NamedTemporaryFile(
-            delete=False,
-            dir=gettempdir(),
-            prefix=_IMPORT_UPLOAD_PREFIX,
-            suffix=".zip",
-        ) as temp_file:
-            for chunk in uploaded_file.chunks():
-                temp_file.write(chunk)
-            return Path(temp_file.name)
+    def _store_import_upload(self, uploaded_file) -> str:
+        if hasattr(uploaded_file, "seek"):
+            uploaded_file.seek(0)
+        storage_name = (
+            f"{_IMPORT_UPLOAD_STORAGE_DIR}/{_IMPORT_UPLOAD_PREFIX}{uuid4().hex}.zip"
+        )
+        return default_storage.save(storage_name, uploaded_file)
 
-    def _cleanup_expired_import_uploads(self, now: float | None = None) -> None:
-        now = now or time.time()
-        cutoff = now - _IMPORT_PREVIEW_TTL_SECONDS
-        for package_path in Path(gettempdir()).glob(f"{_IMPORT_UPLOAD_PREFIX}*.zip"):
+    def _cleanup_expired_import_uploads(self, now=None) -> None:
+        now = now or timezone.now()
+        cutoff = now - timedelta(seconds=_IMPORT_PREVIEW_TTL_SECONDS)
+        for storage_name in self._iter_import_upload_names():
             try:
-                if package_path.stat().st_mtime < cutoff:
-                    package_path.unlink(missing_ok=True)
-            except OSError:
+                modified_at = default_storage.get_modified_time(storage_name)
+            except (AttributeError, FileNotFoundError, NotImplementedError, OSError):
                 continue
+            if timezone.is_naive(modified_at):
+                modified_at = timezone.make_aware(
+                    modified_at,
+                    timezone.get_current_timezone(),
+                )
+            if modified_at < cutoff:
+                self._delete_import_upload(storage_name)
+
+    def _iter_import_upload_names(self) -> list[str]:
+        try:
+            _, filenames = default_storage.listdir(_IMPORT_UPLOAD_STORAGE_DIR)
+        except (FileNotFoundError, NotImplementedError, OSError):
+            return []
+        return [
+            f"{_IMPORT_UPLOAD_STORAGE_DIR}/{filename}"
+            for filename in filenames
+            if filename.startswith(_IMPORT_UPLOAD_PREFIX) and filename.endswith(".zip")
+        ]
+
+    def _delete_import_upload(self, storage_name: str) -> None:
+        if not storage_name:
+            return
+        try:
+            default_storage.delete(storage_name)
+        except (FileNotFoundError, NotImplementedError, OSError):
+            return
 
     def _remember_import_package(
         self,
         request: HttpRequest,
-        package_path: Path,
+        storage_name: str,
     ) -> str:
-        now = time.time()
+        now = timezone.now()
         self._cleanup_expired_import_uploads(now=now)
         packages = dict(request.session.get(_SESSION_IMPORT_PACKAGES_KEY, {}))
         for existing_entry in packages.values():
-            existing_path = self._import_package_entry_path(existing_entry)
-            if existing_path:
-                Path(existing_path).unlink(missing_ok=True)
+            existing_name = self._import_package_entry_name(existing_entry)
+            self._delete_import_upload(existing_name)
         packages = {}
         token = uuid4().hex
-        packages[token] = {"path": str(package_path), "ts": now}
+        packages[token] = {"name": storage_name, "ts": now.timestamp()}
         request.session[_SESSION_IMPORT_PACKAGES_KEY] = packages
         request.session.modified = True
         return token
 
-    def _import_package_entry_path(self, entry) -> str:
+    def _import_package_entry_name(self, entry) -> str:
         if isinstance(entry, dict):
-            return str(entry.get("path") or "")
+            return str(entry.get("name") or "")
         return str(entry or "")
 
     def _consume_import_package(
         self,
         request: HttpRequest,
         token: str,
-    ) -> Path | None:
+    ) -> str | None:
         packages = dict(request.session.get(_SESSION_IMPORT_PACKAGES_KEY, {}))
         entry = packages.pop(token, None)
         request.session[_SESSION_IMPORT_PACKAGES_KEY] = packages
         request.session.modified = True
-        raw_path = self._import_package_entry_path(entry)
-        if not raw_path:
+        storage_name = self._import_package_entry_name(entry)
+        if not storage_name:
             return None
-        package_path = Path(raw_path)
-        if not package_path.exists():
+        try:
+            exists = default_storage.exists(storage_name)
+        except (NotImplementedError, OSError):
+            exists = False
+        if not exists:
             return None
-        return package_path
+        return storage_name
 
     def _summary_message(self, summary: dict, *, singular, plural) -> str:
         skills = summary.get("skills", [])
