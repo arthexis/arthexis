@@ -55,6 +55,10 @@ Expected results:
 - Local port `9080` returns `{"ok": true}` from `/health`.
 - AP-facing port `80` returns the same portal health JSON through nginx.
 - `http://10.42.0.1/` shows the AP consent page headed `AP activity is monitored`.
+- Captive-portal probe paths such as `/connecttest.txt`, plus nested unknown
+  browser paths such as `/soul/register/`, return the AP portal page instead of
+  a bare 404. Hidden path probes and missing nested asset paths such as
+  `/css/missing.css` still return 404.
 
 If nginx validation fails, `setup_ap_portal.sh` restores the most recent
 pre-portal nginx site backup before exiting.

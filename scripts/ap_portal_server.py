@@ -17,7 +17,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = BASE_DIR / "config" / "data" / "ap_portal"
@@ -38,6 +38,26 @@ MAX_PAYLOAD_BYTES = 1024 * 1024
 ARP_TABLE_PATH = Path("/proc/net/arp")
 NDISC_CACHE_PATH = Path("/proc/net/ndisc_cache")
 LOCAL_DEVELOPMENT_MAC = "02:00:00:00:00:01"
+CAPTIVE_PORTAL_PROBE_PATHS = {
+    "/canonical.html",
+    "/connecttest.txt",
+    "/gen_204",
+    "/generate_204",
+    "/hotspot-detect.html",
+    "/library/test/success.html",
+    "/ncsi.txt",
+    "/success.txt",
+}
+
+
+def _path_has_hidden_segment(path: str) -> bool:
+    return any(segment.startswith(".") for segment in path.split("/") if segment)
+
+
+def _path_looks_like_asset(path: str) -> bool:
+    return bool(Path(path).suffix)
+
+
 TERMS_STATEMENT = (
     "I accept that my internet experience may be altered and recorded "
     "for quality of life purposes while using this access point."
@@ -640,36 +660,52 @@ class PortalApplication:
 
             def do_GET(self) -> None:
                 parsed = urlparse(self.path)
-                if parsed.path == "/health":
+                request_path = unquote(parsed.path)
+                if request_path == "/health":
                     self._json({"ok": True})
                     return
-                if parsed.path == "/api/status":
+                if request_path == "/api/status":
                     self._json(
                         app.state.status_for_request(
                             ip_address=self._client_ip(),
                             user_agent=self.headers.get("User-Agent", ""),
-                            path=parsed.path,
+                            path=request_path,
                             host=self.headers.get("Host", ""),
                         )
                     )
                     return
-                if parsed.path == "/api/clients":
+                if request_path == "/api/clients":
                     if not self._is_direct_local_request():
                         self._json({"error": "local_only"}, status=HTTPStatus.FORBIDDEN)
                         return
                     self._json({"clients": app.state.activity.client_summary()})
                     return
 
-                if parsed.path in {"", "/"}:
-                    self._record_request(parsed.path or "/")
-                    self._serve_asset("index.html")
+                if request_path in {"", "/"}:
+                    self._serve_portal_page(request_path or "/")
                     return
-                asset_name = parsed.path.lstrip("/")
-                if "/" in asset_name or asset_name.startswith("."):
+                if request_path.startswith("/api/"):
+                    self._record_request(request_path)
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
-                self._record_request(parsed.path)
-                self._serve_asset(asset_name)
+                if request_path in CAPTIVE_PORTAL_PROBE_PATHS:
+                    self._serve_portal_page(request_path)
+                    return
+                asset_name = request_path.lstrip("/")
+                if _path_has_hidden_segment(asset_name):
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                if "/" in asset_name:
+                    if _path_looks_like_asset(asset_name):
+                        self._record_request(request_path)
+                        if not self._serve_asset(asset_name):
+                            self.send_error(HTTPStatus.NOT_FOUND)
+                        return
+                    self._serve_portal_page(request_path)
+                    return
+                self._record_request(request_path)
+                if not self._serve_asset(asset_name):
+                    self.send_error(HTTPStatus.NOT_FOUND)
 
             def do_POST(self) -> None:
                 parsed = urlparse(self.path)
@@ -723,11 +759,20 @@ class PortalApplication:
                     referer=self.headers.get("Referer", ""),
                 )
 
-            def _serve_asset(self, name: str) -> None:
-                path = app.config.assets_dir / name
-                if not path.exists() or not path.is_file():
+            def _serve_portal_page(self, path: str) -> None:
+                self._record_request(path)
+                if not self._serve_asset("index.html"):
                     self.send_error(HTTPStatus.NOT_FOUND)
-                    return
+
+            def _serve_asset(self, name: str) -> bool:
+                assets_dir = app.config.assets_dir.resolve()
+                path = (assets_dir / name).resolve()
+                try:
+                    path.relative_to(assets_dir)
+                except ValueError:
+                    return False
+                if not path.exists() or not path.is_file():
+                    return False
                 content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
                 body = _read_text(path)
                 self.send_response(HTTPStatus.OK)
@@ -736,6 +781,7 @@ class PortalApplication:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+                return True
 
             def _read_payload(self) -> dict[str, Any]:
                 raw = _read_limited_request_body(self.headers, self.rfile)
