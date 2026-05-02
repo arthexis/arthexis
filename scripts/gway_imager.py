@@ -188,7 +188,7 @@ def _networkmanager_keyfile_content(profile: WindowsWlanProfile) -> str:
 
     lines = [
         "[connection]",
-        f"id={profile.ssid}",
+        f"id={profile.name}",
         "type=wifi",
         "autoconnect=true",
         "",
@@ -317,14 +317,14 @@ def windows_wlan_build_args(
                 export_dir=export_dir,
                 runner=runner,
             )
-            filename = _safe_networkmanager_filename(profile.ssid)
+            filename = _safe_networkmanager_filename(profile.name)
             output_path = profile_dir / filename
             counter = 2
             while output_path.exists():
                 output_path = profile_dir / f"{Path(filename).stem}-{counter}.nmconnection"
                 counter += 1
             output_path.write_text(_networkmanager_keyfile_content(profile), encoding="utf-8")
-            copied_names.append(profile.ssid)
+            copied_names.append(profile.name)
 
         args: list[str] = ["--host-network-profile-dir", str(profile_dir)]
         for profile_name in copied_names:

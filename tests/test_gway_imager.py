@@ -105,6 +105,42 @@ def test_windows_wlan_profile_xml_converts_wpa2_keyfile(tmp_path: Path) -> None:
     assert "psk=example-password" in keyfile
 
 
+def test_windows_wlan_keyfile_uses_profile_name_as_connection_id(tmp_path: Path) -> None:
+    """Regression: profile names avoid collisions when profiles share an SSID."""
+
+    profile_xml = tmp_path / "Wi-Fi-office.xml"
+    profile_xml.write_text(
+        """<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+  <name>Office Preferred</name>
+  <SSIDConfig>
+    <SSID>
+      <name>Office</name>
+    </SSID>
+  </SSIDConfig>
+  <MSM>
+    <security>
+      <authEncryption>
+        <authentication>WPA2PSK</authentication>
+        <encryption>AES</encryption>
+      </authEncryption>
+      <sharedKey>
+        <keyMaterial>example-password</keyMaterial>
+      </sharedKey>
+    </security>
+  </MSM>
+</WLANProfile>
+""",
+        encoding="utf-8",
+    )
+
+    profile = gway_imager.parse_windows_wlan_profile_xml(profile_xml)
+    keyfile = gway_imager._networkmanager_keyfile_content(profile)
+
+    assert "id=Office Preferred" in keyfile
+    assert "ssid=Office" in keyfile
+
+
 def test_windows_wlan_profile_xml_converts_open_keyfile(tmp_path: Path) -> None:
     """Regression: open saved profiles such as arthexis-1 do not need key material."""
 
