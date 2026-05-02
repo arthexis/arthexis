@@ -2,6 +2,7 @@ from django.db import migrations
 
 PRODUCT_DEVELOPER_JOURNEY_SLUG = "product-developer-github-access"
 GITHUB_SETUP_STEP_SLUG = "setup-github-token"
+MAX_POSTGRES_INTEGER = 2_147_483_647
 
 
 def remove_product_developer_github_setup_step(apps, schema_editor):
@@ -25,10 +26,18 @@ def remove_product_developer_github_setup_step(apps, schema_editor):
     if not remaining_steps:
         return
 
-    max_order = max(step.order for step in remaining_steps) + len(remaining_steps)
+    existing_orders = {step.order for step in remaining_steps}
+    temp_start = 0
+    temp_span = len(remaining_steps)
+    while any(order in existing_orders for order in range(temp_start, temp_start + temp_span)):
+        temp_start += temp_span
+
+    if temp_start + temp_span - 1 > MAX_POSTGRES_INTEGER:
+        raise OverflowError("Unable to allocate temporary order range for journey step resequencing")
+
     temp_steps = []
     for position, step in enumerate(remaining_steps, start=1):
-        step.order = max_order + position
+        step.order = temp_start + position - 1
         temp_steps.append(step)
 
     OperatorJourneyStep.objects.bulk_update(temp_steps, ["order"])
