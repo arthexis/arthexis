@@ -1313,7 +1313,7 @@ def build_whatsapp_listener_install_plan(
             resolved_output_dir.mkdir(parents=True, exist_ok=True)
             service_path.parent.mkdir(parents=True, exist_ok=True)
             runner_path.write_text(_linux_listener_runner(resolved_base_dir, command), encoding="utf-8")
-            runner_path.chmod(0o755)
+            runner_path.chmod(0o700)
             service_path.write_text(_linux_systemd_unit(unit_name, resolved_base_dir, runner_path), encoding="utf-8")
             wrote_files = True
 
