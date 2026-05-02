@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
-import uuid
 
 from django.db import models
 from django.utils.text import slugify
@@ -16,12 +16,12 @@ from apps.nodes.device_sync import sync_detected_devices
 from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.video.services.capture import apply_image_rotation
 from apps.video.utils import (
+    OPENCV_CAMERA_IDENTIFIER_PREFIX,
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
-    OPENCV_CAMERA_IDENTIFIER_PREFIX,
-    _cv2_camera_index,
     capture_cv2_snapshot,
     capture_rpi_snapshot,
+    cv2_camera_index,
     detect_cv2_camera_devices,
     probe_rpi_camera_stack,
 )
@@ -137,35 +137,35 @@ class VideoDevice(Ownable):
     @classmethod
     def refresh_from_system(
         cls, *, node, return_objects: bool = False
-    ) -> tuple[int, int] | tuple[int, int, list["VideoDevice"], list["VideoDevice"]]:
+    ) -> tuple[int, int] | tuple[int, int, list[VideoDevice], list[VideoDevice]]:
         """Synchronize :class:`VideoDevice` entries for ``node``."""
 
         detected: list[DetectedVideoDevice] = []
         if is_feature_active_for_node(node=node, slug="video-cam"):
             detected = cls.detect_devices()
-            existing_identifiers = set(
-                cls.objects.filter(node=node).values_list("identifier", flat=True)
-            )
-            compatible_detected: list[DetectedVideoDevice] = []
-            for device in detected:
-                identifier = device.identifier
-                index = _cv2_camera_index(identifier)
-                legacy_identifier = str(index) if index is not None else None
-                if (
-                    identifier.startswith(OPENCV_CAMERA_IDENTIFIER_PREFIX)
-                    and legacy_identifier in existing_identifiers
-                    and identifier not in existing_identifiers
-                ):
-                    compatible_detected.append(
-                        DetectedVideoDevice(
-                            identifier=legacy_identifier,
-                            description=device.description,
-                            raw_info=device.raw_info,
+            if detected:
+                existing_identifiers = set(
+                    cls.objects.filter(node=node).values_list("identifier", flat=True)
+                )
+                compatible_detected: list[DetectedVideoDevice] = []
+                for device in detected:
+                    identifier = device.identifier
+                    index = cv2_camera_index(identifier)
+                    legacy_identifier = str(index) if index is not None else None
+                    if (
+                        identifier.startswith(OPENCV_CAMERA_IDENTIFIER_PREFIX)
+                        and legacy_identifier in existing_identifiers
+                    ):
+                        compatible_detected.append(
+                            DetectedVideoDevice(
+                                identifier=legacy_identifier,
+                                description=device.description,
+                                raw_info=device.raw_info,
+                            )
                         )
-                    )
-                    continue
-                compatible_detected.append(device)
-            detected = compatible_detected
+                        continue
+                    compatible_detected.append(device)
+                detected = compatible_detected
         result = sync_detected_devices(
             model_cls=cls,
             node=node,
@@ -200,13 +200,15 @@ class VideoDevice(Ownable):
             )
             return
 
-        first_device = cls.objects.filter(node=node).order_by("identifier", "pk").first()
+        first_device = (
+            cls.objects.filter(node=node).order_by("identifier", "pk").first()
+        )
         if first_device is not None:
             first_device.is_default = True
             first_device.save(update_fields=["is_default"])
 
     @classmethod
-    def get_default_for_node(cls, node) -> "VideoDevice | None":
+    def get_default_for_node(cls, node) -> VideoDevice | None:
         return (
             cls.objects.filter(node=node).order_by("-is_default", "pk").first()
             if node

@@ -199,7 +199,7 @@ def cv2_camera_identifier(index: int) -> str:
     return f"{OPENCV_CAMERA_IDENTIFIER_PREFIX}{int(index)}"
 
 
-def _cv2_camera_index(device_identifier: str | int) -> int | None:
+def cv2_camera_index(device_identifier: str | int) -> int | None:
     """Return an OpenCV camera index parsed from a supported identifier."""
 
     if type(device_identifier) is int:
@@ -211,10 +211,16 @@ def _cv2_camera_index(device_identifier: str | int) -> int | None:
     return int(identifier) if identifier.isdigit() else None
 
 
+def _cv2_camera_index(device_identifier: str | int) -> int | None:
+    """Compatibility wrapper for the former private OpenCV index helper."""
+
+    return cv2_camera_index(device_identifier)
+
+
 def open_cv2_capture(cv2, device_identifier: str | int):
     """Open an OpenCV capture source using the best local backend."""
 
-    index = _cv2_camera_index(device_identifier)
+    index = cv2_camera_index(device_identifier)
     if index is not None:
         if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
             return cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -404,7 +410,9 @@ def capture_rpi_snapshot(
                 command.extend(["--width", str(width), "--height", str(height)])
             result = _run_command(command, tool_path)
             if result.returncode != 0 and _has_ffmpeg_capture_support():
-                error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
+                error = (
+                    result.stderr or result.stdout or "Snapshot capture failed"
+                ).strip()
                 logger.warning(
                     "rpicam-still failed (%s); attempting ffmpeg fallback", error
                 )
@@ -486,6 +494,7 @@ __all__ = [
     "RPI_CAMERA_DEVICE",
     "has_rpicam_binaries",
     "capture_rpi_snapshot",
+    "cv2_camera_index",
     "cv2_camera_identifier",
     "get_camera_resolutions",
     "has_rpi_camera_stack",

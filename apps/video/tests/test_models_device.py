@@ -93,7 +93,9 @@ def test_detect_devices_describes_cv2_fallback(monkeypatch):
 
 @pytest.mark.django_db
 def test_refresh_from_system_updates_returned_default_state(monkeypatch):
-    node = Node.objects.create(hostname="video-default", public_endpoint="video-default")
+    node = Node.objects.create(
+        hostname="video-default", public_endpoint="video-default"
+    )
     monkeypatch.setattr(
         device_module,
         "is_feature_active_for_node",
@@ -113,9 +115,11 @@ def test_refresh_from_system_updates_returned_default_state(monkeypatch):
         ),
     )
 
-    created, updated, created_objects, updated_objects = VideoDevice.refresh_from_system(
-        node=node,
-        return_objects=True,
+    created, updated, created_objects, updated_objects = (
+        VideoDevice.refresh_from_system(
+            node=node,
+            return_objects=True,
+        )
     )
 
     assert (created, updated) == (1, 0)
@@ -155,9 +159,94 @@ def test_refresh_from_system_keeps_legacy_cv2_identifier(monkeypatch):
     assert (created, updated) == (0, 1)
     legacy_device.refresh_from_db()
     assert legacy_device.description == "OpenCV Camera 0"
-    assert VideoDevice.objects.filter(node=node).values_list("identifier", flat=True) == [
-        "0"
-    ]
+    identifiers = list(
+        VideoDevice.objects.filter(node=node).values_list("identifier", flat=True)
+    )
+    assert identifiers == ["0"]
+
+
+@pytest.mark.django_db
+def test_refresh_from_system_recovers_legacy_cv2_identifier_with_duplicate(
+    monkeypatch,
+):
+    node = Node.objects.create(
+        hostname="video-legacy-duplicate",
+        public_endpoint="video-legacy-duplicate",
+    )
+    legacy_device = VideoDevice.objects.create(
+        node=node,
+        identifier="0",
+        description="Legacy Camera",
+    )
+    VideoDevice.objects.create(
+        node=node,
+        identifier="opencv:0",
+        description="Duplicate Camera",
+    )
+    monkeypatch.setattr(
+        device_module,
+        "is_feature_active_for_node",
+        lambda *, node, slug: True,
+    )
+    monkeypatch.setattr(
+        VideoDevice,
+        "detect_devices",
+        classmethod(
+            lambda cls: [
+                DetectedVideoDevice(
+                    identifier="opencv:0",
+                    description="OpenCV Camera 0",
+                    raw_info="device_index=0 backend=FAKE frame_size=640x480",
+                )
+            ]
+        ),
+    )
+
+    created, updated = VideoDevice.refresh_from_system(node=node)
+
+    assert (created, updated) == (0, 1)
+    legacy_device.refresh_from_db()
+    assert legacy_device.description == "OpenCV Camera 0"
+    identifiers = list(
+        VideoDevice.objects.filter(node=node).values_list("identifier", flat=True)
+    )
+    assert identifiers == ["0"]
+
+
+@pytest.mark.django_db
+def test_refresh_from_system_skips_cv2_identifier_query_without_devices(monkeypatch):
+    node = Node.objects.create(
+        hostname="video-no-devices",
+        public_endpoint="video-no-devices",
+    )
+    monkeypatch.setattr(
+        device_module,
+        "is_feature_active_for_node",
+        lambda *, node, slug: True,
+    )
+    monkeypatch.setattr(VideoDevice, "detect_devices", classmethod(lambda cls: []))
+
+    original_filter = VideoDevice.objects.filter
+
+    class QuerySetProbe:
+        def __init__(self, queryset):
+            self.queryset = queryset
+
+        def __iter__(self):
+            return iter(self.queryset)
+
+        def __getattr__(self, name):
+            return getattr(self.queryset, name)
+
+        def values_list(self, *args, **kwargs):
+            raise AssertionError("unexpected identifier compatibility query")
+
+    def filter_probe(*args, **kwargs):
+        return QuerySetProbe(original_filter(*args, **kwargs))
+
+    monkeypatch.setattr(VideoDevice.objects, "filter", filter_probe)
+
+    assert VideoDevice.refresh_from_system(node=node) == (0, 0)
 
 
 @pytest.mark.django_db
@@ -167,7 +256,9 @@ def test_ensure_single_default_clears_extra_defaults():
         public_endpoint="video-extra-defaults",
     )
     VideoDevice.objects.create(node=node, identifier="opencv:0", is_default=True)
-    extra = VideoDevice.objects.create(node=node, identifier="opencv:1", is_default=True)
+    extra = VideoDevice.objects.create(
+        node=node, identifier="opencv:1", is_default=True
+    )
 
     VideoDevice._ensure_single_default_for_node(node)
 
