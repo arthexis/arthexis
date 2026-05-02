@@ -434,10 +434,12 @@ def _read_package_text(
     archive_path: str,
     *,
     max_size_bytes: int = MAX_PACKAGE_FILE_BYTES,
+    info=None,
 ) -> str:
-    info = _package_entry_info(package, archive_path)
+    if info is None:
+        info = _package_entry_info(package, archive_path)
     _validate_package_entry_size(info, archive_path, max_size_bytes=max_size_bytes)
-    content = package.read(archive_path)
+    content = package.read(info)
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -522,6 +524,7 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
             content_by_path[file_info["path"]] = _read_package_text(
                 package,
                 archive_path,
+                info=info,
             )
         if SKILL_MARKDOWN not in content_by_path:
             raise CodexSkillPackageImportError(
@@ -783,10 +786,17 @@ def import_codex_skill_package(
         package_label = str(getattr(package_path, "name", "<uploaded package>"))
 
     with ZipFile(package_source) as package:
+        try:
+            manifest_info = _package_entry_info(package, "manifest.json")
+        except CodexSkillPackageImportError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required manifest.json"
+            ) from error
         manifest_text = _read_package_text(
             package,
             "manifest.json",
             max_size_bytes=MAX_PACKAGE_MANIFEST_BYTES,
+            info=manifest_info,
         )
         manifest = json.loads(manifest_text)
         if not isinstance(manifest, dict):

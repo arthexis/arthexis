@@ -565,6 +565,16 @@ def test_import_rejects_windows_absolute_manifest_paths(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_dry_run_rejects_missing_manifest_with_legacy_message(tmp_path):
+    package_path = tmp_path / "missing-manifest.zip"
+    with ZipFile(package_path, "w") as package:
+        package.writestr("skills/missing-manifest/SKILL.md", "demo")
+
+    with pytest.raises(ValueError, match="Missing required manifest.json"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
 def test_import_dry_run_rejects_missing_manifest_files(tmp_path):
     package_path = tmp_path / "missing-file.zip"
     manifest = {
