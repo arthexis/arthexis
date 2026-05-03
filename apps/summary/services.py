@@ -273,6 +273,9 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         _write_lcd_frames,
     )
 
+    lock_dir = Path(settings.BASE_DIR) / ".locks"
+    clear_legacy_low_summary_frames(lock_dir)
+
     node = Node.get_local()
     if not node:
         return "skipped:no-node"
@@ -297,8 +300,6 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     ensure_local_model(config)
 
     now = timezone.now()
-    lock_dir = Path(settings.BASE_DIR) / ".locks"
-    clear_legacy_low_summary_frames(lock_dir)
     since = config.last_run_at or (now - timedelta(minutes=5))
     chunks = collect_recent_logs(config, since=since)
     compacted_logs = compact_log_chunks(chunks)
