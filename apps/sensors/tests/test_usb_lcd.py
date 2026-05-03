@@ -19,7 +19,7 @@ from apps.video.models import VideoDevice
 pytestmark = pytest.mark.django_db
 
 
-def test_render_usb_lcd_lines_fits_four_seven_character_labels() -> None:
+def test_render_usb_lcd_lines_fits_four_fixed_icon_slots() -> None:
     statuses = [
         UsbPortStatus(port_number=1, label="LISTEN", connected=True),
         UsbPortStatus(port_number=2, label="OBSERVE", connected=True),
@@ -27,10 +27,23 @@ def test_render_usb_lcd_lines_fits_four_seven_character_labels() -> None:
         UsbPortStatus(port_number=4, label="USB-KEY-LONG", connected=True),
     ]
 
-    assert render_usb_lcd_lines(statuses) == (
-        "LISTEN  OBSERVE",
-        "BASTION USB-KEY",
+    line1, line2 = render_usb_lcd_lines(statuses)
+
+    assert (line1, line2) == ("▘LISTEN ▝OBSERVE", "▖BASTION▗USB-KEY")
+    assert len(line1) == 16
+    assert len(line2) == 16
+
+
+def test_render_usb_lcd_lines_keeps_port_positions_for_sparse_statuses() -> None:
+    line1, line2 = render_usb_lcd_lines(
+        [
+            UsbPortStatus(port_number=2, label="SPARE", connected=False),
+            UsbPortStatus(port_number=4, label="CAM", connected=True),
+        ]
     )
+
+    assert line1 == "▘FREE   ▝FREE   "
+    assert line2 == "▖FREE   ▗CAM    "
 
 
 def test_build_usb_lcd_statuses_uses_local_mappings_and_default_labels() -> None:
@@ -93,7 +106,7 @@ def test_build_usb_lcd_statuses_uses_local_mappings_and_default_labels() -> None
         "BASTION",
         "LISTEN",
         "OBSERVE",
-        "EMPTY",
+        "FREE",
     ]
     assert [status.connected for status in statuses] == [True, True, True, False]
 
@@ -131,7 +144,7 @@ def test_node_scoped_devices_fail_closed_without_local_node(monkeypatch) -> None
     statuses = build_usb_lcd_statuses(mappings=mappings)
 
     assert [status.connected for status in statuses[:2]] == [False, False]
-    assert [status.label for status in statuses[:2]] == ["EMPTY", "EMPTY"]
+    assert [status.label for status in statuses[:2]] == ["FREE", "FREE"]
 
 
 def test_build_usb_lcd_statuses_ignores_other_node_mappings() -> None:
@@ -153,7 +166,7 @@ def test_build_usb_lcd_statuses_ignores_other_node_mappings() -> None:
 
     statuses = build_usb_lcd_statuses(node=local)
 
-    assert [status.label for status in statuses] == ["EMPTY", "EMPTY", "EMPTY", "EMPTY"]
+    assert [status.label for status in statuses] == ["FREE", "FREE", "FREE", "FREE"]
 
 
 def test_build_usb_lcd_statuses_filters_explicit_mappings_by_node() -> None:
@@ -184,7 +197,7 @@ def test_build_usb_lcd_statuses_filters_explicit_mappings_by_node() -> None:
         mappings=[local_mapping, remote_mapping], node=local
     )
 
-    assert [status.label for status in statuses] == ["LOCAL", "EMPTY", "EMPTY", "EMPTY"]
+    assert [status.label for status in statuses] == ["LOCAL", "FREE", "FREE", "FREE"]
 
 
 def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
@@ -208,9 +221,11 @@ def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
 
     assert result["written"] is True
     assert result["connected"] == 1
+    assert result["line1"] == "▘BASTION▝FREE   "
+    assert result["line2"] == "▖FREE   ▗FREE   "
     assert message is not None
-    assert message.subject == "BASTION EMPTY"
-    assert message.body == "EMPTY   EMPTY"
+    assert message.subject == "▘BASTION▝FREE"
+    assert message.body == "▖FREE   ▗FREE"
 
 
 def test_write_usb_lcd_status_removes_stale_lock_without_mappings(

@@ -13,7 +13,12 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from apps.screens.startup_notifications import LCD_USB_LOCK_FILE, write_lcd_message
 
-from .constants import USB_LCD_EMPTY_LABEL, USB_LCD_LABEL_WIDTH, USB_LCD_PORT_COUNT
+from .constants import (
+    USB_LCD_EMPTY_LABEL,
+    USB_LCD_LABEL_WIDTH,
+    USB_LCD_PORT_COUNT,
+    USB_LCD_PORT_ICONS,
+)
 from .models import UsbPortMapping, UsbTracker
 
 logger = logging.getLogger(__name__)
@@ -21,6 +26,7 @@ logger = logging.getLogger(__name__)
 MICROPHONE_TERMS = ("microphone", "mic", "audio", "capture", "alsa")
 CAMERA_TERMS = ("camera", "cam", "video", "v4l", "opencv", "rpicam")
 BASTION_TERMS = ("bastion", "usb-key", "usb_key", "usb key", "security-key")
+USB_LCD_SLOT_WIDTH = 1 + USB_LCD_LABEL_WIDTH
 
 
 @dataclass(frozen=True)
@@ -114,17 +120,26 @@ def build_usb_lcd_statuses(
 
 
 def render_usb_lcd_lines(statuses: Iterable[UsbPortStatus]) -> tuple[str, str]:
-    """Render four USB port labels across two LCD rows."""
+    """Render four fixed USB port slots across two LCD rows."""
 
-    labels = [
-        normalize_usb_lcd_label(status.label)
-        for status in list(statuses)[:USB_LCD_PORT_COUNT]
+    slot_statuses = {
+        port_number: UsbPortStatus(
+            port_number=port_number,
+            label=USB_LCD_EMPTY_LABEL,
+            connected=False,
+        )
+        for port_number in range(1, USB_LCD_PORT_COUNT + 1)
+    }
+    for status in statuses:
+        port_number = int(status.port_number or 0)
+        if port_number in slot_statuses:
+            slot_statuses[port_number] = status
+
+    slots = [
+        _render_usb_lcd_slot(slot_statuses[port_number])
+        for port_number in range(1, USB_LCD_PORT_COUNT + 1)
     ]
-    while len(labels) < USB_LCD_PORT_COUNT:
-        labels.append(USB_LCD_EMPTY_LABEL)
-    return _render_label_pair(labels[0], labels[1]), _render_label_pair(
-        labels[2], labels[3]
-    )
+    return f"{slots[0]}{slots[1]}", f"{slots[2]}{slots[3]}"
 
 
 def write_usb_lcd_status(
@@ -187,10 +202,18 @@ def write_usb_lcd_status(
     }
 
 
-def _render_label_pair(first: str, second: str) -> str:
-    first_label = normalize_usb_lcd_label(first)
-    second_label = normalize_usb_lcd_label(second)
-    return f"{first_label:<{USB_LCD_LABEL_WIDTH}} {second_label:<{USB_LCD_LABEL_WIDTH}}".rstrip()
+def _usb_lcd_port_icon(port_number: int) -> str:
+    port_index = max(1, min(int(port_number or 1), USB_LCD_PORT_COUNT)) - 1
+    return USB_LCD_PORT_ICONS[port_index]
+
+
+def _render_usb_lcd_slot(status: UsbPortStatus) -> str:
+    label = normalize_usb_lcd_label(
+        status.label if status.connected else USB_LCD_EMPTY_LABEL
+    )
+    return f"{_usb_lcd_port_icon(status.port_number)}{label:<{USB_LCD_LABEL_WIDTH}}"[
+        :USB_LCD_SLOT_WIDTH
+    ]
 
 
 def _remove_lock_file(lock_file: Path) -> None:

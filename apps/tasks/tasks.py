@@ -250,7 +250,7 @@ class LocalLLMSummarizer:
             if not (line.startswith("[") and line.endswith("]"))
         ]
         if not event_lines:
-            return "Quiet\nNo new logs\n---"
+            return _summary_screen("QUIET", "no logs")
 
         error_lines = [line for line in event_lines if _summary_severity(line) == "ERR"]
         warn_lines = [line for line in event_lines if _summary_severity(line) == "WRN"]
@@ -270,12 +270,12 @@ class LocalLLMSummarizer:
         if error_lines or warn_lines:
             screens.append(
                 (
-                    f"ERR {len(error_lines)} WRN {len(warn_lines)}",
+                    f"ERR{len(error_lines)} WRN{len(warn_lines)}",
                     _summary_compact_line((error_lines or warn_lines)[-1]),
                 )
             )
         else:
-            screens.append(("OK no err/warn", f"{len(event_lines)} lines"))
+            screens.append(("OK", f"{len(event_lines)}ln no err/wrn"))
 
         for line in (error_lines + warn_lines)[-3:]:
             screens.append((_summary_severity(line), _summary_compact_line(line)))
@@ -288,9 +288,11 @@ class LocalLLMSummarizer:
                 screens.append((label, f"{count}x /5m"))
 
         if len(screens) == 1:
-            screens.append(("Routine only", "No action"))
+            screens.append(("ROUTINE", "no action"))
 
-        return "\n---\n".join(f"{subject}\n{body}" for subject, body in screens)
+        return "\n---\n".join(
+            _summary_screen(subject, body) for subject, body in screens
+        )
 
 
 SUMMARY_TASK_ALIASES = {
@@ -314,7 +316,11 @@ SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
 
 
 def _summary_severity(line: str) -> str:
-    if line.startswith("ERR ") or line.startswith("CRI ") or " raised unexpected" in line:
+    if (
+        line.startswith("ERR ")
+        or line.startswith("CRI ")
+        or " raised unexpected" in line
+    ):
         return "ERR"
     if line.startswith("WRN "):
         return "WRN"
@@ -357,7 +363,14 @@ def _summary_compact_line(line: str) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
         return "-"
-    return cleaned[:16]
+    return cleaned[:24]
+
+
+def _summary_screen(subject: str, body: str) -> str:
+    combined = re.sub(r"\s+", " ", f"{subject}:{body}").strip()[:32]
+    line1 = combined[:16]
+    line2 = combined[16:32]
+    return f"{line1}\n{line2}" if line2 else line1
 
 
 def _write_lcd_frames(

@@ -22,6 +22,8 @@ from .models import LLMSummaryConfig
 logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
+LCD_ROWS = 2
+LCD_SUMMARY_BUFFER_CELLS = LCD_COLUMNS * LCD_ROWS
 LCD_SUMMARY_FRAME_COUNT = 10
 LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
@@ -177,19 +179,21 @@ def compact_log_chunks(chunks: Iterable[LogChunk]) -> str:
 def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
     cutoff = (now - timedelta(minutes=4)).strftime("%H:%M")
     instructions = textwrap.dedent(f"""
-        You summarize system logs for a 16x2 LCD. Focus on the last 4 minutes (cutoff {cutoff}).
-        Highlight urgent operator actions or failures. Use shorthand, abbreviations, and ASCII symbols.
-        Output 8-10 LCD screens. Each screen is two lines (subject then body).
-        Aim for 14-18 chars per line, avoid scrolling when possible.
+        You summarize system logs as 16x2 LCD buffers. Focus on the last 4 minutes (cutoff {cutoff}).
+        Highlight urgent operator actions or failures. Think in 32 visible cells per screen, not as a document.
+        Output 8-10 LCD screens. Each screen is two 16-cell rows.
+        Start each screen with a compact uppercase header, then a single ":" and continue the message immediately.
+        Do not waste row 1 on only the header; wrap the compact message into row 2 when useful.
+        Shorten words aggressively, drop grammar when helpful, and use abbreviations, symbols, arrows, or LCD-friendly drawing characters when they compress meaning.
         Do not emit routine host resource screens; RAM, disk, swap, CPU, and temperature already have dedicated LCD screens.
         Format:
         SCREEN 1:
-        <subject line>
-        <body line>
+        <HDR>:<message row 1>
+        <message row 2>
         ---
         SCREEN 2:
-        <subject line>
-        <body line>
+        <HDR>:<message row 1>
+        <message row 2>
         ...
         Only output the screens, no extra commentary.
         """).strip()
@@ -218,9 +222,10 @@ def parse_screens(output: str) -> list[tuple[str, str]]:
 
     screens: list[tuple[str, str]] = []
     for group in groups:
-        if len(group) < 2:
+        if len(group) == 1:
+            screens.append((group[0], ""))
             continue
-        screens.append((group[0], group[1]))
+        screens.append((group[0], " ".join(group[1:])))
     return screens
 
 
@@ -232,8 +237,13 @@ def filter_redundant_lcd_summary_screens(
     filtered: list[tuple[str, str]] = []
     for subject, body in screens:
         subject_text = (subject or "").strip().lower()
-        body_text = (body or "").strip().lower()
-        if subject_text in {
+        subject_header, _separator, subject_body = subject_text.partition(":")
+        body_text = " ".join(
+            part
+            for part in (subject_body.strip(), (body or "").strip().lower())
+            if part
+        )
+        if subject_header in {
             "host",
             "resource",
             "resources",
@@ -243,19 +253,33 @@ def filter_redundant_lcd_summary_screens(
     return filtered
 
 
-def _normalize_line(text: str) -> str:
-    normalized = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in text)
-    normalized = normalized.strip()
-    if len(normalized) <= LCD_COLUMNS:
-        return normalized.ljust(LCD_COLUMNS)
-    trimmed = normalized[: LCD_COLUMNS - 3].rstrip()
-    return f"{trimmed}...".ljust(LCD_COLUMNS)
+def _normalize_lcd_text(text: str) -> str:
+    normalized = "".join(ch if ch.isprintable() else " " for ch in str(text or ""))
+    return WHITESPACE_RE.sub(" ", normalized).strip()
+
+
+def _normalize_summary_buffer(subject: str, body: str) -> tuple[str, str]:
+    subject_text = _normalize_lcd_text(subject)
+    body_text = _normalize_lcd_text(body)
+    if subject_text and body_text:
+        combined = (
+            f"{subject_text} {body_text}"
+            if ":" in subject_text
+            else f"{subject_text}:{body_text}"
+        )
+    else:
+        combined = subject_text or body_text
+
+    combined = combined[:LCD_SUMMARY_BUFFER_CELLS]
+    line1 = combined[:LCD_COLUMNS].ljust(LCD_COLUMNS)
+    line2 = combined[LCD_COLUMNS:LCD_SUMMARY_BUFFER_CELLS].ljust(LCD_COLUMNS)
+    return line1, line2
 
 
 def normalize_screens(screens: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
     normalized: list[tuple[str, str]] = []
     for subject, body in screens:
-        normalized.append((_normalize_line(subject), _normalize_line(body)))
+        normalized.append(_normalize_summary_buffer(subject, body))
     return normalized
 
 
