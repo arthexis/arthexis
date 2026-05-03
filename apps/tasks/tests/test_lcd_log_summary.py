@@ -22,8 +22,8 @@ def test_local_lcd_summary_uses_dense_event_labels() -> None:
 
     assert "LOG 1" not in output
     assert "ERR2 WRN1:" in output
-    assert "HB ok" in output
-    assert "OCPP fwd" in output
+    assert "HB OK" in output
+    assert "OCPP FWD" in output
 
 
 def test_local_lcd_summary_reports_quiet_logs() -> None:

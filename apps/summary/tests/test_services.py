@@ -41,6 +41,12 @@ def test_parse_screens_accepts_single_line_colon_buffers() -> None:
     assert screens == [("ERR:svc fail -> rst", "")]
 
 
+def test_parse_screens_ignores_single_line_prose() -> None:
+    screens = services.parse_screens("Here is your summary:\n---\nERR:svc fail\n")
+
+    assert screens == [("ERR:svc fail", "")]
+
+
 def test_normalize_screens_flows_header_and_message_across_buffer() -> None:
     frames = services.normalize_screens(
         [("ERR", "scheduler raised unexpected reboot required")]

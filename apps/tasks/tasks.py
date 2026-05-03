@@ -367,10 +367,9 @@ def _summary_compact_line(line: str) -> str:
 
 
 def _summary_screen(subject: str, body: str) -> str:
-    combined = re.sub(r"\s+", " ", f"{subject}:{body}").strip()[:32]
-    line1 = combined[:16]
-    line2 = combined[16:32]
-    return f"{line1}\n{line2}" if line2 else line1
+    header = re.sub(r"\s+", " ", str(subject or "")).strip().upper()
+    message = re.sub(r"\s+", " ", str(body or "")).strip()
+    return f"{header}:{message}"[:32]
 
 
 def _write_lcd_frames(

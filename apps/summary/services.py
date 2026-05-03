@@ -41,6 +41,7 @@ HOST_RESOURCE_BODY_RE = re.compile(
     r"\bt\d+(?:\.\d+)?[cf]?\b.*\bd\d+%.*\bm\d+%",
     re.IGNORECASE,
 )
+INLINE_BUFFER_RE = re.compile(r"^[A-Z0-9][A-Z0-9 /&+.\-]{0,15}:.+")
 
 
 @dataclass(frozen=True)
@@ -223,7 +224,8 @@ def parse_screens(output: str) -> list[tuple[str, str]]:
     screens: list[tuple[str, str]] = []
     for group in groups:
         if len(group) == 1:
-            screens.append((group[0], ""))
+            if INLINE_BUFFER_RE.match(group[0]):
+                screens.append((group[0], ""))
             continue
         screens.append((group[0], " ".join(group[1:])))
     return screens
