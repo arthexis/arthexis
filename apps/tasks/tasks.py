@@ -12,6 +12,7 @@ from django.apps import apps as django_apps
 from django.db import models
 from django.utils import timezone
 
+from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +398,7 @@ def _write_lcd_frames(
         candidate.unlink(missing_ok=True)
 
 
-@shared_task(name="summary.tasks.generate_lcd_log_summary")
+@shared_task(name=LLM_SUMMARY_CELERY_TASK_NAME)
 def generate_lcd_log_summary() -> str:
     from apps.summary.services import execute_log_summary_generation
 

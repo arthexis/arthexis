@@ -1,6 +1,5 @@
-from django.contrib import messages
-
 import pytest
+from django.contrib import messages
 
 from apps.nodes.models import Node
 from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
