@@ -41,6 +41,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": LLM_SUMMARY_CELERY_TASK_NAME,
         "schedule": timedelta(minutes=5),
     },
+    "thermometer_sampling": {
+        "task": "apps.sensors.tasks.sample_thermometers",
+        "schedule": timedelta(minutes=1),
+    },
     "ocpp_configuration_check": {
         "task": "apps.ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),
