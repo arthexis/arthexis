@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
@@ -224,7 +225,11 @@ def _ap_guest_key(request) -> str:
     remote_addr = (request.META.get("REMOTE_ADDR") or "").strip()
     if remote_addr:
         client_identity = f"remote:{remote_addr}"
-        return hashlib.sha256(client_identity.encode("utf-8")).hexdigest()
+        return hmac.new(
+            str(settings.SECRET_KEY).encode("utf-8"),
+            client_identity.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
         guest_key = (session.get(GALLERY_AP_GUEST_SESSION_KEY) or "").strip()
