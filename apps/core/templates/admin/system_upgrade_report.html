@@ -322,11 +322,22 @@
                 {% if policy.interval_label %}
                   <span class="help">{{ policy.interval_label }}</span>
                 {% endif %}
+                {% if policy.target_branch and policy.target_branch != "main" %}
+                  <span class="help">{% blocktrans %}Branch {{ policy.target_branch }}{% endblocktrans %}</span>
+                {% endif %}
                 {% if policy.last_checked_label %}
                   <span class="help">{% blocktrans %}Last checked {{ policy.last_checked_label }}{% endblocktrans %}</span>
                 {% endif %}
               </div>
               <div class="upgrade-policy-requirements">
+                {% if policy.channel == "custom" %}
+                  <span>{% blocktrans with allowed=policy.allowed_bumps|join:", " %}Allowed bumps {{ allowed }}{% endblocktrans %}</span>
+                  {% if policy.include_live_branch %}
+                    <span>{% trans "Live branch enabled" %}</span>
+                  {% else %}
+                    <span>{% trans "Release bumps only" %}</span>
+                  {% endif %}
+                {% endif %}
                 {% if policy.requires_pypi %}
                   <span>{% trans "PyPI required" %}</span>
                 {% endif %}

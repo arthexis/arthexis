@@ -18,6 +18,7 @@ class UpgradePolicy(Entity):
         STABLE = "stable", _("Stable / LTS")
         REGULAR = "regular", _("Regular / Normal")
         LATEST = "latest", _("Latest / Unstable")
+        CUSTOM = "custom", _("Custom")
         LTS = "lts", _("LTS")
         NORMAL = "normal", _("Normal")
         UNSTABLE = "unstable", _("Unstable")
@@ -35,6 +36,33 @@ class UpgradePolicy(Entity):
             "How often to check for upgrades, in minutes. Channel bump cadences "
             "still gate whether the upgrade is allowed to proceed."
         ),
+    )
+    target_branch = models.CharField(
+        max_length=120,
+        default="main",
+        blank=True,
+        help_text=_(
+            "Git branch to inspect and pass to the upgrade command. Blank uses main."
+        ),
+    )
+    include_live_branch = models.BooleanField(
+        default=False,
+        help_text=_(
+            "For custom policies, allow same-version branch revision updates. "
+            "Built-in latest/unstable policies always use live branch tracking."
+        ),
+    )
+    allow_patch_upgrades = models.BooleanField(
+        default=True,
+        help_text=_("For custom policies, allow patch version bumps."),
+    )
+    allow_minor_upgrades = models.BooleanField(
+        default=True,
+        help_text=_("For custom policies, allow minor version bumps."),
+    )
+    allow_major_upgrades = models.BooleanField(
+        default=False,
+        help_text=_("For custom policies, allow major version bumps."),
     )
     requires_pypi_packages = models.BooleanField(
         default=False,

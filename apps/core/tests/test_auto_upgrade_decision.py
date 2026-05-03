@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from apps.core.tasks.auto_upgrade import tasks
 
@@ -12,6 +13,9 @@ def _mode(**overrides):
         "mode_file_physical": True,
         "interval_minutes": 60,
         "requires_pypi": False,
+        "branch": "main",
+        "include_live_branch": False,
+        "allowed_version_bumps": None,
     }
     defaults.update(overrides)
     return tasks.AutoUpgradeMode(**defaults)
@@ -161,6 +165,114 @@ def test_build_upgrade_decision_latest_ignores_release_severity(monkeypatch):
 
     assert decision.apply is True
     assert decision.args[1] == "--latest"
+
+
+def test_build_upgrade_decision_custom_blocks_disallowed_minor_upgrade():
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="custom", allowed_version_bumps=("patch",)),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.1.0",
+            local_version="1.0.9",
+        ),
+    )
+
+    assert decision.skip is True
+    assert decision.apply is False
+    assert decision.reason == "minor-upgrade-disallowed"
+
+
+def test_build_upgrade_decision_custom_allows_selected_branch_version_bump():
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(
+            mode="custom",
+            branch="lab/canary",
+            allowed_version_bumps=("major",),
+        ),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="2.0.0",
+            local_version="1.9.9",
+        ),
+    )
+
+    assert decision.apply is True
+    assert decision.args[1:] == ["--regular", "--branch", "lab/canary"]
+
+
+def test_build_upgrade_decision_custom_live_branch_applies_same_version_revision():
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(
+            mode="custom",
+            branch="lab/canary",
+            include_live_branch=True,
+            allowed_version_bumps=(),
+        ),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.0.0",
+            local_version="1.0.0",
+            remote_revision="remote-rev",
+            local_revision="local-rev",
+        ),
+    )
+
+    assert decision.apply is True
+    assert decision.args[1:] == ["--latest", "--branch", "lab/canary"]
+
+
+def test_build_upgrade_decision_custom_skips_same_version_without_live_branch():
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(
+            mode="custom",
+            branch="lab/canary",
+            include_live_branch=False,
+            allowed_version_bumps=("patch", "minor", "major"),
+        ),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.0.0",
+            local_version="1.0.0",
+            remote_revision="remote-rev",
+            local_revision="local-rev",
+        ),
+    )
+
+    assert decision.skip is True
+    assert decision.apply is False
+    assert decision.reason == "version-unchanged"
+
+
+def test_resolve_auto_upgrade_mode_reads_custom_policy_controls(tmp_path):
+    policy = SimpleNamespace(
+        channel="custom",
+        interval_minutes=42,
+        requires_pypi_packages=True,
+        pk=12,
+        name="Canary",
+        target_branch="origin/lab/canary",
+        include_live_branch=True,
+        allow_patch_upgrades=True,
+        allow_minor_upgrades=False,
+        allow_major_upgrades=True,
+    )
+
+    mode = tasks._resolve_auto_upgrade_mode(tmp_path, None, policy=policy)
+
+    assert mode.mode == "custom"
+    assert mode.interval_minutes == 42
+    assert mode.requires_pypi is True
+    assert mode.branch == "lab/canary"
+    assert mode.include_live_branch is True
+    assert mode.allowed_version_bumps == ("patch", "major")
 
 
 def test_ci_status_for_revision_compatibility_shim_returns_empty_string(tmp_path):

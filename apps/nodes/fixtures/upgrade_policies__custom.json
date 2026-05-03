@@ -1,0 +1,19 @@
+[
+  {
+    "model": "nodes.upgradepolicy",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Custom",
+      "description": "Custom upgrades: branch, frequency, live tracking, and version bump gates are policy-controlled.",
+      "channel": "custom",
+      "interval_minutes": 1440,
+      "target_branch": "main",
+      "include_live_branch": false,
+      "allow_patch_upgrades": true,
+      "allow_minor_upgrades": true,
+      "allow_major_upgrades": false,
+      "requires_pypi_packages": false
+    }
+  }
+]

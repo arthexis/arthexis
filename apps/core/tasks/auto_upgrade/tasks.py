@@ -28,9 +28,13 @@ from apps.core.auto_upgrade import (
 )
 from apps.core.notifications import LcdChannel
 from apps.core.versioning import (
+    UPGRADE_CHANNEL_CUSTOM,
     UPGRADE_CHANNEL_REGULAR,
     UPGRADE_CHANNEL_STABLE,
     UPGRADE_CHANNEL_UNSTABLE,
+    VERSION_BUMP_MAJOR,
+    VERSION_BUMP_MINOR,
+    VERSION_BUMP_PATCH,
     auto_upgrade_bump_allowed,
     auto_upgrade_bump_cadence_minutes,
     classify_version_bump,
@@ -183,6 +187,9 @@ class AutoUpgradeMode:
     policy_id: int | None = None
     policy_name: str | None = None
     skip_recency_check: bool = False
+    branch: str = "main"
+    include_live_branch: bool = False
+    allowed_version_bumps: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -354,6 +361,44 @@ def _git_remote_revision(base_dir: Path, branch: str) -> str:
     ).strip()
 
 
+def _normalize_upgrade_branch(value: object) -> str:
+    """Return a safe origin branch name for git operations."""
+
+    branch = str(value or "").strip()
+    if branch.startswith("origin/"):
+        branch = branch.removeprefix("origin/").strip()
+    if branch.startswith("refs/remotes/origin/"):
+        branch = branch.removeprefix("refs/remotes/origin/").strip()
+    if branch.startswith("refs/heads/"):
+        branch = branch.removeprefix("refs/heads/").strip()
+
+    if not branch:
+        return "main"
+
+    invalid = (
+        branch.startswith("-")
+        or branch.endswith("/")
+        or ".." in branch
+        or "@{" in branch
+        or "\\" in branch
+        or any(character.isspace() for character in branch)
+    )
+    if invalid:
+        return "main"
+    return branch
+
+
+def _policy_allowed_version_bumps(policy) -> tuple[str, ...]:
+    allowed: list[str] = []
+    if bool(getattr(policy, "allow_patch_upgrades", True)):
+        allowed.append(VERSION_BUMP_PATCH)
+    if bool(getattr(policy, "allow_minor_upgrades", True)):
+        allowed.append(VERSION_BUMP_MINOR)
+    if bool(getattr(policy, "allow_major_upgrades", False)):
+        allowed.append(VERSION_BUMP_MAJOR)
+    return tuple(allowed)
+
+
 def _load_upgrade_policy(policy_id: int | None):
     if policy_id is None:
         return None
@@ -382,6 +427,9 @@ def _resolve_auto_upgrade_mode(
     policy_id = None
     policy_name = None
     skip_recency_check = False
+    branch = "main"
+    include_live_branch = False
+    allowed_version_bumps: tuple[str, ...] | None = None
 
     if policy is not None:
         mode = normalize_upgrade_channel(
@@ -396,6 +444,10 @@ def _resolve_auto_upgrade_mode(
         mode_file_exists = False
         mode_file_physical = False
         skip_recency_check = True
+        branch = _normalize_upgrade_branch(getattr(policy, "target_branch", "main"))
+        if mode == UPGRADE_CHANNEL_CUSTOM:
+            include_live_branch = bool(getattr(policy, "include_live_branch", False))
+            allowed_version_bumps = _policy_allowed_version_bumps(policy)
 
         return AutoUpgradeMode(
             mode=mode,
@@ -408,6 +460,9 @@ def _resolve_auto_upgrade_mode(
             policy_id=policy_id,
             policy_name=policy_name,
             skip_recency_check=skip_recency_check,
+            branch=branch,
+            include_live_branch=include_live_branch,
+            allowed_version_bumps=allowed_version_bumps,
         )
 
     try:
@@ -425,6 +480,9 @@ def _resolve_auto_upgrade_mode(
         if override_mode == UPGRADE_CHANNEL_UNSTABLE:
             mode = UPGRADE_CHANNEL_UNSTABLE
             override_log = "latest"
+        elif override_mode == UPGRADE_CHANNEL_CUSTOM:
+            mode = UPGRADE_CHANNEL_CUSTOM
+            override_log = "custom"
         elif override_mode in {UPGRADE_CHANNEL_STABLE, UPGRADE_CHANNEL_REGULAR}:
             mode = override_mode
             override_log = mode
@@ -444,6 +502,9 @@ def _resolve_auto_upgrade_mode(
         policy_id=policy_id,
         policy_name=policy_name,
         skip_recency_check=skip_recency_check,
+        branch=branch,
+        include_live_branch=include_live_branch,
+        allowed_version_bumps=allowed_version_bumps,
     )
 
 
@@ -632,7 +693,11 @@ def _fetch_repository_state(
         return None
 
     release_version, release_revision, release_pypi_url = _latest_release()
-    remote_version = release_version or _read_remote_version(base_dir, branch)
+    branch_version = _read_remote_version(base_dir, branch)
+    if mode.mode == UPGRADE_CHANNEL_CUSTOM:
+        remote_version = branch_version or release_version
+    else:
+        remote_version = release_version or branch_version
     local_version = _read_local_version(base_dir)
     severity = _resolve_release_severity(remote_version)
     local_revision = _current_revision(base_dir)
@@ -665,6 +730,25 @@ def build_upgrade_decision(
                 args=[],
                 notify=False,
             )
+        if (
+            mode.mode == UPGRADE_CHANNEL_CUSTOM
+            and repo_state.release_version != repo_state.remote_version
+        ):
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason="pypi-release-missing",
+                args=[],
+                notify=False,
+            )
+
+    if mode.mode == UPGRADE_CHANNEL_CUSTOM:
+        return _build_custom_upgrade_decision(
+            base_dir,
+            mode,
+            repo_state,
+            recency_throttled=recency_throttled,
+        )
 
     if mode.mode == UPGRADE_CHANNEL_UNSTABLE:
         if (
@@ -753,6 +837,62 @@ def build_upgrade_decision(
             ),
             recency_throttled=recency_throttled,
         )
+
+
+def _build_custom_upgrade_decision(
+    base_dir: Path,
+    mode: AutoUpgradeMode,
+    repo_state: AutoUpgradeRepositoryState,
+    *,
+    recency_throttled: bool = False,
+) -> AutoUpgradeDecision:
+    target_version = repo_state.remote_version or repo_state.local_version or "0"
+    revision_changed = (
+        bool(repo_state.remote_revision)
+        and repo_state.local_revision != repo_state.remote_revision
+    )
+
+    if repo_state.local_version == target_version:
+        if mode.include_live_branch and revision_changed:
+            return _apply_recency_throttle(
+                AutoUpgradeDecision(
+                    skip=False,
+                    apply=True,
+                    reason=None,
+                    args=_upgrade_command_args("latest", mode.branch),
+                    notify=True,
+                ),
+                recency_throttled=recency_throttled,
+            )
+        return AutoUpgradeDecision(
+            skip=True,
+            apply=False,
+            reason="revision-unchanged" if not revision_changed else "version-unchanged",
+            args=[],
+            notify=False,
+        )
+
+    version_bump = classify_version_bump(repo_state.local_version, target_version)
+    allowed_bumps = set(mode.allowed_version_bumps or ())
+    if version_bump not in allowed_bumps:
+        return AutoUpgradeDecision(
+            skip=True,
+            apply=False,
+            reason=f"{version_bump}-upgrade-disallowed",
+            args=[],
+            notify=False,
+        )
+
+    return _apply_recency_throttle(
+        AutoUpgradeDecision(
+            skip=False,
+            apply=True,
+            reason=None,
+            args=_upgrade_command_args("regular", mode.branch),
+            notify=True,
+        ),
+        recency_throttled=recency_throttled,
+    )
 
 
 def _apply_recency_throttle(
@@ -1013,6 +1153,7 @@ def check_github_updates(
         mode = _resolve_auto_upgrade_mode(
             base_dir, channel_override, policy=policy
         )
+        branch = mode.branch
         status = "NO-UPDATES"
 
         if not _apply_stable_schedule_guard(
@@ -1038,6 +1179,11 @@ def check_github_updates(
             append_auto_upgrade_log(
                 base_dir,
                 f"Applying upgrade policy: {mode.policy_name}",
+            )
+        if branch != "main":
+            append_auto_upgrade_log(
+                base_dir,
+                f"Using upgrade branch: origin/{branch}",
             )
 
         notify = None
