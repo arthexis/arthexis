@@ -266,6 +266,7 @@ class UsbPortMapping(Entity):
         "nodes.Node",
         on_delete=models.CASCADE,
         null=True,
+        blank=False,
         related_name="usb_port_mappings",
         help_text=_("Node that owns this physical USB hub mapping."),
     )
@@ -309,6 +310,11 @@ class UsbPortMapping(Entity):
             models.UniqueConstraint(
                 fields=["node", "port_number"],
                 name="sensors_usbportmapping_node_port_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["port_number"],
+                condition=models.Q(node__isnull=True),
+                name="sensors_usbportmapping_unassigned_port_unique",
             ),
         ]
         verbose_name = _("USB Port Mapping")

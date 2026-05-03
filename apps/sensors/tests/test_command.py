@@ -52,6 +52,7 @@ def test_sensors_scan_usb_trackers_command_json_output(settings, tmp_path):
 
 def test_sensors_set_usb_lcd_port_command_configures_mapping(settings, tmp_path):
     settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
     node = Node.objects.create(hostname="gway", public_endpoint="gway")
     Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
     output = StringIO()
@@ -79,6 +80,7 @@ def test_sensors_set_usb_lcd_port_command_configures_mapping(settings, tmp_path)
 
 def test_sensors_write_usb_lcd_status_command_outputs_summary(settings, tmp_path):
     settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
     node = Node.objects.create(hostname="gway", public_endpoint="gway")
     Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
     UsbTracker.objects.create(
@@ -104,6 +106,7 @@ def test_sensors_write_usb_lcd_status_command_outputs_summary(settings, tmp_path
 
 def test_sensors_clear_usb_lcd_port_command_removes_mapping(settings, tmp_path):
     settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
     node = Node.objects.create(hostname="gway", public_endpoint="gway")
     other_node = Node.objects.create(hostname="remote", public_endpoint="remote")
     Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
@@ -132,6 +135,7 @@ def test_sensors_clear_usb_lcd_port_command_removes_mapping(settings, tmp_path):
 
 def test_sensors_set_usb_lcd_port_requires_local_node(settings, tmp_path):
     settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
 
     with pytest.raises(CommandError, match="No local node is registered"):
         call_command(

@@ -9,18 +9,14 @@ def assign_existing_usb_port_mapping_nodes(apps, schema_editor):
     Node = apps.get_model("nodes", "Node")
     UsbPortMapping = apps.get_model("sensors", "UsbPortMapping")
 
-    node = Node.objects.filter(current_relation="SELF").order_by("pk").first()
+    self_nodes = list(Node.objects.filter(current_relation="SELF").order_by("pk")[:2])
+    node = self_nodes[0] if len(self_nodes) == 1 else None
     if node is None and Node.objects.count() == 1:
         node = Node.objects.order_by("pk").first()
     if node is None:
         return
 
     UsbPortMapping.objects.filter(node__isnull=True).update(node=node)
-
-
-def unassign_existing_usb_port_mapping_nodes(apps, schema_editor):
-    UsbPortMapping = apps.get_model("sensors", "UsbPortMapping")
-    UsbPortMapping.objects.update(node=None)
 
 
 class Migration(migrations.Migration):
@@ -43,16 +39,13 @@ class Migration(migrations.Migration):
             model_name="usbportmapping",
             name="node",
             field=models.ForeignKey(
+                blank=False,
                 help_text="Node that owns this physical USB hub mapping.",
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="usb_port_mappings",
                 to="nodes.node",
             ),
-        ),
-        migrations.RunPython(
-            assign_existing_usb_port_mapping_nodes,
-            unassign_existing_usb_port_mapping_nodes,
         ),
         migrations.AlterField(
             model_name="usbportmapping",
@@ -65,11 +58,20 @@ class Migration(migrations.Migration):
                 ],
             ),
         ),
+        migrations.RunPython(assign_existing_usb_port_mapping_nodes),
         migrations.AddConstraint(
             model_name="usbportmapping",
             constraint=models.UniqueConstraint(
                 fields=("node", "port_number"),
                 name="sensors_usbportmapping_node_port_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="usbportmapping",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("node__isnull", True)),
+                fields=("port_number",),
+                name="sensors_usbportmapping_unassigned_port_unique",
             ),
         ),
     ]
