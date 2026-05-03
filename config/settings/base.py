@@ -62,6 +62,17 @@ NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", Fa
 NODES_ENABLE_SIBLING_IPC = env_bool("NODES_ENABLE_SIBLING_IPC", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 REPORTS_HTML_TO_PDF_ENABLED = env_bool("REPORTS_HTML_TO_PDF_ENABLED", True)
+THERMOMETER_SOURCE = os.environ.get("THERMOMETER_SOURCE", "auto").strip() or "auto"
+THERMOMETER_PATH_TEMPLATE = (
+    os.environ.get(
+        "THERMOMETER_PATH_TEMPLATE",
+        "/sys/bus/w1/devices/{slug}/temperature",
+    ).strip()
+    or "/sys/bus/w1/devices/{slug}/temperature"
+)
+THERMOMETER_I2C_PATH_TEMPLATE = os.environ.get(
+    "THERMOMETER_I2C_PATH_TEMPLATE", ""
+).strip()
 ROUTE_PROVIDERS = [
     "apps.actions.routes",
     "apps.awg.routes",

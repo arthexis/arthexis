@@ -3,11 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from django.conf import settings
 
 from apps.sensors.models import Thermometer, UsbTracker
 from apps.sensors.tasks import sample_thermometers, scan_usb_trackers
 
 pytestmark = pytest.mark.django_db
+
+
+def test_thermometer_sampling_is_in_static_beat_schedule() -> None:
+    schedule = settings.CELERY_BEAT_SCHEDULE["thermometer_sampling"]
+
+    assert schedule["task"] == sample_thermometers.name
 
 
 def test_scan_usb_trackers_records_passive_match(settings, tmp_path: Path) -> None:
