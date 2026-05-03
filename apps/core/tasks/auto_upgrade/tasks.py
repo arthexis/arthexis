@@ -463,8 +463,8 @@ def _resolve_auto_upgrade_mode(
         mode_file_exists = False
         mode_file_physical = False
         skip_recency_check = True
-        branch = _normalize_upgrade_branch(getattr(policy, "target_branch", "main"))
         if mode == UPGRADE_CHANNEL_CUSTOM:
+            branch = _normalize_upgrade_branch(getattr(policy, "target_branch", "main"))
             include_live_branch = bool(getattr(policy, "include_live_branch", False))
             allowed_version_bumps = _policy_allowed_version_bumps(policy)
 

@@ -298,6 +298,22 @@ def test_resolve_auto_upgrade_mode_custom_override_uses_default_bumps(tmp_path):
     assert mode.allowed_version_bumps == ("patch", "minor")
 
 
+def test_resolve_auto_upgrade_mode_ignores_branch_for_builtin_policy(tmp_path):
+    policy = SimpleNamespace(
+        channel="regular",
+        interval_minutes=42,
+        requires_pypi_packages=False,
+        pk=12,
+        name="Regular",
+        target_branch="lab/canary",
+    )
+
+    mode = tasks._resolve_auto_upgrade_mode(tmp_path, None, policy=policy)
+
+    assert mode.mode == "regular"
+    assert mode.branch == "main"
+
+
 def test_normalize_upgrade_branch_rejects_invalid_git_ref_names():
     invalid_branches = [
         "lab:canary",
