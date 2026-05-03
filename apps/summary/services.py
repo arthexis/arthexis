@@ -300,19 +300,9 @@ def render_lcd_payload(subject: str, body: str, *, expires_at=None) -> str:
 
 
 def clear_legacy_low_summary_frames(lock_dir: Path) -> None:
-    """Remove old summary frames written into the low LCD channel."""
+    """Legacy helper kept as a no-op to avoid deleting active low-channel messages."""
 
-    prefix = f"{LCD_LOW_LOCK_FILE}-"
-    legacy_frames = [
-        candidate
-        for candidate in lock_dir.glob(f"{prefix}*")
-        if candidate.name[len(prefix) :].isdigit()
-    ]
-    if not legacy_frames:
-        return
-
-    for candidate in [lock_dir / LCD_LOW_LOCK_FILE, *legacy_frames]:
-        candidate.unlink(missing_ok=True)
+    _ = lock_dir
 
 
 def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
