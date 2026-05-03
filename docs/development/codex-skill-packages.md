@@ -81,3 +81,68 @@ The apply step calls the same package importer without dry-run mode. Package
 service validation still owns the safety boundary: unsafe paths, invalid UTF-8,
 unsupported manifests, blocked secrets, portability reclassification, and
 soft-deleted slug restoration all follow the command-line import behavior.
+
+## Proposed Node-To-Node Package Exchange
+
+Issue #7618 tracks a node-to-node sharing flow for Codex skill packages. The
+goal is to let one registered Arthexis node ask another node for its portable
+skill and agent package data, preview the package, and import all skills or a
+selected subset without committing operator skills into the source tree.
+
+The provider node should expose a protected package export endpoint that returns
+the same package format produced by:
+
+```bash
+python manage.py codex_skill_packages export --output skills.zip
+```
+
+The endpoint must use existing node trust boundaries. Anonymous callers must not
+be able to download packages, and the endpoint must not introduce a second
+package serializer. It should call the existing package export service so
+excluded files remain redacted and portable payload rules stay centralized.
+
+The requesting node should get a CLI workflow shaped like this:
+
+```bash
+python manage.py codex_skill_packages pull --node gateway --dry-run
+python manage.py codex_skill_packages pull --node gateway --all
+python manage.py codex_skill_packages pull --node gateway --slug quotation --slug rfid-scan
+```
+
+`--dry-run` should fetch the remote package and run the existing importer in
+preview mode. `--all` should import every portable skill in the package. Repeated
+`--slug` options should filter the package before import so an operator can pull
+only the skills they want from a trusted node.
+
+The admin workflow should mirror the upload import flow:
+
+1. Staff chooses a registered node from an Agent Skills or Nodes admin action.
+2. The suite fetches the remote package and shows a preview of skill slugs and
+   manifest files.
+3. Staff confirms either all skills or selected skills.
+4. The suite applies the same `import_codex_skill_package(..., dry_run=False)`
+   path used by upload import.
+
+The exchange must keep the current safety boundary:
+
+- `SKILL.md`, `agents/`, `assets/`, `references/`, `scripts/`, and `templates/`
+  are portable when classification allows them.
+- Runtime state, caches, generated archives, local workgroup state, and secrets
+  are not transferred as payload content.
+- Target-node materialization still resolves only the approved SIGILS for that
+  node.
+- Import preview and apply must reject unsafe paths, invalid UTF-8, malformed
+  manifests, duplicate paths, missing `SKILL.md`, and unsupported package
+  formats through the existing package service.
+
+Implementation should add tests for successful all-skill import, selected-skill
+import, unauthorized remote access, malformed remote package responses, and
+excluded-file handling. Validation should include:
+
+```bash
+python manage.py test run -- apps.skills apps.nodes
+python manage.py check --fail-level ERROR
+python manage.py migrations check
+python scripts/check_import_resolution.py apps.skills apps.nodes
+git diff --check
+```
