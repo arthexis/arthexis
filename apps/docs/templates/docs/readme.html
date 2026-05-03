@@ -44,7 +44,7 @@
             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
             <span>{% trans "Loading remaining sections…" %}</span>
           </div>
-          <a class="btn btn-outline-primary btn-sm reader-full-document-link" href="{{ full_document_url }}">
+          <a class="btn btn-outline-primary btn-sm reader-full-document-link" href="{{ full_document_url }}" hidden>
             {% trans "Load full document" %}
           </a>
           <noscript>
@@ -74,8 +74,28 @@
 {% endif %}
 <script>
   (function () {
+    var fullDocumentLinks = document.querySelectorAll(".reader-full-document-link[hidden]");
+    for (var linkIndex = 0; linkIndex < fullDocumentLinks.length; linkIndex += 1) {
+      fullDocumentLinks[linkIndex].removeAttribute("hidden");
+    }
+    var hasControllerFlag = function () {
+      var falseValues = ["0", "false", "off", "no"];
+      var parts = window.location.search.replace(/^\?/, "").split("&");
+      for (var index = 0; index < parts.length; index += 1) {
+        if (!parts[index]) {
+          continue;
+        }
+        var keyValue = parts[index].split("=");
+        var key = decodeURIComponent(keyValue[0] || "").toLowerCase();
+        var value = decodeURIComponent(keyValue[1] || "").toLowerCase();
+        if ((key === "controller" || key === "tv" || key === "ps4") && falseValues.indexOf(value) === -1) {
+          return true;
+        }
+      }
+      return false;
+    };
     var controllerMode = document.documentElement.classList.contains("controller-mode") ||
-      /(?:\?|&)(controller|tv|ps4)(?:=1|=true|&|$)/i.test(window.location.search);
+      hasControllerFlag();
     var reloadDelay = controllerMode ? 30 * 60 * 1000 : 5 * 60 * 1000;
     var timer;
     var resetTimer = function () {

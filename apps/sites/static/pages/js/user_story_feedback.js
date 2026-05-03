@@ -736,16 +736,12 @@
           .then(data => {
             let message = '';
             if (data && data.errors) {
-              const values = [];
+              let values = [];
               Object.keys(data.errors).forEach(key => {
                 const value = data.errors[key];
-                if (Array.isArray(value)) {
-                  value.forEach(item => values.push(item));
-                } else if (value) {
-                  values.push(value);
-                }
+                values = values.concat(Array.isArray(value) ? value : [value]);
               });
-              message = values.join(' ');
+              message = values.filter(Boolean).join(' ');
             }
             if (!message) {
               message = errorMessage || '';

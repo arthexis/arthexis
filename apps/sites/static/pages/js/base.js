@@ -9,6 +9,7 @@ const getLocalStorage = () => {
 };
 
 const hasQueryFlag = names => {
+  const falseValues = ['0', 'false', 'off', 'no'];
   const search = window.location.search.replace(/^\?/, '').split('&');
   return search.some(part => {
     if (!part) {
@@ -17,7 +18,7 @@ const hasQueryFlag = names => {
     const keyValue = part.split('=');
     const key = decodeURIComponent(keyValue[0] || '').toLowerCase();
     const value = decodeURIComponent(keyValue[1] || '').toLowerCase();
-    return names.indexOf(key) !== -1 && value !== '0' && value !== 'false';
+    return names.indexOf(key) !== -1 && falseValues.indexOf(value) === -1;
   });
 };
 
