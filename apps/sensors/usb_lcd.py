@@ -203,7 +203,10 @@ def write_usb_lcd_status(
 
 
 def _usb_lcd_port_icon(port_number: int) -> str:
-    port_index = max(1, min(int(port_number or 1), USB_LCD_PORT_COUNT)) - 1
+    icon_count = len(USB_LCD_PORT_ICONS)
+    if icon_count <= 0:
+        return "?"
+    port_index = max(0, min(int(port_number or 1) - 1, icon_count - 1))
     return USB_LCD_PORT_ICONS[port_index]
 
 

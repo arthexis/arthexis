@@ -69,6 +69,25 @@ def test_normalize_screens_preserves_prewrapped_inline_buffer() -> None:
     assert frames == [("ERR2 WRN1:Panic ", "failure         ")]
 
 
+def test_deterministic_summary_round_trips_thirty_two_cell_buffer() -> None:
+    from apps.tasks.tasks import LocalLLMSummarizer
+
+    output = LocalLLMSummarizer().summarize(
+        "\n".join(
+            [
+                "LOGS:",
+                "ERR apps.demo: ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+            ]
+        )
+    )
+
+    frames = services.normalize_screens(services.parse_screens(output))
+
+    assert frames[0] == ("ERR1 WRN0:apps.d", "emo: ABCDEFGHIJK")
+    assert len(frames[0][0]) == 16
+    assert len(frames[0][1]) == 16
+
+
 def test_filter_redundant_lcd_summary_screens_handles_inline_headers() -> None:
     frames = services.filter_redundant_lcd_summary_screens(
         [
