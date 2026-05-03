@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -232,7 +233,7 @@ class LocalLLMSummarizer:
         return self._fallback(prompt)
 
     def _fallback(self, prompt: str) -> str:
-        """Build a repeatable screen list from compacted prompt log lines."""
+        """Build dense, repeatable LCD screens from compacted prompt log lines."""
         log_lines: list[str] = []
         in_logs = False
         for line in prompt.splitlines():
@@ -241,25 +242,128 @@ class LocalLLMSummarizer:
                 continue
             if in_logs and line.strip():
                 log_lines.append(line)
-        sample = (
-            [line for line in log_lines if not (line.startswith("[") and line.endswith("]"))][-20:]
-            if log_lines
-            else [line for line in prompt.splitlines() if line]
-        )
-        summary = []
-        for idx in range(0, min(len(sample), 20), 2):
-            subject = f"LOG {idx // 2 + 1}"
-            body = sample[idx][:16]
-            summary.append(subject)
-            summary.append(body)
-            summary.append("---")
-        return "\n".join(summary)
+
+        event_lines = [
+            line
+            for line in log_lines
+            if not (line.startswith("[") and line.endswith("]"))
+        ]
+        if not event_lines:
+            return "Quiet\nNo new logs\n---"
+
+        error_lines = [line for line in event_lines if _summary_severity(line) == "ERR"]
+        warn_lines = [line for line in event_lines if _summary_severity(line) == "WRN"]
+        task_counts: dict[str, int] = {}
+        source_counts: dict[str, int] = {}
+
+        for line in event_lines:
+            task_label = _summary_task_label(line)
+            if task_label:
+                task_counts[task_label] = task_counts.get(task_label, 0) + 1
+                continue
+            source_label = _summary_source_label(line)
+            if source_label:
+                source_counts[source_label] = source_counts.get(source_label, 0) + 1
+
+        screens: list[tuple[str, str]] = []
+        if error_lines or warn_lines:
+            screens.append(
+                (
+                    f"ERR {len(error_lines)} WRN {len(warn_lines)}",
+                    _summary_compact_line((error_lines or warn_lines)[-1]),
+                )
+            )
+        else:
+            screens.append(("OK no err/warn", f"{len(event_lines)} lines"))
+
+        for line in (error_lines + warn_lines)[-3:]:
+            screens.append((_summary_severity(line), _summary_compact_line(line)))
+
+        for label, count in _summary_top_counts(task_counts, limit=4):
+            screens.append((label, f"{count}x /5m"))
+
+        if len(screens) < 3:
+            for label, count in _summary_top_counts(source_counts, limit=3):
+                screens.append((label, f"{count}x /5m"))
+
+        if len(screens) == 1:
+            screens.append(("Routine only", "No action"))
+
+        return "\n---\n".join(f"{subject}\n{body}" for subject, body in screens)
+
+
+SUMMARY_TASK_ALIASES = {
+    "apps.core.tasks.heartbeat": "HB ok",
+    "apps.ocpp.tasks.setup_forwarders": "OCPP fwd",
+    "apps.ocpp.tasks.send_offline_charge_point_notifications": "OCPP note",
+    "terminals.ensure_agent_terminals": "Term chk",
+}
+
+SUMMARY_SOURCE_ALIASES = {
+    "apps.core.tasks.heartbeat": "HB",
+    "celery.beat": "Beat",
+    "celery.worker.strategy": "Worker",
+    "celery.app.trace": "Task trace",
+    "apps.ocpp": "OCPP",
+}
+
+SUMMARY_TASK_RE = re.compile(r"Task ([\w.]+)\[")
+SUMMARY_DUE_TASK_RE = re.compile(r"Sending due task [\w-]+ \(([\w.]+)\)")
+SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
+
+
+def _summary_severity(line: str) -> str:
+    if line.startswith("ERR ") or " raised unexpected" in line:
+        return "ERR"
+    if line.startswith("WRN ") or line.startswith("CRI "):
+        return "WRN"
+    return "OK"
+
+
+def _summary_alias(value: str, aliases: dict[str, str]) -> str:
+    for prefix, label in aliases.items():
+        if value == prefix or value.startswith(f"{prefix}."):
+            return label
+    return value.rsplit(".", 1)[-1].replace("_", " ")[:16]
+
+
+def _summary_task_label(line: str) -> str | None:
+    match = SUMMARY_DUE_TASK_RE.search(line) or SUMMARY_TASK_RE.search(line)
+    if not match:
+        if "Heartbeat task executed" in line:
+            return "HB ok"
+        return None
+    return _summary_alias(match.group(1), SUMMARY_TASK_ALIASES)
+
+
+def _summary_source_label(line: str) -> str | None:
+    match = SUMMARY_SOURCE_RE.match(line)
+    if not match:
+        return None
+    return _summary_alias(match.group(1), SUMMARY_SOURCE_ALIASES)
+
+
+def _summary_top_counts(counts: dict[str, int], *, limit: int) -> list[tuple[str, int]]:
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+
+
+def _summary_compact_line(line: str) -> str:
+    cleaned = re.sub(r"^(?:DBG|INF|WRN|ERR|CRI)\s+", "", line)
+    cleaned = re.sub(r"\[[^\]]+\]", "", cleaned)
+    cleaned = cleaned.replace("Task ", "")
+    cleaned = cleaned.replace("raised unexpected:", "raised:")
+    cleaned = cleaned.replace("Scheduler: Sending due task", "due")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return "-"
+    return cleaned[:16]
 
 
 def _write_lcd_frames(
     frames: list[tuple[str, str]],
     *,
     lock_file: Path,
+    expires_at=None,
 ) -> None:
     """Persist LCD frames into channel lock files.
 
@@ -283,7 +387,7 @@ def _write_lcd_frames(
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     for idx, (subject, body) in enumerate(frames):
         target = lock_file if idx == 0 else lock_file.with_name(f"{base_name}-{idx}")
-        payload = render_lcd_payload(subject, body)
+        payload = render_lcd_payload(subject, body, expires_at=expires_at)
         target.write_text(payload, encoding="utf-8")
 
     for candidate in lock_file.parent.glob(f"{prefix}*"):

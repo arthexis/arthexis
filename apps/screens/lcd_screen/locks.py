@@ -20,6 +20,7 @@ from apps.screens.startup_notifications import (
     LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    LCD_SUMMARY_LOCK_FILE,
     LCD_STATS_LOCK_FILE,
     LCD_UPTIME_LOCK_FILE,
     read_lcd_lock_file,
@@ -67,6 +68,7 @@ class EventPayload(NamedTuple):
 CHANNEL_BASE_NAMES = {
     "high": LCD_HIGH_LOCK_FILE,
     "low": LCD_LOW_LOCK_FILE,
+    "summary": LCD_SUMMARY_LOCK_FILE,
     "clock": CLOCK_LOCK_NAME,
     "uptime": UPTIME_LOCK_NAME,
     "stats": LCD_STATS_LOCK_FILE,

@@ -11,6 +11,7 @@ from apps.screens.lcd_screen import locks as lcd_locks
 from apps.screens.startup_notifications import (
     LCD_CHANNELS_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
+    LCD_SUMMARY_LOCK_FILE,
     read_lcd_lock_file,
 )
 from apps.summary.node_features import get_llm_summary_prereq_state
@@ -95,7 +96,9 @@ class Command(BaseCommand):
             config = get_summary_config()
 
         prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
-        current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)
+        current_message = read_lcd_lock_file(
+            base_dir / ".locks" / LCD_SUMMARY_LOCK_FILE
+        )
         planned_screens = normalize_screens(parse_screens(config.last_output))
         current_pair = (
             (current_message.subject.strip(), current_message.body.strip())

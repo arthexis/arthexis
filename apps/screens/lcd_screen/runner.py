@@ -273,6 +273,11 @@ class LCDRunner:
         if state_label == "high" and channel_state:
             payload = _high_payload(channel_state)
             return payload or locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
+        if state_label == "summary" and channel_state:
+            payload = _peek_payload(channel_state)
+            if payload and _payload_has_text(payload):
+                return payload
+            return locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
         if state_label in {"low", "uptime"} and channel_state:
             payload = _peek_payload(channel_state)
             base_payload = _select_low_payload(
@@ -370,32 +375,50 @@ class LCDRunner:
         def _channel_available(label: str) -> bool:
             if label == "high":
                 return bool(channel_info[label].signature)
+            if label == "summary":
+                return channel_text[label]
             if label == "clock":
                 return channel_text[label] or _lcd_clock_enabled()
             if label in {"low", "stats"}:
                 return True
             return False
 
+        def _interleave_summary(normal_order: tuple[str, ...]) -> tuple[str, ...]:
+            if not normal_order:
+                return ("summary",)
+            interleaved: list[str] = []
+            for label in normal_order:
+                interleaved.extend((label, "summary"))
+            return tuple(interleaved)
+
         previous_order = self.rotation.order
         if configured_order:
-            self.rotation.order = tuple(
+            configured_available = tuple(
                 label for label in configured_order if _channel_available(label)
             )
+            if "summary" not in configured_available and _channel_available("summary"):
+                self.rotation.order = _interleave_summary(configured_available)
+            else:
+                self.rotation.order = configured_available
             if not self.rotation.order:
                 self.rotation.order = ("clock",)
         else:
             high_available = _channel_available("high")
             low_available = _channel_available("low")
+            summary_available = _channel_available("summary")
             if high_available:
-                self.rotation.order = (
+                normal_order = (
                     ("high", "low", "stats", "clock")
                     if low_available
                     else ("high", "stats", "clock")
                 )
             else:
-                self.rotation.order = (
+                normal_order = (
                     ("low", "stats", "clock") if low_available else ("stats", "clock")
                 )
+            self.rotation.order = (
+                _interleave_summary(normal_order) if summary_available else normal_order
+            )
 
         if previous_order and 0 <= self.rotation.index < len(previous_order):
             current_label = previous_order[self.rotation.index]

@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
 LCD_SUMMARY_FRAME_COUNT = 10
+LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -237,23 +238,20 @@ def normalize_screens(screens: Iterable[tuple[str, str]]) -> list[tuple[str, str
 
 
 def fixed_frame_window(screens: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Return exactly 10 LCD frames by truncating or padding with blanks."""
+    """Return a bounded LCD summary frame list without padding low-value blanks."""
 
-    padded = list(screens[:LCD_SUMMARY_FRAME_COUNT])
-    while len(padded) < LCD_SUMMARY_FRAME_COUNT:
-        padded.append((" " * LCD_COLUMNS, " " * LCD_COLUMNS))
-    return padded
+    return list(screens[:LCD_SUMMARY_FRAME_COUNT])
 
 
-def render_lcd_payload(subject: str, body: str) -> str:
-    return render_lcd_lock_file(subject=subject, body=body)
+def render_lcd_payload(subject: str, body: str, *, expires_at=None) -> str:
+    return render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
 
 
 def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
     """Generate LCD log summary output and persist latest run metadata."""
 
     from apps.nodes.models import Node
-    from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
+    from apps.screens.startup_notifications import LCD_SUMMARY_LOCK_FILE
     from apps.tasks.tasks import (
         LocalLLMSummarizer,
         _write_lcd_frames,
@@ -299,8 +297,13 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     if not screens:
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
 
-    lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_LOW_LOCK_FILE
-    _write_lcd_frames(fixed_frame_window(screens), lock_file=lock_file)
+    lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_SUMMARY_LOCK_FILE
+    frames = fixed_frame_window(screens)
+    _write_lcd_frames(
+        frames,
+        lock_file=lock_file,
+        expires_at=now + LCD_SUMMARY_EXPIRES_AFTER,
+    )
 
     config.last_run_at = now
     config.last_prompt = prompt
@@ -316,4 +319,4 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
             "updated_at",
         ]
     )
-    return f"wrote:{LCD_SUMMARY_FRAME_COUNT}"
+    return f"wrote:{len(frames)}"
