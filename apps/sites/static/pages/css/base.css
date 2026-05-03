@@ -674,6 +674,9 @@ body.user-story-open {
   --bs-btn-color: var(--user-story-accent-text);
   --bs-btn-hover-color: var(--user-story-accent-text);
   --bs-btn-active-color: var(--user-story-accent-text);
+  --bs-btn-disabled-bg: var(--bs-secondary-bg);
+  --bs-btn-disabled-border-color: var(--bs-border-color);
+  --bs-btn-disabled-color: var(--bs-secondary-color);
 }
 
 .user-story-card .btn-link {
