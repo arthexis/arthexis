@@ -222,7 +222,7 @@ def _run_status_command(args: list[str]) -> subprocess.CompletedProcess[str] | N
             check=False,
             timeout=STATUS_COMMAND_TIMEOUT_SECONDS,
         )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):
         return None
 
 
@@ -341,30 +341,34 @@ def _usb_inventory_status_lines() -> list[str]:
 
     lines: list[str] = []
     for device in devices:
-        if not isinstance(device, dict):
-            continue
-        if device.get("transport") != "usb" or device.get("type") != "part":
-            continue
-
-        name = str(device.get("name") or device.get("path") or "usb")
-        label = str(device.get("label") or device.get("fstype") or "device")
-        roles = device.get("claimed_roles") or []
-        role = _usb_role_label(str(roles[0])) if roles else "mounted"
-        mounts = device.get("mounts") or []
-        if not mounts:
-            lines.append(f"WRN usb: {name} {label} unmounted")
-            continue
-
-        is_read_only = any(
-            isinstance(mount, dict) and mount.get("read_only") for mount in mounts
-        )
-        mode = "ro" if is_read_only else "rw"
-        if role != "mounted":
-            lines.append(f"OK usb: {name} {mode} {role}")
-        else:
-            lines.append(f"OK usb: {name} {label} {mode}")
+        line = _usb_device_status_line(device)
+        if line:
+            lines.append(line)
 
     return lines[:2]
+
+
+def _usb_device_status_line(device: object) -> str:
+    if not isinstance(device, dict):
+        return ""
+    if device.get("transport") != "usb" or device.get("type") != "part":
+        return ""
+
+    name = str(device.get("name") or device.get("path") or "usb")
+    label = str(device.get("label") or device.get("fstype") or "device")
+    roles = device.get("claimed_roles") or []
+    role = _usb_role_label(str(roles[0])) if roles else "mounted"
+    mounts = device.get("mounts") or []
+    if not mounts:
+        return f"WRN usb: {name} {label} unmounted"
+
+    is_read_only = any(
+        isinstance(mount, dict) and mount.get("read_only") for mount in mounts
+    )
+    mode = "ro" if is_read_only else "rw"
+    if role != "mounted":
+        return f"OK usb: {name} {mode} {role}"
+    return f"OK usb: {name} {label} {mode}"
 
 
 def _usb_role_label(role: str) -> str:
