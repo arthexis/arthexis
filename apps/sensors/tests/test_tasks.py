@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ def test_thermometer_sampling_is_in_static_beat_schedule() -> None:
     schedule = settings.CELERY_BEAT_SCHEDULE["thermometer_sampling"]
 
     assert schedule["task"] == sample_thermometers.name
+    assert schedule["schedule"] == timedelta(minutes=1)
 
 
 def test_scan_usb_trackers_records_passive_match(settings, tmp_path: Path) -> None:
