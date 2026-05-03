@@ -325,9 +325,6 @@ SUMMARY_SOURCE_ALIASES = {
 SUMMARY_TASK_RE = re.compile(r"Task ([\w.]+)\[")
 SUMMARY_DUE_TASK_RE = re.compile(r"Sending due task [\w-]+ \(([\w.]+)\)")
 SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
-SUMMARY_STATUS_RE = re.compile(
-    r"^(?P<severity>OK|ERR|WRN|CRI)\s+(?P<source>[a-z][\w-]*):\s+(?P<body>.+)$"
-)
 SUMMARY_STATUS_SOURCE_LABELS = {
     "host": "Host",
     "journal": "Journal",
@@ -368,15 +365,21 @@ def _summary_source_label(line: str) -> str | None:
 
 
 def _summary_status_screen(line: str) -> tuple[str, str] | None:
-    match = SUMMARY_STATUS_RE.match(line)
-    if not match:
+    severity, separator, remainder = line.partition(" ")
+    if separator == "" or severity not in {"OK", "ERR", "WRN", "CRI"}:
         return None
 
-    severity = match.group("severity")
-    source = match.group("source")
+    source, separator, body = remainder.partition(":")
+    source = source.strip()
+    body = body.strip()
+    if separator == "" or not source or not body:
+        return None
+    if not all(ch.isalnum() or ch in {"_", "-"} for ch in source):
+        return None
+
     label = SUMMARY_STATUS_SOURCE_LABELS.get(source, source.replace("-", " ").title())
     subject = label if severity == "OK" else f"{severity} {label}"
-    return (subject[:16], _summary_compact_line(match.group("body")))
+    return (subject[:16], _summary_compact_line(body))
 
 
 def _summary_top_counts(counts: dict[str, int], *, limit: int) -> list[tuple[str, int]]:
