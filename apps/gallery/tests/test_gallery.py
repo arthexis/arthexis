@@ -678,7 +678,7 @@ def test_gallery_module_fixture_exposes_ap_guest_landing():
     )
 
     assert module["fields"]["path"] == "/gallery/"
-    assert module["fields"]["roles"] == [["Control"], ["Satellite"]]
+    assert module["fields"]["roles"] == [["Control"], ["Satellite"], ["Gateway"]]
     assert landing["fields"]["module"] == ["/gallery/"]
     assert landing["fields"]["path"] == reverse("gallery:ap")
 
