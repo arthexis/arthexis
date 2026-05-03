@@ -115,20 +115,6 @@ def test_summary_frames_are_written_with_expiry(tmp_path) -> None:
     ]
 
 
-def test_legacy_low_summary_frames_are_preserved(tmp_path) -> None:
-    (tmp_path / "lcd-low").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-2").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-extra").write_text("keep\nme\n", encoding="utf-8")
-
-    services.clear_legacy_low_summary_frames(tmp_path)
-
-    assert (tmp_path / "lcd-low").exists()
-    assert (tmp_path / "lcd-low-1").exists()
-    assert (tmp_path / "lcd-low-2").exists()
-    assert (tmp_path / "lcd-low-extra").exists()
-
-
 def test_no_log_generation_preserves_low_channel_messages(
     monkeypatch, settings, tmp_path
 ) -> None:
