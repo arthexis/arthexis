@@ -536,6 +536,10 @@ class GalleryApGuestTests(TestCase):
         self.assertFalse(GalleryImage.objects.filter(title="Evening").exists())
 
     def test_ap_guest_upload_limit_applies_across_fresh_sessions(self):
+        extra = {
+            "REMOTE_ADDR": "203.0.113.10",
+            "HTTP_USER_AGENT": "gallery-tests",
+        }
         first_response = self.client.post(
             reverse("gallery:ap"),
             {
@@ -543,6 +547,7 @@ class GalleryApGuestTests(TestCase):
                 "title": "Morning Session One",
                 "image": self._upload("morning-session-one.jpg"),
             },
+            **extra,
         )
         self.assertEqual(first_response.status_code, 302)
 
@@ -554,6 +559,7 @@ class GalleryApGuestTests(TestCase):
                 "title": "Morning Session Two",
                 "image": self._upload("morning-session-two.jpg"),
             },
+            **extra,
         )
 
         self.assertEqual(second_response.status_code, 200)
@@ -561,6 +567,42 @@ class GalleryApGuestTests(TestCase):
         self.assertTrue(GalleryImage.objects.filter(title="Morning Session One").exists())
         self.assertFalse(
             GalleryImage.objects.filter(title="Morning Session Two").exists()
+        )
+
+    def test_ap_guest_upload_limit_ignores_spoofable_headers(self):
+        first_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Trusted Address",
+                "image": self._upload("trusted-address.jpg"),
+            },
+            REMOTE_ADDR="203.0.113.30",
+            HTTP_X_FORWARDED_FOR="198.51.100.10",
+            HTTP_USER_AGENT="gallery-tests/one",
+        )
+        self.assertEqual(first_response.status_code, 302)
+
+        fresh_client = Client()
+        second_response = fresh_client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Spoofed Headers",
+                "image": self._upload("spoofed-headers.jpg"),
+            },
+            REMOTE_ADDR="203.0.113.30",
+            HTTP_X_FORWARDED_FOR="198.51.100.99",
+            HTTP_USER_AGENT="gallery-tests/two",
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "You can upload one image per day.")
+        self.assertTrue(
+            GalleryImage.objects.filter(title="Trusted Address").exists()
+        )
+        self.assertFalse(
+            GalleryImage.objects.filter(title="Spoofed Headers").exists()
         )
 
     @override_settings(GALLERY_AP_GUEST_MAX_UPLOAD_BYTES=10)
@@ -670,6 +712,10 @@ class GalleryApGuestTests(TestCase):
         self.assertFalse(GalleryImageReaction.objects.exists())
 
     def test_ap_guest_reaction_is_scoped_across_fresh_sessions(self):
+        extra = {
+            "REMOTE_ADDR": "203.0.113.20",
+            "HTTP_USER_AGENT": "gallery-tests",
+        }
         image = self._create_public_image("Scoped", color="purple")
         first_response = self.client.post(
             reverse("gallery:ap"),
@@ -678,6 +724,7 @@ class GalleryApGuestTests(TestCase):
                 "image_slug": image.slug,
                 "reaction": "like",
             },
+            **extra,
         )
         self.assertEqual(first_response.status_code, 302)
 
@@ -689,6 +736,7 @@ class GalleryApGuestTests(TestCase):
                 "image_slug": image.slug,
                 "reaction": "dislike",
             },
+            **extra,
         )
         self.assertEqual(second_response.status_code, 302)
 

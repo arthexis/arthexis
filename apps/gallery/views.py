@@ -222,10 +222,8 @@ def _rf_card_store_url_for_image(image: GalleryImage) -> str:
 
 def _ap_guest_key(request) -> str:
     remote_addr = (request.META.get("REMOTE_ADDR") or "").strip()
-    forwarded_for = (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
-    user_agent = (request.META.get("HTTP_USER_AGENT") or "").strip()
-    client_identity = "|".join((forwarded_for, remote_addr, user_agent))
-    if client_identity:
+    if remote_addr:
+        client_identity = f"remote:{remote_addr}"
         return hashlib.sha256(client_identity.encode("utf-8")).hexdigest()
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
