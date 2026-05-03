@@ -188,6 +188,12 @@ def _select_low_payload(
     )
     interface_label = interface_label_func()
     body_parts = [f"ON {on_label}"]
+    temperature_label_func = _package_override(
+        "_lcd_temperature_label", _lcd_temperature_label
+    )
+    temperature = temperature_label_func()
+    if temperature:
+        body_parts.append(temperature)
     if interface_label:
         body_parts.append(interface_label)
     body = " ".join(body_parts).strip()
@@ -453,7 +459,17 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
 
     if format_temperature:
         try:
-            label = format_temperature()
+            from django.conf import settings
+
+            label = format_temperature(
+                source=str(getattr(settings, "THERMOMETER_SOURCE", "auto") or "auto"),
+                w1_paths=_configured_temperature_paths(
+                    getattr(settings, "THERMOMETER_PATH_TEMPLATE", "")
+                ),
+                i2c_paths=_configured_temperature_paths(
+                    getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
+                ),
+            )
         except Exception:
             logger.debug("Unable to load sysfs thermometer reading", exc_info=True)
         else:
@@ -476,6 +492,13 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
             value = value / Decimal("1000")
         return _format_temperature_value(value, "C")
     return None
+
+
+def _configured_temperature_paths(template: object) -> list[str] | None:
+    raw = str(template or "").strip()
+    if not raw or "{slug" in raw:
+        return None
+    return [raw]
 
 
 def _clock_payload(

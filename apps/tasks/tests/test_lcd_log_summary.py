@@ -21,12 +21,24 @@ def test_local_lcd_summary_uses_dense_event_labels() -> None:
     output = LocalLLMSummarizer().summarize(prompt)
 
     assert "LOG 1" not in output
-    assert "ERR2 WRN1:" in output
+    assert "6 ln       ERROR" in output
+    assert "Panic failure" in output
     assert "HB OK" in output
     assert "OCPP FWD" in output
+    assert "2x        NORMAL" in output
 
 
 def test_local_lcd_summary_reports_quiet_logs() -> None:
     output = LocalLLMSummarizer().summarize("LOGS:\n[celery.log]\n")
 
-    assert output == "QUIET:no logs"
+    assert output == "No recent logs\n0 ln      NORMAL"
+
+
+def test_local_lcd_summary_keeps_journal_failure_on_first_row() -> None:
+    output = LocalLLMSummarizer().summarize(
+        "LOGS:\nERR apps.demo: Journal failed 3\n"
+    )
+
+    assert output.split("\n---\n")[0] == "Journal failed 3\n1 ln       ERROR"
+    assert "Check logs\n1x           FIX" in output
+    assert output.count("Journal failed 3") == 1

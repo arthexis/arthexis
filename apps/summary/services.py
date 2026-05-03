@@ -183,18 +183,20 @@ def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
         You summarize system logs as 16x2 LCD buffers. Focus on the last 4 minutes (cutoff {cutoff}).
         Highlight urgent operator actions or failures. Think in 32 visible cells per screen, not as a document.
         Output 8-10 LCD screens. Each screen is two 16-cell rows.
-        Start each screen with a compact uppercase header, then a single ":" and continue the message immediately.
-        Do not waste row 1 on only the header; wrap the compact message into row 2 when useful.
+        Row 1 is the log extract, status phrase, or longer description.
+        Row 2 starts with a compact count such as "12 ln" for log lines or "3x" for repeated events.
+        Use the remaining right-side cells on row 2 for one operator word such as NORMAL, WARNING, ERROR, CHECK, FIX, or WAIT.
+        Keep short phrases on one row when they fit; for example, "Journal failed 3" must not be split after "Journal".
         Shorten words aggressively, drop grammar when helpful, and use abbreviations, symbols, arrows, or LCD-friendly drawing characters when they compress meaning.
-        Do not emit routine host resource screens; RAM, disk, swap, CPU, and temperature already have dedicated LCD screens.
+        Do not emit routine Host screens; RAM, disk, swap, CPU, and temperature already have dedicated LCD screens.
         Format:
         SCREEN 1:
-        <HDR>:<message row 1>
-        <message row 2>
+        <log extract or description>
+        <count>        <OPERATOR-WORD>
         ---
         SCREEN 2:
-        <HDR>:<message row 1>
-        <message row 2>
+        <log extract or description>
+        <count>        <OPERATOR-WORD>
         ...
         Only output the screens, no extra commentary.
         """).strip()
@@ -245,37 +247,33 @@ def filter_redundant_lcd_summary_screens(
             for part in (subject_body.strip(), (body or "").strip().lower())
             if part
         )
-        if subject_header in {
-            "host",
-            "resource",
-            "resources",
-        } and HOST_RESOURCE_BODY_RE.search(body_text):
+        if subject_header == "host":
+            continue
+        if subject_header in {"resource", "resources"} and HOST_RESOURCE_BODY_RE.search(
+            body_text
+        ):
             continue
         filtered.append((subject, body))
     return filtered
 
 
-def _normalize_lcd_text(text: str) -> str:
+def _normalize_lcd_text(text: str, *, collapse_whitespace: bool = True) -> str:
     normalized = "".join(ch if ch.isprintable() else " " for ch in str(text or ""))
-    return WHITESPACE_RE.sub(" ", normalized).strip()
+    if collapse_whitespace:
+        normalized = WHITESPACE_RE.sub(" ", normalized)
+    return normalized.strip()
 
 
 def _normalize_summary_buffer(subject: str, body: str) -> tuple[str, str]:
     subject_text = _normalize_lcd_text(subject)
-    body_text = _normalize_lcd_text(body)
-    if ":" in subject_text:
-        overflow = subject_text[LCD_COLUMNS:]
-        line2_source = " ".join(part for part in (overflow, body_text) if part)
+    body_text = _normalize_lcd_text(body, collapse_whitespace=False)
+    if body_text:
         return (
             subject_text[:LCD_COLUMNS].ljust(LCD_COLUMNS),
-            line2_source[:LCD_COLUMNS].ljust(LCD_COLUMNS),
+            body_text[:LCD_COLUMNS].ljust(LCD_COLUMNS),
         )
 
-    if subject_text and body_text:
-        combined = f"{subject_text}:{body_text}"
-    else:
-        combined = subject_text or body_text
-
+    combined = subject_text
     combined = combined[:LCD_SUMMARY_BUFFER_CELLS]
     line1 = combined[:LCD_COLUMNS].ljust(LCD_COLUMNS)
     line2 = combined[LCD_COLUMNS:LCD_SUMMARY_BUFFER_CELLS].ljust(LCD_COLUMNS)

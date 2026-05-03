@@ -14,6 +14,7 @@ def test_filter_redundant_lcd_summary_screens_drops_host_resource_frame() -> Non
     frames = services.filter_redundant_lcd_summary_screens(
         [
             ("Host", "t65C d51% m44%"),
+            ("HOST:gway-001", "routine status"),
             ("Status", "0 failed units"),
             ("USB key", "sda1 ro bastion"),
         ]
@@ -29,9 +30,10 @@ def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
     prompt = services.build_summary_prompt("log line", now=datetime(2026, 5, 3))
 
     assert "Think in 32 visible cells per screen" in prompt
-    assert 'then a single ":" and continue the message immediately' in prompt
+    assert "Row 1 is the log extract" in prompt
+    assert '"12 ln" for log lines' in prompt
     assert "Shorten words aggressively" in prompt
-    assert "Do not emit routine host resource screens" in prompt
+    assert "Do not emit routine Host screens" in prompt
     assert "LOGS:\nlog line" in prompt
 
 
@@ -52,9 +54,17 @@ def test_normalize_screens_flows_header_and_message_across_buffer() -> None:
         [("ERR", "scheduler raised unexpected reboot required")]
     )
 
-    assert frames == [("ERR:scheduler ra", "ised unexpected ")]
+    assert frames == [("ERR             ", "scheduler raised")]
     assert len(frames[0][0]) == 16
     assert len(frames[0][1]) == 16
+
+
+def test_normalize_screens_keeps_log_extract_and_status_on_separate_rows() -> None:
+    frames = services.normalize_screens(
+        [("Journal failed 3", "12 ln      ERROR")]
+    )
+
+    assert frames == [("Journal failed 3", "12 ln      ERROR")]
 
 
 def test_normalize_screens_preserves_existing_inline_header() -> None:
@@ -83,7 +93,7 @@ def test_deterministic_summary_round_trips_thirty_two_cell_buffer() -> None:
 
     frames = services.normalize_screens(services.parse_screens(output))
 
-    assert frames[0] == ("ERR1 WRN0:apps.d", "emo: ABCDEFGHIJK")
+    assert frames[0] == ("ABCDEFGHIJKLMNOP", "1 ln       ERROR")
     assert len(frames[0][0]) == 16
     assert len(frames[0][1]) == 16
 
@@ -92,6 +102,7 @@ def test_filter_redundant_lcd_summary_screens_handles_inline_headers() -> None:
     frames = services.filter_redundant_lcd_summary_screens(
         [
             ("HOST:t65C d51% m44%", ""),
+            ("Host:gway-001", "active"),
             ("ERR:svc failed", "manual"),
         ]
     )
