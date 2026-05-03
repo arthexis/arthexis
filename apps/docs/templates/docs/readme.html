@@ -79,6 +79,13 @@
       fullDocumentLinks[linkIndex].removeAttribute("hidden");
     }
     var hasControllerFlag = function () {
+      var decodeQueryPart = function (value) {
+        try {
+          return decodeURIComponent(value || "").toLowerCase();
+        } catch (error) {
+          return "";
+        }
+      };
       var falseValues = ["0", "false", "off", "no"];
       var parts = window.location.search.replace(/^\?/, "").split("&");
       for (var index = 0; index < parts.length; index += 1) {
@@ -86,8 +93,8 @@
           continue;
         }
         var keyValue = parts[index].split("=");
-        var key = decodeURIComponent(keyValue[0] || "").toLowerCase();
-        var value = decodeURIComponent(keyValue[1] || "").toLowerCase();
+        var key = decodeQueryPart(keyValue[0]);
+        var value = decodeQueryPart(keyValue[1]);
         if ((key === "controller" || key === "tv" || key === "ps4") && falseValues.indexOf(value) === -1) {
           return true;
         }

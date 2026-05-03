@@ -19,6 +19,8 @@ def test_controller_mode_adds_large_targets_and_legacy_focus_fallbacks():
     assert "PlayStation 4" in script
     assert "['controller', 'tv', 'ps4']" in script
     assert "['0', 'false', 'off', 'no']" in script
+    assert "decodeQueryPart" in script
+    assert "catch (error)" in script
     assert ".controller-mode .navbar .nav-link" in css
     assert ".controller-mode .user-story-rating label" in css
     assert ".controller-mode .markdown-body table" in css
@@ -38,6 +40,8 @@ def test_docs_reader_has_controller_safe_full_document_and_reload_paths():
     assert 'href="{{ full_document_url }}"' in template
     assert '"0", "false", "off", "no"' in template
     assert 'key === "controller" || key === "tv" || key === "ps4"' in template
+    assert "var decodeQueryPart = function" in template
+    assert "catch (error)" in template
     assert "30 * 60 * 1000" in template
     assert '"pointermove"' in template
     assert '"focusin"' in template

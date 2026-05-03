@@ -9,6 +9,13 @@ const getLocalStorage = () => {
 };
 
 const hasQueryFlag = names => {
+  const decodeQueryPart = value => {
+    try {
+      return decodeURIComponent(value || '').toLowerCase();
+    } catch (error) {
+      return '';
+    }
+  };
   const falseValues = ['0', 'false', 'off', 'no'];
   const search = window.location.search.replace(/^\?/, '').split('&');
   return search.some(part => {
@@ -16,8 +23,8 @@ const hasQueryFlag = names => {
       return false;
     }
     const keyValue = part.split('=');
-    const key = decodeURIComponent(keyValue[0] || '').toLowerCase();
-    const value = decodeURIComponent(keyValue[1] || '').toLowerCase();
+    const key = decodeQueryPart(keyValue[0]);
+    const value = decodeQueryPart(keyValue[1]);
     return names.indexOf(key) !== -1 && falseValues.indexOf(value) === -1;
   });
 };
