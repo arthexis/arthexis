@@ -1,4 +1,4 @@
-from apps.tasks.tasks import LocalLLMSummarizer
+from apps.tasks.tasks import LocalLLMSummarizer, _summary_status_line
 
 
 def test_local_lcd_summary_uses_dense_event_labels() -> None:
@@ -21,12 +21,46 @@ def test_local_lcd_summary_uses_dense_event_labels() -> None:
     output = LocalLLMSummarizer().summarize(prompt)
 
     assert "LOG 1" not in output
-    assert "ERR2 WRN1:" in output
+    assert "6 ln       ERROR" in output
+    assert "Panic failure" in output
     assert "HB OK" in output
     assert "OCPP FWD" in output
+    assert "2x        NORMAL" in output
 
 
 def test_local_lcd_summary_reports_quiet_logs() -> None:
     output = LocalLLMSummarizer().summarize("LOGS:\n[celery.log]\n")
 
-    assert output == "QUIET:no logs"
+    assert output == "No recent logs\n0 ln      NORMAL"
+
+
+def test_local_lcd_summary_keeps_journal_failure_on_first_row() -> None:
+    output = LocalLLMSummarizer().summarize(
+        "LOGS:\nERR apps.demo: Journal failed 3\n"
+    )
+
+    assert output.split("\n---\n")[0] == "Journal failed 3\n1 ln       ERROR"
+    assert "Check logs\n1x           FIX" in output
+    assert output.count("Journal failed 3") == 1
+
+
+def test_local_lcd_summary_keeps_latest_warning_detail_with_errors() -> None:
+    output = LocalLLMSummarizer().summarize(
+        "\n".join(
+            [
+                "LOGS:",
+                "ERR apps.demo: Boom failure",
+                "WRN apps.demo: Disk warning 1",
+                "WRN apps.demo: Disk warning 2",
+                "WRN apps.demo: Disk warning 3",
+            ]
+        )
+    )
+
+    assert "Boom failure\n4 ln       ERROR" in output
+    assert "Disk warning 3\n1 ln     WARNING" in output
+    assert output.count("Boom failure") == 1
+
+
+def test_summary_status_line_preserves_exact_fit_status() -> None:
+    assert _summary_status_line("123456789", "WARNING") == "123456789WARNING"

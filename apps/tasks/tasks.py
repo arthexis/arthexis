@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SLEEP_SECONDS = 30
 DEFAULT_PROMPT_TIMEOUT = 240
+LCD_SUMMARY_COLUMNS = 16
 
 
 @shared_task
@@ -250,14 +251,23 @@ class LocalLLMSummarizer:
             if not (line.startswith("[") and line.endswith("]"))
         ]
         if not event_lines:
-            return _summary_screen("QUIET", "no logs")
+            return _summary_screen(
+                "No recent logs", _summary_status_line("0 ln", "NORMAL")
+            )
 
-        error_lines = [line for line in event_lines if _summary_severity(line) == "ERR"]
-        warn_lines = [line for line in event_lines if _summary_severity(line) == "WRN"]
+        attention_events = [
+            (idx, line, severity)
+            for idx, line in enumerate(event_lines)
+            if (severity := _summary_severity(line)) != "OK"
+        ]
+        error_lines = [line for _, line, severity in attention_events if severity == "ERR"]
+        warn_lines = [line for _, line, severity in attention_events if severity == "WRN"]
         task_counts: dict[str, int] = {}
         source_counts: dict[str, int] = {}
 
         for line in event_lines:
+            if _summary_severity(line) != "OK":
+                continue
             task_label = _summary_task_label(line)
             if task_label:
                 task_counts[task_label] = task_counts.get(task_label, 0) + 1
@@ -268,27 +278,53 @@ class LocalLLMSummarizer:
 
         screens: list[tuple[str, str]] = []
         if error_lines or warn_lines:
+            evaluation = _summary_evaluation(len(error_lines), len(warn_lines))
+            headline_idx, headline_line, _headline_severity = next(
+                event
+                for event in reversed(attention_events)
+                if event[2] == ("ERR" if error_lines else "WRN")
+            )
             screens.append(
                 (
-                    f"ERR{len(error_lines)} WRN{len(warn_lines)}",
-                    _summary_compact_line((error_lines or warn_lines)[-1]),
+                    _summary_compact_line(headline_line),
+                    _summary_status_line(f"{len(event_lines)} ln", evaluation),
                 )
             )
         else:
-            screens.append(("OK", f"{len(event_lines)}ln no err/wrn"))
+            screens.append(
+                (
+                    "No err/wrn logs",
+                    _summary_status_line(f"{len(event_lines)} ln", "NORMAL"),
+                )
+            )
 
-        for line in (error_lines + warn_lines)[-3:]:
-            screens.append((_summary_severity(line), _summary_compact_line(line)))
+        detail_events = [
+            event for event in attention_events if event[0] != headline_idx
+        ][-3:] if attention_events else []
+        for _idx, line, severity in detail_events:
+            screens.append(
+                (
+                    _summary_compact_line(line),
+                    _summary_status_line(
+                        "1 ln", "WARNING" if severity == "WRN" else "ERROR"
+                    ),
+                )
+            )
 
         for label, count in _summary_top_counts(task_counts, limit=4):
-            screens.append((label, f"{count}x /5m"))
+            screens.append((label, _summary_status_line(f"{count}x", "NORMAL")))
 
         if len(screens) < 3:
             for label, count in _summary_top_counts(source_counts, limit=3):
-                screens.append((label, f"{count}x /5m"))
+                screens.append((label, _summary_status_line(f"{count}x", "NORMAL")))
 
         if len(screens) == 1:
-            screens.append(("ROUTINE", "no action"))
+            if error_lines:
+                screens.append(("Check logs", _summary_status_line("1x", "FIX")))
+            elif warn_lines:
+                screens.append(("Review logs", _summary_status_line("1x", "CHECK")))
+            else:
+                screens.append(("Routine", _summary_status_line("0x", "NORMAL")))
 
         return "\n---\n".join(
             _summary_screen(subject, body) for subject, body in screens
@@ -296,10 +332,10 @@ class LocalLLMSummarizer:
 
 
 SUMMARY_TASK_ALIASES = {
-    "apps.core.tasks.heartbeat": "HB ok",
-    "apps.ocpp.tasks.setup_forwarders": "OCPP fwd",
-    "apps.ocpp.tasks.send_offline_charge_point_notifications": "OCPP note",
-    "terminals.ensure_agent_terminals": "Term chk",
+    "apps.core.tasks.heartbeat": "HB OK",
+    "apps.ocpp.tasks.setup_forwarders": "OCPP FWD",
+    "apps.ocpp.tasks.send_offline_charge_point_notifications": "OCPP NOTE",
+    "terminals.ensure_agent_terminals": "TERM CHK",
 }
 
 SUMMARY_SOURCE_ALIASES = {
@@ -327,6 +363,14 @@ def _summary_severity(line: str) -> str:
     return "OK"
 
 
+def _summary_evaluation(error_count: int, warn_count: int) -> str:
+    if error_count:
+        return "ERROR"
+    if warn_count:
+        return "WARNING"
+    return "NORMAL"
+
+
 def _summary_alias(value: str, aliases: dict[str, str]) -> str:
     for prefix, label in aliases.items():
         if value == prefix or value.startswith(f"{prefix}."):
@@ -338,7 +382,7 @@ def _summary_task_label(line: str) -> str | None:
     match = SUMMARY_DUE_TASK_RE.search(line) or SUMMARY_TASK_RE.search(line)
     if not match:
         if "Heartbeat task executed" in line:
-            return "HB ok"
+            return "HB OK"
         return None
     return _summary_alias(match.group(1), SUMMARY_TASK_ALIASES)
 
@@ -357,6 +401,7 @@ def _summary_top_counts(counts: dict[str, int], *, limit: int) -> list[tuple[str
 def _summary_compact_line(line: str) -> str:
     cleaned = re.sub(r"^(?:DBG|INF|WRN|ERR|CRI)\s+", "", line)
     cleaned = re.sub(r"\[[^\]]+\]", "", cleaned)
+    cleaned = re.sub(r"^[\w.]+:\s+", "", cleaned)
     cleaned = cleaned.replace("Task ", "")
     cleaned = cleaned.replace("raised unexpected:", "raised:")
     cleaned = cleaned.replace("Scheduler: Sending due task", "due")
@@ -366,10 +411,33 @@ def _summary_compact_line(line: str) -> str:
     return cleaned[:24]
 
 
+def _summary_status_line(metric: str, evaluation: str) -> str:
+    left = re.sub(r"\s+", " ", str(metric or "")).strip()
+    right = re.sub(r"\s+", " ", str(evaluation or "")).strip().upper()
+    if not left:
+        return right[:LCD_SUMMARY_COLUMNS]
+    if not right:
+        return left[:LCD_SUMMARY_COLUMNS]
+    if len(left) + len(right) == LCD_SUMMARY_COLUMNS:
+        return f"{left}{right}"
+    if len(left) + len(right) > LCD_SUMMARY_COLUMNS:
+        return f"{left} {right}"[:LCD_SUMMARY_COLUMNS]
+    return f"{left}{' ' * (LCD_SUMMARY_COLUMNS - len(left) - len(right))}{right}"
+
+
+def _summary_lcd_line(text: str, *, collapse_whitespace: bool = True) -> str:
+    normalized = "".join(
+        ch if 32 <= ord(ch) < 127 else " " for ch in str(text or "")
+    )
+    if collapse_whitespace:
+        normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()[:LCD_SUMMARY_COLUMNS]
+
+
 def _summary_screen(subject: str, body: str) -> str:
-    header = re.sub(r"\s+", " ", str(subject or "")).strip().upper()
-    message = re.sub(r"\s+", " ", str(body or "")).strip()
-    return f"{header}:{message}"[:32]
+    line1 = _summary_lcd_line(subject)
+    line2 = _summary_lcd_line(body, collapse_whitespace=False)
+    return f"{line1}\n{line2}".rstrip()
 
 
 def _write_lcd_frames(
