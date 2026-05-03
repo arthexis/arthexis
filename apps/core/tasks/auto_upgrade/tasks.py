@@ -744,7 +744,6 @@ def build_upgrade_decision(
 
     if mode.mode == UPGRADE_CHANNEL_CUSTOM:
         return _build_custom_upgrade_decision(
-            base_dir,
             mode,
             repo_state,
             recency_throttled=recency_throttled,
@@ -840,7 +839,6 @@ def build_upgrade_decision(
 
 
 def _build_custom_upgrade_decision(
-    base_dir: Path,
     mode: AutoUpgradeMode,
     repo_state: AutoUpgradeRepositoryState,
     *,
