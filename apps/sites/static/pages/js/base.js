@@ -1,5 +1,41 @@
 const MOBILE_BREAKPOINT = '(max-width: 767.98px)';
 
+const getLocalStorage = () => {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+};
+
+const hasQueryFlag = names => {
+  const search = window.location.search.replace(/^\?/, '').split('&');
+  return search.some(part => {
+    if (!part) {
+      return false;
+    }
+    const keyValue = part.split('=');
+    const key = decodeURIComponent(keyValue[0] || '').toLowerCase();
+    const value = decodeURIComponent(keyValue[1] || '').toLowerCase();
+    return names.indexOf(key) !== -1 && value !== '0' && value !== 'false';
+  });
+};
+
+const setupControllerMode = () => {
+  const userAgent = window.navigator ? window.navigator.userAgent || '' : '';
+  const isPlayStation = /PlayStation 4/i.test(userAgent);
+  const isControllerRequested = hasQueryFlag(['controller', 'tv', 'ps4']);
+  const isCoarsePointer = window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches;
+  if (!isPlayStation && !isControllerRequested && !isCoarsePointer) {
+    return;
+  }
+
+  document.documentElement.classList.add('controller-mode');
+  if (document.body) {
+    document.body.classList.add('controller-mode');
+  }
+};
+
 /**
  * Apply site theme variables from data attributes on the html element.
  */
@@ -30,7 +66,14 @@ const applySiteThemeVariables = () => {
 const setTheme = (theme, persist = true) => {
   document.documentElement.setAttribute('data-bs-theme', theme);
   if (persist) {
-    localStorage.setItem('theme', theme);
+    const storage = getLocalStorage();
+    if (storage) {
+      try {
+        storage.setItem('theme', theme);
+      } catch (error) {
+        // Keep theme switching working when storage is restricted.
+      }
+    }
   }
 
   const toggle = document.getElementById('theme-toggle');
@@ -86,7 +129,8 @@ const setupThemeToggle = () => {
  * Initialize the theme state from storage or default.
  */
 const initThemeState = () => {
-  const saved = localStorage.getItem('theme');
+  const storage = getLocalStorage();
+  const saved = storage ? storage.getItem('theme') : null;
   if (saved) {
     setTheme(saved);
     return;
@@ -103,10 +147,14 @@ const syncDebugToolbarTheme = () => {
     return;
   }
   const apply = () => {
-    if (localStorage.getItem('theme')) {
+    const storage = getLocalStorage();
+    if (!storage) {
       return;
     }
-    const djdtTheme = localStorage.getItem('djdt.user-theme');
+    if (storage.getItem('theme')) {
+      return;
+    }
+    const djdtTheme = storage.getItem('djdt.user-theme');
     if (!djdtTheme) {
       return;
     }
@@ -248,7 +296,8 @@ const setupLanguageSelect = () => {
     select.addEventListener('change', () => {
       const form = select.form;
       const data = new FormData(form);
-      const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+      const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+      const csrfToken = csrfInput ? csrfInput.value : '';
       fetch(form.action, {
         method: 'POST',
         body: data,
@@ -260,7 +309,8 @@ const setupLanguageSelect = () => {
             form.submit();
             return;
           }
-          const rawNext = form.querySelector('input[name="next"]')?.value;
+          const nextInput = form.querySelector('input[name="next"]');
+          const rawNext = nextInput ? nextInput.value : '';
           window.location.href = getSafeRedirect(rawNext);
         })
         .catch(() => {
@@ -398,6 +448,7 @@ const setupFundingBannerDismissal = () => {
   });
 };
 
+setupControllerMode();
 applySiteThemeVariables();
 setupThemeToggle();
 initThemeState();

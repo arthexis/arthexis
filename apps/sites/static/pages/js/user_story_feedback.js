@@ -41,12 +41,31 @@
   let autocompleteAbortController = null;
   let autocompleteRequestId = 0;
 
+  const createBubblingEvent = eventName => {
+    if (typeof Event === 'function') {
+      return new Event(eventName, { bubbles: true });
+    }
+    const event = document.createEvent('Event');
+    event.initEvent(eventName, true, false);
+    return event;
+  };
+
+  const dispatchFeedbackDialogOpened = () => {
+    if (typeof CustomEvent === 'function') {
+      document.dispatchEvent(new CustomEvent(DIALOG_OPENED_EVENT, { detail: { source: 'feedback' } }));
+      return;
+    }
+    const event = document.createEvent('CustomEvent');
+    event.initCustomEvent(DIALOG_OPENED_EVENT, false, false, { source: 'feedback' });
+    document.dispatchEvent(event);
+  };
+
   const setCommentValue = value => {
     if (!commentField) {
       return;
     }
     commentField.value = value;
-    commentField.dispatchEvent(new Event('input', { bubbles: true }));
+    commentField.dispatchEvent(createBubblingEvent('input'));
     commentField.focus();
     commentField.setSelectionRange(commentField.value.length, commentField.value.length);
   };
@@ -89,13 +108,13 @@
     autocompleteContainer.appendChild(list);
   };
 
-  const fetchAutocompleteSuggestions = async () => {
-    if (autocompleteAbortController) {
+  const fetchAutocompleteSuggestions = () => {
+    if (autocompleteAbortController && autocompleteAbortController.abort) {
       autocompleteAbortController.abort();
       autocompleteAbortController = null;
     }
 
-    if (!autocompleteUrl || !commentField || commentField.value.trim().length < 2) {
+    if (!window.fetch || !autocompleteUrl || !commentField || commentField.value.trim().length < 2) {
       clearAutocompleteSuggestions();
       return;
     }
@@ -103,13 +122,11 @@
     const requestId = autocompleteRequestId + 1;
     autocompleteRequestId = requestId;
     const query = commentField.value;
-    const abortController = new AbortController();
+    const abortController = typeof window.AbortController === 'function' ? new AbortController() : null;
     autocompleteAbortController = abortController;
 
-    const payload = new URLSearchParams();
     const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]');
-    payload.set('q', query);
-    payload.set('limit', '5');
+    const payload = `q=${encodeURIComponent(query)}&limit=5`;
     const headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       'X-Requested-With': 'XMLHttpRequest',
@@ -124,31 +141,38 @@
       commentField &&
       commentField.value === query;
 
-    try {
-      const response = await fetch(autocompleteUrl, {
-        method: 'POST',
-        headers,
-        body: payload,
-        signal: abortController.signal,
-      });
-      if (!response.ok) {
+    const fetchOptions = {
+      method: 'POST',
+      headers,
+      body: payload,
+    };
+    if (abortController) {
+      fetchOptions.signal = abortController.signal;
+    }
+
+    fetch(autocompleteUrl, fetchOptions)
+      .then(response => {
+        if (!response.ok) {
+          if (isCurrentAutocompleteRequest()) {
+            clearAutocompleteSuggestions();
+          }
+          return null;
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data && isCurrentAutocompleteRequest()) {
+          renderAutocompleteSuggestions(data.suggestions || []);
+        }
+      })
+      .catch(error => {
+        if (error && error.name === 'AbortError') {
+          return;
+        }
         if (isCurrentAutocompleteRequest()) {
           clearAutocompleteSuggestions();
         }
-        return;
-      }
-      const data = await response.json();
-      if (isCurrentAutocompleteRequest()) {
-        renderAutocompleteSuggestions(data.suggestions || []);
-      }
-    } catch (error) {
-      if (error && error.name === 'AbortError') {
-        return;
-      }
-      if (isCurrentAutocompleteRequest()) {
-        clearAutocompleteSuggestions();
-      }
-    }
+      });
   };
 
   const debounce = (fn, waitMs) => {
@@ -164,6 +188,60 @@
   const requestAutocompleteSuggestions = debounce(fetchAutocompleteSuggestions, 150);
   let previousFocus = null;
   let copyFeedbackTimeout = null;
+
+  const focusableSelector = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'textarea:not([disabled])',
+    'select:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  const isInsideHiddenContainer = element => {
+    let node = element;
+    while (node && node !== overlay) {
+      if (node.hasAttribute && node.hasAttribute('hidden')) {
+        return true;
+      }
+      node = node.parentNode;
+    }
+    return false;
+  };
+
+  const getFocusableOverlayElements = () =>
+    Array.from(overlay.querySelectorAll(focusableSelector)).filter(element => {
+      if (isInsideHiddenContainer(element)) {
+        return false;
+      }
+      const style = window.getComputedStyle(element);
+      return style.visibility !== 'hidden' && style.display !== 'none';
+    });
+
+  const trapOverlayFocus = event => {
+    if (event.key !== 'Tab' || overlay.hasAttribute('hidden')) {
+      return;
+    }
+    const focusableElements = getFocusableOverlayElements();
+    if (!focusableElements.length) {
+      event.preventDefault();
+      if (card) {
+        card.focus();
+      }
+      return;
+    }
+    const first = focusableElements[0];
+    const last = focusableElements[focusableElements.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const ratingMessages = Array.from({ length: 6 }, (_, index) => {
     if (!ratingHint) {
@@ -251,7 +329,7 @@
     if (!overlay.hasAttribute('hidden')) {
       return;
     }
-    document.dispatchEvent(new CustomEvent(DIALOG_OPENED_EVENT, { detail: { source: 'feedback' } }));
+    dispatchFeedbackDialogOpened();
     previousFocus = document.activeElement;
     overlay.removeAttribute('hidden');
     requestAnimationFrame(() => {
@@ -300,6 +378,7 @@
   });
 
   document.addEventListener('keydown', event => {
+    trapOverlayFocus(event);
     if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
       closeOverlay();
     }
@@ -325,11 +404,37 @@
   initializeTextareaAutoExpand();
 
   if (ratingInputs && ratingInputs.length) {
+    const ratingInputList = Array.from(ratingInputs);
+    const selectRatingByValue = nextValue => {
+      const targetInput = ratingInputList.find(input => Number(input.value) === nextValue);
+      if (!targetInput) {
+        return;
+      }
+      targetInput.checked = true;
+      targetInput.focus();
+      targetInput.dispatchEvent(createBubblingEvent('change'));
+    };
     ratingInputs.forEach(input => {
       const showHint = () => setRatingHintText(Number(input.value));
       input.addEventListener('change', setRatingHint);
       input.addEventListener('focus', showHint);
       input.addEventListener('blur', setRatingHint);
+      input.addEventListener('keydown', event => {
+        const currentValue = Number(input.value);
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+          event.preventDefault();
+          selectRatingByValue(Math.max(1, currentValue - 1));
+        } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          selectRatingByValue(Math.min(5, currentValue + 1));
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          selectRatingByValue(1);
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          selectRatingByValue(5);
+        }
+      });
     });
     setRatingHint();
   }
@@ -587,7 +692,10 @@
     });
   }
 
-  form.addEventListener('submit', async event => {
+  form.addEventListener('submit', event => {
+    if (!window.fetch || !window.FormData) {
+      return;
+    }
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
@@ -597,53 +705,66 @@
     }
 
     const formData = new FormData(form);
-    try {
-      const response = await fetch(form.action, {
-        method: 'POST',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        form.reset();
-        setCharCount();
-        clearAutocompleteSuggestions();
-        setRatingHint();
-        resizeFeedbackTextareas({ force: true });
-        if (successAlert) {
-          successAlert.textContent = defaultSuccessMessage;
-          successAlert.classList.remove('is-hidden');
-          successAlert.removeAttribute('hidden');
-        }
-      } else {
-        const data = await response.json().catch(() => ({}));
-        let message = '';
-        if (data && data.errors) {
-          message = Object.values(data.errors)
-            .flat()
-            .join(' ');
-        }
-        if (!message) {
-          message = errorMessage || '';
-        }
-        if (errorAlert) {
-          errorAlert.textContent = message;
-          errorAlert.classList.remove('is-hidden');
-          errorAlert.removeAttribute('hidden');
-        }
-      }
-    } catch (error) {
-      if (errorAlert) {
-        errorAlert.textContent = networkErrorMessage || '';
-        errorAlert.classList.remove('is-hidden');
-        errorAlert.removeAttribute('hidden');
-      }
-    } finally {
+    const enableSubmit = () => {
       if (submitBtn) {
         submitBtn.disabled = false;
       }
-    }
+    };
+    fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: formData,
+    })
+      .then(response => {
+        if (response.ok) {
+          form.reset();
+          setCharCount();
+          clearAutocompleteSuggestions();
+          setRatingHint();
+          resizeFeedbackTextareas({ force: true });
+          if (successAlert) {
+            successAlert.textContent = defaultSuccessMessage;
+            successAlert.classList.remove('is-hidden');
+            successAlert.removeAttribute('hidden');
+          }
+          return null;
+        }
+        return response.json()
+          .catch(() => ({}))
+          .then(data => {
+            let message = '';
+            if (data && data.errors) {
+              const values = [];
+              Object.keys(data.errors).forEach(key => {
+                const value = data.errors[key];
+                if (Array.isArray(value)) {
+                  value.forEach(item => values.push(item));
+                } else if (value) {
+                  values.push(value);
+                }
+              });
+              message = values.join(' ');
+            }
+            if (!message) {
+              message = errorMessage || '';
+            }
+            if (errorAlert) {
+              errorAlert.textContent = message;
+              errorAlert.classList.remove('is-hidden');
+              errorAlert.removeAttribute('hidden');
+            }
+            return null;
+          });
+      })
+      .catch(() => {
+        if (errorAlert) {
+          errorAlert.textContent = networkErrorMessage || '';
+          errorAlert.classList.remove('is-hidden');
+          errorAlert.removeAttribute('hidden');
+        }
+      })
+      .then(enableSubmit, enableSubmit);
   });
 })();

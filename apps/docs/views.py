@@ -10,12 +10,11 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db.models import Q
-from django.http import HttpRequest
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
-from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils import timezone
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.views.decorators.cache import never_cache
 
 from apps.gallery.models import GalleryImage
@@ -56,6 +55,8 @@ LIBRARY_ROOT_QUERY_PARAMETER = "virtual_root"
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
+CONTROLLER_FULL_DOCUMENT_QUERY_PARAMS = ("controller", "tv", "ps4")
+CONTROLLER_FALSE_QUERY_VALUES = {"0", "false", "off", "no"}
 
 
 DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES = (
@@ -224,6 +225,16 @@ def _build_render_cache_key(file_path: Path, lang: str) -> str:
     except OSError:
         mtime = 0
     return f"docs:render:{file_path}:{mtime}:{lang}"
+
+
+def _should_force_controller_full_document(request: HttpRequest) -> bool:
+    for query_param in CONTROLLER_FULL_DOCUMENT_QUERY_PARAMS:
+        if query_param not in request.GET:
+            continue
+        value = (request.GET.get(query_param) or "").strip().lower()
+        if value not in CONTROLLER_FALSE_QUERY_VALUES:
+            return True
+    return False
 
 
 def _iter_document_paths(root: Path) -> list[Path]:
@@ -871,8 +882,10 @@ def render_readme_page(
     else:
         html, toc_html = _render_document_cached(document.file, cache_key)
     force_full_document = _should_default_full_document(normalized_doc)
-    full_document = request.GET.get("full") == "1" or (
-        force_full_document and "full" not in request.GET
+    full_document = (
+        request.GET.get("full") == "1"
+        or _should_force_controller_full_document(request)
+        or (force_full_document and "full" not in request.GET)
     )
     initial_content, remaining_content = rendering.split_html_sections(html, 2)
     if full_document:

@@ -44,6 +44,9 @@
             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
             <span>{% trans "Loading remaining sections…" %}</span>
           </div>
+          <a class="btn btn-outline-primary btn-sm reader-full-document-link" href="{{ full_document_url }}">
+            {% trans "Load full document" %}
+          </a>
           <noscript>
             <a class="btn btn-outline-primary btn-sm mt-3" href="{{ full_document_url }}">
               {% trans "Load full document" %}
@@ -71,15 +74,21 @@
 {% endif %}
 <script>
   (function () {
-    const RELOAD_DELAY = 5 * 60 * 1000;
-    let timer;
-    const resetTimer = () => {
+    var controllerMode = document.documentElement.classList.contains("controller-mode") ||
+      /(?:\?|&)(controller|tv|ps4)(?:=1|=true|&|$)/i.test(window.location.search);
+    var reloadDelay = controllerMode ? 30 * 60 * 1000 : 5 * 60 * 1000;
+    var timer;
+    var resetTimer = function () {
       clearTimeout(timer);
-      timer = setTimeout(() => {
+      timer = setTimeout(function () {
+        if (document.body && document.body.classList.contains("user-story-open")) {
+          resetTimer();
+          return;
+        }
         window.location.reload();
-      }, RELOAD_DELAY);
+      }, reloadDelay);
     };
-    ["click", "mousemove", "keydown", "scroll", "touchstart"].forEach((evt) => {
+    ["click", "mousemove", "pointermove", "focusin", "keydown", "scroll", "touchstart"].forEach(function (evt) {
       document.addEventListener(evt, resetTimer, { passive: true });
     });
     resetTimer();
