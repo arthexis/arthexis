@@ -129,21 +129,7 @@ def test_summary_frames_are_written_with_expiry(tmp_path) -> None:
     ]
 
 
-def test_legacy_low_summary_frames_are_removed(tmp_path) -> None:
-    (tmp_path / "lcd-low").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-2").write_text("old\nsummary\n", encoding="utf-8")
-    (tmp_path / "lcd-low-extra").write_text("keep\nme\n", encoding="utf-8")
-
-    services.clear_legacy_low_summary_frames(tmp_path)
-
-    assert not (tmp_path / "lcd-low").exists()
-    assert not (tmp_path / "lcd-low-1").exists()
-    assert not (tmp_path / "lcd-low-2").exists()
-    assert (tmp_path / "lcd-low-extra").exists()
-
-
-def test_no_log_generation_removes_legacy_low_summary_frames(
+def test_no_log_generation_preserves_low_channel_messages(
     monkeypatch, settings, tmp_path
 ) -> None:
     from apps.nodes.models import Node
@@ -178,11 +164,11 @@ def test_no_log_generation_removes_legacy_low_summary_frames(
     result = services.execute_log_summary_generation()
 
     assert result == "skipped:no-logs"
-    assert not (lock_dir / "lcd-low").exists()
-    assert not (lock_dir / "lcd-low-1").exists()
+    assert (lock_dir / "lcd-low").exists()
+    assert (lock_dir / "lcd-low-1").exists()
 
 
-def test_suite_gate_skip_removes_legacy_low_summary_frames(
+def test_suite_gate_skip_preserves_low_channel_messages(
     monkeypatch, settings, tmp_path
 ) -> None:
     from apps.nodes.models import Node
@@ -203,5 +189,5 @@ def test_suite_gate_skip_removes_legacy_low_summary_frames(
     result = services.execute_log_summary_generation()
 
     assert result == "skipped:suite-feature-disabled"
-    assert not (lock_dir / "lcd-low").exists()
-    assert not (lock_dir / "lcd-low-1").exists()
+    assert (lock_dir / "lcd-low").exists()
+    assert (lock_dir / "lcd-low-1").exists()
