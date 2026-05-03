@@ -15,12 +15,14 @@ def test_filter_redundant_lcd_summary_screens_drops_host_resource_frame() -> Non
         [
             ("Host", "t65C d51% m44%"),
             ("HOST:gway-001", "routine status"),
+            ("Host", "failed journal writer"),
             ("Status", "0 failed units"),
             ("USB key", "sda1 ro bastion"),
         ]
     )
 
     assert frames == [
+        ("Host", "failed journal writer"),
         ("Status", "0 failed units"),
         ("USB key", "sda1 ro bastion"),
     ]
@@ -103,11 +105,12 @@ def test_filter_redundant_lcd_summary_screens_handles_inline_headers() -> None:
         [
             ("HOST:t65C d51% m44%", ""),
             ("Host:gway-001", "active"),
+            ("HOST:gway-001", "down"),
             ("ERR:svc failed", "manual"),
         ]
     )
 
-    assert frames == [("ERR:svc failed", "manual")]
+    assert frames == [("HOST:gway-001", "down"), ("ERR:svc failed", "manual")]
 
 
 def test_summary_frames_are_written_with_expiry(tmp_path) -> None:

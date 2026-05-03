@@ -255,8 +255,13 @@ class LocalLLMSummarizer:
                 "No recent logs", _summary_status_line("0 ln", "NORMAL")
             )
 
-        error_lines = [line for line in event_lines if _summary_severity(line) == "ERR"]
-        warn_lines = [line for line in event_lines if _summary_severity(line) == "WRN"]
+        attention_events = [
+            (idx, line, severity)
+            for idx, line in enumerate(event_lines)
+            if (severity := _summary_severity(line)) != "OK"
+        ]
+        error_lines = [line for _, line, severity in attention_events if severity == "ERR"]
+        warn_lines = [line for _, line, severity in attention_events if severity == "WRN"]
         task_counts: dict[str, int] = {}
         source_counts: dict[str, int] = {}
 
@@ -274,9 +279,14 @@ class LocalLLMSummarizer:
         screens: list[tuple[str, str]] = []
         if error_lines or warn_lines:
             evaluation = _summary_evaluation(len(error_lines), len(warn_lines))
+            headline_idx, headline_line, _headline_severity = next(
+                event
+                for event in reversed(attention_events)
+                if event[2] == ("ERR" if error_lines else "WRN")
+            )
             screens.append(
                 (
-                    _summary_compact_line((error_lines or warn_lines)[-1]),
+                    _summary_compact_line(headline_line),
                     _summary_status_line(f"{len(event_lines)} ln", evaluation),
                 )
             )
@@ -288,8 +298,10 @@ class LocalLLMSummarizer:
                 )
             )
 
-        for line in (error_lines + warn_lines)[-4:-1]:
-            severity = _summary_severity(line)
+        detail_events = [
+            event for event in attention_events if event[0] != headline_idx
+        ][-3:] if attention_events else []
+        for _idx, line, severity in detail_events:
             screens.append(
                 (
                     _summary_compact_line(line),

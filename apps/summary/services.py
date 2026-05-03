@@ -41,6 +41,10 @@ HOST_RESOURCE_BODY_RE = re.compile(
     r"\bt\d+(?:\.\d+)?[cf]?\b.*\bd\d+%.*\bm\d+%",
     re.IGNORECASE,
 )
+HOST_ATTENTION_BODY_RE = re.compile(
+    r"\b(?:action|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
+    re.IGNORECASE,
+)
 INLINE_BUFFER_RE = re.compile(r"^[A-Z0-9][A-Z0-9 /&+.\-]{0,15}:.+")
 
 
@@ -247,7 +251,7 @@ def filter_redundant_lcd_summary_screens(
             for part in (subject_body.strip(), (body or "").strip().lower())
             if part
         )
-        if subject_header == "host":
+        if subject_header == "host" and not HOST_ATTENTION_BODY_RE.search(body_text):
             continue
         if subject_header in {"resource", "resources"} and HOST_RESOURCE_BODY_RE.search(
             body_text

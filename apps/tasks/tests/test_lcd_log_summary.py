@@ -42,3 +42,21 @@ def test_local_lcd_summary_keeps_journal_failure_on_first_row() -> None:
     assert output.split("\n---\n")[0] == "Journal failed 3\n1 ln       ERROR"
     assert "Check logs\n1x           FIX" in output
     assert output.count("Journal failed 3") == 1
+
+
+def test_local_lcd_summary_keeps_latest_warning_detail_with_errors() -> None:
+    output = LocalLLMSummarizer().summarize(
+        "\n".join(
+            [
+                "LOGS:",
+                "ERR apps.demo: Boom failure",
+                "WRN apps.demo: Disk warning 1",
+                "WRN apps.demo: Disk warning 2",
+                "WRN apps.demo: Disk warning 3",
+            ]
+        )
+    )
+
+    assert "Boom failure\n4 ln       ERROR" in output
+    assert "Disk warning 3\n1 ln     WARNING" in output
+    assert output.count("Boom failure") == 1
