@@ -154,7 +154,8 @@
     };
 
     const summarizeFirstRow = (table) => {
-      const firstBodyRow = table.tBodies[0]?.rows[0] || table.rows[1];
+      const firstBody = table.tBodies[0];
+      const firstBodyRow = (firstBody && firstBody.rows[0]) || table.rows[1];
       if (!firstBodyRow) {
         return "";
       }
@@ -198,6 +199,8 @@
 
         table.id = tableId;
         table.classList.add("reader-collapsible-table");
+        table.tabIndex = 0;
+        table.setAttribute("aria-label", headingText);
         table.setAttribute("hidden", "");
         table.dataset.tableToggleReady = "true";
 
