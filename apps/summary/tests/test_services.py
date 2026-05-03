@@ -38,3 +38,42 @@ def test_legacy_low_summary_frames_are_removed(tmp_path) -> None:
     assert not (tmp_path / "lcd-low-1").exists()
     assert not (tmp_path / "lcd-low-2").exists()
     assert (tmp_path / "lcd-low-extra").exists()
+
+
+def test_no_log_generation_removes_legacy_low_summary_frames(
+    monkeypatch, settings, tmp_path
+) -> None:
+    from apps.nodes.models import Node
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "lcd-low").write_text("old\nsummary\n", encoding="utf-8")
+    (lock_dir / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
+
+    class FakeNode:
+        def has_feature(self, slug: str) -> bool:
+            return slug == "llm-summary"
+
+    class FakeConfig:
+        is_active = True
+        last_run_at = None
+
+        def save(self, *, update_fields):
+            self.update_fields = update_fields
+
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(Node, "get_local", staticmethod(lambda: FakeNode()))
+    monkeypatch.setattr(
+        services,
+        "is_suite_feature_enabled",
+        lambda slug, default=True: True,
+    )
+    monkeypatch.setattr(services, "get_summary_config", lambda: FakeConfig())
+    monkeypatch.setattr(services, "ensure_local_model", lambda config: None)
+    monkeypatch.setattr(services, "collect_recent_logs", lambda config, since: [])
+
+    result = services.execute_log_summary_generation()
+
+    assert result == "skipped:no-logs"
+    assert not (lock_dir / "lcd-low").exists()
+    assert not (lock_dir / "lcd-low-1").exists()
