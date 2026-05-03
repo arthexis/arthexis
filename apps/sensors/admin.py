@@ -157,8 +157,7 @@ class ThermometerAdmin(admin.ModelAdmin):
 
         if days == 1:
             labels = [
-                (start_at + timedelta(hours=offset)).isoformat()
-                for offset in range(24)
+                (start_at + timedelta(hours=offset)).isoformat() for offset in range(24)
             ]
         else:
             labels = [
@@ -246,11 +245,12 @@ class UsbTrackerAdmin(admin.ModelAdmin):
 @admin.register(UsbPortMapping)
 class UsbPortMappingAdmin(admin.ModelAdmin):
     list_display = (
+        "node",
         "port_number",
         "label",
         "source_type",
         "source_identifier",
         "is_active",
     )
-    search_fields = ("label", "source_identifier", "description")
-    list_filter = ("source_type", "is_active")
+    search_fields = ("node__hostname", "label", "source_identifier", "description")
+    list_filter = ("node", "source_type", "is_active")

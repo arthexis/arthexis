@@ -35,6 +35,7 @@ def test_render_usb_lcd_lines_fits_four_seven_character_labels() -> None:
 
 def test_build_usb_lcd_statuses_uses_local_mappings_and_default_labels() -> None:
     node = Node.objects.create(hostname="gway", public_endpoint="gway")
+    other_node = Node.objects.create(hostname="remote", public_endpoint="remote")
     UsbTracker.objects.create(
         name="USB-KEY",
         slug="usb-key",
@@ -54,21 +55,32 @@ def test_build_usb_lcd_statuses_uses_local_mappings_and_default_labels() -> None
         description="USB camera",
     )
     UsbPortMapping.objects.create(
+        node=other_node,
+        port_number=1,
+        label="REMOTE",
+        source_type=UsbPortMapping.SourceType.USB_TRACKER,
+        source_identifier="usb-key",
+    )
+    UsbPortMapping.objects.create(
+        node=node,
         port_number=1,
         source_type=UsbPortMapping.SourceType.USB_TRACKER,
         source_identifier="usb-key",
     )
     UsbPortMapping.objects.create(
+        node=node,
         port_number=2,
         source_type=UsbPortMapping.SourceType.RECORDING_DEVICE,
         source_identifier="1-0",
     )
     UsbPortMapping.objects.create(
+        node=node,
         port_number=3,
         source_type=UsbPortMapping.SourceType.VIDEO_DEVICE,
         source_identifier="opencv:0",
     )
     UsbPortMapping.objects.create(
+        node=node,
         port_number=4,
         source_type=UsbPortMapping.SourceType.USB_TRACKER,
         source_identifier="missing",
@@ -101,24 +113,30 @@ def test_node_scoped_devices_fail_closed_without_local_node(monkeypatch) -> None
         name="USB Camera",
         description="USB camera",
     )
-    UsbPortMapping.objects.create(
-        port_number=1,
-        source_type=UsbPortMapping.SourceType.RECORDING_DEVICE,
-        source_identifier="1-0",
-    )
-    UsbPortMapping.objects.create(
-        port_number=2,
-        source_type=UsbPortMapping.SourceType.VIDEO_DEVICE,
-        source_identifier="opencv:0",
-    )
+    mappings = [
+        UsbPortMapping.objects.create(
+            node=node,
+            port_number=1,
+            source_type=UsbPortMapping.SourceType.RECORDING_DEVICE,
+            source_identifier="1-0",
+        ),
+        UsbPortMapping.objects.create(
+            node=node,
+            port_number=2,
+            source_type=UsbPortMapping.SourceType.VIDEO_DEVICE,
+            source_identifier="opencv:0",
+        ),
+    ]
 
-    statuses = build_usb_lcd_statuses()
+    statuses = build_usb_lcd_statuses(mappings=mappings)
 
     assert [status.connected for status in statuses[:2]] == [False, False]
     assert [status.label for status in statuses[:2]] == ["EMPTY", "EMPTY"]
 
 
-def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
+def test_build_usb_lcd_statuses_ignores_other_node_mappings() -> None:
+    local = Node.objects.create(hostname="local", public_endpoint="local")
+    remote = Node.objects.create(hostname="remote", public_endpoint="remote")
     UsbTracker.objects.create(
         name="Bastion drive",
         slug="bastion",
@@ -126,13 +144,66 @@ def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
         last_match_path="/media/bastion/security/key.txt",
     )
     UsbPortMapping.objects.create(
+        node=remote,
+        port_number=1,
+        label="REMOTE",
+        source_type=UsbPortMapping.SourceType.USB_TRACKER,
+        source_identifier="bastion",
+    )
+
+    statuses = build_usb_lcd_statuses(node=local)
+
+    assert [status.label for status in statuses] == ["EMPTY", "EMPTY", "EMPTY", "EMPTY"]
+
+
+def test_build_usb_lcd_statuses_filters_explicit_mappings_by_node() -> None:
+    local = Node.objects.create(hostname="local", public_endpoint="local")
+    remote = Node.objects.create(hostname="remote", public_endpoint="remote")
+    UsbTracker.objects.create(
+        name="Bastion drive",
+        slug="bastion",
+        required_file_path="security/key.txt",
+        last_match_path="/media/bastion/security/key.txt",
+    )
+    local_mapping = UsbPortMapping.objects.create(
+        node=local,
+        port_number=1,
+        label="LOCAL",
+        source_type=UsbPortMapping.SourceType.USB_TRACKER,
+        source_identifier="bastion",
+    )
+    remote_mapping = UsbPortMapping.objects.create(
+        node=remote,
+        port_number=2,
+        label="REMOTE",
+        source_type=UsbPortMapping.SourceType.USB_TRACKER,
+        source_identifier="bastion",
+    )
+
+    statuses = build_usb_lcd_statuses(
+        mappings=[local_mapping, remote_mapping], node=local
+    )
+
+    assert [status.label for status in statuses] == ["LOCAL", "EMPTY", "EMPTY", "EMPTY"]
+
+
+def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
+    node = Node.objects.create(hostname="gway", public_endpoint="gway")
+    UsbTracker.objects.create(
+        name="Bastion drive",
+        slug="bastion",
+        required_file_path="security/key.txt",
+        last_match_path="/media/bastion/security/key.txt",
+    )
+    UsbPortMapping.objects.create(
+        node=node,
         port_number=1,
         label="BASTION",
         source_type=UsbPortMapping.SourceType.USB_TRACKER,
         source_identifier="bastion",
     )
 
-    result = write_usb_lcd_status(lock_dir=tmp_path)
+    result = write_usb_lcd_status(lock_dir=tmp_path, node=node)
     message = read_lcd_lock_file(tmp_path / LCD_USB_LOCK_FILE)
 
     assert result["written"] is True
