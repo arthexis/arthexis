@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 LCD_HIGH_LOCK_FILE = "lcd-high"
 LCD_LOW_LOCK_FILE = "lcd-low"
+LCD_SUMMARY_LOCK_FILE = "lcd-summary"
 LCD_CLOCK_LOCK_FILE = "clock"
 LCD_UPTIME_LOCK_FILE = "uptime"
 LCD_STATS_LOCK_FILE = "stats"
@@ -118,6 +119,7 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
     for name in (
         LCD_HIGH_LOCK_FILE,
         LCD_LOW_LOCK_FILE,
+        LCD_SUMMARY_LOCK_FILE,
         LCD_CLOCK_LOCK_FILE,
         LCD_UPTIME_LOCK_FILE,
         LCD_STATS_LOCK_FILE,

@@ -470,3 +470,108 @@ def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeyp
     assert low_payload.line1 == "LO BASE"
     assert high_cycle.index == 0
     assert coordinator.high_repeat_count == 0
+
+
+def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
+    coordinator = runner.LCDRunner()
+
+    monkeypatch.setattr(runner.locks, "_load_channel_order", lambda lock_dir: None)
+
+    payload_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("x", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {
+        "high": payload_cycle,
+        "low": payload_cycle,
+        "summary": payload_cycle,
+        "clock": payload_cycle,
+        "stats": payload_cycle,
+    }
+    channel_text = {
+        "high": True,
+        "low": True,
+        "summary": True,
+        "clock": False,
+        "stats": False,
+    }
+
+    coordinator.configure_rotation_order(channel_info, channel_text)
+
+    assert coordinator.rotation.order == (
+        "high",
+        "summary",
+        "low",
+        "summary",
+        "stats",
+        "summary",
+        "clock",
+        "summary",
+    )
+
+
+def test_configured_rotation_order_does_not_inject_summary_when_omitted(monkeypatch):
+    coordinator = runner.LCDRunner()
+
+    monkeypatch.setattr(
+        runner.locks,
+        "_load_channel_order",
+        lambda lock_dir: ("high", "clock"),
+    )
+
+    payload_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("x", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {
+        "high": payload_cycle,
+        "low": payload_cycle,
+        "summary": payload_cycle,
+        "clock": payload_cycle,
+        "stats": payload_cycle,
+    }
+    channel_text = {
+        "high": True,
+        "low": True,
+        "summary": True,
+        "clock": True,
+        "stats": False,
+    }
+
+    coordinator.configure_rotation_order(channel_info, channel_text)
+
+    assert coordinator.rotation.order == ("high", "clock")
+
+
+def test_summary_payload_rotates_its_own_channel() -> None:
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+    summary_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("SUM 1", "A", 0),
+            runner.locks.LockPayload("SUM 2", "B", 0),
+        ],
+        signature=((0, 0.0), (1, 0.0)),
+        index=0,
+    )
+    channel_info = {"summary": summary_cycle}
+    channel_text = {"summary": True}
+
+    first = coordinator.payload_for_state(
+        ("summary",),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+    second = coordinator.payload_for_state(
+        ("summary",),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert (first.line1, second.line1) == ("SUM 1", "SUM 2")

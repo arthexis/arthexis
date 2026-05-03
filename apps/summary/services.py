@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
 import logging
 import os
-from pathlib import Path
 import re
 import textwrap
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
 
 from apps.features.parameters import get_feature_parameter
 from apps.features.utils import is_suite_feature_enabled
-from apps.screens.startup_notifications import render_lcd_lock_file
+from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE, render_lcd_lock_file
 
 from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
 LCD_SUMMARY_FRAME_COUNT = 10
+LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -237,27 +238,43 @@ def normalize_screens(screens: Iterable[tuple[str, str]]) -> list[tuple[str, str
 
 
 def fixed_frame_window(screens: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Return exactly 10 LCD frames by truncating or padding with blanks."""
+    """Return a bounded LCD summary frame list without padding low-value blanks."""
 
-    padded = list(screens[:LCD_SUMMARY_FRAME_COUNT])
-    while len(padded) < LCD_SUMMARY_FRAME_COUNT:
-        padded.append((" " * LCD_COLUMNS, " " * LCD_COLUMNS))
-    return padded
+    return list(screens[:LCD_SUMMARY_FRAME_COUNT])
 
 
-def render_lcd_payload(subject: str, body: str) -> str:
-    return render_lcd_lock_file(subject=subject, body=body)
+def render_lcd_payload(subject: str, body: str, *, expires_at=None) -> str:
+    return render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
+
+
+def clear_legacy_low_summary_frames(lock_dir: Path) -> None:
+    """Remove old summary frames written into the low LCD channel."""
+
+    prefix = f"{LCD_LOW_LOCK_FILE}-"
+    legacy_frames = [
+        candidate
+        for candidate in lock_dir.glob(f"{prefix}*")
+        if candidate.name[len(prefix) :].isdigit()
+    ]
+    if not legacy_frames:
+        return
+
+    for candidate in [lock_dir / LCD_LOW_LOCK_FILE, *legacy_frames]:
+        candidate.unlink(missing_ok=True)
 
 
 def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
     """Generate LCD log summary output and persist latest run metadata."""
 
     from apps.nodes.models import Node
-    from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
+    from apps.screens.startup_notifications import LCD_SUMMARY_LOCK_FILE
     from apps.tasks.tasks import (
         LocalLLMSummarizer,
         _write_lcd_frames,
     )
+
+    lock_dir = Path(settings.BASE_DIR) / ".locks"
+    clear_legacy_low_summary_frames(lock_dir)
 
     node = Node.get_local()
     if not node:
@@ -299,8 +316,13 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     if not screens:
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
 
-    lock_file = Path(settings.BASE_DIR) / ".locks" / LCD_LOW_LOCK_FILE
-    _write_lcd_frames(fixed_frame_window(screens), lock_file=lock_file)
+    lock_file = lock_dir / LCD_SUMMARY_LOCK_FILE
+    frames = fixed_frame_window(screens)
+    _write_lcd_frames(
+        frames,
+        lock_file=lock_file,
+        expires_at=now + LCD_SUMMARY_EXPIRES_AFTER,
+    )
 
     config.last_run_at = now
     config.last_prompt = prompt
@@ -316,4 +338,4 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
             "updated_at",
         ]
     )
-    return f"wrote:{LCD_SUMMARY_FRAME_COUNT}"
+    return f"wrote:{len(frames)}"

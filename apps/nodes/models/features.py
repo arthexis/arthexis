@@ -627,6 +627,8 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
+        from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
+
         raw_task_name = "llm_summary_lcd"
         task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
         if enabled:
@@ -637,7 +639,7 @@ class NodeFeatureMixin:
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.summary.tasks.generate_lcd_log_summary",
+                    "task": LLM_SUMMARY_CELERY_TASK_NAME,
                     "enabled": True,
                 },
             )

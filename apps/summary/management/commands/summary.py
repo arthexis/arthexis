@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
@@ -11,11 +12,12 @@ from apps.screens.lcd_screen import locks as lcd_locks
 from apps.screens.startup_notifications import (
     LCD_CHANNELS_LOCK_FILE,
     LCD_RUNTIME_LOCK_FILE,
+    LCD_SUMMARY_LOCK_FILE,
     read_lcd_lock_file,
 )
-from apps.summary.node_features import get_llm_summary_prereq_state
 from apps.summary.constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from apps.summary.models import LLMSummaryConfig
+from apps.summary.node_features import get_llm_summary_prereq_state
 from apps.summary.services import (
     ensure_local_model,
     execute_log_summary_generation,
@@ -95,7 +97,15 @@ class Command(BaseCommand):
             config = get_summary_config()
 
         prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
-        current_message = read_lcd_lock_file(base_dir / ".locks" / lcd_locks.LOW_LOCK_FILE.name)
+        current_message = read_lcd_lock_file(
+            base_dir / ".locks" / LCD_SUMMARY_LOCK_FILE
+        )
+        if (
+            current_message is not None
+            and current_message.expires_at is not None
+            and current_message.expires_at <= timezone.now()
+        ):
+            current_message = None
         planned_screens = normalize_screens(parse_screens(config.last_output))
         current_pair = (
             (current_message.subject.strip(), current_message.body.strip())

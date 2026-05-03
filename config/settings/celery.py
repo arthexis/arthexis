@@ -6,6 +6,7 @@ from datetime import timedelta
 from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
+from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
 from .base import NODE_ROLE
 from .broker import resolve_celery_broker_url
@@ -35,6 +36,10 @@ CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "apps.core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
+    },
+    "llm_summary_lcd": {
+        "task": LLM_SUMMARY_CELERY_TASK_NAME,
+        "schedule": timedelta(minutes=5),
     },
     "ocpp_configuration_check": {
         "task": "apps.ocpp.tasks.schedule_daily_charge_point_configuration_checks",
