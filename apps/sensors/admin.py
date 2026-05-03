@@ -10,7 +10,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from .models import Thermometer, ThermometerReading, UsbTracker
+from .models import Thermometer, ThermometerReading, UsbPortMapping, UsbTracker
 from .thermometers import read_temperature
 
 
@@ -241,3 +241,16 @@ class UsbTrackerAdmin(admin.ModelAdmin):
         "last_match_path",
         "last_error",
     )
+
+
+@admin.register(UsbPortMapping)
+class UsbPortMappingAdmin(admin.ModelAdmin):
+    list_display = (
+        "port_number",
+        "label",
+        "source_type",
+        "source_identifier",
+        "is_active",
+    )
+    search_fields = ("label", "source_identifier", "description")
+    list_filter = ("source_type", "is_active")

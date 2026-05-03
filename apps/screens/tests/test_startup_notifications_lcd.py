@@ -10,11 +10,13 @@ from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LEGACY_FEATURE_LOCK,
+    LCD_USB_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
     read_lcd_lock_file,
     render_lcd_lock_file,
 )
+
 
 class LCDStartupNotificationTests(TestCase):
     def _create_node(self, mac: str) -> Node:
@@ -47,6 +49,16 @@ class LCDStartupNotificationTests(TestCase):
                     )
 
                     self.assertTrue(feature.is_enabled)
+
+    def test_lcd_feature_enabled_accepts_usb_lock(self):
+        with TemporaryDirectory() as tmpdir:
+            lock_dir = Path(tmpdir) / ".locks"
+            lock_dir.mkdir(parents=True)
+            (lock_dir / LCD_USB_LOCK_FILE).write_text(
+                "EMPTY EMPTY\nEMPTY EMPTY\n", encoding="utf-8"
+            )
+
+            self.assertTrue(lcd_feature_enabled(lock_dir))
 
     def test_refresh_features_assigns_lcd_feature_from_project_lock_dir(self):
         """Verify local nodes auto-assign the LCD feature when project locks exist."""

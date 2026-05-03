@@ -27,14 +27,18 @@ LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
-UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE)
+UUID_RE = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE
+)
 HEX_RE = re.compile(r"\b[0-9a-f]{16,}\b", re.IGNORECASE)
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-TIMESTAMP_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:,\d+)?\s+"
-)
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:,\d+)?\s+")
 LEVEL_RE = re.compile(r"\b(INFO|DEBUG|WARNING|ERROR|CRITICAL)\b")
 WHITESPACE_RE = re.compile(r"\s+")
+HOST_RESOURCE_BODY_RE = re.compile(
+    r"\bt\d+(?:\.\d+)?[cf]?\b.*\bd\d+%.*\bm\d+%",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -172,12 +176,12 @@ def compact_log_chunks(chunks: Iterable[LogChunk]) -> str:
 
 def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
     cutoff = (now - timedelta(minutes=4)).strftime("%H:%M")
-    instructions = textwrap.dedent(
-        f"""
+    instructions = textwrap.dedent(f"""
         You summarize system logs for a 16x2 LCD. Focus on the last 4 minutes (cutoff {cutoff}).
         Highlight urgent operator actions or failures. Use shorthand, abbreviations, and ASCII symbols.
         Output 8-10 LCD screens. Each screen is two lines (subject then body).
         Aim for 14-18 chars per line, avoid scrolling when possible.
+        Do not emit routine host resource screens; RAM, disk, swap, CPU, and temperature already have dedicated LCD screens.
         Format:
         SCREEN 1:
         <subject line>
@@ -188,8 +192,7 @@ def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
         <body line>
         ...
         Only output the screens, no extra commentary.
-        """
-    ).strip()
+        """).strip()
     return f"{instructions}\n\nLOGS:\n{compacted_logs}\n"
 
 
@@ -219,6 +222,25 @@ def parse_screens(output: str) -> list[tuple[str, str]]:
             continue
         screens.append((group[0], group[1]))
     return screens
+
+
+def filter_redundant_lcd_summary_screens(
+    screens: Iterable[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Drop summary frames already covered by dedicated LCD status screens."""
+
+    filtered: list[tuple[str, str]] = []
+    for subject, body in screens:
+        subject_text = (subject or "").strip().lower()
+        body_text = (body or "").strip().lower()
+        if subject_text in {
+            "host",
+            "resource",
+            "resources",
+        } and HOST_RESOURCE_BODY_RE.search(body_text):
+            continue
+        filtered.append((subject, body))
+    return filtered
 
 
 def _normalize_line(text: str) -> str:
@@ -280,9 +302,8 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     if not node:
         return "skipped:no-node"
 
-    if (
-        not ignore_suite_feature_gate
-        and not is_suite_feature_enabled(LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True)
+    if not ignore_suite_feature_gate and not is_suite_feature_enabled(
+        LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True
     ):
         logger.info(
             "Skipping LCD summary automation because suite feature '%s' is disabled.",
@@ -305,13 +326,23 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     compacted_logs = compact_log_chunks(chunks)
     if not compacted_logs:
         config.last_run_at = now
-        config.save(update_fields=["last_run_at", "log_offsets", "model_path", "installed_at", "updated_at"])
+        config.save(
+            update_fields=[
+                "last_run_at",
+                "log_offsets",
+                "model_path",
+                "installed_at",
+                "updated_at",
+            ]
+        )
         return "skipped:no-logs"
 
     prompt = build_summary_prompt(compacted_logs, now=now)
     summarizer = LocalLLMSummarizer()
     output = summarizer.summarize(prompt)
-    screens = normalize_screens(parse_screens(output))
+    screens = normalize_screens(
+        filter_redundant_lcd_summary_screens(parse_screens(output))
+    )
 
     if not screens:
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])

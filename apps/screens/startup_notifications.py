@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ LCD_SUMMARY_LOCK_FILE = "lcd-summary"
 LCD_CLOCK_LOCK_FILE = "clock"
 LCD_UPTIME_LOCK_FILE = "uptime"
 LCD_STATS_LOCK_FILE = "stats"
+LCD_USB_LOCK_FILE = "lcd-usb"
 LCD_CHANNELS_LOCK_FILE = "lcd-channels.lck"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
@@ -123,6 +125,7 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
         LCD_CLOCK_LOCK_FILE,
         LCD_UPTIME_LOCK_FILE,
         LCD_STATS_LOCK_FILE,
+        LCD_USB_LOCK_FILE,
         LCD_CHANNELS_LOCK_FILE,
         LCD_LEGACY_FEATURE_LOCK,
         LCD_RUNTIME_LOCK_FILE,

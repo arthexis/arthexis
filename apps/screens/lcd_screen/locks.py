@@ -7,7 +7,8 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import datetime, timedelta
+from datetime import timezone as datetime_timezone
 from glob import glob
 from pathlib import Path
 from typing import NamedTuple
@@ -20,12 +21,12 @@ from apps.screens.startup_notifications import (
     LCD_CLOCK_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
-    LCD_SUMMARY_LOCK_FILE,
     LCD_STATS_LOCK_FILE,
+    LCD_SUMMARY_LOCK_FILE,
     LCD_UPTIME_LOCK_FILE,
+    LCD_USB_LOCK_FILE,
     read_lcd_lock_file,
 )
-
 from utils.service_probe import detect_runserver_port, probe_admin_login
 
 from .event_utils import parse_event_expiry, parse_event_expiry_candidate
@@ -72,6 +73,7 @@ CHANNEL_BASE_NAMES = {
     "clock": CLOCK_LOCK_NAME,
     "uptime": UPTIME_LOCK_NAME,
     "stats": LCD_STATS_LOCK_FILE,
+    "usb": LCD_USB_LOCK_FILE,
 }
 
 

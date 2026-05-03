@@ -10,6 +10,28 @@ def test_fixed_frame_window_does_not_pad_blank_frames() -> None:
     assert frames == [("A", "B"), ("C", "D")]
 
 
+def test_filter_redundant_lcd_summary_screens_drops_host_resource_frame() -> None:
+    frames = services.filter_redundant_lcd_summary_screens(
+        [
+            ("Host", "t65C d51% m44%"),
+            ("Status", "0 failed units"),
+            ("USB key", "sda1 ro bastion"),
+        ]
+    )
+
+    assert frames == [
+        ("Status", "0 failed units"),
+        ("USB key", "sda1 ro bastion"),
+    ]
+
+
+def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
+    prompt = services.build_summary_prompt("log line", now=datetime(2026, 5, 3))
+
+    assert "Do not emit routine host resource screens" in prompt
+    assert "LOGS:\nlog line" in prompt
+
+
 def test_summary_frames_are_written_with_expiry(tmp_path) -> None:
     expires_at = datetime(2026, 5, 3, 14, 30, tzinfo=timezone.utc)
 
