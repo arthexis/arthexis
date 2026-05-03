@@ -28,6 +28,7 @@ from apps.core.tasks.auto_upgrade import (
     check_github_updates,
 )
 from apps.core.versioning import (
+    UPGRADE_CHANNEL_CUSTOM,
     UPGRADE_CHANNEL_REGULAR,
     UPGRADE_CHANNEL_STABLE,
     UPGRADE_CHANNEL_UNSTABLE,
@@ -54,6 +55,7 @@ UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
     "stable": {"override": UPGRADE_CHANNEL_STABLE, "label": _("Stable / LTS")},
     "regular": {"override": UPGRADE_CHANNEL_REGULAR, "label": _("Regular / Normal")},
     "latest": {"override": UPGRADE_CHANNEL_UNSTABLE, "label": _("Latest / Unstable")},
+    "custom": {"override": UPGRADE_CHANNEL_CUSTOM, "label": _("Custom")},
     # Legacy aliases
     "lts": {"override": UPGRADE_CHANNEL_STABLE, "label": _("Stable / LTS")},
     "normal": {"override": UPGRADE_CHANNEL_REGULAR, "label": _("Regular / Normal")},
@@ -259,6 +261,17 @@ def _load_upgrade_policy_report() -> dict[str, object]:
                 "channel_state": channel_state,
                 "interval_minutes": policy.interval_minutes,
                 "interval_label": _format_interval_minutes(policy.interval_minutes),
+                "target_branch": policy.target_branch or "main",
+                "include_live_branch": policy.include_live_branch,
+                "allowed_bumps": [
+                    bump
+                    for bump, allowed in (
+                        ("patch", policy.allow_patch_upgrades),
+                        ("minor", policy.allow_minor_upgrades),
+                        ("major", policy.allow_major_upgrades),
+                    )
+                    if allowed
+                ],
                 "requires_pypi": policy.requires_pypi_packages,
                 "last_checked_at": assignment.last_checked_at,
                 "last_checked_label": _format_timestamp(assignment.last_checked_at),

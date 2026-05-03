@@ -22,8 +22,15 @@ delegated systemd unit is launched, and what to check if something fails.
     upgrades can proceed weekly.
   - `latest`/`unstable`: tracks live `main` revisions daily instead of gating on
     release version bumps.
+  - `custom`: uses the policy's configured branch, interval, live-branch toggle,
+    and patch/minor/major bump gates.
   `ARTHEXIS_UPGRADE_FREQ` still overrides the check interval, but channel bump
   cadence gates whether a release upgrade may proceed.
+- Custom policies keep the existing `interval_minutes` frequency and add:
+  `target_branch`, `include_live_branch`, `allow_patch_upgrades`,
+  `allow_minor_upgrades`, and `allow_major_upgrades`. When live branch tracking
+  is off, same-version revision changes are skipped. When it is on, same-version
+  branch revisions can be applied with the latest/unstable upgrade path.
 - Boot-time prestart checks (`scripts/boot-upgrade-prestart.sh`) keep a per-service
   recency lock at `.locks/<service>-boot-upgrade-last-check.lck` after a
   successful run. If the local revision is unchanged and the recency TTL has
@@ -55,6 +62,7 @@ Run one of the following from the project root:
 ./upgrade.sh --stable   # direct run, useful for local validation
 ./upgrade.sh --regular  # release upgrade path with regular/normal channel semantics
 ./upgrade.sh --latest   # live-main path used by latest/unstable
+./upgrade.sh --latest --branch lab/canary  # live custom branch path
 ./upgrade.sh --detached # launches the delegated watcher so the upgrade continues if the console disconnects
 ./scripts/delegated-upgrade.sh  # matches the automated delegated path
 ```

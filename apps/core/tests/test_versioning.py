@@ -2,6 +2,7 @@ from apps.core.versioning import (
     AUTO_UPGRADE_DAY_MINUTES,
     AUTO_UPGRADE_MONTH_MINUTES,
     AUTO_UPGRADE_WEEK_MINUTES,
+    UPGRADE_CHANNEL_CUSTOM,
     UPGRADE_CHANNEL_REGULAR,
     UPGRADE_CHANNEL_STABLE,
     UPGRADE_CHANNEL_UNSTABLE,
@@ -30,6 +31,7 @@ def test_normalize_upgrade_channel_aliases():
     assert normalize_upgrade_channel("normal") == UPGRADE_CHANNEL_REGULAR
     assert normalize_upgrade_channel("version") == UPGRADE_CHANNEL_REGULAR
     assert normalize_upgrade_channel("latest") == UPGRADE_CHANNEL_UNSTABLE
+    assert normalize_upgrade_channel("custom") == UPGRADE_CHANNEL_CUSTOM
 
 
 def test_auto_upgrade_bump_rules_match_channel_tiers():

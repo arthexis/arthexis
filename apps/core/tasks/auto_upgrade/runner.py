@@ -16,13 +16,16 @@ logger = logging.getLogger(__name__)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 
 
-def _upgrade_command_args(mode: str) -> list[str]:
+def _upgrade_command_args(mode: str, branch: str | None = None) -> list[str]:
     """Return the platform-appropriate upgrade command for ``mode``."""
 
     script = "./upgrade.sh"
     if os.name == "nt" or sys.platform == "win32":
         script = "upgrade.bat"
-    return [script, f"--{mode}"]
+    args = [script, f"--{mode}"]
+    if branch and branch != "main":
+        args.extend(["--branch", branch])
+    return args
 
 
 def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:

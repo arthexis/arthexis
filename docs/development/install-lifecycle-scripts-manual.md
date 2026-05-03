@@ -166,6 +166,7 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--latest`, `--unstable` | Set latest/unstable channel for auto-upgrade. |
 | `--stable`, `--lts` | Set stable/LTS channel for auto-upgrade. |
 | `--regular`, `--normal` | Set regular/normal channel for auto-upgrade. |
+| custom policy fields | In the admin/CLI policy model, custom policies can set frequency, target branch, live-branch tracking, and allowed patch/minor/major bumps. |
 | `--fixed` | Disable auto-upgrade. |
 | `--auto-upgrade`, `--no-auto-upgrade` | Explicitly enable/disable auto-upgrade. |
 | `--debug`, `--no-debug` | Toggle debug env setting. |
@@ -187,7 +188,9 @@ Both supported backends emit a consistent reconciliation report that includes co
 Auto-upgrade channel tiers gate release bumps after the scheduler fires:
 `stable`/`lts` allows patch upgrades weekly and minor upgrades monthly,
 `regular`/`normal` allows patch and minor upgrades daily and major upgrades
-weekly, and `latest`/`unstable` follows live `main` revisions daily.
+weekly, `latest`/`unstable` follows live `main` revisions daily, and `custom`
+uses the stored policy interval, branch, live-branch toggle, and explicit
+patch/minor/major gates.
 
 
 ## 5. Runtime status (`status.sh`)

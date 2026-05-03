@@ -49,7 +49,7 @@ class Command(BaseCommand):
         check_parser.add_argument(
             "--channel",
             default="stable",
-            help="Channel override for this check (stable, unstable, latest).",
+            help="Channel override for this check (stable, regular, latest, custom).",
         )
         check_parser.add_argument(
             "--keep-skip-revisions",
@@ -63,7 +63,7 @@ class Command(BaseCommand):
         )
         channel_parser.add_argument(
             "channel",
-            help="Target channel (stable, unstable, latest).",
+            help="Target channel (stable, regular, latest, custom).",
         )
 
         notify_parser = subparsers.add_parser(
@@ -163,6 +163,21 @@ class Command(BaseCommand):
                 self.stdout.write(f" - {revision}")
         else:
             self.stdout.write("Blocked revisions: none")
+
+        policies = settings_info.get("policies") or []
+        if policies:
+            self.stdout.write("Policies:")
+            for policy in policies:
+                allowed_bumps = ", ".join(policy.get("allowed_bumps") or []) or "none"
+                live = "yes" if policy.get("include_live_branch") else "no"
+                self.stdout.write(
+                    " - "
+                    f"{policy.get('name')}: channel={policy.get('channel')}, "
+                    f"branch={policy.get('target_branch') or 'main'}, "
+                    f"interval={policy.get('interval_label')}, "
+                    f"allowed_bumps={allowed_bumps}, "
+                    f"live_branch={live}"
+                )
 
         self.stdout.write("Recent activity:")
         if log_entries:
