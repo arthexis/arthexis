@@ -21,12 +21,12 @@ def test_local_lcd_summary_uses_dense_event_labels() -> None:
     output = LocalLLMSummarizer().summarize(prompt)
 
     assert "LOG 1" not in output
-    assert "ERR 2 WRN 1" in output
-    assert "HB ok" in output
-    assert "OCPP fwd" in output
+    assert "ERR2 WRN1:" in output
+    assert "HB OK" in output
+    assert "OCPP FWD" in output
 
 
 def test_local_lcd_summary_reports_quiet_logs() -> None:
     output = LocalLLMSummarizer().summarize("LOGS:\n[celery.log]\n")
 
-    assert output == "Quiet\nNo new logs\n---"
+    assert output == "QUIET:no logs"

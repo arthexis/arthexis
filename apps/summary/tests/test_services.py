@@ -28,8 +28,75 @@ def test_filter_redundant_lcd_summary_screens_drops_host_resource_frame() -> Non
 def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
     prompt = services.build_summary_prompt("log line", now=datetime(2026, 5, 3))
 
+    assert "Think in 32 visible cells per screen" in prompt
+    assert 'then a single ":" and continue the message immediately' in prompt
+    assert "Shorten words aggressively" in prompt
     assert "Do not emit routine host resource screens" in prompt
     assert "LOGS:\nlog line" in prompt
+
+
+def test_parse_screens_accepts_single_line_colon_buffers() -> None:
+    screens = services.parse_screens("SCREEN 1:\nERR:svc fail -> rst\n---\n")
+
+    assert screens == [("ERR:svc fail -> rst", "")]
+
+
+def test_parse_screens_ignores_single_line_prose() -> None:
+    screens = services.parse_screens("Here is your summary:\n---\nERR:svc fail\n")
+
+    assert screens == [("ERR:svc fail", "")]
+
+
+def test_normalize_screens_flows_header_and_message_across_buffer() -> None:
+    frames = services.normalize_screens(
+        [("ERR", "scheduler raised unexpected reboot required")]
+    )
+
+    assert frames == [("ERR:scheduler ra", "ised unexpected ")]
+    assert len(frames[0][0]) == 16
+    assert len(frames[0][1]) == 16
+
+
+def test_normalize_screens_preserves_existing_inline_header() -> None:
+    frames = services.normalize_screens([("ERR:svc fail", "manual rst")])
+
+    assert frames == [("ERR:svc fail    ", "manual rst      ")]
+
+
+def test_normalize_screens_preserves_prewrapped_inline_buffer() -> None:
+    frames = services.normalize_screens([("ERR2 WRN1:Panic", "failure")])
+
+    assert frames == [("ERR2 WRN1:Panic ", "failure         ")]
+
+
+def test_deterministic_summary_round_trips_thirty_two_cell_buffer() -> None:
+    from apps.tasks.tasks import LocalLLMSummarizer
+
+    output = LocalLLMSummarizer().summarize(
+        "\n".join(
+            [
+                "LOGS:",
+                "ERR apps.demo: ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+            ]
+        )
+    )
+
+    frames = services.normalize_screens(services.parse_screens(output))
+
+    assert frames[0] == ("ERR1 WRN0:apps.d", "emo: ABCDEFGHIJK")
+    assert len(frames[0][0]) == 16
+    assert len(frames[0][1]) == 16
+
+
+def test_filter_redundant_lcd_summary_screens_handles_inline_headers() -> None:
+    frames = services.filter_redundant_lcd_summary_screens(
+        [
+            ("HOST:t65C d51% m44%", ""),
+            ("ERR:svc failed", "manual"),
+        ]
+    )
+
+    assert frames == [("ERR:svc failed", "manual")]
 
 
 def test_summary_frames_are_written_with_expiry(tmp_path) -> None:
