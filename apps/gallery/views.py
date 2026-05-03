@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
@@ -220,15 +221,21 @@ def _rf_card_store_url_for_image(image: GalleryImage) -> str:
 
 
 def _ap_guest_key(request) -> str:
+    remote_addr = (request.META.get("REMOTE_ADDR") or "").strip()
+    forwarded_for = (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
+    user_agent = (request.META.get("HTTP_USER_AGENT") or "").strip()
+    client_identity = "|".join((forwarded_for, remote_addr, user_agent))
+    if client_identity:
+        return hashlib.sha256(client_identity.encode("utf-8")).hexdigest()
     session = getattr(request, "session", None)
-    if not hasattr(session, "get"):
-        return uuid4().hex
-    guest_key = (session.get(GALLERY_AP_GUEST_SESSION_KEY) or "").strip()
-    if guest_key:
+    if hasattr(session, "get"):
+        guest_key = (session.get(GALLERY_AP_GUEST_SESSION_KEY) or "").strip()
+        if guest_key:
+            return guest_key
+        guest_key = uuid4().hex
+        session[GALLERY_AP_GUEST_SESSION_KEY] = guest_key
         return guest_key
-    guest_key = uuid4().hex
-    session[GALLERY_AP_GUEST_SESSION_KEY] = guest_key
-    return guest_key
+    return uuid4().hex
 
 
 def _ap_gallery_redirect(sort_key: str, *, page_number=None):

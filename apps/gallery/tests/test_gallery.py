@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -535,6 +535,34 @@ class GalleryApGuestTests(TestCase):
         self.assertTrue(GalleryImage.objects.filter(title="Morning").exists())
         self.assertFalse(GalleryImage.objects.filter(title="Evening").exists())
 
+    def test_ap_guest_upload_limit_applies_across_fresh_sessions(self):
+        first_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Morning Session One",
+                "image": self._upload("morning-session-one.jpg"),
+            },
+        )
+        self.assertEqual(first_response.status_code, 302)
+
+        fresh_client = Client()
+        second_response = fresh_client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "upload",
+                "title": "Morning Session Two",
+                "image": self._upload("morning-session-two.jpg"),
+            },
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "You can upload one image per day.")
+        self.assertTrue(GalleryImage.objects.filter(title="Morning Session One").exists())
+        self.assertFalse(
+            GalleryImage.objects.filter(title="Morning Session Two").exists()
+        )
+
     @override_settings(GALLERY_AP_GUEST_MAX_UPLOAD_BYTES=10)
     def test_ap_guest_upload_enforces_size_limit(self):
         response = self.client.post(
@@ -640,6 +668,35 @@ class GalleryApGuestTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {"detail": "invalid image"})
         self.assertFalse(GalleryImageReaction.objects.exists())
+
+    def test_ap_guest_reaction_is_scoped_across_fresh_sessions(self):
+        image = self._create_public_image("Scoped", color="purple")
+        first_response = self.client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "react",
+                "image_slug": image.slug,
+                "reaction": "like",
+            },
+        )
+        self.assertEqual(first_response.status_code, 302)
+
+        fresh_client = Client()
+        second_response = fresh_client.post(
+            reverse("gallery:ap"),
+            {
+                "action": "react",
+                "image_slug": image.slug,
+                "reaction": "dislike",
+            },
+        )
+        self.assertEqual(second_response.status_code, 302)
+
+        self.assertEqual(GalleryImageReaction.objects.filter(image=image).count(), 1)
+        self.assertEqual(
+            GalleryImageReaction.objects.get(image=image).value,
+            GalleryImageReaction.DISLIKE,
+        )
 
     @override_settings(GALLERY_AP_GUEST_PAGE_SIZE=2)
     def test_ap_guest_gallery_paginates_public_images(self):
