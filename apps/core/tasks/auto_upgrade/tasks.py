@@ -72,6 +72,8 @@ AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
 AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
 AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
+DEFAULT_CUSTOM_VERSION_BUMPS = (VERSION_BUMP_PATCH, VERSION_BUMP_MINOR)
+GIT_REF_INVALID_CHARACTERS = frozenset(" ~^:?*[\\")
 
 SEVERITY_NORMAL = "normal"
 SEVERITY_LOW = "low"
@@ -375,13 +377,28 @@ def _normalize_upgrade_branch(value: object) -> str:
     if not branch:
         return "main"
 
+    components = branch.split("/")
     invalid = (
         branch.startswith("-")
         or branch.endswith("/")
+        or branch.endswith(".")
+        or branch == "@"
         or ".." in branch
+        or "//" in branch
         or "@{" in branch
         or "\\" in branch
-        or any(character.isspace() for character in branch)
+        or any(
+            character in GIT_REF_INVALID_CHARACTERS
+            or ord(character) < 32
+            or ord(character) == 127
+            for character in branch
+        )
+        or any(
+            not component
+            or component.startswith(".")
+            or component.endswith(".lock")
+            for component in components
+        )
     )
     if invalid:
         return "main"
@@ -488,6 +505,8 @@ def _resolve_auto_upgrade_mode(
             override_log = mode
 
     mode = normalize_upgrade_channel(mode) or DEFAULT_AUTO_UPGRADE_MODE
+    if mode == UPGRADE_CHANNEL_CUSTOM and allowed_version_bumps is None:
+        allowed_version_bumps = DEFAULT_CUSTOM_VERSION_BUMPS
 
     interval_minutes = _resolve_auto_upgrade_interval_minutes(mode)
 
@@ -871,7 +890,10 @@ def _build_custom_upgrade_decision(
         )
 
     version_bump = classify_version_bump(repo_state.local_version, target_version)
-    allowed_bumps = set(mode.allowed_version_bumps or ())
+    configured_bumps = mode.allowed_version_bumps
+    if configured_bumps is None:
+        configured_bumps = DEFAULT_CUSTOM_VERSION_BUMPS
+    allowed_bumps = set(configured_bumps)
     if version_bump not in allowed_bumps:
         return AutoUpgradeDecision(
             skip=True,

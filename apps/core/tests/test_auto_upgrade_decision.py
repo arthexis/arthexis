@@ -251,6 +251,22 @@ def test_build_upgrade_decision_custom_skips_same_version_without_live_branch():
     assert decision.reason == "version-unchanged"
 
 
+def test_build_upgrade_decision_custom_defaults_to_patch_and_minor_bumps():
+    decision = tasks.build_upgrade_decision(
+        Path("/tmp/base"),
+        _mode(mode="custom"),
+        _repo_state(
+            release_version=None,
+            release_revision=None,
+            remote_version="1.1.0",
+            local_version="1.0.9",
+        ),
+    )
+
+    assert decision.apply is True
+    assert decision.args[1:] == ["--regular"]
+
+
 def test_resolve_auto_upgrade_mode_reads_custom_policy_controls(tmp_path):
     policy = SimpleNamespace(
         channel="custom",
@@ -273,6 +289,36 @@ def test_resolve_auto_upgrade_mode_reads_custom_policy_controls(tmp_path):
     assert mode.branch == "lab/canary"
     assert mode.include_live_branch is True
     assert mode.allowed_version_bumps == ("patch", "major")
+
+
+def test_resolve_auto_upgrade_mode_custom_override_uses_default_bumps(tmp_path):
+    mode = tasks._resolve_auto_upgrade_mode(tmp_path, "custom")
+
+    assert mode.mode == "custom"
+    assert mode.allowed_version_bumps == ("patch", "minor")
+
+
+def test_normalize_upgrade_branch_rejects_invalid_git_ref_names():
+    invalid_branches = [
+        "lab:canary",
+        "lab~canary",
+        "lab^canary",
+        "lab?canary",
+        "lab*canary",
+        "lab[canary",
+        "lab\\canary",
+        "lab//canary",
+        "lab/canary.",
+        "lab/canary.lock",
+        "lab/.hidden",
+        ".hidden",
+        "@",
+    ]
+
+    for branch in invalid_branches:
+        assert tasks._normalize_upgrade_branch(branch) == "main"
+
+    assert tasks._normalize_upgrade_branch("refs/heads/lab/canary") == "lab/canary"
 
 
 def test_ci_status_for_revision_compatibility_shim_returns_empty_string(tmp_path):
