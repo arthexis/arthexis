@@ -564,7 +564,7 @@ body.user-story-open {
     cursor: not-allowed;
     box-shadow: none;
     background: var(--admin-ui-color-neutral-500, var(--user-story-muted));
-    color: var(--admin-ui-color-neutral-0, #fff);
+    color: var(--admin-ui-color-neutral-0, var(--user-story-accent-text));
 }
 
 .user-story-card .user-story-close {
