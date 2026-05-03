@@ -511,6 +511,39 @@ def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
     )
 
 
+def test_rotation_order_includes_usb_channel_when_active(monkeypatch):
+    coordinator = runner.LCDRunner()
+
+    monkeypatch.setattr(runner.locks, "_load_channel_order", lambda lock_dir: None)
+
+    empty_cycle = runner.ChannelCycle(payloads=[], signature=(), index=0)
+    payload_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("x", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {
+        "high": empty_cycle,
+        "low": payload_cycle,
+        "summary": empty_cycle,
+        "clock": empty_cycle,
+        "stats": empty_cycle,
+        "usb": payload_cycle,
+    }
+    channel_text = {
+        "high": False,
+        "low": True,
+        "summary": False,
+        "clock": False,
+        "stats": False,
+        "usb": True,
+    }
+
+    coordinator.configure_rotation_order(channel_info, channel_text)
+
+    assert coordinator.rotation.order == ("low", "stats", "usb", "clock")
+
+
 def test_configured_rotation_order_does_not_inject_summary_when_omitted(monkeypatch):
     coordinator = runner.LCDRunner()
 

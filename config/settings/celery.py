@@ -6,6 +6,7 @@ from datetime import timedelta
 from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
+from apps.sensors.constants import USB_LCD_STATUS_CELERY_TASK_NAME
 from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
 from .base import NODE_ROLE
@@ -44,6 +45,10 @@ CELERY_BEAT_SCHEDULE = {
     "thermometer_sampling": {
         "task": "apps.sensors.tasks.sample_thermometers",
         "schedule": timedelta(minutes=1),
+    },
+    "usb_lcd_status": {
+        "task": USB_LCD_STATUS_CELERY_TASK_NAME,
+        "schedule": timedelta(seconds=30),
     },
     "ocpp_configuration_check": {
         "task": "apps.ocpp.tasks.schedule_daily_charge_point_configuration_checks",

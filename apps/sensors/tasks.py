@@ -9,6 +9,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from .constants import USB_LCD_STATUS_CELERY_TASK_NAME
 from .models import Thermometer, UsbTracker
 from .thermometers import read_temperature
 
@@ -222,4 +223,18 @@ def scan_usb_trackers() -> dict[str, int]:
     }
 
 
-__all__ = ["sample_thermometers", "scan_usb_trackers"]
+@shared_task(name=USB_LCD_STATUS_CELERY_TASK_NAME)
+def refresh_usb_lcd_status(*, scan_trackers: bool = True) -> dict[str, object]:
+    """Refresh the USB LCD lock file from local device mappings."""
+
+    tracker_result = scan_usb_trackers() if scan_trackers else None
+
+    from .usb_lcd import write_usb_lcd_status
+
+    result = write_usb_lcd_status()
+    if tracker_result is not None:
+        result["trackers"] = tracker_result
+    return result
+
+
+__all__ = ["refresh_usb_lcd_status", "sample_thermometers", "scan_usb_trackers"]

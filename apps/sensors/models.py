@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import re
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
+
+from .constants import USB_LCD_LABEL_WIDTH, USB_LCD_PORT_COUNT
 
 
 class PhysicalSensor(Entity):
@@ -252,11 +254,67 @@ class UsbTracker(Entity):
         return self.name
 
 
+class UsbPortMapping(Entity):
+    """Local LCD mapping for one physical USB hub port."""
+
+    class SourceType(models.TextChoices):
+        USB_TRACKER = "usb-tracker", _("USB tracker")
+        RECORDING_DEVICE = "recording-device", _("Recording device")
+        VIDEO_DEVICE = "video-device", _("Video device")
+
+    port_number = models.PositiveSmallIntegerField(
+        unique=True,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(USB_LCD_PORT_COUNT),
+        ],
+        help_text=_("Physical USB hub port number shown on the LCD."),
+    )
+    label = models.CharField(
+        max_length=USB_LCD_LABEL_WIDTH,
+        blank=True,
+        help_text=_("Optional LCD label. Labels are rendered in up to 7 characters."),
+    )
+    source_type = models.CharField(
+        max_length=32,
+        choices=SourceType.choices,
+        help_text=_(
+            "Local device inventory used to decide whether the port is connected."
+        ),
+    )
+    source_identifier = models.CharField(
+        max_length=255,
+        help_text=_(
+            "USB tracker slug, recording-device identifier, or video-device identifier."
+        ),
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["port_number"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    port_number__gte=1, port_number__lte=USB_LCD_PORT_COUNT
+                ),
+                name="sensors_usbportmapping_port_range",
+            )
+        ]
+        verbose_name = _("USB Port Mapping")
+        verbose_name_plural = _("USB Port Mappings")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        label = (self.label or self.source_identifier or self.source_type).strip()
+        return f"USB {self.port_number}: {label}"
+
+
 __all__ = [
     "PhysicalSensor",
     "Thermometer",
     "ThermometerManager",
     "ThermometerReading",
+    "UsbPortMapping",
     "UsbTracker",
     "UsbTrackerManager",
 ]
