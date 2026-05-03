@@ -24,3 +24,17 @@ def test_summary_frames_are_written_with_expiry(tmp_path) -> None:
         "No errors",
         "2026-05-03T14:30:00+00:00",
     ]
+
+
+def test_legacy_low_summary_frames_are_removed(tmp_path) -> None:
+    (tmp_path / "lcd-low").write_text("old\nsummary\n", encoding="utf-8")
+    (tmp_path / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
+    (tmp_path / "lcd-low-2").write_text("old\nsummary\n", encoding="utf-8")
+    (tmp_path / "lcd-low-extra").write_text("keep\nme\n", encoding="utf-8")
+
+    services.clear_legacy_low_summary_frames(tmp_path)
+
+    assert not (tmp_path / "lcd-low").exists()
+    assert not (tmp_path / "lcd-low-1").exists()
+    assert not (tmp_path / "lcd-low-2").exists()
+    assert (tmp_path / "lcd-low-extra").exists()

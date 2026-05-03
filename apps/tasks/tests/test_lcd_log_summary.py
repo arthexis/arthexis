@@ -14,13 +14,14 @@ def test_local_lcd_summary_uses_dense_event_labels() -> None:
             "(apps.ocpp.tasks.setup_forwarders)",
             "WRN apps.demo: Disk nearly full",
             "ERR apps.demo: Boom failure",
+            "CRI apps.demo: Panic failure",
         ]
     )
 
     output = LocalLLMSummarizer().summarize(prompt)
 
     assert "LOG 1" not in output
-    assert "ERR 1 WRN 1" in output
+    assert "ERR 2 WRN 1" in output
     assert "HB ok" in output
     assert "OCPP fwd" in output
 

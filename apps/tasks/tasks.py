@@ -314,9 +314,9 @@ SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
 
 
 def _summary_severity(line: str) -> str:
-    if line.startswith("ERR ") or " raised unexpected" in line:
+    if line.startswith("ERR ") or line.startswith("CRI ") or " raised unexpected" in line:
         return "ERR"
-    if line.startswith("WRN ") or line.startswith("CRI "):
+    if line.startswith("WRN "):
         return "WRN"
     return "OK"
 

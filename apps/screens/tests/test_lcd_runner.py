@@ -511,6 +511,40 @@ def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
     )
 
 
+def test_configured_rotation_order_does_not_inject_summary_when_omitted(monkeypatch):
+    coordinator = runner.LCDRunner()
+
+    monkeypatch.setattr(
+        runner.locks,
+        "_load_channel_order",
+        lambda lock_dir: ("high", "clock"),
+    )
+
+    payload_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("x", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {
+        "high": payload_cycle,
+        "low": payload_cycle,
+        "summary": payload_cycle,
+        "clock": payload_cycle,
+        "stats": payload_cycle,
+    }
+    channel_text = {
+        "high": True,
+        "low": True,
+        "summary": True,
+        "clock": True,
+        "stats": False,
+    }
+
+    coordinator.configure_rotation_order(channel_info, channel_text)
+
+    assert coordinator.rotation.order == ("high", "clock")
+
+
 def test_summary_payload_rotates_its_own_channel() -> None:
     coordinator = runner.LCDRunner()
     now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)

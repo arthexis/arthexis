@@ -8,7 +8,8 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import datetime, timedelta
+from datetime import timezone as datetime_timezone
 from pathlib import Path
 
 from apps.core.optional_hardware import is_expected_optional_hardware_absence
@@ -393,13 +394,9 @@ class LCDRunner:
 
         previous_order = self.rotation.order
         if configured_order:
-            configured_available = tuple(
+            self.rotation.order = tuple(
                 label for label in configured_order if _channel_available(label)
             )
-            if "summary" not in configured_available and _channel_available("summary"):
-                self.rotation.order = _interleave_summary(configured_available)
-            else:
-                self.rotation.order = configured_available
             if not self.rotation.order:
                 self.rotation.order = ("clock",)
         else:
