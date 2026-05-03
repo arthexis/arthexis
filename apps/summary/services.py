@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import textwrap
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -24,6 +27,10 @@ logger = logging.getLogger(__name__)
 LCD_COLUMNS = 16
 LCD_SUMMARY_FRAME_COUNT = 10
 LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
+STATUS_COMMAND_TIMEOUT_SECONDS = 1.5
+STATUS_JOURNAL_LOOKBACK = "2 hours ago"
+STATUS_JOURNAL_MAX_LINES = 80
+STATUS_SOURCE_LINE_LIMIT = 8
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -35,6 +42,27 @@ TIMESTAMP_RE = re.compile(
 )
 LEVEL_RE = re.compile(r"\b(INFO|DEBUG|WARNING|ERROR|CRITICAL)\b")
 WHITESPACE_RE = re.compile(r"\s+")
+JOURNAL_TIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}T(?P<hhmm>\d{2}:\d{2}):")
+
+STATUS_JOURNAL_KEEP_PATTERNS = (
+    "fat-fs",
+    "fat read failed",
+    "asking for cache data failed",
+    "i/o error",
+    "usb write fail",
+    "failed to start",
+    "failed with result",
+)
+STATUS_JOURNAL_DROP_PATTERNS = (
+    "bluetoothd",
+    "connection closed by remote host",
+    "kex_exchange_identification",
+    "src/plugin.c:init_plugin",
+)
+USB_ROLE_LABELS = {
+    "bastion-unlock": "bastion",
+    "kindle-postbox": "kindle",
+}
 
 
 @dataclass(frozen=True)
@@ -170,11 +198,267 @@ def compact_log_chunks(chunks: Iterable[LogChunk]) -> str:
     return "\n".join(compacted)
 
 
+def collect_noteworthy_status_lines() -> list[str]:
+    """Return compact host status lines that are useful when log deltas are quiet."""
+
+    lines: list[str] = []
+    lines.extend(_systemd_failed_status_lines())
+    lines.extend(_journal_status_lines())
+    lines.extend(_usb_inventory_status_lines())
+
+    host_line = _host_resource_status_line()
+    if host_line:
+        lines.append(host_line)
+
+    return _dedupe_status_lines(lines)[:STATUS_SOURCE_LINE_LIMIT]
+
+
+def _run_status_command(args: list[str]) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=STATUS_COMMAND_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return None
+
+
+def _systemd_failed_status_lines() -> list[str]:
+    systemctl = shutil.which("systemctl")
+    if not systemctl:
+        return []
+
+    result = _run_status_command(
+        [systemctl, "--failed", "--no-legend", "--plain", "--no-pager"]
+    )
+    if result is None:
+        return []
+    if result.returncode not in {0, 1}:
+        return []
+
+    units: list[str] = []
+    for raw_line in result.stdout.splitlines():
+        parts = raw_line.split()
+        if not parts:
+            continue
+        units.append(parts[0].removesuffix(".service"))
+
+    if not units:
+        return ["OK status: 0 failed units"]
+
+    shown = ", ".join(units[:3])
+    suffix = "" if len(units) <= 3 else f" +{len(units) - 3}"
+    return [f"ERR status: failed units {shown}{suffix}"]
+
+
+def _journal_status_lines() -> list[str]:
+    journalctl = shutil.which("journalctl")
+    if not journalctl:
+        return []
+
+    result = _run_status_command(
+        [
+            journalctl,
+            "-p",
+            "3",
+            "-b",
+            "--since",
+            STATUS_JOURNAL_LOOKBACK,
+            "--lines",
+            str(STATUS_JOURNAL_MAX_LINES),
+            "--no-pager",
+            "--output=short-iso",
+        ]
+    )
+    if result is None or result.returncode not in {0, 1}:
+        return []
+
+    grouped: dict[str, dict[str, object]] = {}
+    for raw_line in result.stdout.splitlines():
+        if not _is_noteworthy_journal_line(raw_line):
+            continue
+        label = _journal_status_label(raw_line)
+        entry = grouped.setdefault(label, {"count": 0, "last": ""})
+        entry["count"] = int(entry["count"]) + 1
+        line_time = _journal_line_time(raw_line)
+        if line_time:
+            entry["last"] = line_time
+
+    lines: list[str] = []
+    for label, entry in sorted(
+        grouped.items(),
+        key=lambda item: (-int(item[1]["count"]), item[0]),
+    )[:3]:
+        last = f" last {entry['last']}" if entry.get("last") else ""
+        lines.append(f"ERR journal: {label} x{entry['count']}{last}")
+    return lines
+
+
+def _is_noteworthy_journal_line(raw_line: str) -> bool:
+    lowered = raw_line.lower()
+    if not lowered.strip():
+        return False
+    if any(pattern in lowered for pattern in STATUS_JOURNAL_DROP_PATTERNS):
+        return False
+    return any(pattern in lowered for pattern in STATUS_JOURNAL_KEEP_PATTERNS)
+
+
+def _journal_status_label(raw_line: str) -> str:
+    lowered = raw_line.lower()
+    if "fat-fs" in lowered or "fat read failed" in lowered:
+        return "USB FAT sda1"
+    if "asking for cache data failed" in lowered:
+        return "USB cache sda"
+    if "usb write fail" in lowered:
+        return "USB write fail"
+
+    failed_start = re.search(r"Failed to start ([^:.]+)", raw_line)
+    if failed_start:
+        return f"failed start {failed_start.group(1).strip()[:24]}"
+    if "failed with result" in lowered:
+        return "unit failed"
+    return "system error"
+
+
+def _journal_line_time(raw_line: str) -> str:
+    match = JOURNAL_TIME_RE.search(raw_line)
+    if not match:
+        return ""
+    return match.group("hhmm")
+
+
+def _usb_inventory_status_lines() -> list[str]:
+    inventory = _read_usb_inventory()
+    if not isinstance(inventory, dict):
+        return []
+
+    devices = inventory.get("devices")
+    if not isinstance(devices, list):
+        return []
+
+    lines: list[str] = []
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        if device.get("transport") != "usb" or device.get("type") != "part":
+            continue
+
+        name = str(device.get("name") or device.get("path") or "usb")
+        label = str(device.get("label") or device.get("fstype") or "device")
+        roles = device.get("claimed_roles") or []
+        role = _usb_role_label(str(roles[0])) if roles else "mounted"
+        mounts = device.get("mounts") or []
+        if not mounts:
+            lines.append(f"WRN usb: {name} {label} unmounted")
+            continue
+
+        is_read_only = any(
+            isinstance(mount, dict) and mount.get("read_only") for mount in mounts
+        )
+        mode = "ro" if is_read_only else "rw"
+        if role != "mounted":
+            lines.append(f"OK usb: {name} {mode} {role}")
+        else:
+            lines.append(f"OK usb: {name} {label} {mode}")
+
+    return lines[:2]
+
+
+def _usb_role_label(role: str) -> str:
+    return USB_ROLE_LABELS.get(role, role)
+
+
+def _read_usb_inventory() -> dict[str, object] | None:
+    path = Path(os.getenv("ARTHEXIS_USB_INVENTORY", "/run/arthexis-usb/devices.json"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _host_resource_status_line() -> str:
+    parts: list[str] = []
+
+    temp_c = _read_cpu_temp_c()
+    if temp_c is not None:
+        parts.append(f"t{temp_c}C")
+
+    try:
+        usage = shutil.disk_usage(settings.BASE_DIR)
+    except OSError:
+        usage = None
+    if usage and usage.total:
+        disk_percent = round((usage.used / usage.total) * 100)
+        parts.append(f"d{disk_percent}%")
+
+    mem_percent = _read_memory_used_percent()
+    if mem_percent is not None:
+        parts.append(f"m{mem_percent}%")
+
+    if not parts:
+        return ""
+    return f"OK host: {' '.join(parts)}"
+
+
+def _read_cpu_temp_c() -> int | None:
+    path = Path("/sys/class/thermal/thermal_zone0/temp")
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+        value = float(raw)
+    except (OSError, ValueError):
+        return None
+    if value > 1000:
+        value = value / 1000
+    return round(value)
+
+
+def _read_memory_used_percent() -> int | None:
+    path = Path("/proc/meminfo")
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    values: dict[str, int] = {}
+    for line in lines:
+        key, _separator, rest = line.partition(":")
+        if key not in {"MemTotal", "MemAvailable"}:
+            continue
+        raw_value = rest.strip().split()[0]
+        try:
+            values[key] = int(raw_value)
+        except (IndexError, ValueError):
+            continue
+
+    total = values.get("MemTotal")
+    available = values.get("MemAvailable")
+    if not total or available is None:
+        return None
+    used = max(total - available, 0)
+    return round((used / total) * 100)
+
+
+def _dedupe_status_lines(lines: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for line in lines:
+        cleaned = WHITESPACE_RE.sub(" ", line).strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        deduped.append(cleaned)
+    return deduped
+
+
 def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
     cutoff = (now - timedelta(minutes=4)).strftime("%H:%M")
     instructions = textwrap.dedent(
         f"""
         You summarize system logs for a 16x2 LCD. Focus on the last 4 minutes (cutoff {cutoff}).
+        When LOGS contains current host-status lines, show the useful facts directly.
         Highlight urgent operator actions or failures. Use shorthand, abbreviations, and ASCII symbols.
         Output 8-10 LCD screens. Each screen is two lines (subject then body).
         Aim for 14-18 chars per line, avoid scrolling when possible.
@@ -304,9 +588,21 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     chunks = collect_recent_logs(config, since=since)
     compacted_logs = compact_log_chunks(chunks)
     if not compacted_logs:
-        config.last_run_at = now
-        config.save(update_fields=["last_run_at", "log_offsets", "model_path", "installed_at", "updated_at"])
-        return "skipped:no-logs"
+        status_lines = collect_noteworthy_status_lines()
+        if status_lines:
+            compacted_logs = "[status]\n" + "\n".join(status_lines)
+        else:
+            config.last_run_at = now
+            config.save(
+                update_fields=[
+                    "last_run_at",
+                    "log_offsets",
+                    "model_path",
+                    "installed_at",
+                    "updated_at",
+                ]
+            )
+            return "skipped:no-logs"
 
     prompt = build_summary_prompt(compacted_logs, now=now)
     summarizer = LocalLLMSummarizer()

@@ -254,6 +254,11 @@ class LocalLLMSummarizer:
 
         error_lines = [line for line in event_lines if _summary_severity(line) == "ERR"]
         warn_lines = [line for line in event_lines if _summary_severity(line) == "WRN"]
+        status_screens = [
+            screen
+            for line in event_lines
+            if (screen := _summary_status_screen(line)) is not None
+        ]
         task_counts: dict[str, int] = {}
         source_counts: dict[str, int] = {}
 
@@ -267,6 +272,11 @@ class LocalLLMSummarizer:
                 source_counts[source_label] = source_counts.get(source_label, 0) + 1
 
         screens: list[tuple[str, str]] = []
+        if status_screens and len(status_screens) == len(event_lines):
+            return "\n---\n".join(
+                f"{subject}\n{body}" for subject, body in status_screens[:5]
+            )
+
         if error_lines or warn_lines:
             screens.append(
                 (
@@ -286,6 +296,10 @@ class LocalLLMSummarizer:
         if len(screens) < 3:
             for label, count in _summary_top_counts(source_counts, limit=3):
                 screens.append((label, f"{count}x /5m"))
+
+        for screen in status_screens[:3]:
+            if screen not in screens:
+                screens.append(screen)
 
         if len(screens) == 1:
             screens.append(("Routine only", "No action"))
@@ -311,6 +325,15 @@ SUMMARY_SOURCE_ALIASES = {
 SUMMARY_TASK_RE = re.compile(r"Task ([\w.]+)\[")
 SUMMARY_DUE_TASK_RE = re.compile(r"Sending due task [\w-]+ \(([\w.]+)\)")
 SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
+SUMMARY_STATUS_RE = re.compile(
+    r"^(?P<severity>OK|ERR|WRN|CRI)\s+(?P<source>[a-z][\w-]*):\s+(?P<body>.+)$"
+)
+SUMMARY_STATUS_SOURCE_LABELS = {
+    "host": "Host",
+    "journal": "Journal",
+    "status": "Status",
+    "usb": "USB key",
+}
 
 
 def _summary_severity(line: str) -> str:
@@ -344,6 +367,18 @@ def _summary_source_label(line: str) -> str | None:
     return _summary_alias(match.group(1), SUMMARY_SOURCE_ALIASES)
 
 
+def _summary_status_screen(line: str) -> tuple[str, str] | None:
+    match = SUMMARY_STATUS_RE.match(line)
+    if not match:
+        return None
+
+    severity = match.group("severity")
+    source = match.group("source")
+    label = SUMMARY_STATUS_SOURCE_LABELS.get(source, source.replace("-", " ").title())
+    subject = label if severity == "OK" else f"{severity} {label}"
+    return (subject[:16], _summary_compact_line(match.group("body")))
+
+
 def _summary_top_counts(counts: dict[str, int], *, limit: int) -> list[tuple[str, int]]:
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
 
@@ -357,7 +392,7 @@ def _summary_compact_line(line: str) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
         return "-"
-    return cleaned[:16]
+    return cleaned[:16].rstrip()
 
 
 def _write_lcd_frames(

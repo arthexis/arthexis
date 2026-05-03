@@ -30,3 +30,21 @@ def test_local_lcd_summary_reports_quiet_logs() -> None:
     output = LocalLLMSummarizer().summarize("LOGS:\n[celery.log]\n")
 
     assert output == "Quiet\nNo new logs\n---"
+
+
+def test_local_lcd_summary_renders_status_lines_directly() -> None:
+    prompt = "\n".join(
+        [
+            "LOGS:",
+            "[status]",
+            "ERR journal: USB FAT sda1 x18 last 08:32",
+            "OK usb: sda1 ro bastion",
+            "OK host: t62C d54% m46%",
+        ]
+    )
+
+    output = LocalLLMSummarizer().summarize(prompt)
+
+    assert "ERR Journal\nUSB FAT sda1 x18" in output
+    assert "USB key\nsda1 ro bastion" in output
+    assert "Host\nt62C d54% m46%" in output

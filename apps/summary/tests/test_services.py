@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import subprocess
 
 from apps.summary import services
 from apps.tasks.tasks import _write_lcd_frames
@@ -71,6 +72,7 @@ def test_no_log_generation_removes_legacy_low_summary_frames(
     monkeypatch.setattr(services, "get_summary_config", lambda: FakeConfig())
     monkeypatch.setattr(services, "ensure_local_model", lambda config: None)
     monkeypatch.setattr(services, "collect_recent_logs", lambda config, since: [])
+    monkeypatch.setattr(services, "collect_noteworthy_status_lines", lambda: [])
 
     result = services.execute_log_summary_generation()
 
@@ -102,3 +104,63 @@ def test_suite_gate_skip_removes_legacy_low_summary_frames(
     assert result == "skipped:suite-feature-disabled"
     assert not (lock_dir / "lcd-low").exists()
     assert not (lock_dir / "lcd-low-1").exists()
+
+
+def test_collect_noteworthy_status_lines_adds_host_fallback_sources(monkeypatch) -> None:
+    def fake_which(name: str) -> str | None:
+        if name in {"journalctl", "systemctl"}:
+            return f"/usr/bin/{name}"
+        return None
+
+    def fake_run(args: list[str]):
+        if "systemctl" in args[0]:
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        if "journalctl" in args[0]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout="\n".join(
+                    [
+                        "2026-05-03T08:32:27-0600 host kernel: FAT-fs (sda1): "
+                        "Directory bread(block 32768) failed",
+                        "2026-05-03T08:32:46-0600 host kernel: FAT-fs (sda1): "
+                        "FAT read failed (blocknr 1986)",
+                        "2026-05-03T09:59:22-0600 host sshd[1]: error: "
+                        "kex_exchange_identification: Connection closed by remote host",
+                    ]
+                ),
+                stderr="",
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(services.shutil, "which", fake_which)
+    monkeypatch.setattr(services, "_run_status_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "_read_usb_inventory",
+        lambda: {
+            "devices": [
+                {
+                    "claimed_roles": ["bastion-unlock"],
+                    "label": "ESD-USB",
+                    "mounts": [{"read_only": True}],
+                    "name": "sda1",
+                    "transport": "usb",
+                    "type": "part",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        services,
+        "_host_resource_status_line",
+        lambda: "OK host: t62C d54% m46%",
+    )
+
+    lines = services.collect_noteworthy_status_lines()
+
+    assert "OK status: 0 failed units" in lines
+    assert "ERR journal: USB FAT sda1 x2 last 08:32" in lines
+    assert "OK usb: sda1 ro bastion" in lines
+    assert "OK host: t62C d54% m46%" in lines
+    assert not any("kex_exchange" in line for line in lines)
