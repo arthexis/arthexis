@@ -73,7 +73,12 @@ AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
 AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
 DEFAULT_CUSTOM_VERSION_BUMPS = (VERSION_BUMP_PATCH, VERSION_BUMP_MINOR)
-GIT_REF_INVALID_CHARACTERS = frozenset(" ~^:?*[\\")
+SAFE_UPGRADE_BRANCH_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789"
+    "._/-"
+)
 
 SEVERITY_NORMAL = "normal"
 SEVERITY_LOW = "low"
@@ -386,11 +391,8 @@ def _normalize_upgrade_branch(value: object) -> str:
         or ".." in branch
         or "//" in branch
         or "@{" in branch
-        or "\\" in branch
         or any(
-            character in GIT_REF_INVALID_CHARACTERS
-            or ord(character) < 32
-            or ord(character) == 127
+            character not in SAFE_UPGRADE_BRANCH_CHARACTERS
             for character in branch
         )
         or any(
