@@ -128,7 +128,10 @@ def write_usb_lcd_status(*, lock_dir: Path | str | None = None) -> dict[str, obj
     )
     lock_file = target_dir / LCD_USB_LOCK_FILE
     try:
-        configured = UsbPortMapping.objects.filter(is_active=True).count()
+        mappings = list(
+            UsbPortMapping.objects.filter(is_active=True).order_by("port_number")
+        )
+        configured = len(mappings)
         if configured <= 0:
             _remove_lock_file(lock_file)
             return {
@@ -138,7 +141,7 @@ def write_usb_lcd_status(*, lock_dir: Path | str | None = None) -> dict[str, obj
                 "lock_file": str(lock_file),
             }
 
-        statuses = build_usb_lcd_statuses()
+        statuses = build_usb_lcd_statuses(mappings=mappings)
     except (OperationalError, ProgrammingError) as exc:
         logger.debug(
             "Skipping USB LCD status refresh: database unavailable", exc_info=True
