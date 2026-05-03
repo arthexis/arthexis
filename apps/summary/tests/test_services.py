@@ -54,7 +54,13 @@ def test_normalize_screens_flows_header_and_message_across_buffer() -> None:
 def test_normalize_screens_preserves_existing_inline_header() -> None:
     frames = services.normalize_screens([("ERR:svc fail", "manual rst")])
 
-    assert frames == [("ERR:svc fail man", "ual rst         ")]
+    assert frames == [("ERR:svc fail    ", "manual rst      ")]
+
+
+def test_normalize_screens_preserves_prewrapped_inline_buffer() -> None:
+    frames = services.normalize_screens([("ERR2 WRN1:Panic", "failure")])
+
+    assert frames == [("ERR2 WRN1:Panic ", "failure         ")]
 
 
 def test_filter_redundant_lcd_summary_screens_handles_inline_headers() -> None:

@@ -261,12 +261,16 @@ def _normalize_lcd_text(text: str) -> str:
 def _normalize_summary_buffer(subject: str, body: str) -> tuple[str, str]:
     subject_text = _normalize_lcd_text(subject)
     body_text = _normalize_lcd_text(body)
-    if subject_text and body_text:
-        combined = (
-            f"{subject_text} {body_text}"
-            if ":" in subject_text
-            else f"{subject_text}:{body_text}"
+    if ":" in subject_text:
+        overflow = subject_text[LCD_COLUMNS:]
+        line2_source = " ".join(part for part in (overflow, body_text) if part)
+        return (
+            subject_text[:LCD_COLUMNS].ljust(LCD_COLUMNS),
+            line2_source[:LCD_COLUMNS].ljust(LCD_COLUMNS),
         )
+
+    if subject_text and body_text:
+        combined = f"{subject_text}:{body_text}"
     else:
         combined = subject_text or body_text
 
