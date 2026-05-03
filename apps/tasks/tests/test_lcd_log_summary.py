@@ -1,4 +1,4 @@
-from apps.tasks.tasks import LocalLLMSummarizer
+from apps.tasks.tasks import LocalLLMSummarizer, _summary_status_line
 
 
 def test_local_lcd_summary_uses_dense_event_labels() -> None:
@@ -60,3 +60,7 @@ def test_local_lcd_summary_keeps_latest_warning_detail_with_errors() -> None:
     assert "Boom failure\n4 ln       ERROR" in output
     assert "Disk warning 3\n1 ln     WARNING" in output
     assert output.count("Boom failure") == 1
+
+
+def test_summary_status_line_preserves_exact_fit_status() -> None:
+    assert _summary_status_line("123456789", "WARNING") == "123456789WARNING"

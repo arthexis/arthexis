@@ -418,7 +418,9 @@ def _summary_status_line(metric: str, evaluation: str) -> str:
         return right[:LCD_SUMMARY_COLUMNS]
     if not right:
         return left[:LCD_SUMMARY_COLUMNS]
-    if len(left) + len(right) >= LCD_SUMMARY_COLUMNS:
+    if len(left) + len(right) == LCD_SUMMARY_COLUMNS:
+        return f"{left}{right}"
+    if len(left) + len(right) > LCD_SUMMARY_COLUMNS:
         return f"{left} {right}"[:LCD_SUMMARY_COLUMNS]
     return f"{left}{' ' * (LCD_SUMMARY_COLUMNS - len(left) - len(right))}{right}"
 
