@@ -322,12 +322,10 @@ def test_normalize_upgrade_branch_rejects_invalid_git_ref_names():
         "lab?canary",
         "lab*canary",
         "lab[canary",
-        "lab]canary",
         "lab\\canary",
         "lab;canary",
         "lab&canary",
         "lab|canary",
-        "lab$canary",
         "lab(canary)",
         "lab>canary",
         "lab//canary",
@@ -342,6 +340,10 @@ def test_normalize_upgrade_branch_rejects_invalid_git_ref_names():
         assert tasks._normalize_upgrade_branch(branch) == "main"
 
     assert tasks._normalize_upgrade_branch("refs/heads/lab/canary") == "lab/canary"
+    assert tasks._normalize_upgrade_branch("feature+canary") == "feature+canary"
+    assert tasks._normalize_upgrade_branch("release=2026") == "release=2026"
+    assert tasks._normalize_upgrade_branch("ops]hotfix") == "ops]hotfix"
+    assert tasks._normalize_upgrade_branch("lab$canary") == "lab$canary"
 
 
 def test_ci_status_for_revision_compatibility_shim_returns_empty_string(tmp_path):

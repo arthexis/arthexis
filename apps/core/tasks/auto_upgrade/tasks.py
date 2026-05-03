@@ -77,7 +77,7 @@ SAFE_UPGRADE_BRANCH_CHARACTERS = frozenset(
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789"
-    "._/-"
+    "._/-+=]@,$"
 )
 
 SEVERITY_NORMAL = "normal"

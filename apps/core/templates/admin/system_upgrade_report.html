@@ -331,7 +331,7 @@
               </div>
               <div class="upgrade-policy-requirements">
                 {% if policy.channel == "custom" %}
-                  <span>{% blocktrans with allowed=policy.allowed_bumps|join:", " %}Allowed bumps {{ allowed }}{% endblocktrans %}</span>
+                  <span>{% blocktrans with allowed=policy.allowed_bumps|join:", "|default:"none" %}Allowed bumps: {{ allowed }}{% endblocktrans %}</span>
                   {% if policy.include_live_branch %}
                     <span>{% trans "Live branch enabled" %}</span>
                   {% else %}
