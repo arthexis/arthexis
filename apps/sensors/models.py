@@ -262,8 +262,14 @@ class UsbPortMapping(Entity):
         RECORDING_DEVICE = "recording-device", _("Recording device")
         VIDEO_DEVICE = "video-device", _("Video device")
 
+    node = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="usb_port_mappings",
+        help_text=_("Node that owns this physical USB hub mapping."),
+    )
     port_number = models.PositiveSmallIntegerField(
-        unique=True,
         validators=[
             MinValueValidator(1),
             MaxValueValidator(USB_LCD_PORT_COUNT),
@@ -292,21 +298,26 @@ class UsbPortMapping(Entity):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["port_number"]
+        ordering = ["node__hostname", "port_number"]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
                     port_number__gte=1, port_number__lte=USB_LCD_PORT_COUNT
                 ),
                 name="sensors_usbportmapping_port_range",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["node", "port_number"],
+                name="sensors_usbportmapping_node_port_unique",
+            ),
         ]
         verbose_name = _("USB Port Mapping")
         verbose_name_plural = _("USB Port Mappings")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         label = (self.label or self.source_identifier or self.source_type).strip()
-        return f"USB {self.port_number}: {label}"
+        node = self.node or _("Unassigned node")
+        return f"{node} USB {self.port_number}: {label}"
 
 
 __all__ = [

@@ -6,6 +6,7 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.nodes.models import Node
 from apps.sensors.models import UsbPortMapping
 from apps.sensors.tasks import scan_usb_trackers
 from apps.sensors.usb_lcd import normalize_usb_lcd_label, write_usb_lcd_status
@@ -115,9 +116,11 @@ class Command(BaseCommand):
         source_id = str(options["source_id"]).strip()
         if not source_id:
             raise CommandError("--source-id cannot be blank")
+        node = self._local_node_or_error()
 
         label = normalize_usb_lcd_label(options.get("label"), fallback="")
         mapping, created = UsbPortMapping.objects.update_or_create(
+            node=node,
             port_number=options["port"],
             defaults={
                 "source_type": options["source_type"],
@@ -127,9 +130,10 @@ class Command(BaseCommand):
                 "is_active": not options.get("inactive", False),
             },
         )
-        lcd_result = write_usb_lcd_status()
+        lcd_result = write_usb_lcd_status(node=node)
         result = {
             "created": created,
+            "node": node.pk,
             "port": mapping.port_number,
             "source_type": mapping.source_type,
             "source_identifier": mapping.source_identifier,
@@ -147,10 +151,14 @@ class Command(BaseCommand):
         )
 
     def _handle_clear_usb_lcd_port(self, **options):
-        deleted, _ = UsbPortMapping.objects.filter(port_number=options["port"]).delete()
-        lcd_result = write_usb_lcd_status()
+        node = self._local_node_or_error()
+        deleted, _ = UsbPortMapping.objects.filter(
+            node=node, port_number=options["port"]
+        ).delete()
+        lcd_result = write_usb_lcd_status(node=node)
         result = {
             "deleted": bool(deleted),
+            "node": node.pk,
             "port": options["port"],
             "lcd": lcd_result,
         }
@@ -179,3 +187,9 @@ class Command(BaseCommand):
             )
             return
         self.stdout.write("USB LCD status cleared: no active mappings configured")
+
+    def _local_node_or_error(self):
+        node = Node.get_local()
+        if node is None:
+            raise CommandError("No local node is registered for USB LCD mappings")
+        return node

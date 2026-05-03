@@ -80,10 +80,15 @@ def build_usb_lcd_statuses(
 ) -> list[UsbPortStatus]:
     """Build four port statuses from local USB LCD mappings."""
 
-    if mappings is None:
-        mappings = UsbPortMapping.objects.filter(is_active=True).order_by("port_number")
     if node is None:
         node = _local_node()
+    if mappings is None:
+        if node is None:
+            mappings = UsbPortMapping.objects.none()
+        else:
+            mappings = UsbPortMapping.objects.filter(
+                node=node, is_active=True
+            ).order_by("port_number")
 
     statuses = {
         port: UsbPortStatus(
@@ -92,6 +97,8 @@ def build_usb_lcd_statuses(
         for port in range(1, USB_LCD_PORT_COUNT + 1)
     }
     for mapping in mappings:
+        if node is None or mapping.node_id != node.pk:
+            continue
         port_number = int(mapping.port_number or 0)
         if not mapping.is_active or port_number not in statuses:
             continue
@@ -120,7 +127,9 @@ def render_usb_lcd_lines(statuses: Iterable[UsbPortStatus]) -> tuple[str, str]:
     )
 
 
-def write_usb_lcd_status(*, lock_dir: Path | str | None = None) -> dict[str, object]:
+def write_usb_lcd_status(
+    *, lock_dir: Path | str | None = None, node=None
+) -> dict[str, object]:
     """Write the USB LCD lock file, or remove it when no mappings exist."""
 
     target_dir = (
@@ -128,8 +137,20 @@ def write_usb_lcd_status(*, lock_dir: Path | str | None = None) -> dict[str, obj
     )
     lock_file = target_dir / LCD_USB_LOCK_FILE
     try:
+        if node is None:
+            node = _local_node()
+        if node is None:
+            _remove_lock_file(lock_file)
+            return {
+                "configured": 0,
+                "connected": 0,
+                "written": False,
+                "lock_file": str(lock_file),
+            }
         mappings = list(
-            UsbPortMapping.objects.filter(is_active=True).order_by("port_number")
+            UsbPortMapping.objects.filter(node=node, is_active=True).order_by(
+                "port_number"
+            )
         )
         configured = len(mappings)
         if configured <= 0:
@@ -141,7 +162,7 @@ def write_usb_lcd_status(*, lock_dir: Path | str | None = None) -> dict[str, obj
                 "lock_file": str(lock_file),
             }
 
-        statuses = build_usb_lcd_statuses(mappings=mappings)
+        statuses = build_usb_lcd_statuses(mappings=mappings, node=node)
     except (OperationalError, ProgrammingError) as exc:
         logger.debug(
             "Skipping USB LCD status refresh: database unavailable", exc_info=True
