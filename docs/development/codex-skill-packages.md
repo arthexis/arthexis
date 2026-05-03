@@ -142,7 +142,7 @@ excluded-file handling. Validation should include:
 ```bash
 python manage.py test run -- apps.skills apps.nodes
 python manage.py check --fail-level ERROR
-python manage.py makemigrations --check --dry-run
+python manage.py migrations check
 python scripts/check_import_resolution.py apps.skills apps.nodes
 git diff --check
 ```
