@@ -204,6 +204,8 @@ def _mapping_connected(mapping: UsbPortMapping, *, node) -> bool:
             .exists()
         )
     if source_type == UsbPortMapping.SourceType.RECORDING_DEVICE:
+        if node is None:
+            return False
         from apps.audio.models import RecordingDevice
 
         queryset = RecordingDevice.objects.filter(
@@ -214,6 +216,8 @@ def _mapping_connected(mapping: UsbPortMapping, *, node) -> bool:
             queryset = queryset.filter(node=node)
         return queryset.exists()
     if source_type == UsbPortMapping.SourceType.VIDEO_DEVICE:
+        if node is None:
+            return False
         from apps.video.models import VideoDevice
 
         queryset = VideoDevice.objects.filter(identifier=identifier)

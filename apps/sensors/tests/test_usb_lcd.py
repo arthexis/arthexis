@@ -86,6 +86,38 @@ def test_build_usb_lcd_statuses_uses_local_mappings_and_default_labels() -> None
     assert [status.connected for status in statuses] == [True, True, True, False]
 
 
+def test_node_scoped_devices_fail_closed_without_local_node(monkeypatch) -> None:
+    monkeypatch.setattr("apps.sensors.usb_lcd._local_node", lambda: None)
+    node = Node.objects.create(hostname="other", public_endpoint="other")
+    RecordingDevice.objects.create(
+        node=node,
+        identifier="1-0",
+        description="USB Microphone",
+        capture_channels=1,
+    )
+    VideoDevice.objects.create(
+        node=node,
+        identifier="opencv:0",
+        name="USB Camera",
+        description="USB camera",
+    )
+    UsbPortMapping.objects.create(
+        port_number=1,
+        source_type=UsbPortMapping.SourceType.RECORDING_DEVICE,
+        source_identifier="1-0",
+    )
+    UsbPortMapping.objects.create(
+        port_number=2,
+        source_type=UsbPortMapping.SourceType.VIDEO_DEVICE,
+        source_identifier="opencv:0",
+    )
+
+    statuses = build_usb_lcd_statuses()
+
+    assert [status.connected for status in statuses[:2]] == [False, False]
+    assert [status.label for status in statuses[:2]] == ["EMPTY", "EMPTY"]
+
+
 def test_write_usb_lcd_status_writes_lock_file(tmp_path: Path) -> None:
     UsbTracker.objects.create(
         name="Bastion drive",
