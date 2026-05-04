@@ -561,6 +561,9 @@ def test_low_channel_filters_routine_host_payloads_but_keeps_host_alerts(
     (lock_dir / "lcd-low-2").write_text(
         "Host\nfailed journal writer\n", encoding="utf-8"
     )
+    (lock_dir / "lcd-low-3").write_text(
+        "Host\nattention: thermal alert\n", encoding="utf-8"
+    )
 
     monkeypatch.setattr(runner.locks, "LOCK_DIR", lock_dir)
 
@@ -571,6 +574,7 @@ def test_low_channel_filters_routine_host_payloads_but_keeps_host_alerts(
 
     assert ("Host", "t66C d51% m42%") not in payloads
     assert ("Host", "failed journal writer") in payloads
+    assert ("Host", "attention: thermal alert") in payloads
 
 
 def test_rotation_order_includes_usb_channel_when_active(monkeypatch):

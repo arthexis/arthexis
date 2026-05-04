@@ -16,7 +16,11 @@ from apps.features.parameters import get_feature_parameter
 from apps.features.utils import is_suite_feature_enabled
 from apps.screens.startup_notifications import render_lcd_lock_file
 
-from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
+from .constants import (
+    LCD_SUMMARY_WINDOW_LABEL,
+    LCD_SUMMARY_WINDOW_MINUTES,
+    LLM_SUMMARY_SUITE_FEATURE_SLUG,
+)
 from .models import LLMSummaryConfig
 
 logger = logging.getLogger(__name__)
@@ -26,7 +30,6 @@ LCD_ROWS = 2
 LCD_SUMMARY_BUFFER_CELLS = LCD_COLUMNS * LCD_ROWS
 LCD_SUMMARY_FRAME_COUNT = 10
 LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
-LCD_SUMMARY_WINDOW_LABEL = "5m"
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -43,7 +46,7 @@ HOST_RESOURCE_BODY_RE = re.compile(
     re.IGNORECASE,
 )
 HOST_ATTENTION_BODY_RE = re.compile(
-    r"\b(?:action|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
+    r"\b(?:action|alert|attention|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
     re.IGNORECASE,
 )
 INLINE_BUFFER_RE = re.compile(r"^[A-Z0-9][A-Z0-9 /&+.\-]{0,15}:.+")
@@ -187,13 +190,13 @@ def compact_log_chunks(chunks: Iterable[LogChunk]) -> str:
 
 
 def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
-    cutoff = (now - timedelta(minutes=5)).strftime("%H:%M")
+    cutoff = (now - timedelta(minutes=LCD_SUMMARY_WINDOW_MINUTES)).strftime("%H:%M")
     instructions = textwrap.dedent(f"""
-        You summarize system logs as 16x2 LCD buffers. Focus on the last 5 minutes (cutoff {cutoff}).
+        You summarize system logs as 16x2 LCD buffers. Focus on the last {LCD_SUMMARY_WINDOW_MINUTES} minutes (cutoff {cutoff}).
         Highlight urgent operator actions or failures. Think in 32 visible cells per screen, not as a document.
         Output 8-10 LCD screens. Each screen is two 16-cell rows.
         Row 1 is the log extract, status phrase, or longer description.
-        Row 2 starts with a compact count such as "12 ln/5m" for log lines or "3x/5m" for repeated events.
+        Row 2 starts with a compact count such as "12 ln/{LCD_SUMMARY_WINDOW_LABEL}" for log lines or "3x/{LCD_SUMMARY_WINDOW_LABEL}" for repeated events.
         Never write "line" or "lines" on row 2; use "ln".
         Use the remaining right-side cells on row 2 for one operator word such as NORMAL, WARNING, ERROR, CHECK, FIX, or WAIT.
         Keep short phrases on one row when they fit; for example, "Journal failed 3" must not be split after "Journal".

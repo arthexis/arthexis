@@ -77,7 +77,7 @@ CHANNEL_BASE_NAMES = {
     "usb": LCD_USB_LOCK_FILE,
 }
 HOST_ATTENTION_BODY_RE = re.compile(
-    r"\b(?:action|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
+    r"\b(?:action|alert|attention|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
     re.IGNORECASE,
 )
 

@@ -12,14 +12,16 @@ from django.apps import apps as django_apps
 from django.db import models
 from django.utils import timezone
 
-from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
+from apps.summary.constants import (
+    LCD_SUMMARY_WINDOW_LABEL,
+    LLM_SUMMARY_CELERY_TASK_NAME,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SLEEP_SECONDS = 30
 DEFAULT_PROMPT_TIMEOUT = 240
 LCD_SUMMARY_COLUMNS = 16
-LCD_SUMMARY_WINDOW_LABEL = "5m"
 SUMMARY_COUNT_METRIC_RE = re.compile(
     r"^(?P<count>\d+)\s*(?P<unit>lines?|lns?|x)\b(?:\s*/\s*\d+\s*[smhd])?",
     re.IGNORECASE,
