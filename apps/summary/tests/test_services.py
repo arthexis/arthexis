@@ -33,7 +33,8 @@ def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
 
     assert "Think in 32 visible cells per screen" in prompt
     assert "Row 1 is the log extract" in prompt
-    assert '"12 ln" for log lines' in prompt
+    assert '"12 ln/5m" for log lines' in prompt
+    assert 'Never write "line" or "lines" on row 2' in prompt
     assert "Shorten words aggressively" in prompt
     assert "Do not emit routine Host screens" in prompt
     assert "LOGS:\nlog line" in prompt
@@ -62,11 +63,15 @@ def test_normalize_screens_flows_header_and_message_across_buffer() -> None:
 
 
 def test_normalize_screens_keeps_log_extract_and_status_on_separate_rows() -> None:
-    frames = services.normalize_screens(
-        [("Journal failed 3", "12 ln      ERROR")]
-    )
+    frames = services.normalize_screens([("Journal failed 3", "12 lines      error")])
 
-    assert frames == [("Journal failed 3", "12 ln      ERROR")]
+    assert frames == [("Journal failed 3", "12 ln/5m   ERROR")]
+
+
+def test_normalize_screens_adds_window_to_repeat_counts() -> None:
+    frames = services.normalize_screens([("refresh usb lcd", "10x       normal")])
+
+    assert frames == [("refresh usb lcd ", "10x/5m    NORMAL")]
 
 
 def test_normalize_screens_preserves_existing_inline_header() -> None:
@@ -95,7 +100,7 @@ def test_deterministic_summary_round_trips_thirty_two_cell_buffer() -> None:
 
     frames = services.normalize_screens(services.parse_screens(output))
 
-    assert frames[0] == ("ABCDEFGHIJKLMNOP", "1 ln       ERROR")
+    assert frames[0] == ("ABCDEFGHIJKLMNOP", "1 ln/5m    ERROR")
     assert len(frames[0][0]) == 16
     assert len(frames[0][1]) == 16
 

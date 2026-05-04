@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -75,6 +76,10 @@ CHANNEL_BASE_NAMES = {
     "stats": LCD_STATS_LOCK_FILE,
     "usb": LCD_USB_LOCK_FILE,
 }
+HOST_ATTENTION_BODY_RE = re.compile(
+    r"\b(?:action|alert|attention|blocked|check|critical|down|err(?:or)?|exception|fail(?:ed|ure)?|fix|offline|panic|warn(?:ing)?)\b",
+    re.IGNORECASE,
+)
 
 
 _SUITE_REACHABILITY_CACHE = {"checked_at": 0.0, "is_up": False}
@@ -89,7 +94,9 @@ def _package_override(name: str, default):
     return getattr(package, name, default)
 
 
-def _channel_lock_entries(lock_dir: Path, base_name: str) -> list[tuple[int, Path, float]]:
+def _channel_lock_entries(
+    lock_dir: Path, base_name: str
+) -> list[tuple[int, Path, float]]:
     entries: list[tuple[int, Path, float]] = []
     if not lock_dir.exists():
         return entries
@@ -153,9 +160,13 @@ def _read_lock_payload(lock_file: Path, *, now: datetime) -> LockPayload | None:
         try:
             lock_file.unlink()
         except OSError:
-            logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
+            logger.debug(
+                "Failed to remove expired lock file: %s", lock_file, exc_info=True
+            )
         return None
-    if payload.expires_at is None and payload.subject.strip().upper().startswith("SIM "):
+    if payload.expires_at is None and payload.subject.strip().upper().startswith(
+        "SIM "
+    ):
         simulator_running = _simulator_running()
         if simulator_running is False:
             try:
@@ -195,10 +206,26 @@ def _load_low_channel_payloads(
         payload = _read_lock_payload(path, now=now)
         if payload is None:
             continue
+        if _is_routine_host_payload(payload):
+            continue
         if num == 0:
             has_base_payload = True
         payloads.append(payload)
     return payloads, has_base_payload
+
+
+def _is_routine_host_payload(payload: LockPayload) -> bool:
+    subject_text = (payload.line1 or "").strip().lower()
+    subject_header, _separator, subject_body = subject_text.partition(":")
+    if subject_header != "host":
+        return False
+
+    body_text = " ".join(
+        part
+        for part in (subject_body.strip(), (payload.line2 or "").strip().lower())
+        if part
+    )
+    return not HOST_ATTENTION_BODY_RE.search(body_text)
 
 
 def _read_lock_file(lock_file: Path) -> LockPayload:
@@ -209,7 +236,9 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
         try:
             lock_file.unlink()
         except OSError:
-            logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
+            logger.debug(
+                "Failed to remove expired lock file: %s", lock_file, exc_info=True
+            )
         return LockPayload("", "", DEFAULT_SCROLL_MS)
     return LockPayload(
         payload.subject,
@@ -273,7 +302,9 @@ def _event_lock_sort_key(path: Path) -> tuple[int, str]:
     return 10**9, name
 
 
-def _parse_event_lock_file(lock_file: Path, now: datetime) -> tuple[EventPayload, datetime]:
+def _parse_event_lock_file(
+    lock_file: Path, now: datetime
+) -> tuple[EventPayload, datetime]:
     try:
         lines = lock_file.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
@@ -349,7 +380,9 @@ def _load_channel_order(lock_dir: Path = LOCK_DIR) -> list[str] | None:
     order: list[str] = []
     for name in requested:
         if name not in CHANNEL_BASE_NAMES:
-            logger.debug("Skipping unknown LCD channel '%s' in channel order lock", name)
+            logger.debug(
+                "Skipping unknown LCD channel '%s' in channel order lock", name
+            )
             continue
         order.append(name)
     return order or None
@@ -423,9 +456,7 @@ def _suite_reachable(
     return is_up
 
 
-def _boot_elapsed_seconds(
-    *, now: datetime | None = None
-) -> int | None:
+def _boot_elapsed_seconds(*, now: datetime | None = None) -> int | None:
     now_value = now or datetime.now(datetime_timezone.utc)
     try:
         boot_time = float(psutil.boot_time())
@@ -440,11 +471,15 @@ def _boot_elapsed_seconds(
     return seconds if seconds >= 0 else None
 
 
-def _on_seconds(base_dir: Path = BASE_DIR, *, now: datetime | None = None) -> int | None:
+def _on_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
     now_value = now or datetime.now(datetime_timezone.utc)
     suite_reachable = _package_override("_suite_reachable", _suite_reachable)
     boot_elapsed = _package_override("_boot_elapsed_seconds", _boot_elapsed_seconds)
-    availability_seconds = _package_override("_availability_seconds", _availability_seconds)
+    availability_seconds = _package_override(
+        "_availability_seconds", _availability_seconds
+    )
 
     is_up = suite_reachable(base_dir)
     elapsed_seconds = boot_elapsed(now=now_value)
@@ -556,7 +591,10 @@ def _install_date(
 
 
 def _down_seconds(
-    uptime_seconds: int | None, base_dir: Path = BASE_DIR, *, now: datetime | None = None
+    uptime_seconds: int | None,
+    base_dir: Path = BASE_DIR,
+    *,
+    now: datetime | None = None,
 ) -> int | None:
     if uptime_seconds is None:
         return None
