@@ -26,6 +26,7 @@ LCD_ROWS = 2
 LCD_SUMMARY_BUFFER_CELLS = LCD_COLUMNS * LCD_ROWS
 LCD_SUMMARY_FRAME_COUNT = 10
 LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
+LCD_SUMMARY_WINDOW_LABEL = "5m"
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -46,6 +47,10 @@ HOST_ATTENTION_BODY_RE = re.compile(
     re.IGNORECASE,
 )
 INLINE_BUFFER_RE = re.compile(r"^[A-Z0-9][A-Z0-9 /&+.\-]{0,15}:.+")
+SUMMARY_STATUS_COUNT_RE = re.compile(
+    r"^(?P<count>\d+)\s*(?P<unit>lines?|lns?|x)\b(?:\s*/\s*\d+\s*[smhd])?(?P<rest>.*)$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -182,13 +187,14 @@ def compact_log_chunks(chunks: Iterable[LogChunk]) -> str:
 
 
 def build_summary_prompt(compacted_logs: str, *, now: datetime) -> str:
-    cutoff = (now - timedelta(minutes=4)).strftime("%H:%M")
+    cutoff = (now - timedelta(minutes=5)).strftime("%H:%M")
     instructions = textwrap.dedent(f"""
-        You summarize system logs as 16x2 LCD buffers. Focus on the last 4 minutes (cutoff {cutoff}).
+        You summarize system logs as 16x2 LCD buffers. Focus on the last 5 minutes (cutoff {cutoff}).
         Highlight urgent operator actions or failures. Think in 32 visible cells per screen, not as a document.
         Output 8-10 LCD screens. Each screen is two 16-cell rows.
         Row 1 is the log extract, status phrase, or longer description.
-        Row 2 starts with a compact count such as "12 ln" for log lines or "3x" for repeated events.
+        Row 2 starts with a compact count such as "12 ln/5m" for log lines or "3x/5m" for repeated events.
+        Never write "line" or "lines" on row 2; use "ln".
         Use the remaining right-side cells on row 2 for one operator word such as NORMAL, WARNING, ERROR, CHECK, FIX, or WAIT.
         Keep short phrases on one row when they fit; for example, "Journal failed 3" must not be split after "Journal".
         Shorten words aggressively, drop grammar when helpful, and use abbreviations, symbols, arrows, or LCD-friendly drawing characters when they compress meaning.
@@ -268,9 +274,44 @@ def _normalize_lcd_text(text: str, *, collapse_whitespace: bool = True) -> str:
     return normalized.strip()
 
 
+def normalize_summary_status_row(row: str) -> str:
+    """Return a normalized LCD summary status row when it starts with a count."""
+
+    raw = _normalize_lcd_text(row, collapse_whitespace=False)
+    text = _normalize_lcd_text(row)
+    match = SUMMARY_STATUS_COUNT_RE.match(text)
+    if not match:
+        return raw
+
+    count = match.group("count")
+    unit = match.group("unit").lower()
+    metric = (
+        f"{count}x/{LCD_SUMMARY_WINDOW_LABEL}"
+        if unit == "x"
+        else f"{count} ln/{LCD_SUMMARY_WINDOW_LABEL}"
+    )
+    evaluation = _normalize_lcd_text(match.group("rest")).upper()
+    return _format_summary_status_row(metric, evaluation)
+
+
+def _format_summary_status_row(metric: str, evaluation: str) -> str:
+    left = _normalize_lcd_text(metric)
+    right = _normalize_lcd_text(evaluation).upper()
+    if not left:
+        return right[:LCD_COLUMNS]
+    if not right:
+        return left[:LCD_COLUMNS]
+    if len(left) + len(right) == LCD_COLUMNS:
+        return f"{left}{right}"
+    if len(left) + len(right) > LCD_COLUMNS:
+        return f"{left} {right}"[:LCD_COLUMNS]
+    return f"{left}{' ' * (LCD_COLUMNS - len(left) - len(right))}{right}"
+
+
 def _normalize_summary_buffer(subject: str, body: str) -> tuple[str, str]:
     subject_text = _normalize_lcd_text(subject)
     body_text = _normalize_lcd_text(body, collapse_whitespace=False)
+    body_text = normalize_summary_status_row(body_text)
     if body_text:
         return (
             subject_text[:LCD_COLUMNS].ljust(LCD_COLUMNS),

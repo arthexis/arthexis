@@ -276,7 +276,9 @@ def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
     coordinator.scroll_scheduler = FakeScheduler()
     coordinator.frame_writer = FakeWriter(object())
     coordinator.lcd = object()
-    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25, steps1=2, steps2=2)
+    coordinator.event.display_state = SimpleNamespace(
+        scroll_sec=0.25, steps1=2, steps2=2
+    )
 
     shutdown_calls: list[object] = []
     monkeypatch.setattr(
@@ -346,7 +348,9 @@ def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch)
     monkeypatch.setattr(
         runner,
         "_select_low_payload",
-        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+        lambda *args, **kwargs: runner.locks.LockPayload(
+            "LO BASE", "", 0, is_base=True
+        ),
     )
 
     high_cycle = runner.ChannelCycle(
@@ -366,7 +370,9 @@ def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch)
     channel_text = {"high": True, "low": False}
 
     seen = [
-        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        coordinator.payload_for_state(
+            ("high", "low"), slot, channel_info, channel_text, now_dt
+        ).line1
         for slot in (0, 1, 0, 1, 0, 1, 0)
     ]
 
@@ -380,7 +386,9 @@ def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch)
     high_cycle.index = 1
 
     churn_seen = [
-        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        coordinator.payload_for_state(
+            ("high", "low"), slot, channel_info, channel_text, now_dt
+        ).line1
         for slot in (0, 1, 0, 1)
     ]
 
@@ -396,7 +404,9 @@ def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
     monkeypatch.setattr(
         runner,
         "_select_low_payload",
-        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+        lambda *args, **kwargs: runner.locks.LockPayload(
+            "LO BASE", "", 0, is_base=True
+        ),
     )
 
     high_cycle = runner.ChannelCycle(
@@ -440,7 +450,9 @@ def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeyp
     monkeypatch.setattr(
         runner,
         "_select_low_payload",
-        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+        lambda *args, **kwargs: runner.locks.LockPayload(
+            "LO BASE", "", 0, is_base=True
+        ),
     )
 
     high_cycle = runner.ChannelCycle(
@@ -472,7 +484,7 @@ def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeyp
     assert coordinator.high_repeat_count == 0
 
 
-def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
+def test_rotation_order_appends_summary_channel_once_when_active(monkeypatch):
     coordinator = runner.LCDRunner()
 
     monkeypatch.setattr(runner.locks, "_load_channel_order", lambda lock_dir: None)
@@ -501,14 +513,64 @@ def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
 
     assert coordinator.rotation.order == (
         "high",
-        "summary",
         "low",
-        "summary",
         "stats",
-        "summary",
         "clock",
         "summary",
     )
+
+
+def test_low_channel_keeps_generated_base_with_lock_payloads(monkeypatch, tmp_path):
+    now_dt = datetime(2026, 5, 4, tzinfo=timezone.utc)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "lcd-low").write_text("Status\n0 failed units\n", encoding="utf-8")
+
+    monkeypatch.setattr(runner.locks, "LOCK_DIR", lock_dir)
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload(
+            "UP 0d1h1m", "ON 1m1s 88.2F", 0, is_base=True
+        ),
+    )
+
+    channel_info, channel_text = runner._load_channel_states({}, now_dt)
+    payload = runner.LCDRunner().payload_for_state(
+        ("low",),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert channel_info["low"].payloads[0].is_base is True
+    assert channel_info["low"].payloads[1].line1 == "Status"
+    assert payload.line1 == "UP 0d1h1m"
+    assert payload.line2 == "ON 1m1s 88.2F"
+
+
+def test_low_channel_filters_routine_host_payloads_but_keeps_host_alerts(
+    monkeypatch, tmp_path
+):
+    now_dt = datetime(2026, 5, 4, tzinfo=timezone.utc)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "lcd-low").write_text("Status\n0 failed units\n", encoding="utf-8")
+    (lock_dir / "lcd-low-1").write_text("Host\nt66C d51% m42%\n", encoding="utf-8")
+    (lock_dir / "lcd-low-2").write_text(
+        "Host\nfailed journal writer\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(runner.locks, "LOCK_DIR", lock_dir)
+
+    channel_info, _channel_text = runner._load_channel_states({}, now_dt)
+    payloads = [
+        (payload.line1, payload.line2) for payload in channel_info["low"].payloads
+    ]
+
+    assert ("Host", "t66C d51% m42%") not in payloads
+    assert ("Host", "failed journal writer") in payloads
 
 
 def test_rotation_order_includes_usb_channel_when_active(monkeypatch):

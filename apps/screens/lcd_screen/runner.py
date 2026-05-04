@@ -47,7 +47,9 @@ ROTATION_SECONDS = 10
 EVENT_LINE_SCROLL_SECONDS = 10
 EVENT_STATIC_REFRESH_SECONDS = 2.0
 BASE_RELIEF_BLOCKED_CYCLES = 3
-BASE_RELIEF_LONG_EXPIRY = timedelta(seconds=ROTATION_SECONDS * BASE_RELIEF_BLOCKED_CYCLES)
+BASE_RELIEF_LONG_EXPIRY = timedelta(
+    seconds=ROTATION_SECONDS * BASE_RELIEF_BLOCKED_CYCLES
+)
 
 _SHUTDOWN_REQUESTED = False
 _EVENT_INTERRUPT_REQUESTED = False
@@ -112,7 +114,9 @@ class LCDRunner:
     """Coordinate LCD startup, event handling, rotation, and shutdown."""
 
     history_recorder: LCDHistoryRecorder = field(
-        default_factory=lambda: LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="work")
+        default_factory=lambda: LCDHistoryRecorder(
+            base_dir=BASE_DIR, history_dir_name="work"
+        )
     )
     scroll_scheduler: ScrollScheduler = field(default_factory=ScrollScheduler)
     health: LCDHealthMonitor = field(default_factory=LCDHealthMonitor)
@@ -126,7 +130,9 @@ class LCDRunner:
     relief_states: dict[str, ChannelReliefState] = field(default_factory=dict)
     cycle_prefetch_future: Future[PrefetchedCycle] | None = None
     cycle_prefetch_executor: ThreadPoolExecutor = field(
-        default_factory=lambda: ThreadPoolExecutor(max_workers=1, thread_name_prefix="lcd-cycle")
+        default_factory=lambda: ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="lcd-cycle"
+        )
     )
     cycle_state_lock: threading.Lock = field(default_factory=threading.Lock)
     high_repeat_signature: tuple[tuple[int, float], ...] | None = None
@@ -161,7 +167,9 @@ class LCDRunner:
 
         try:
             self.lcd = _initialize_lcd()
-            self.frame_writer = LCDFrameWriter(self.lcd, history_recorder=self.history_recorder)
+            self.frame_writer = LCDFrameWriter(
+                self.lcd, history_recorder=self.history_recorder
+            )
             self.health.record_success()
         except LCDUnavailableError as exc:
             self.disable_lcd("LCD unavailable during startup", exc)
@@ -174,7 +182,9 @@ class LCDRunner:
         if self.lcd is not None:
             return
         self.lcd = _initialize_lcd()
-        self.frame_writer = LCDFrameWriter(self.lcd, history_recorder=self.history_recorder)
+        self.frame_writer = LCDFrameWriter(
+            self.lcd, history_recorder=self.history_recorder
+        )
         self.health.record_success()
 
     def setup(self) -> None:
@@ -287,8 +297,15 @@ class LCDRunner:
                 now=now_dt,
             )
             if payload and _payload_has_text(payload):
-                refreshed = _refresh_uptime_payload(payload, base_dir=BASE_DIR, now=now_dt)
-                return self.apply_relief_if_needed("low", refreshed, base_payload, now_dt)
+                refreshed = _refresh_uptime_payload(
+                    payload, base_dir=BASE_DIR, now=now_dt
+                )
+                return self.apply_relief_if_needed(
+                    "low", refreshed, base_payload, now_dt
+                )
+            if payload and payload.is_base:
+                self.reset_relief_state("low")
+                return base_payload
             high_state = channel_info.get("high")
             if "high" in state_order and high_state and len(high_state.payloads) >= 2:
                 high_payload = _high_payload(high_state)
@@ -300,15 +317,21 @@ class LCDRunner:
         if state_label == "clock":
             if channel_state and channel_text[state_label]:
                 payload = _peek_payload(channel_state)
-                base_payload = _clock_base_payload(now_dt, use_fahrenheit=self.rotation.clock_cycle % 2 == 0)
-                resolved = self.apply_relief_if_needed("clock", payload, base_payload, now_dt)
+                base_payload = _clock_base_payload(
+                    now_dt, use_fahrenheit=self.rotation.clock_cycle % 2 == 0
+                )
+                resolved = self.apply_relief_if_needed(
+                    "clock", payload, base_payload, now_dt
+                )
                 if advance and resolved.is_base:
                     self.rotation.clock_cycle += 1
                 return resolved
             if _lcd_clock_enabled():
                 self.reset_relief_state("clock")
                 use_fahrenheit = self.rotation.clock_cycle % 2 == 0
-                base_payload = _clock_base_payload(now_dt, use_fahrenheit=use_fahrenheit)
+                base_payload = _clock_base_payload(
+                    now_dt, use_fahrenheit=use_fahrenheit
+                )
                 if advance:
                     self.rotation.clock_cycle += 1
                 return base_payload
@@ -331,7 +354,9 @@ class LCDRunner:
                 )
             if stats_payload and _payload_has_text(stats_payload):
                 base_payload = _stats_payload()
-                return self.apply_relief_if_needed("stats", stats_payload, base_payload, now_dt)
+                return self.apply_relief_if_needed(
+                    "stats", stats_payload, base_payload, now_dt
+                )
             self.reset_relief_state("stats")
             return _stats_payload()
         return locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
@@ -359,8 +384,12 @@ class LCDRunner:
                     advance=False,
                 )
             _warn_on_non_ascii_payload(payload, order[index])
-            prepared_state = _prepare_display_state(payload.line1, payload.line2, payload.scroll_ms)
-            return PrefetchedCycle(order=order, index=index, display_state=prepared_state)
+            prepared_state = _prepare_display_state(
+                payload.line1, payload.line2, payload.scroll_ms
+            )
+            return PrefetchedCycle(
+                order=order, index=index, display_state=prepared_state
+            )
 
         self.cycle_prefetch_future = self.cycle_prefetch_executor.submit(_prefetch)
 
@@ -384,13 +413,10 @@ class LCDRunner:
                 return True
             return False
 
-        def _interleave_summary(normal_order: tuple[str, ...]) -> tuple[str, ...]:
+        def _append_summary(normal_order: tuple[str, ...]) -> tuple[str, ...]:
             if not normal_order:
                 return ("summary",)
-            interleaved: list[str] = []
-            for label in normal_order:
-                interleaved.extend((label, "summary"))
-            return tuple(interleaved)
+            return (*normal_order, "summary")
 
         previous_order = self.rotation.order
         if configured_order:
@@ -418,7 +444,7 @@ class LCDRunner:
                     ("low", *utility_order) if low_available else utility_order
                 )
             self.rotation.order = (
-                _interleave_summary(normal_order) if summary_available else normal_order
+                _append_summary(normal_order) if summary_available else normal_order
             )
 
         if previous_order and 0 <= self.rotation.index < len(previous_order):
@@ -512,7 +538,9 @@ class LCDRunner:
             self.event.payload.scroll_ms,
         )
         self.event.line_deadline = (
-            now + EVENT_LINE_SCROLL_SECONDS if len(self.event.payload.lines) > 2 else 0.0
+            now + EVENT_LINE_SCROLL_SECONDS
+            if len(self.event.payload.lines) > 2
+            else 0.0
         )
         self.event.refresh_deadline = 0.0
 
@@ -533,7 +561,9 @@ class LCDRunner:
                 or refresh_now >= self.event.refresh_deadline
             )
         ):
-            display_state = display_state._replace(last_segment1=None, last_segment2=None)
+            display_state = display_state._replace(
+                last_segment1=None, last_segment2=None
+            )
             self.event.refresh_deadline = refresh_now + EVENT_STATIC_REFRESH_SECONDS
         self.event.display_state, write_success, shutdown_triggered = _advance_display(
             display_state,
@@ -571,7 +601,9 @@ class LCDRunner:
                 channel_text,
                 now_dt,
             )
-        _warn_on_non_ascii_payload(current_payload, self.rotation.order[self.rotation.index])
+        _warn_on_non_ascii_payload(
+            current_payload, self.rotation.order[self.rotation.index]
+        )
         self.rotation.display_state = _prepare_display_state(
             current_payload.line1,
             current_payload.line2,
@@ -612,20 +644,28 @@ class LCDRunner:
         self.ensure_lcd()
         self.scroll_scheduler.sleep_until_ready()
         frame_timestamp = datetime.now(datetime_timezone.utc)
-        label = self.rotation.order[self.rotation.index] if self.rotation.order else None
-        self.rotation.display_state, write_success, shutdown_triggered = _advance_display(
-            self.rotation.display_state,
-            self.frame_writer,
-            shutdown_requested=_shutdown_requested,
-            label=label,
-            timestamp=frame_timestamp,
+        label = (
+            self.rotation.order[self.rotation.index] if self.rotation.order else None
+        )
+        self.rotation.display_state, write_success, shutdown_triggered = (
+            _advance_display(
+                self.rotation.display_state,
+                self.frame_writer,
+                shutdown_requested=_shutdown_requested,
+                label=label,
+                timestamp=frame_timestamp,
+            )
         )
         if shutdown_triggered:
             _handle_shutdown_request(self.lcd)
             raise StopIteration
         self.record_health(write_success, "LCD write failed during rotation display")
         self.scroll_scheduler.advance(
-            (self.rotation.display_state.scroll_sec if self.rotation.display_state else 0)
+            (
+                self.rotation.display_state.scroll_sec
+                if self.rotation.display_state
+                else 0
+            )
             or DEFAULT_FALLBACK_SCROLL_SEC
         )
 
@@ -673,7 +713,9 @@ class LCDRunner:
                         channel_text,
                         now_dt,
                     )
-                _warn_on_non_ascii_payload(next_payload, self.rotation.order[next_index])
+                _warn_on_non_ascii_payload(
+                    next_payload, self.rotation.order[next_index]
+                )
                 self.rotation.next_display_state = _prepare_display_state(
                     next_payload.line1,
                     next_payload.line2,
@@ -767,7 +809,9 @@ def _reset_shutdown_flag() -> None:
     _SHUTDOWN_REQUESTED = False
 
 
-def _request_event_interrupt(signum, frame) -> None:  # pragma: no cover - signal handler
+def _request_event_interrupt(
+    signum, frame
+) -> None:  # pragma: no cover - signal handler
     """Interrupt the LCD cycle to show event lock files immediately."""
 
     global _EVENT_INTERRUPT_REQUESTED
@@ -857,20 +901,32 @@ def _load_channel_states(
         signature = tuple((num, mtime) for num, _, mtime in entries)
         payloads: list[locks.LockPayload] = []
         if label == "low":
-            payloads, has_base_payload = locks._load_low_channel_payloads(entries, now=now_dt)
-            if not has_base_payload:
-                payloads.insert(0, locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS))
-                signature = ((0, -1.0),) + signature
+            payloads, _has_base_payload = locks._load_low_channel_payloads(
+                entries, now=now_dt
+            )
+            payloads.insert(
+                0,
+                locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS, is_base=True),
+            )
+            signature = ((-1, -1.0),) + signature
         else:
             payloads = locks._load_channel_payloads(entries, now=now_dt)
-        if existing is None or existing.signature != signature or payloads != existing.payloads:
+        if (
+            existing is None
+            or existing.signature != signature
+            or payloads != existing.payloads
+        ):
             next_index = 0
             if existing and payloads:
                 next_index = existing.index % len(payloads)
-            existing = ChannelCycle(payloads=payloads, signature=signature, index=next_index)
+            existing = ChannelCycle(
+                payloads=payloads, signature=signature, index=next_index
+            )
         current_states[label] = existing
         channel_info[label] = existing
-        channel_text[label] = any(_payload_has_text(payload) for payload in existing.payloads)
+        channel_text[label] = any(
+            _payload_has_text(payload) for payload in existing.payloads
+        )
     return channel_info, channel_text
 
 
@@ -890,7 +946,9 @@ def _load_next_event(
             try:
                 candidate.unlink()
             except OSError:
-                logger.debug("Failed to remove expired event lock: %s", candidate, exc_info=True)
+                logger.debug(
+                    "Failed to remove expired event lock: %s", candidate, exc_info=True
+                )
             continue
         return payload, expires_at, candidate
     return None, None, None

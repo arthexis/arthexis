@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_SLEEP_SECONDS = 30
 DEFAULT_PROMPT_TIMEOUT = 240
 LCD_SUMMARY_COLUMNS = 16
+LCD_SUMMARY_WINDOW_LABEL = "5m"
+SUMMARY_COUNT_METRIC_RE = re.compile(
+    r"^(?P<count>\d+)\s*(?P<unit>lines?|lns?|x)\b(?:\s*/\s*\d+\s*[smhd])?",
+    re.IGNORECASE,
+)
 
 
 @shared_task
@@ -260,8 +265,12 @@ class LocalLLMSummarizer:
             for idx, line in enumerate(event_lines)
             if (severity := _summary_severity(line)) != "OK"
         ]
-        error_lines = [line for _, line, severity in attention_events if severity == "ERR"]
-        warn_lines = [line for _, line, severity in attention_events if severity == "WRN"]
+        error_lines = [
+            line for _, line, severity in attention_events if severity == "ERR"
+        ]
+        warn_lines = [
+            line for _, line, severity in attention_events if severity == "WRN"
+        ]
         task_counts: dict[str, int] = {}
         source_counts: dict[str, int] = {}
 
@@ -298,9 +307,11 @@ class LocalLLMSummarizer:
                 )
             )
 
-        detail_events = [
-            event for event in attention_events if event[0] != headline_idx
-        ][-3:] if attention_events else []
+        detail_events = (
+            [event for event in attention_events if event[0] != headline_idx][-3:]
+            if attention_events
+            else []
+        )
         for _idx, line, severity in detail_events:
             screens.append(
                 (
@@ -412,7 +423,7 @@ def _summary_compact_line(line: str) -> str:
 
 
 def _summary_status_line(metric: str, evaluation: str) -> str:
-    left = re.sub(r"\s+", " ", str(metric or "")).strip()
+    left = _summary_metric_text(metric)
     right = re.sub(r"\s+", " ", str(evaluation or "")).strip().upper()
     if not left:
         return right[:LCD_SUMMARY_COLUMNS]
@@ -425,10 +436,21 @@ def _summary_status_line(metric: str, evaluation: str) -> str:
     return f"{left}{' ' * (LCD_SUMMARY_COLUMNS - len(left) - len(right))}{right}"
 
 
+def _summary_metric_text(metric: str) -> str:
+    left = re.sub(r"\s+", " ", str(metric or "")).strip()
+    match = SUMMARY_COUNT_METRIC_RE.match(left)
+    if not match:
+        return left
+
+    count = match.group("count")
+    unit = match.group("unit").lower()
+    if unit == "x":
+        return f"{count}x/{LCD_SUMMARY_WINDOW_LABEL}"
+    return f"{count} ln/{LCD_SUMMARY_WINDOW_LABEL}"
+
+
 def _summary_lcd_line(text: str, *, collapse_whitespace: bool = True) -> str:
-    normalized = "".join(
-        ch if 32 <= ord(ch) < 127 else " " for ch in str(text or "")
-    )
+    normalized = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(text or ""))
     if collapse_whitespace:
         normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()[:LCD_SUMMARY_COLUMNS]
