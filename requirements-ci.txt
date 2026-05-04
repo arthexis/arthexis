@@ -87,7 +87,7 @@ trio==0.31.0
 twine==6.1.0
 Twisted==25.5.0
 txaio==25.9.2
-types-requests==2.33.0.20260408
+types-requests==2.33.0.20260503
 typing_extensions==4.15.0
 urllib3~=2.6.3
 weasyprint==68.1
