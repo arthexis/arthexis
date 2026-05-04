@@ -51,7 +51,7 @@ mkdocs==1.6.1
 opencv-python==4.13.0.92
 packaging==26.2
 pillow==12.2.0
-playwright==1.58.0
+playwright==1.59.0
 plyer==2.1.0; sys_platform == "win32"
 prompt_toolkit==3.0.52
 psutil==7.2.2
