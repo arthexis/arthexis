@@ -71,7 +71,7 @@ python-dotenv==1.2.2
 PyYAML==6.0.3
 qrcode==8.2
 redis==7.4.0
-reportlab==4.4.10
+reportlab==4.5.0
 requests==2.33.1
 ruff==0.15.11
 selenium==4.43.0
