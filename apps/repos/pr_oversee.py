@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -50,6 +51,57 @@ PENDING_CHECKS = {
 BAD_MERGE_STATES = {"BEHIND", "BLOCKED", "DIRTY", "UNKNOWN"}
 README_RE = re.compile(r"(^|/)(README|README\.[^/]+)$", re.IGNORECASE)
 VERSION_SUFFIX_SEPARATORS = "-_/"
+PATCHWORK_ENV_VAR = "ARTHEXIS_PATCHWORK_DIR"
+PATCHWORK_METADATA = ".arthexis-pr-oversee.json"
+PATCHWORK_OWNED_NOISE = {PATCHWORK_METADATA, ".venv"}
+
+
+def default_patchwork_dir() -> Path:
+    """Return the default directory for temporary PR worktrees."""
+
+    configured = os.environ.get(PATCHWORK_ENV_VAR, "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / "patchwork"
+
+
+def _slugify_path_segment(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    return slug.strip("-") or "repo"
+
+
+def patchwork_worktree_path(root: Path, repo: str, number: int) -> Path:
+    """Return the deterministic patchwork worktree path for a PR."""
+
+    return root.expanduser() / f"{_slugify_path_segment(repo)}-pr-{number}"
+
+
+def _path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _status_path(line: str) -> str:
+    if len(line) < 4:
+        return ""
+    value = line[3:].strip()
+    if " -> " in value:
+        return ""
+    return value.rstrip("/")
+
+
+def _status_is_patchwork_noise(lines: Iterable[str]) -> bool:
+    paths = [_status_path(line) for line in lines if line.strip()]
+    if not paths:
+        return True
+    return all(
+        path in PATCHWORK_OWNED_NOISE
+        or any(path.startswith(f"{noise}/") for noise in PATCHWORK_OWNED_NOISE)
+        for path in paths
+    )
 
 
 class PullRequestOverseeError(RuntimeError):
@@ -544,6 +596,37 @@ class PullRequestOverseer:
         )
         return [_coerce_mapping(item) for item in _coerce_list(payload)]
 
+    def pull_request_state_lookup(self, numbers: Iterable[int]) -> dict[int, str]:
+        """Return PR states for a set of PR numbers using a batched list call."""
+
+        wanted = sorted({number for number in numbers if number})
+        if not wanted:
+            return {}
+        payload = self.gh_json(
+            [
+                "pr",
+                "list",
+                "--repo",
+                self.repo,
+                "--state",
+                "all",
+                "--limit",
+                str(max(100, len(wanted))),
+                "--json",
+                "number,state",
+            ]
+        )
+        lookup: dict[int, str] = {}
+        for item in _coerce_list(payload):
+            row = _coerce_mapping(item)
+            try:
+                number = int(row.get("number") or 0)
+            except (TypeError, ValueError):
+                continue
+            if number in wanted:
+                lookup[number] = str(row.get("state") or "").upper()
+        return lookup
+
     def comments(self, number: int, *, unresolved_only: bool = False) -> dict[str, Any]:
         owner, name = self.repo.split("/", 1)
         query = """
@@ -777,6 +860,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
     ) -> dict[str, Any]:
         if worktree.exists():
             raise PullRequestOverseeError(f"Worktree path already exists: {worktree}")
+        worktree.parent.mkdir(parents=True, exist_ok=True)
         pr = self.pr_view(number)
         remote_ref = f"refs/remotes/origin/pr/{number}"
         self.git(["fetch", "origin", f"pull/{number}/head:{remote_ref}"])
@@ -797,13 +881,72 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "worktree": str(worktree),
         }
         try:
-            (worktree / ".arthexis-pr-oversee.json").write_text(
+            (worktree / PATCHWORK_METADATA).write_text(
                 json.dumps(metadata, indent=2) + "\n",
                 encoding="utf-8",
             )
         except OSError:
             metadata["metadataWriteError"] = True
         return metadata
+
+    def _worktree_status_lines(self, worktree: Path) -> list[str]:
+        result = self.runner.run(
+            [
+                "git",
+                "-C",
+                str(worktree),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
+            cwd=self.cwd,
+            check=False,
+        )
+        if result.returncode != 0:
+            return []
+        return [line for line in result.stdout.splitlines() if line.strip()]
+
+    def _remove_worktree(
+        self,
+        worktree: Path,
+        *,
+        patchwork_root: Path | None = None,
+    ) -> dict[str, Any]:
+        result = self.runner.run(
+            ["git", "worktree", "remove", str(worktree)], cwd=self.cwd, check=False
+        )
+        action: dict[str, Any] = {
+            "action": "remove-worktree",
+            "path": str(worktree),
+            "returncode": result.returncode,
+            "stderr": result.stderr.strip(),
+        }
+        if result.returncode == 0:
+            return action
+
+        metadata_exists = (worktree / PATCHWORK_METADATA).exists()
+        status_lines = self._worktree_status_lines(worktree)
+        can_force = metadata_exists and _status_is_patchwork_noise(status_lines)
+        if patchwork_root is not None:
+            can_force = can_force and _path_is_relative_to(worktree, patchwork_root)
+        if not can_force:
+            action["forced"] = False
+            action["status"] = status_lines
+            return action
+
+        forced = self.runner.run(
+            ["git", "worktree", "remove", "--force", str(worktree)],
+            cwd=self.cwd,
+            check=False,
+        )
+        action.update(
+            {
+                "forced": True,
+                "forceReturncode": forced.returncode,
+                "forceStderr": forced.stderr.strip(),
+            }
+        )
+        return action
 
     def sync_worktree(self, number: int, *, worktree: Path) -> dict[str, Any]:
         """Fetch the current PR head and move an existing worktree to it."""
@@ -885,17 +1028,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             )
         actions: list[dict[str, Any]] = []
         if worktree:
-            result = self.runner.run(
-                ["git", "worktree", "remove", str(worktree)], cwd=self.cwd, check=False
-            )
-            actions.append(
-                {
-                    "action": "remove-worktree",
-                    "path": str(worktree),
-                    "returncode": result.returncode,
-                    "stderr": result.stderr.strip(),
-                }
-            )
+            actions.append(self._remove_worktree(worktree))
         base_branch = str(pr.get("baseRefName") or "main")
         self.git(["fetch", "origin", base_branch, "--prune"])
         actions.append(
@@ -916,6 +1049,115 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 }
             )
         return {"number": number, "state": state, "actions": actions}
+
+    def patchwork_hygiene(
+        self,
+        *,
+        root: Path | None = None,
+        max_age_days: float = 14.0,
+        write: bool = False,
+        force_stale_open: bool = False,
+    ) -> dict[str, Any]:
+        """Report and optionally prune monitor-owned patchwork worktrees."""
+
+        if max_age_days < 0:
+            raise PullRequestOverseeError("max_age_days must be zero or positive")
+        patchwork_root = (root or default_patchwork_dir()).expanduser()
+        if not patchwork_root.exists():
+            return {
+                "root": str(patchwork_root),
+                "exists": False,
+                "maxAgeDays": max_age_days,
+                "write": write,
+                "items": [],
+                "pruned": [],
+            }
+
+        items: list[dict[str, Any]] = []
+        pruned: list[dict[str, Any]] = []
+        pending_items: list[dict[str, Any]] = []
+        state_numbers: list[int] = []
+        now = time.time()
+        for metadata_path in sorted(patchwork_root.glob(f"*/{PATCHWORK_METADATA}")):
+            worktree = metadata_path.parent
+            try:
+                metadata = _coerce_mapping(json.loads(metadata_path.read_text()))
+            except (OSError, json.JSONDecodeError):
+                metadata = {}
+            repo = str(metadata.get("repo") or "")
+            raw_number = metadata.get("number") or 0
+            invalid_number = False
+            try:
+                number = int(raw_number)
+            except (TypeError, ValueError):
+                number = 0
+                invalid_number = True
+            age_days = max(0.0, (now - metadata_path.stat().st_mtime) / 86400)
+            reason = ""
+            if repo and repo != self.repo:
+                reason = "foreign-repo"
+            elif invalid_number:
+                reason = "invalid-pr-number"
+            elif not number:
+                reason = "missing-pr-number"
+            elif number:
+                state_numbers.append(number)
+            pending_items.append(
+                {
+                    "worktree": worktree,
+                    "repo": repo,
+                    "number": number,
+                    "ageDays": age_days,
+                    "reason": reason,
+                }
+            )
+
+        state_lookup = self.pull_request_state_lookup(state_numbers)
+        for pending in pending_items:
+            worktree = pending["worktree"]
+            repo = str(pending["repo"])
+            number = int(pending["number"] or 0)
+            age_days = float(pending["ageDays"])
+            reason = str(pending["reason"])
+            state = ""
+            if number and not reason:
+                state = state_lookup.get(number, "")
+                if not state:
+                    try:
+                        state = str(self.pr_view(number).get("state") or "").upper()
+                    except PullRequestOverseeError as exc:
+                        reason = f"pr-state-error:{exc}"
+
+            stale = age_days >= max_age_days
+            candidate = state in {"MERGED", "CLOSED"} or (
+                force_stale_open and stale and not reason
+            )
+            if not reason and not candidate:
+                reason = "active-or-recent"
+            item = {
+                "worktree": str(worktree),
+                "repo": repo,
+                "number": number,
+                "state": state,
+                "ageDays": round(age_days, 2),
+                "stale": stale,
+                "candidate": candidate,
+                "reason": "prune" if candidate else reason,
+            }
+            if write and candidate:
+                item["remove"] = self._remove_worktree(
+                    worktree, patchwork_root=patchwork_root
+                )
+                pruned.append(item)
+            items.append(item)
+        return {
+            "root": str(patchwork_root),
+            "exists": True,
+            "maxAgeDays": max_age_days,
+            "write": write,
+            "items": items,
+            "pruned": pruned,
+        }
 
     def hygiene(self, number: int) -> dict[str, Any]:
         return hygiene_report(self.pr_view(number), self.changed_files(number))
@@ -1012,7 +1254,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 )
                 synced_worktree_head = head_sha
 
-            if run_test_plan:
+            if run_test_plan and state != "MERGED":
                 validation_cwd = worktree if worktree else self.cwd
                 validation_head = head_sha or f"iteration-{iteration}"
                 validation_key = f"{validation_head}:{validation_cwd}"
