@@ -118,6 +118,44 @@ class Command(BaseCommand):
         )
         self._add_pr_arg(hygiene_parser)
 
+        monitor_parser = subparsers.add_parser(
+            "monitor",
+            help="Run the PR oversight workflow until completion or manual decision.",
+        )
+        self._add_pr_arg(monitor_parser)
+        monitor_parser.add_argument("--interval", type=float, default=30.0)
+        monitor_parser.add_argument("--max-iterations", type=int, default=120)
+        monitor_parser.add_argument("--timeout", type=float, default=0.0)
+        monitor_parser.add_argument("--require-approval", action="store_true")
+        monitor_parser.add_argument("--allow-pending", action="store_true")
+        monitor_parser.add_argument("--include-logs", action="store_true")
+        monitor_parser.add_argument("--run-test-plan", action="store_true")
+        monitor_parser.add_argument("--dependency-limit", type=int, default=80)
+        monitor_parser.add_argument(
+            "--worktree", default="", help="Optional PR worktree path."
+        )
+        monitor_parser.add_argument(
+            "--branch", default="", help="Optional local branch for checkout."
+        )
+        monitor_parser.add_argument(
+            "--merge", action="store_true", help="Merge when the PR is ready."
+        )
+        monitor_parser.add_argument(
+            "--cleanup", action="store_true", help="Clean local artifacts after merge."
+        )
+        monitor_parser.add_argument(
+            "--method", choices=["squash", "merge", "rebase"], default="squash"
+        )
+        monitor_parser.add_argument("--delete-branch", action="store_true")
+        monitor_parser.add_argument("--delete-local-branch", default="")
+        monitor_parser.add_argument("--expected-head-sha", default="")
+        monitor_parser.add_argument("--admin", action="store_true")
+        monitor_parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Required for monitor merge and cleanup actions.",
+        )
+
     def handle(self, *args, **options) -> None:
         repo = self._resolve_repository(str(options.get("repo") or ""))
         overseer = PullRequestOverseer(repo=repo)
@@ -136,6 +174,11 @@ class Command(BaseCommand):
         if action == "hygiene" and not result.get("ok"):
             raise CommandError(
                 "PR hygiene failed: " + ", ".join(result.get("failures") or [])
+            )
+        if action == "monitor" and result.get("manualDecisionRequired"):
+            raise CommandError(
+                "manual decision required: "
+                + ", ".join(result.get("manualDecisionReasons") or [])
             )
 
     def _run_action(
@@ -216,6 +259,33 @@ class Command(BaseCommand):
             )
         if action == "hygiene":
             return overseer.hygiene(number)
+        if action == "monitor":
+            worktree = (
+                Path(str(options["worktree"])).expanduser()
+                if str(options.get("worktree") or "").strip()
+                else None
+            )
+            return overseer.monitor(
+                number,
+                interval_seconds=float(options.get("interval") or 0.0),
+                max_iterations=int(options.get("max_iterations") or 0),
+                timeout_seconds=float(options.get("timeout") or 0.0),
+                require_approval=bool(options.get("require_approval")),
+                allow_pending=bool(options.get("allow_pending")),
+                include_logs=bool(options.get("include_logs")),
+                run_test_plan=bool(options.get("run_test_plan")),
+                dependency_limit=int(options.get("dependency_limit") or 0),
+                worktree=worktree,
+                branch=str(options.get("branch") or ""),
+                merge=bool(options.get("merge")),
+                cleanup=bool(options.get("cleanup")),
+                method=str(options.get("method") or "squash"),
+                delete_branch=bool(options.get("delete_branch")),
+                delete_local_branch=str(options.get("delete_local_branch") or ""),
+                expected_head_sha=str(options.get("expected_head_sha") or ""),
+                admin=bool(options.get("admin")),
+                write=bool(options.get("write")),
+            )
         raise CommandError(f"Unsupported action: {action}")
 
     def _add_pr_arg(self, parser) -> None:
@@ -260,6 +330,12 @@ class Command(BaseCommand):
                 self.stdout.write(f"failure={failure}")
             for warning in result.get("warnings") or []:
                 self.stdout.write(f"warning={warning}")
+            return
+
+        if "manualDecisionRequired" in result:
+            self.stdout.write(f"monitor={result.get('status')}")
+            for reason in result.get("manualDecisionReasons") or []:
+                self.stdout.write(f"manual={reason}")
             return
 
         self.stdout.write(json.dumps(result, indent=2, sort_keys=True))

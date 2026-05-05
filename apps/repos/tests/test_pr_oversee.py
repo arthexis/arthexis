@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from io import StringIO
 import json
 import sys
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -62,6 +62,32 @@ def _pr_payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def _review_threads_payload(*, unresolved: bool = False):
+    nodes = []
+    if unresolved:
+        nodes.append(
+            {
+                "isResolved": False,
+                "isOutdated": False,
+                "path": "apps/repos/pr_oversee.py",
+                "line": 42,
+                "comments": {"nodes": []},
+            }
+        )
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "nodes": nodes,
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+        }
+    }
 
 
 def test_readiness_gate_reports_blockers_for_review_checks_and_threads():
@@ -441,3 +467,140 @@ def test_management_command_merge_without_write_reports_plan():
         allow_pending=False,
     )
     fake.merge.assert_not_called()
+
+
+def test_monitor_stops_for_manual_review_blocker():
+    runner = FakeRunner(
+        [
+            CommandResult(
+                0,
+                json.dumps(_pr_payload(reviewDecision="CHANGES_REQUESTED")),
+            ),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis",
+        runner=runner,
+        sleep_func=lambda _seconds: None,
+    )
+
+    result = overseer.monitor(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        dependency_limit=0,
+    )
+
+    assert result["status"] == "manual_decision_required"
+    assert result["manualDecisionRequired"] is True
+    assert "gate:review:CHANGES_REQUESTED" in result["manualDecisionReasons"]
+    assert result["iterationCount"] == 1
+
+
+def test_monitor_waits_on_pending_then_merges_and_cleans():
+    pending = _pr_payload(
+        statusCheckRollup=[
+            {"name": "Tests", "status": "IN_PROGRESS", "conclusion": ""}
+        ]
+    )
+    ready = _pr_payload()
+    merged = _pr_payload(state="MERGED")
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(pending)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+            CommandResult(0, json.dumps(ready)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+            CommandResult(0, json.dumps(ready)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "merged"),
+            CommandResult(0, json.dumps(merged)),
+            CommandResult(0, json.dumps(merged)),
+            CommandResult(0, ""),
+        ]
+    )
+    sleeps = []
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis",
+        runner=runner,
+        sleep_func=sleeps.append,
+    )
+
+    result = overseer.monitor(
+        123,
+        interval_seconds=0,
+        max_iterations=2,
+        dependency_limit=0,
+        merge=True,
+        cleanup=True,
+        write=True,
+        delete_branch=True,
+    )
+
+    assert result["status"] == "complete"
+    assert result["complete"] is True
+    assert result["iterationCount"] == 2
+    assert sleeps == [0]
+    assert [action["action"] for action in result["actions"]] == [
+        "merge",
+        "cleanup",
+    ]
+    assert runner.commands[8] == [
+        "gh",
+        "pr",
+        "merge",
+        "123",
+        "--repo",
+        "arthexis/arthexis",
+        "--squash",
+        "--match-head-commit",
+        "head-sha",
+        "--delete-branch",
+    ]
+
+
+def test_management_command_monitor_invokes_overseer_monitor():
+    fake = PullRequestOverseer(repo="arthexis/arthexis")
+    fake.monitor = Mock(
+        return_value={
+            "status": "complete",
+            "complete": True,
+            "manualDecisionRequired": False,
+            "manualDecisionReasons": [],
+        }
+    )
+    buffer = StringIO()
+
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
+        call_command(
+            "pr_oversee",
+            "--repo",
+            "arthexis/arthexis",
+            "--json",
+            "monitor",
+            "--pr",
+            "123",
+            "--interval",
+            "0",
+            "--max-iterations",
+            "1",
+            "--merge",
+            "--write",
+            stdout=buffer,
+        )
+
+    payload = json.loads(buffer.getvalue())
+    assert payload["status"] == "complete"
+    fake.monitor.assert_called_once()
+    _, kwargs = fake.monitor.call_args
+    assert kwargs["interval_seconds"] == 0
+    assert kwargs["max_iterations"] == 1
+    assert kwargs["merge"] is True
+    assert kwargs["write"] is True

@@ -13,6 +13,10 @@ Use `pr_oversee` when PR supervision needs deterministic state, blockers, and lo
 .venv/bin/python manage.py pr_oversee --repo arthexis/arthexis merge --pr 123 --write --method squash --delete-branch
 .venv/bin/python manage.py pr_oversee --repo arthexis/arthexis cleanup --pr 123 --write --worktree ../arthexis-pr-123
 .venv/bin/python manage.py pr_oversee --repo arthexis/arthexis hygiene --pr 123
+.venv/bin/python manage.py pr_oversee --repo arthexis/arthexis --json monitor --pr 123 --interval 30 --max-iterations 120
+.venv/bin/python manage.py pr_oversee --repo arthexis/arthexis --json monitor --pr 123 --merge --cleanup --write --delete-branch
 ```
 
 The command delegates GitHub state and merge operations to `gh`, but normalizes the output into stable JSON. `gate` exits nonzero when a PR is blocked by draft state, merge state, review state, failed or pending checks, or unresolved review threads. `merge` always re-runs the gate immediately before calling `gh pr merge` and passes a head-commit guard to GitHub, and `cleanup` refuses to remove local artifacts unless the PR is already merged.
+
+`monitor` runs the oversight workflow in a controlled loop: inspect, gate, review comments, hygiene, changed-file test plan, CI summary, and dependency duplicate scan. It sleeps only while checks are pending. It stops with `manualDecisionRequired` for review blockers, hygiene failures, failed local validation, missing write permission for requested write actions, or loop limits, and exits nonzero in that state. By default it is read-only; use `--merge --write` to merge a ready PR and add `--cleanup` for post-merge cleanup. Set `--max-iterations 0` or `--timeout 0` to disable those caps.
