@@ -60,10 +60,10 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
         message_id,
         action=ocpp_action,
         log_key=context.log_key,
-        message=(
+        message=str(_(
             "GetConfiguration timed out: charger did not respond"
             " (operation may not be supported)"
-        ),
+        )),
     )
     return ActionCall(
         msg=msg,
