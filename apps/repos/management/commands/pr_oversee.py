@@ -1,0 +1,224 @@
+"""Deterministic GitHub pull-request oversight command."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from django.core.management.base import BaseCommand, CommandError
+
+from apps.release import DEFAULT_PACKAGE
+from apps.repos.github import parse_repository_url, resolve_active_repository
+from apps.repos.pr_oversee import PullRequestOverseeError, PullRequestOverseer
+
+
+class Command(BaseCommand):
+    """Expose deterministic PR oversight operations."""
+
+    help = "Inspect, gate, prepare, validate, merge, and clean up GitHub pull requests."
+
+    def add_arguments(self, parser) -> None:
+        parser.add_argument(
+            "--repo",
+            default="",
+            help=(
+                "Repository slug in owner/name format. Defaults to active package repository "
+                f"or {DEFAULT_PACKAGE.repository_url}."
+            ),
+        )
+        parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+
+        subparsers = parser.add_subparsers(dest="action", required=True)
+
+        inspect_parser = subparsers.add_parser("inspect", help="Return a complete PR state snapshot.")
+        self._add_pr_arg(inspect_parser)
+
+        gate_parser = subparsers.add_parser("gate", help="Fail unless the PR is merge-ready.")
+        self._add_pr_arg(gate_parser)
+        gate_parser.add_argument("--require-approval", action="store_true")
+        gate_parser.add_argument("--allow-pending", action="store_true")
+
+        comments_parser = subparsers.add_parser("comments", help="List PR review threads.")
+        self._add_pr_arg(comments_parser)
+        comments_parser.add_argument("--unresolved", action="store_true")
+
+        checkout_parser = subparsers.add_parser("checkout", help="Create an isolated worktree for a PR.")
+        self._add_pr_arg(checkout_parser)
+        checkout_parser.add_argument("--worktree", required=True, help="Worktree path to create.")
+        checkout_parser.add_argument("--branch", default="", help="Optional local branch name.")
+
+        test_plan_parser = subparsers.add_parser("test-plan", help="Map changed files to test commands.")
+        self._add_pr_arg(test_plan_parser)
+
+        ci_parser = subparsers.add_parser("ci", help="Collect failed or pending CI checks.")
+        self._add_pr_arg(ci_parser)
+        ci_parser.add_argument("--failures", action="store_true", help="Return failing/pending checks.")
+        ci_parser.add_argument("--logs", action="store_true", help="Fetch failed run log snippets.")
+
+        dedupe_parser = subparsers.add_parser(
+            "dependency-dedupe",
+            help="Find duplicate or superseded dependency PR groups.",
+        )
+        dedupe_parser.add_argument("--limit", type=int, default=80)
+
+        merge_parser = subparsers.add_parser("merge", help="Gate and merge a PR.")
+        self._add_pr_arg(merge_parser)
+        merge_parser.add_argument("--method", choices=["squash", "merge", "rebase"], default="squash")
+        merge_parser.add_argument("--delete-branch", action="store_true")
+        merge_parser.add_argument("--require-approval", action="store_true")
+        merge_parser.add_argument("--expected-head-sha", default="")
+        merge_parser.add_argument("--allow-pending", action="store_true")
+        merge_parser.add_argument("--admin", action="store_true")
+        merge_parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Required to perform the merge. Without it the command only reports the gated plan.",
+        )
+
+        cleanup_parser = subparsers.add_parser("cleanup", help="Clean local PR artifacts after merge.")
+        self._add_pr_arg(cleanup_parser)
+        cleanup_parser.add_argument("--worktree", default="", help="Worktree path to remove.")
+        cleanup_parser.add_argument("--delete-local-branch", default="")
+        cleanup_parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Required to perform cleanup. Without it the command only reports the plan.",
+        )
+
+        hygiene_parser = subparsers.add_parser("hygiene", help="Run deterministic PR hygiene checks.")
+        self._add_pr_arg(hygiene_parser)
+
+    def handle(self, *args, **options) -> None:
+        repo = self._resolve_repository(str(options.get("repo") or ""))
+        overseer = PullRequestOverseer(repo=repo)
+        action = str(options["action"])
+
+        try:
+            result = self._run_action(overseer, action, options)
+        except PullRequestOverseeError as exc:
+            raise CommandError(str(exc)) from exc
+
+        self._write_result(result, json_output=bool(options.get("json")))
+        if action == "gate" and not result.get("ready"):
+            raise CommandError("PR is not merge-ready: " + ", ".join(result.get("blockers") or []))
+        if action == "hygiene" and not result.get("ok"):
+            raise CommandError("PR hygiene failed: " + ", ".join(result.get("failures") or []))
+
+    def _run_action(
+        self,
+        overseer: PullRequestOverseer,
+        action: str,
+        options: dict[str, object],
+    ) -> dict[str, object]:
+        number = int(options.get("pr") or 0)
+        if action == "inspect":
+            return overseer.inspect(number)
+        if action == "gate":
+            return overseer.gate(
+                number,
+                require_approval=bool(options.get("require_approval")),
+                allow_pending=bool(options.get("allow_pending")),
+            )
+        if action == "comments":
+            return overseer.comments(number, unresolved_only=bool(options.get("unresolved")))
+        if action == "checkout":
+            return overseer.checkout(
+                number,
+                worktree=Path(str(options["worktree"])).expanduser(),
+                branch=str(options.get("branch") or ""),
+            )
+        if action == "test-plan":
+            return overseer.test_plan(number)
+        if action == "ci":
+            _ = options.get("failures")
+            return overseer.ci_failures(number, include_logs=bool(options.get("logs")))
+        if action == "dependency-dedupe":
+            return overseer.dependency_dedupe(limit=int(options.get("limit") or 80))
+        if action == "merge":
+            if not options.get("write"):
+                gate = overseer.gate(
+                    number,
+                    require_approval=bool(options.get("require_approval")),
+                    allow_pending=bool(options.get("allow_pending")),
+                )
+                return {"write": False, "plannedCommand": "gh pr merge", "gate": gate}
+            return overseer.merge(
+                number,
+                method=str(options.get("method") or "squash"),
+                delete_branch=bool(options.get("delete_branch")),
+                require_approval=bool(options.get("require_approval")),
+                expected_head_sha=str(options.get("expected_head_sha") or ""),
+                allow_pending=bool(options.get("allow_pending")),
+                admin=bool(options.get("admin")),
+            )
+        if action == "cleanup":
+            if not options.get("write"):
+                return {
+                    "write": False,
+                    "plannedActions": [
+                        item
+                        for item in (
+                            "remove-worktree" if options.get("worktree") else "",
+                            "fetch-main-prune",
+                            "delete-local-branch" if options.get("delete_local_branch") else "",
+                        )
+                        if item
+                    ],
+                }
+            worktree = (
+                Path(str(options["worktree"])).expanduser()
+                if str(options.get("worktree") or "").strip()
+                else None
+            )
+            return overseer.cleanup(
+                number,
+                worktree=worktree,
+                delete_local_branch=str(options.get("delete_local_branch") or ""),
+            )
+        if action == "hygiene":
+            return overseer.hygiene(number)
+        raise CommandError(f"Unsupported action: {action}")
+
+    def _add_pr_arg(self, parser) -> None:
+        parser.add_argument("--pr", type=int, required=True, help="Pull request number.")
+
+    def _resolve_repository(self, raw_repo: str) -> str:
+        cleaned = raw_repo.strip()
+        if cleaned:
+            try:
+                owner, name = parse_repository_url(cleaned)
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
+            return f"{owner}/{name}"
+
+        try:
+            active = resolve_active_repository()
+        except ValueError:
+            owner, name = parse_repository_url(DEFAULT_PACKAGE.repository_url)
+            return f"{owner}/{name}"
+        return f"{active.owner}/{active.name}"
+
+    def _write_result(self, result: dict[str, object], *, json_output: bool) -> None:
+        if json_output:
+            self.stdout.write(json.dumps(result, indent=2, sort_keys=True))
+            return
+
+        if "ready" in result:
+            state = "READY" if result.get("ready") else "BLOCKED"
+            self.stdout.write(f"state={state}")
+            for blocker in result.get("blockers") or []:
+                self.stdout.write(f"blocker={blocker}")
+            for warning in result.get("warnings") or []:
+                self.stdout.write(f"warning={warning}")
+            return
+
+        if "ok" in result:
+            state = "OK" if result.get("ok") else "FAILED"
+            self.stdout.write(f"hygiene={state}")
+            for failure in result.get("failures") or []:
+                self.stdout.write(f"failure={failure}")
+            for warning in result.get("warnings") or []:
+                self.stdout.write(f"warning={warning}")
+            return
+
+        self.stdout.write(json.dumps(result, indent=2, sort_keys=True))
