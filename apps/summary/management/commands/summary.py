@@ -28,11 +28,11 @@ from apps.summary.services import (
 
 
 class Command(BaseCommand):
-    """Report LCD summarizer status and optionally auto-enable prerequisites."""
+    """Report LLM summarizer status and optionally enable LCD output."""
 
     REQUIRED_FEATURE_SLUGS = ("celery-queue", "lcd-screen", "llm-summary")
 
-    help = "Show LCD summarizer status and the current summary LCD rotation plan."
+    help = "Show LLM summarizer status and the current summary rotation plan."
 
     def add_arguments(self, parser) -> None:
         """Register command-line flags."""
@@ -40,7 +40,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--enabled",
             action="store_true",
-            help="Enable required locks/features so LCD summary can run.",
+            help="Enable LCD/Celery locks and node features for displayed summaries.",
         )
         parser.add_argument(
             "--run-now",
@@ -71,7 +71,9 @@ class Command(BaseCommand):
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
 
         if options["run_now"]:
-            if not is_suite_feature_enabled(LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True):
+            if not is_suite_feature_enabled(
+                LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True
+            ):
                 if options["allow_disabled_feature"]:
                     self.stdout.write(
                         self.style.WARNING(
@@ -79,7 +81,9 @@ class Command(BaseCommand):
                             "running manual override via --allow-disabled-feature."
                         )
                     )
-                    run_status = self._run_summary_task_now(ignore_suite_feature_gate=True)
+                    run_status = self._run_summary_task_now(
+                        ignore_suite_feature_gate=True
+                    )
                 else:
                     run_status = "skipped:suite-feature-disabled"
                     self.stdout.write(
@@ -113,7 +117,7 @@ class Command(BaseCommand):
             else None
         )
 
-        self.stdout.write(self.style.MIGRATE_HEADING("LCD Summary Status"))
+        self.stdout.write(self.style.MIGRATE_HEADING("LLM Summary Status"))
         self.stdout.write(f"Node: {node.hostname} (id={node.pk})")
         self.stdout.write(
             "Feature assignments: "
@@ -122,10 +126,10 @@ class Command(BaseCommand):
                 slugs=self.REQUIRED_FEATURE_SLUGS,
             )
         )
-        self.stdout.write(f"Summary config active: {'yes' if config.is_active else 'no'}")
         self.stdout.write(
-            f"Model path: {config.model_path or '(default)'}"
+            f"Summary config active: {'yes' if config.is_active else 'no'}"
         )
+        self.stdout.write(f"Model path: {config.model_path or '(default)'}")
         self.stdout.write(
             f"Installed at: {config.installed_at.isoformat() if config.installed_at else 'never'}"
         )
@@ -133,17 +137,21 @@ class Command(BaseCommand):
             f"Last run: {config.last_run_at.isoformat() if config.last_run_at else 'never'}"
         )
         self.stdout.write(
-            "Prerequisites: "
+            "Output/schedule state: "
             f"lcd={'ok' if prereqs['lcd_enabled'] else 'missing'}, "
             f"celery={'ok' if prereqs['celery_enabled'] else 'missing'}"
         )
 
         channel_plan = self._load_channel_plan(base_dir)
-        self.stdout.write(f"Channel order: {', '.join(channel_plan) if channel_plan else '(default)'}")
+        self.stdout.write(
+            f"Channel order: {', '.join(channel_plan) if channel_plan else '(default)'}"
+        )
 
         self.stdout.write(self.style.MIGRATE_HEADING("Summary Plan"))
         if not planned_screens:
-            self.stdout.write("No summary plan captured yet. Run the summary task first.")
+            self.stdout.write(
+                "No summary plan captured yet. Run the summary task first."
+            )
             return
 
         for index, (subject, body) in enumerate(planned_screens, start=1):
@@ -161,7 +169,9 @@ class Command(BaseCommand):
         (lock_dir / LCD_RUNTIME_LOCK_FILE).touch(exist_ok=True)
         ensure_local_model(config)
         config.is_active = True
-        config.save(update_fields=["is_active", "model_path", "installed_at", "updated_at"])
+        config.save(
+            update_fields=["is_active", "model_path", "installed_at", "updated_at"]
+        )
 
         feature_displays = {
             "celery-queue": "Celery Queue",
@@ -181,8 +191,12 @@ class Command(BaseCommand):
     def _feature_assignment_line(self, node: Node, *, slugs: tuple[str, ...]) -> str:
         """Return a compact feature-assignment status string for the node."""
 
-        assigned = set(node.features.filter(slug__in=slugs).values_list("slug", flat=True))
-        return ", ".join(f"{slug}={'yes' if slug in assigned else 'no'}" for slug in slugs)
+        assigned = set(
+            node.features.filter(slug__in=slugs).values_list("slug", flat=True)
+        )
+        return ", ".join(
+            f"{slug}={'yes' if slug in assigned else 'no'}" for slug in slugs
+        )
 
     def _load_channel_plan(self, base_dir: Path) -> list[str]:
         """Return configured LCD channel order from lock file if available."""

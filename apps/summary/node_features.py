@@ -28,15 +28,11 @@ def _celery_lock_enabled(base_dir: Path, base_path: Path) -> bool:
 
 
 def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
-    """Return whether llm-summary runtime requirements are met."""
+    """Return whether this node can generate LLM summary values."""
 
     try:
         from apps.summary.services import get_summary_config
     except ImportError:
-        return False
-
-    prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
-    if not (prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")):
         return False
 
     try:
@@ -80,10 +76,8 @@ def setup_node_feature(
     )
 
 
-def get_llm_summary_prereq_state(
-    *, base_dir: Path, base_path: Path
-) -> dict[str, bool]:
-    """Return lock- and screen-based prerequisites for llm-summary."""
+def get_llm_summary_prereq_state(*, base_dir: Path, base_path: Path) -> dict[str, bool]:
+    """Return optional LCD output and Celery scheduling state for summaries."""
 
     return {
         "lcd_enabled": lcd_feature_enabled_for_paths(base_dir, base_path),

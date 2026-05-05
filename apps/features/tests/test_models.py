@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from django.core.management import call_command
-from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
 
 from apps.features.models import Feature
+from apps.nodes.models import NodeFeature
 
 
 @pytest.mark.django_db
@@ -23,7 +24,9 @@ from apps.features.models import Feature
         ({}, 0),
     ],
 )
-def test_params_count_reads_feature_metadata_parameters(metadata, expected_count: int) -> None:
+def test_params_count_reads_feature_metadata_parameters(
+    metadata, expected_count: int
+) -> None:
     """params_count should only count dictionary-backed parameter values."""
 
     feature = Feature.objects.create(
@@ -33,6 +36,7 @@ def test_params_count_reads_feature_metadata_parameters(metadata, expected_count
     )
 
     assert feature.params_count == expected_count
+
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
@@ -112,3 +116,29 @@ def test_pages_feature_fixtures_load_after_register_site_apps(
     feature = Feature.objects.get(slug=slug)
     assert feature.main_app is not None
     assert feature.main_app.name == "pages"
+
+
+@pytest.mark.django_db
+def test_llm_summary_suite_fixture_links_summary_node_feature() -> None:
+    """The suite gate should unlock summary generation, not LCD hardware."""
+
+    NodeFeature.objects.get_or_create(
+        slug="llm-summary",
+        defaults={"display": "LLM Summary"},
+    )
+    fixture_path = (
+        Path(settings.BASE_DIR)
+        / "apps"
+        / "features"
+        / "fixtures"
+        / "features__llm_summary_suite.json"
+    )
+
+    call_command("register_site_apps")
+    call_command("loaddata", str(fixture_path))
+
+    feature = Feature.objects.select_related("node_feature").get(
+        slug="llm-summary-suite"
+    )
+    assert feature.node_feature is not None
+    assert feature.node_feature.slug == "llm-summary"

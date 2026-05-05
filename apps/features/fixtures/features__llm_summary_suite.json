@@ -22,7 +22,7 @@
       ],
       "metadata": {},
       "node_feature": [
-        "lcd-screen"
+        "llm-summary"
       ],
       "protocol_coverage": {},
       "public_requirements": "No direct public interface; summarization updates internal displays.",
