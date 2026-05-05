@@ -458,7 +458,8 @@ def _assign_module_menu(module):
 def _limit_anon_ocpp_landings(module, request, landings: list):
     """Keep only public supported-model navigation for anonymous OCPP visits."""
 
-    if request.user.is_authenticated:
+    user = getattr(request, "user", None)
+    if getattr(user, "is_authenticated", False):
         return landings
     if (module.path.rstrip("/") or "/").lower() != "/ocpp":
         return landings
@@ -470,7 +471,7 @@ def _limit_anon_ocpp_landings(module, request, landings: list):
         if (landing.path.rstrip("/") or "/").lower() == supported_models_path
     ]
     if filtered_landings:
-        module.menu = "Supported CP Models"
+        module.menu = _("Supported CP Models")
         return filtered_landings
     return landings
 
