@@ -8,14 +8,17 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.repos.pr_oversee import (
     CommandResult,
     PullRequestOverseeError,
     PullRequestOverseer,
     changed_files_to_test_plan,
+    default_patchwork_dir,
     dependency_duplicates,
     hygiene_report,
+    patchwork_worktree_path,
     readiness_gate,
 )
 
@@ -366,6 +369,20 @@ def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
     )
 
 
+def test_patchwork_worktree_path_is_deterministic(tmp_path: Path):
+    assert patchwork_worktree_path(tmp_path, "arthexis/arthexis", 123) == (
+        tmp_path / "arthexis-arthexis-pr-123"
+    )
+
+
+def test_default_patchwork_dir_respects_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("ARTHEXIS_PATCHWORK_DIR", str(tmp_path))
+
+    assert default_patchwork_dir() == tmp_path
+
+
 def test_merge_gates_expected_head_before_calling_gh_merge():
     comments = {
         "data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": []}}}}
@@ -424,6 +441,124 @@ def test_cleanup_fetches_merged_pr_base_branch(tmp_path: Path):
     }
 
 
+def test_cleanup_forces_removal_for_owned_patchwork_metadata(tmp_path: Path):
+    worktree = tmp_path / "patchwork" / "arthexis-arthexis-pr-123"
+    worktree.mkdir(parents=True)
+    (worktree / ".arthexis-pr-oversee.json").write_text('{"number": 123}\n')
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload(state="MERGED"))),
+            CommandResult(128, stderr="contains modified or untracked files"),
+            CommandResult(0, "?? .arthexis-pr-oversee.json\n?? .venv/\n"),
+            CommandResult(0),
+            CommandResult(0),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+
+    result = overseer.cleanup(123, worktree=worktree)
+
+    assert result["actions"][0]["forced"] is True
+    assert runner.commands[3] == [
+        "git",
+        "worktree",
+        "remove",
+        "--force",
+        str(worktree),
+    ]
+
+
+def test_patchwork_remove_respects_git_force_failure(tmp_path: Path):
+    patchwork_root = tmp_path / "patchwork"
+    worktree = patchwork_root / "arthexis-arthexis-pr-123"
+    worktree.mkdir(parents=True)
+    (worktree / ".arthexis-pr-oversee.json").write_text('{"number": 123}\n')
+    runner = FakeRunner(
+        [
+            CommandResult(128, stderr="contains modified or untracked files"),
+            CommandResult(0, "?? .arthexis-pr-oversee.json\n"),
+            CommandResult(128, stderr="worktree is locked"),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+
+    result = overseer._remove_worktree(worktree, patchwork_root=patchwork_root)
+
+    assert result["forced"] is True
+    assert result["forceReturncode"] == 128
+    assert worktree.exists()
+    assert len(runner.commands) == 3
+
+
+def test_patchwork_hygiene_marks_merged_worktrees_for_prune(tmp_path: Path):
+    worktree = tmp_path / "arthexis-arthexis-pr-123"
+    worktree.mkdir()
+    (worktree / ".arthexis-pr-oversee.json").write_text(
+        json.dumps({"repo": "arthexis/arthexis", "number": 123})
+    )
+    runner = FakeRunner([CommandResult(0, json.dumps([{"number": 123, "state": "MERGED"}]))])
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.patchwork_hygiene(root=tmp_path)
+
+    assert result["items"][0]["candidate"] is True
+    assert result["items"][0]["reason"] == "prune"
+    assert runner.commands[0][:6] == [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "arthexis/arthexis",
+        "--state",
+    ]
+
+
+def test_patchwork_hygiene_batches_pr_state_lookup(tmp_path: Path):
+    for number in (123, 124):
+        worktree = tmp_path / f"arthexis-arthexis-pr-{number}"
+        worktree.mkdir()
+        (worktree / ".arthexis-pr-oversee.json").write_text(
+            json.dumps({"repo": "arthexis/arthexis", "number": number})
+        )
+    runner = FakeRunner(
+        [
+            CommandResult(
+                0,
+                json.dumps(
+                    [
+                        {"number": 123, "state": "MERGED"},
+                        {"number": 124, "state": "OPEN"},
+                    ]
+                ),
+            )
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.patchwork_hygiene(root=tmp_path)
+
+    assert [item["state"] for item in result["items"]] == ["MERGED", "OPEN"]
+    assert len(runner.commands) == 1
+
+
+def test_patchwork_hygiene_marks_invalid_metadata_without_crashing(tmp_path: Path):
+    worktree = tmp_path / "arthexis-arthexis-pr-bad"
+    worktree.mkdir()
+    (worktree / ".arthexis-pr-oversee.json").write_text(
+        json.dumps({"repo": "arthexis/arthexis", "number": "abc"})
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=FakeRunner())
+
+    result = overseer.patchwork_hygiene(root=tmp_path)
+
+    assert result["items"][0]["candidate"] is False
+    assert result["items"][0]["reason"] == "invalid-pr-number"
+
+
 def test_hygiene_detects_missing_migration_and_generated_files():
     result = hygiene_report(
         _pr_payload(body="No sections"),
@@ -469,6 +604,40 @@ def test_management_command_merge_without_write_reports_plan():
         allow_pending=False,
     )
     fake.merge.assert_not_called()
+
+
+def test_management_command_checkout_defaults_to_patchwork_dir(tmp_path: Path):
+    fake = PullRequestOverseer(repo="arthexis/arthexis")
+    fake.checkout = Mock(
+        return_value={
+            "number": 123,
+            "worktree": str(tmp_path / "arthexis-arthexis-pr-123"),
+        }
+    )
+    buffer = StringIO()
+
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
+        call_command(
+            "pr_oversee",
+            "--repo",
+            "arthexis/arthexis",
+            "--json",
+            "checkout",
+            "--pr",
+            "123",
+            "--patchwork-dir",
+            str(tmp_path),
+            stdout=buffer,
+        )
+
+    payload = json.loads(buffer.getvalue())
+    assert payload["worktree"] == str(tmp_path / "arthexis-arthexis-pr-123")
+    fake.checkout.assert_called_once()
+    _, kwargs = fake.checkout.call_args
+    assert kwargs["worktree"] == tmp_path / "arthexis-arthexis-pr-123"
 
 
 def test_monitor_stops_for_manual_review_blocker():
@@ -669,6 +838,31 @@ def test_monitor_resyncs_reused_worktree_when_pr_head_changes(tmp_path: Path):
     assert sleeps == [0]
 
 
+def test_monitor_skips_validation_for_already_merged_missing_patchwork(tmp_path: Path):
+    worktree = tmp_path / "missing-patchwork"
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload(state="MERGED"))),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.monitor(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        dependency_limit=0,
+        worktree=worktree,
+        run_test_plan=True,
+    )
+
+    assert result["status"] == "complete"
+    assert "localValidation" not in result["last"]
+    assert worktree not in runner.cwd_history
+
+
 def test_management_command_monitor_invokes_overseer_monitor():
     fake = PullRequestOverseer(repo="arthexis/arthexis")
     fake.monitor = Mock(
@@ -710,3 +904,38 @@ def test_management_command_monitor_invokes_overseer_monitor():
     assert kwargs["max_iterations"] == 1
     assert kwargs["merge"] is True
     assert kwargs["write"] is True
+
+
+def test_management_command_monitor_defaults_validation_to_patchwork(tmp_path: Path):
+    fake = PullRequestOverseer(repo="arthexis/arthexis")
+    fake.monitor = Mock(
+        return_value={
+            "status": "manual_decision_required",
+            "complete": False,
+            "manualDecisionRequired": True,
+            "manualDecisionReasons": ["merge_decision_required"],
+        }
+    )
+    buffer = StringIO()
+
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
+        with pytest.raises(CommandError):
+            call_command(
+                "pr_oversee",
+                "--repo",
+                "arthexis/arthexis",
+                "--json",
+                "monitor",
+                "--pr",
+                "123",
+                "--run-test-plan",
+                "--patchwork-dir",
+                str(tmp_path),
+                stdout=buffer,
+            )
+
+    _, kwargs = fake.monitor.call_args
+    assert kwargs["worktree"] == tmp_path / "arthexis-arthexis-pr-123"

@@ -9,7 +9,12 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.release import DEFAULT_PACKAGE
 from apps.repos.github import parse_repository_url, resolve_active_repository
-from apps.repos.pr_oversee import PullRequestOverseeError, PullRequestOverseer
+from apps.repos.pr_oversee import (
+    PullRequestOverseeError,
+    PullRequestOverseer,
+    default_patchwork_dir,
+    patchwork_worktree_path,
+)
 
 
 class Command(BaseCommand):
@@ -55,8 +60,11 @@ class Command(BaseCommand):
         )
         self._add_pr_arg(checkout_parser)
         checkout_parser.add_argument(
-            "--worktree", required=True, help="Worktree path to create."
+            "--worktree",
+            default="",
+            help="Worktree path to create. Defaults to the patchwork directory.",
         )
+        self._add_patchwork_dir_arg(checkout_parser)
         checkout_parser.add_argument(
             "--branch", default="", help="Optional local branch name."
         )
@@ -118,6 +126,18 @@ class Command(BaseCommand):
         )
         self._add_pr_arg(hygiene_parser)
 
+        patchwork_parser = subparsers.add_parser(
+            "patchwork", help="Report or prune monitor-owned patchwork worktrees."
+        )
+        self._add_patchwork_dir_arg(patchwork_parser)
+        patchwork_parser.add_argument("--max-age-days", type=float, default=14.0)
+        patchwork_parser.add_argument("--force-stale-open", action="store_true")
+        patchwork_parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Required to remove patchwork worktrees.",
+        )
+
         monitor_parser = subparsers.add_parser(
             "monitor",
             help="Run the PR oversight workflow until completion or manual decision.",
@@ -134,6 +154,7 @@ class Command(BaseCommand):
         monitor_parser.add_argument(
             "--worktree", default="", help="Optional PR worktree path."
         )
+        self._add_patchwork_dir_arg(monitor_parser)
         monitor_parser.add_argument(
             "--branch", default="", help="Optional local branch for checkout."
         )
@@ -201,9 +222,10 @@ class Command(BaseCommand):
                 number, unresolved_only=bool(options.get("unresolved"))
             )
         if action == "checkout":
+            worktree = self._resolve_worktree_option(overseer, number, options)
             return overseer.checkout(
                 number,
-                worktree=Path(str(options["worktree"])).expanduser(),
+                worktree=worktree,
                 branch=str(options.get("branch") or ""),
             )
         if action == "test-plan":
@@ -259,12 +281,15 @@ class Command(BaseCommand):
             )
         if action == "hygiene":
             return overseer.hygiene(number)
-        if action == "monitor":
-            worktree = (
-                Path(str(options["worktree"])).expanduser()
-                if str(options.get("worktree") or "").strip()
-                else None
+        if action == "patchwork":
+            return overseer.patchwork_hygiene(
+                root=self._resolve_patchwork_dir(options),
+                max_age_days=float(options.get("max_age_days") or 0.0),
+                write=bool(options.get("write")),
+                force_stale_open=bool(options.get("force_stale_open")),
             )
+        if action == "monitor":
+            worktree = self._resolve_monitor_worktree(overseer, number, options)
             return overseer.monitor(
                 number,
                 interval_seconds=float(options.get("interval") or 0.0),
@@ -292,6 +317,50 @@ class Command(BaseCommand):
         parser.add_argument(
             "--pr", type=int, required=True, help="Pull request number."
         )
+
+    def _add_patchwork_dir_arg(self, parser) -> None:
+        parser.add_argument(
+            "--patchwork-dir",
+            default="",
+            help=(
+                "Directory for temporary PR worktrees. Defaults to "
+                f"{default_patchwork_dir()} or ARTHEXIS_PATCHWORK_DIR."
+            ),
+        )
+
+    def _resolve_patchwork_dir(self, options: dict[str, object]) -> Path:
+        raw_value = str(options.get("patchwork_dir") or "").strip()
+        if raw_value:
+            return Path(raw_value).expanduser()
+        return default_patchwork_dir()
+
+    def _resolve_worktree_option(
+        self,
+        overseer: PullRequestOverseer,
+        number: int,
+        options: dict[str, object],
+    ) -> Path:
+        raw_value = str(options.get("worktree") or "").strip()
+        if raw_value:
+            return Path(raw_value).expanduser()
+        return patchwork_worktree_path(
+            self._resolve_patchwork_dir(options), overseer.repo, number
+        )
+
+    def _resolve_monitor_worktree(
+        self,
+        overseer: PullRequestOverseer,
+        number: int,
+        options: dict[str, object],
+    ) -> Path | None:
+        raw_value = str(options.get("worktree") or "").strip()
+        if raw_value:
+            return Path(raw_value).expanduser()
+        if options.get("run_test_plan"):
+            return patchwork_worktree_path(
+                self._resolve_patchwork_dir(options), overseer.repo, number
+            )
+        return None
 
     def _resolve_repository(self, raw_repo: str) -> str:
         cleaned = raw_repo.strip()
