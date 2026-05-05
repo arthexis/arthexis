@@ -14,6 +14,7 @@ from django.db.models import Q
 from django.utils import timezone
 from websocket import WebSocketException, create_connection
 
+from apps.ocpp.forwarding_paths import FORWARDING_WEBSOCKET_PREFIXES
 from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class Forwarder:
                     continue
             scheme = "wss" if parsed.scheme == "https" else "ws"
             base_path = parsed.path.rstrip("/")
-            for prefix in ("", "/ws"):
+            for prefix in FORWARDING_WEBSOCKET_PREFIXES:
                 path = f"{base_path}{prefix}/{encoded_id}".replace("//", "/")
                 if not path.startswith("/"):
                     path = f"/{path}"
