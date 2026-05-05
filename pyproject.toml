@@ -52,7 +52,7 @@ dependencies = [
   "plyer==2.1.0; sys_platform == \"win32\"",
   "prompt_toolkit==3.0.52",
   "psutil==7.2.2",
-  "psycopg-binary==3.3.3",
+  "psycopg-binary==3.3.4",
   "psycopg==3.3.4",
   "pycparser==3.0",
   "pyOpenSSL==26.0.0",
