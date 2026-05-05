@@ -7,6 +7,7 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
+from apps.summary.models import LLMSummaryConfig
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from apps.nodes.models import Node
@@ -31,16 +32,12 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
     """Return whether this node can generate LLM summary values."""
 
     try:
-        from apps.summary.services import get_summary_config
-    except ImportError:
-        return False
-
-    try:
-        config = get_summary_config()
+        return LLMSummaryConfig.objects.filter(
+            slug="lcd-log-summary",
+            is_active=True,
+        ).exists()
     except (OperationalError, ProgrammingError):
         return False
-
-    return bool(config.is_active)
 
 
 def check_node_feature(

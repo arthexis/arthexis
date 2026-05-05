@@ -292,13 +292,11 @@ def test_detect_auto_feature_enables_llm_summary_without_lcd_when_config_active(
 ):
     """llm-summary detection should reflect generation capability, not LCD output."""
 
-    from apps.summary.services import get_summary_config
+    from apps.summary.models import LLMSummaryConfig
 
     node, tmp_path = llm_summary_node
 
-    config = get_summary_config()
-    config.is_active = True
-    config.save(update_fields=["is_active", "updated_at"])
+    LLMSummaryConfig.objects.create(is_active=True)
 
     result = node._detect_auto_feature(
         "llm-summary", base_dir=tmp_path, base_path=tmp_path
@@ -313,19 +311,33 @@ def test_detect_auto_feature_skips_llm_summary_when_config_inactive(
 ):
     """Inactive summary config should keep the node summary feature off."""
 
-    from apps.summary.services import get_summary_config
+    from apps.summary.models import LLMSummaryConfig
 
     node, tmp_path = llm_summary_node
 
-    config = get_summary_config()
-    config.is_active = False
-    config.save(update_fields=["is_active", "updated_at"])
+    LLMSummaryConfig.objects.create(is_active=False)
 
     result = node._detect_auto_feature(
         "llm-summary", base_dir=tmp_path, base_path=tmp_path
     )
 
     assert result is False
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_does_not_create_llm_summary_config(llm_summary_node):
+    """Feature detection should be a read-only probe."""
+
+    from apps.summary.models import LLMSummaryConfig
+
+    node, tmp_path = llm_summary_node
+
+    result = node._detect_auto_feature(
+        "llm-summary", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is False
+    assert LLMSummaryConfig.objects.count() == 0
 
 
 @pytest.mark.django_db

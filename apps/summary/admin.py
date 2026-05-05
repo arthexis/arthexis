@@ -16,7 +16,7 @@ from apps.features.models import Feature
 from apps.features.parameters import set_feature_parameter_values
 from apps.nodes.models import NodeFeature
 
-from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
+from .constants import LLM_SUMMARY_NODE_FEATURE_SLUG, LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
 from .services import DEFAULT_MODEL_DIR, ensure_local_model, get_summary_config, resolve_model_path
 
@@ -88,19 +88,23 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
     def _sync_summary_suite_feature(self, config: LLMSummaryConfig) -> Feature:
         """Persist suite feature parameters and ensure node-feature linkage is present."""
 
-        lcd_node_feature = NodeFeature.objects.filter(slug="lcd-screen").first()
+        summary_node_feature = NodeFeature.objects.filter(
+            slug=LLM_SUMMARY_NODE_FEATURE_SLUG
+        ).first()
         suite_feature, _created = Feature.objects.get_or_create(
             slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
             defaults={
                 "display": "LLM Summary Suite",
                 "source": Feature.Source.CUSTOM,
                 "is_enabled": True,
-                "node_feature": lcd_node_feature,
+                "node_feature": summary_node_feature,
             },
         )
         updated_fields: set[str] = set()
-        if suite_feature.node_feature_id != (lcd_node_feature.pk if lcd_node_feature else None):
-            suite_feature.node_feature = lcd_node_feature
+        if suite_feature.node_feature_id != (
+            summary_node_feature.pk if summary_node_feature else None
+        ):
+            suite_feature.node_feature = summary_node_feature
             updated_fields.add("node_feature")
 
         set_feature_parameter_values(

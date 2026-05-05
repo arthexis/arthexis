@@ -40,7 +40,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--enabled",
             action="store_true",
-            help="Enable LCD/Celery locks and node features for displayed summaries.",
+            help="Enable LCD/Celery locks and node features for summary generation and display.",
         )
         parser.add_argument(
             "--run-now",
