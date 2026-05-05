@@ -406,17 +406,23 @@ def _node_candidate_hosts(node: Node, interfaces: list[str]) -> list[str]:
     return hosts
 
 
+def _url_host(host: str) -> str:
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]"
+    return host
+
+
 def _fetch_node_info(host: str, ports: tuple[int, ...], timeout: float) -> dict[str, Any] | None:
     for port in ports:
         schemes = ("https",) if port == 443 else ("http", "https")
         for scheme in schemes:
-            url = f"{scheme}://{host}:{port}/nodes/info/"
+            url = f"{scheme}://{_url_host(host)}:{port}/nodes/info/"
             request = Request(url, headers={"User-Agent": "arthexis-reservation-watch/1.0"})
             try:
                 with urlopen(request, timeout=timeout) as response:
                     if response.status != 200:
                         continue
-                    payload = json.loads(response.read(8192).decode("utf-8"))
+                    payload = json.loads(response.read())
             except (OSError, URLError, ValueError, json.JSONDecodeError):
                 continue
             if isinstance(payload, dict) and payload.get("hostname"):
@@ -435,6 +441,13 @@ def _node_info_port(info: dict[str, Any]) -> int:
         except (TypeError, ValueError):
             continue
     return 8888
+
+
+def _node_info_ipv4_addresses(info: dict[str, Any]) -> str:
+    raw_value = info.get("ipv4_address") or []
+    if isinstance(raw_value, str):
+        raw_value = re.split(r"[\s,]+", raw_value)
+    return ",".join(Node.sanitize_ipv4_addresses(raw_value))
 
 
 def _info_matches_reservation(node: Node, info: dict[str, Any]) -> bool:
@@ -483,7 +496,7 @@ def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
         "hostname": str(info.get("hostname") or node.hostname).strip(),
         "network_hostname": str(info.get("network_hostname") or "").strip(),
         "address": str(info.get("address") or info.get("_watch_host") or "").strip(),
-        "ipv4_address": ",".join(Node.sanitize_ipv4_addresses(info.get("ipv4_address") or [])),
+        "ipv4_address": _node_info_ipv4_addresses(info),
         "ipv6_address": str(info.get("ipv6_address") or "").strip(),
         "host_instance_id": str(info.get("host_instance_id") or "").strip(),
         "port": _node_info_port(info),

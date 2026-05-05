@@ -18,6 +18,7 @@ from django.test import override_settings
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
     ImageReservation,
+    _fetch_node_info,
     confirm_reserved_node,
     plan_image_reservation,
     watch_reserved_nodes_once,
@@ -1355,9 +1356,34 @@ def test_watch_reserved_nodes_confirms_matching_node(monkeypatch) -> None:
     assert results[0].status == "confirmed"
     node.refresh_from_db()
     assert node.reserved is False
+    assert node.ipv4_address == "10.42.0.4"
     assert node.mac_address == "aa:bb:cc:dd:ee:04"
     assert node.port == 8888
     assert node.trusted is True
+
+
+def test_fetch_node_info_brackets_ipv6_hosts_and_reads_full_json() -> None:
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"hostname": "gway-006", "note": "x" * 9000}).encode(
+                "utf-8"
+            )
+
+    with patch("apps.imager.reservations.urlopen", return_value=FakeResponse()) as open_mock:
+        payload = _fetch_node_info("fd00::6", (8888,), timeout=0.1)
+
+    request = open_mock.call_args.args[0]
+    assert request.full_url == "http://[fd00::6]:8888/nodes/info/"
+    assert payload["hostname"] == "gway-006"
+    assert len(payload["note"]) == 9000
 
 
 @pytest.mark.django_db
