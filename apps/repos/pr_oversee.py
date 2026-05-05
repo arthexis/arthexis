@@ -6,9 +6,11 @@ import json
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 JSONValue = dict[str, Any] | list[Any] | str | int | float | bool | None
 
@@ -498,10 +500,14 @@ class PullRequestOverseer:
         repo: str,
         runner: CommandRunner | None = None,
         cwd: Path | None = None,
+        sleep_func: Callable[[float], None] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self.repo = repo
         self.runner = runner or CommandRunner()
         self.cwd = cwd or Path.cwd()
+        self._sleep = sleep_func or time.sleep
+        self._clock = clock or time.monotonic
 
     def gh_json(self, args: list[str]) -> JSONValue:
         result = self.runner.run(["gh", *args], cwd=self.cwd, check=True)
@@ -643,14 +649,24 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             ),
         }
 
-    def inspect(self, number: int) -> dict[str, Any]:
+    def inspect(
+        self,
+        number: int,
+        *,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+    ) -> dict[str, Any]:
         pr = self.pr_view(number)
         review_threads = self.comments(number, unresolved_only=False)
         pr["reviewThreads"] = review_threads["threads"]
         pr["unresolvedReviewThreadCount"] = review_threads["unresolvedCount"]
         return {
             "pullRequest": pr,
-            "readiness": readiness_gate(pr),
+            "readiness": readiness_gate(
+                pr,
+                require_approval=require_approval,
+                allow_pending=allow_pending,
+            ),
         }
 
     def gate(
@@ -660,10 +676,11 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         require_approval: bool = False,
         allow_pending: bool = False,
     ) -> dict[str, Any]:
-        pr = self.inspect(number)["pullRequest"]
-        return readiness_gate(
-            pr, require_approval=require_approval, allow_pending=allow_pending
-        )
+        return self.inspect(
+            number,
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+        )["readiness"]
 
     def changed_files(self, number: int) -> list[str]:
         output = self.gh_text(
@@ -678,6 +695,18 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         self, number: int, *, include_logs: bool = False, log_limit: int = 4000
     ) -> dict[str, Any]:
         pr = self.pr_view(number)
+        return self._ci_failures_from_pr(
+            number, pr, include_logs=include_logs, log_limit=log_limit
+        )
+
+    def _ci_failures_from_pr(
+        self,
+        number: int,
+        pr: Mapping[str, Any],
+        *,
+        include_logs: bool = False,
+        log_limit: int = 4000,
+    ) -> dict[str, Any]:
         checks = check_rollup_state(pr)
         failures = [*checks["failing"], *checks["pending"]]
         log_snippets: dict[str, str] = {}
@@ -706,6 +735,34 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "number": number,
             "failures": failures,
             "logs": log_snippets,
+        }
+
+    def run_validation_commands(
+        self,
+        commands: Iterable[Iterable[object]],
+        *,
+        output_limit: int = 4000,
+        cwd: Path | None = None,
+    ) -> dict[str, Any]:
+        """Run generated local validation commands and summarize their results."""
+
+        results: list[dict[str, Any]] = []
+        execution_cwd = cwd or self.cwd
+        for raw_command in commands:
+            command = [str(part) for part in raw_command]
+            result = self.runner.run(command, cwd=execution_cwd, check=False)
+            results.append(
+                {
+                    "command": command,
+                    "returncode": result.returncode,
+                    "stdout": result.stdout[-output_limit:],
+                    "stderr": result.stderr[-output_limit:],
+                }
+            )
+        return {
+            "ok": all(item["returncode"] == 0 for item in results),
+            "cwd": str(execution_cwd),
+            "commands": results,
         }
 
     def dependency_dedupe(self, *, limit: int = 80) -> dict[str, Any]:
@@ -747,6 +804,30 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         except OSError:
             metadata["metadataWriteError"] = True
         return metadata
+
+    def sync_worktree(self, number: int, *, worktree: Path) -> dict[str, Any]:
+        """Fetch the current PR head and move an existing worktree to it."""
+
+        if not worktree.exists():
+            raise PullRequestOverseeError(f"Worktree path does not exist: {worktree}")
+        remote_ref = f"refs/remotes/origin/pr/{number}"
+        self.git(["fetch", "origin", f"pull/{number}/head:{remote_ref}"])
+        result = self.runner.run(
+            ["git", "-C", str(worktree), "checkout", "--detach", remote_ref],
+            cwd=self.cwd,
+            check=False,
+        )
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip()
+            raise PullRequestOverseeError(
+                f"Unable to sync PR worktree {worktree}: {message}"
+            )
+        return {
+            "number": number,
+            "worktree": str(worktree),
+            "remoteRef": remote_ref,
+            "returncode": result.returncode,
+        }
 
     def merge(
         self,
@@ -838,3 +919,333 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 
     def hygiene(self, number: int) -> dict[str, Any]:
         return hygiene_report(self.pr_view(number), self.changed_files(number))
+
+    def monitor(
+        self,
+        number: int,
+        *,
+        interval_seconds: float = 30.0,
+        max_iterations: int = 120,
+        timeout_seconds: float = 0.0,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+        include_logs: bool = False,
+        run_test_plan: bool = False,
+        dependency_limit: int = 80,
+        worktree: Path | None = None,
+        branch: str = "",
+        merge: bool = False,
+        cleanup: bool = False,
+        method: str = "squash",
+        delete_branch: bool = False,
+        delete_local_branch: str = "",
+        expected_head_sha: str = "",
+        admin: bool = False,
+        write: bool = False,
+    ) -> dict[str, Any]:
+        """Run the PR oversight workflow until completion or manual decision."""
+
+        if max_iterations < 0:
+            raise PullRequestOverseeError("max_iterations must be zero or positive")
+        if interval_seconds < 0:
+            raise PullRequestOverseeError("interval_seconds must be zero or positive")
+        if timeout_seconds < 0:
+            raise PullRequestOverseeError("timeout_seconds must be zero or positive")
+
+        actions: list[dict[str, Any]] = []
+        checkout_handled = False
+        deadline = self._clock() + timeout_seconds if timeout_seconds else 0.0
+        iterations: list[dict[str, Any]] = []
+        validation_by_head: dict[str, dict[str, Any]] = {}
+        changed_files_by_head: dict[str, list[str]] = {}
+        synced_worktree_head = ""
+        dependency_dedupe = (
+            self.dependency_dedupe(limit=dependency_limit)
+            if dependency_limit
+            else {}
+        )
+        last_snapshot: dict[str, Any] = {}
+        iteration = 0
+
+        while True:
+            iteration += 1
+            snapshot = self._monitor_snapshot(
+                number,
+                require_approval=require_approval,
+                allow_pending=allow_pending,
+                include_logs=include_logs,
+                changed_files_by_head=changed_files_by_head,
+                dependency_dedupe=dependency_dedupe,
+            )
+            gate = snapshot["gate"]
+            pr = snapshot["inspect"]["pullRequest"]
+            head_sha = str(gate.get("headRefOid") or "")
+
+            state = str(pr.get("state") or "").upper()
+            if state != "MERGED" and worktree and not checkout_handled:
+                if worktree.exists():
+                    actions.append(
+                        {"action": "checkout-reuse", "worktree": str(worktree)}
+                    )
+                else:
+                    actions.append(
+                        {
+                            "action": "checkout",
+                            "result": self.checkout(
+                                number, worktree=worktree, branch=branch
+                            ),
+                        }
+                    )
+                checkout_handled = True
+            if (
+                state != "MERGED"
+                and worktree
+                and head_sha
+                and synced_worktree_head != head_sha
+            ):
+                actions.append(
+                    {
+                        "action": "sync-worktree",
+                        "headRefOid": head_sha,
+                        "result": self.sync_worktree(number, worktree=worktree),
+                    }
+                )
+                synced_worktree_head = head_sha
+
+            if run_test_plan:
+                validation_cwd = worktree if worktree else self.cwd
+                validation_head = head_sha or f"iteration-{iteration}"
+                validation_key = f"{validation_head}:{validation_cwd}"
+                validation = validation_by_head.get(validation_key)
+                if validation is None:
+                    validation = self.run_validation_commands(
+                        snapshot["testPlan"]["commands"],
+                        cwd=validation_cwd,
+                    )
+                    validation_by_head[validation_key] = validation
+                    actions.append(
+                        {
+                            "action": "local-validation",
+                            "headRefOid": head_sha,
+                            "cwd": str(validation_cwd),
+                            "ok": validation["ok"],
+                        }
+                    )
+                snapshot["localValidation"] = validation
+
+            last_snapshot = snapshot
+            iteration_summary = {
+                "iteration": iteration,
+                "state": pr.get("state"),
+                "ready": gate.get("ready"),
+                "blockers": gate.get("blockers") or [],
+                "warnings": gate.get("warnings") or [],
+                "hygieneOk": snapshot["hygiene"].get("ok"),
+                "ciFailures": len(snapshot["ci"].get("failures") or []),
+            }
+            iterations.append(iteration_summary)
+
+            if state == "MERGED":
+                if cleanup:
+                    if not write:
+                        return self._monitor_result(
+                            number,
+                            "manual_decision_required",
+                            complete=False,
+                            manual_reasons=["write_required:cleanup"],
+                            iterations=iterations,
+                            last=last_snapshot,
+                            actions=actions,
+                        )
+                    actions.append(
+                        {
+                            "action": "cleanup",
+                            "result": self.cleanup(
+                                number,
+                                worktree=worktree,
+                                delete_local_branch=delete_local_branch,
+                            ),
+                        }
+                    )
+                return self._monitor_result(
+                    number,
+                    "complete",
+                    complete=True,
+                    manual_reasons=[],
+                    iterations=iterations,
+                    last=last_snapshot,
+                    actions=actions,
+                )
+
+            manual_reasons = self._monitor_manual_reasons(snapshot)
+            if manual_reasons:
+                return self._monitor_result(
+                    number,
+                    "manual_decision_required",
+                    complete=False,
+                    manual_reasons=manual_reasons,
+                    iterations=iterations,
+                    last=last_snapshot,
+                    actions=actions,
+                )
+
+            if gate.get("ready") and snapshot["hygiene"].get("ok"):
+                if not merge:
+                    return self._monitor_result(
+                        number,
+                        "manual_decision_required",
+                        complete=False,
+                        manual_reasons=["merge_decision_required"],
+                        iterations=iterations,
+                        last=last_snapshot,
+                        actions=actions,
+                    )
+                if not write:
+                    return self._monitor_result(
+                        number,
+                        "manual_decision_required",
+                        complete=False,
+                        manual_reasons=["write_required:merge"],
+                        iterations=iterations,
+                        last=last_snapshot,
+                        actions=actions,
+                    )
+                merge_result = self.merge(
+                    number,
+                    method=method,
+                    delete_branch=delete_branch,
+                    require_approval=require_approval,
+                    expected_head_sha=expected_head_sha or head_sha,
+                    allow_pending=allow_pending,
+                    admin=admin,
+                )
+                actions.append({"action": "merge", "result": merge_result})
+                if not merge_result.get("merged"):
+                    return self._monitor_result(
+                        number,
+                        "manual_decision_required",
+                        complete=False,
+                        manual_reasons=["merge:not_confirmed"],
+                        iterations=iterations,
+                        last=last_snapshot,
+                        actions=actions,
+                    )
+                if cleanup:
+                    actions.append(
+                        {
+                            "action": "cleanup",
+                            "result": self.cleanup(
+                                number,
+                                worktree=worktree,
+                                delete_local_branch=delete_local_branch,
+                            ),
+                        }
+                    )
+                return self._monitor_result(
+                    number,
+                    "complete",
+                    complete=True,
+                    manual_reasons=[],
+                    iterations=iterations,
+                    last=last_snapshot,
+                    actions=actions,
+                )
+
+            if max_iterations and iteration >= max_iterations:
+                return self._monitor_result(
+                    number,
+                    "manual_decision_required",
+                    complete=False,
+                    manual_reasons=["monitor:max_iterations"],
+                    iterations=iterations,
+                    last=last_snapshot,
+                    actions=actions,
+                )
+            if deadline and self._clock() >= deadline:
+                return self._monitor_result(
+                    number,
+                    "manual_decision_required",
+                    complete=False,
+                    manual_reasons=["monitor:timeout"],
+                    iterations=iterations,
+                    last=last_snapshot,
+                    actions=actions,
+                )
+            self._sleep(interval_seconds)
+
+    def _monitor_snapshot(
+        self,
+        number: int,
+        *,
+        require_approval: bool,
+        allow_pending: bool,
+        include_logs: bool,
+        changed_files_by_head: dict[str, list[str]],
+        dependency_dedupe: dict[str, Any],
+    ) -> dict[str, Any]:
+        inspection = self.inspect(
+            number,
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+        )
+        pr = inspection["pullRequest"]
+        gate = inspection["readiness"]
+        head_sha = str(gate.get("headRefOid") or pr.get("headRefOid") or "")
+        files = changed_files_by_head.get(head_sha)
+        if files is None:
+            files = self.changed_files(number)
+            changed_files_by_head[head_sha] = files
+        return {
+            "inspect": inspection,
+            "gate": gate,
+            "hygiene": hygiene_report(pr, files),
+            "testPlan": changed_files_to_test_plan(files),
+            "ci": self._ci_failures_from_pr(
+                number, pr, include_logs=include_logs
+            ),
+            "dependencyDedupe": dependency_dedupe,
+        }
+
+    def _monitor_manual_reasons(self, snapshot: Mapping[str, Any]) -> list[str]:
+        gate = _coerce_mapping(snapshot.get("gate"))
+        hygiene = _coerce_mapping(snapshot.get("hygiene"))
+        validation = _coerce_mapping(snapshot.get("localValidation"))
+        pending_checks = bool(
+            _coerce_list(_coerce_mapping(gate.get("checks")).get("pending"))
+        )
+        reasons = [
+            f"gate:{blocker}"
+            for blocker in _coerce_list(gate.get("blockers"))
+            if not str(blocker).startswith("pending:")
+            and not (pending_checks and str(blocker) == "merge_state:BLOCKED")
+        ]
+        reasons.extend(
+            f"hygiene:{failure}" for failure in _coerce_list(hygiene.get("failures"))
+        )
+        if validation and not validation.get("ok"):
+            reasons.append("local_validation:failed")
+        return reasons
+
+    def _monitor_result(
+        self,
+        number: int,
+        status: str,
+        *,
+        complete: bool,
+        manual_reasons: list[str],
+        iterations: list[dict[str, Any]],
+        last: dict[str, Any],
+        actions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "number": number,
+            "repo": self.repo,
+            "status": status,
+            "complete": complete,
+            "manualDecisionRequired": bool(manual_reasons),
+            "manualDecisionReasons": manual_reasons,
+            "iterationCount": len(iterations),
+            "iterations": iterations,
+            "last": last,
+            "actions": actions,
+        }
