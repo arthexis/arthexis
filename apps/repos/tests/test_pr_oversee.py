@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from io import StringIO
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
@@ -363,6 +364,8 @@ def test_merge_gates_expected_head_before_calling_gh_merge():
         "--repo",
         "arthexis/arthexis",
         "--squash",
+        "--match-head-commit",
+        "head-sha",
         "--delete-branch",
     ]
 
@@ -407,13 +410,17 @@ def test_hygiene_detects_missing_migration_and_generated_files():
 
 def test_management_command_merge_without_write_reports_plan():
     fake = PullRequestOverseer(repo="arthexis/arthexis")
-    fake.gate = lambda *args, **kwargs: {"ready": True, "blockers": [], "warnings": []}
+    fake.gate = Mock(return_value={"ready": True, "blockers": [], "warnings": []})
+    fake.merge = Mock(
+        side_effect=AssertionError("merge should not run in dry-run mode")
+    )
+    buffer = StringIO()
 
     with patch(
         "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
         return_value=fake,
     ):
-        output = call_command(
+        call_command(
             "pr_oversee",
             "--repo",
             "arthexis/arthexis",
@@ -421,6 +428,16 @@ def test_management_command_merge_without_write_reports_plan():
             "merge",
             "--pr",
             "123",
+            stdout=buffer,
         )
 
-    assert output is None
+    payload = json.loads(buffer.getvalue())
+    assert payload["write"] is False
+    assert payload["plannedCommand"] == "gh pr merge"
+    assert payload["gate"]["ready"] is True
+    fake.gate.assert_called_once_with(
+        123,
+        require_approval=False,
+        allow_pending=False,
+    )
+    fake.merge.assert_not_called()

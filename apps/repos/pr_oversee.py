@@ -772,6 +772,9 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 f"PR head changed before merge: expected {expected_head_sha}, got {head_sha}"
             )
         command = ["pr", "merge", str(number), "--repo", self.repo, f"--{method}"]
+        guard_sha = expected_head_sha or head_sha
+        if guard_sha:
+            command.extend(["--match-head-commit", guard_sha])
         if delete_branch:
             command.append("--delete-branch")
         if admin:
