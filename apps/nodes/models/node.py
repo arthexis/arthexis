@@ -127,6 +127,10 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         default=False,
         help_text="Mark the node as trusted for network interactions.",
     )
+    reserved = models.BooleanField(
+        default=False,
+        help_text="Marks a peer placeholder reserved by an image build before first contact.",
+    )
     message_queue_length = models.PositiveSmallIntegerField(
         default=10,
         help_text="Maximum queued NetMessages to retain for this peer.",

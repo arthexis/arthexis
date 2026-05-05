@@ -43,6 +43,14 @@ To copy host Wi-Fi/Ethernet NetworkManager profiles into the image, pass one or 
 
 Profile selectors match the NetworkManager connection id, filename, or filename stem from `/etc/NetworkManager/system-connections`. Use `--copy-all-host-networks` only when every saved profile and credential on the build host should be copied. For test rigs or nonstandard hosts, override the source directory with `--host-network-profile-dir`.
 
+To reserve the target node before first boot, add `--reserve`. The build creates or updates a peer `Node` row with `reserved=True`, preassigns a hostname from the parent prefix, and bakes that hostname into the image. Use `--reserve-number 4` to force a suffix such as `gway-004`, or `--reserve-prefix gway` to override the parent-derived prefix. `IMAGER_RESERVE_DEFAULT=1` makes reservation the instance default, and `--no-reserve` disables it for one build.
+
+Reserved builds can also copy the active parent Wi-Fi profile by default with `--copy-parent-network` or `IMAGER_COPY_PARENT_NETWORK_DEFAULT=1`. The reservation watcher can clear pending reservations after the burned node responds on `/nodes/info/`:
+
+```bash
+.venv/bin/python manage.py imager watch-reservations --interfaces wlan0,wlan1,eth0 --interval 30
+```
+
 List registered artifacts:
 
 ```bash

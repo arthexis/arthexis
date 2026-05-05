@@ -30,6 +30,16 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.imager.models import RaspberryPiImageArtifact
+from apps.imager.reservations import (
+    ImageReservation,
+    RESERVATION_ENV_PATH,
+    RESERVATION_JSON_PATH,
+    active_parent_network_names,
+    commit_image_reservation,
+    plan_image_reservation,
+    render_reservation_env,
+    render_reservation_json,
+)
 
 TARGET_RPI4B = "rpi-4b"
 DEFAULT_RECOVERY_SSH_USER = "arthe"
@@ -88,6 +98,18 @@ SUITE_BUNDLE_EXCLUDED_NAMES = frozenset(
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 
+RESERVED_NODE_ENV=/usr/local/share/arthexis/reserved-node.env
+if [ -f "$RESERVED_NODE_ENV" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$RESERVED_NODE_ENV"
+  set +a
+fi
+
+if [ -n "${NODE_HOSTNAME:-}" ]; then
+  hostnamectl set-hostname "$NODE_HOSTNAME" 2>/dev/null || hostname "$NODE_HOSTNAME" 2>/dev/null || true
+fi
+
 missing_packages=()
 if ! command -v git >/dev/null 2>&1; then
   missing_packages+=(git ca-certificates)
@@ -111,6 +133,21 @@ fi
 
 if [ ! -x "$APP_HOME/start.sh" ]; then
   git clone --depth 1 "${ARTHEXIS_GIT_URL}" "$APP_HOME"
+fi
+
+if [ -f "$RESERVED_NODE_ENV" ]; then
+  touch "$APP_HOME/arthexis.env"
+  chmod 600 "$APP_HOME/arthexis.env" || true
+  while IFS= read -r line; do
+    case "$line" in
+      NODE_*=*)
+        key="${line%%=*}"
+        if ! grep -q "^${key}=" "$APP_HOME/arthexis.env"; then
+          printf '%s\\n' "$line" >> "$APP_HOME/arthexis.env"
+        fi
+        ;;
+    esac
+  done < "$RESERVED_NODE_ENV"
 fi
 
 cd "$APP_HOME"
@@ -233,6 +270,7 @@ class BuildResult:
     build_engine: str
     build_profile: str
     profile_manifest: dict[str, object]
+    reservation: dict[str, object] | None = None
 
 
 @dataclass
@@ -287,6 +325,7 @@ class ImageCustomizationResult:
 
     suite_bundle: SuiteBundleInfo | None = None
     network_profiles: tuple[NetworkProfileInfo, ...] = ()
+    reservation: ImageReservation | None = None
 
 
 @dataclass(frozen=True)
@@ -1026,6 +1065,7 @@ def _customize_image(
     recovery_ssh_access: RecoverySSHAccess | None = None,
     suite_source_path: Path | None = None,
     network_profiles: tuple[NetworkProfileInfo, ...] = (),
+    reservation: ImageReservation | None = None,
 ) -> ImageCustomizationResult:
     """Inject bootstrap scripts and systemd units into the image."""
 
@@ -1036,6 +1076,8 @@ def _customize_image(
         service = work_dir / "arthexis-bootstrap.service"
         firstrun = work_dir / "firstrun.sh"
         recovery_service = work_dir / "arthexis-recovery-access.service"
+        reservation_env = work_dir / "reserved-node.env"
+        reservation_json = work_dir / "reserved-node.json"
         suite_bundle_info: SuiteBundleInfo | None = None
 
         bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
@@ -1067,6 +1109,26 @@ def _customize_image(
             ],
             error_message="guestfish failed while injecting bootstrap files",
         )
+        if reservation is not None:
+            reservation_env.write_text(render_reservation_env(reservation), encoding="utf-8")
+            reservation_json.write_text(render_reservation_json(reservation), encoding="utf-8")
+            _guestfish_run_commands(
+                image_path,
+                [
+                    _guestfish_mkdir_p_command(str(PurePosixPath(RESERVATION_ENV_PATH).parent)),
+                    *_guestfish_upload_commands(
+                        reservation_env,
+                        RESERVATION_ENV_PATH,
+                        chmod_mode="0600",
+                    ),
+                    *_guestfish_upload_commands(
+                        reservation_json,
+                        RESERVATION_JSON_PATH,
+                        chmod_mode="0644",
+                    ),
+                ],
+                error_message="guestfish failed while injecting reserved node metadata",
+            )
         if suite_source_path is not None:
             suite_bundle = work_dir / "arthexis-suite.tar.gz"
             suite_bundle_info = _create_suite_bundle(suite_source_path, suite_bundle)
@@ -1165,6 +1227,7 @@ def _customize_image(
     return ImageCustomizationResult(
         suite_bundle=suite_bundle_info,
         network_profiles=network_profiles,
+        reservation=reservation,
     )
 
 
@@ -1233,6 +1296,14 @@ def _network_profiles_metadata(network_profiles: tuple[NetworkProfileInfo, ...])
             for profile in network_profiles
         ],
     }
+
+
+def _reservation_metadata(reservation: dict[str, object] | None) -> dict[str, object]:
+    """Return JSON-safe metadata for an image reservation."""
+
+    if not reservation:
+        return {"enabled": False}
+    return {"enabled": True, **reservation}
 
 
 def _format_url_host(host: str) -> str:
@@ -1768,6 +1839,11 @@ def build_rpi4b_image(
     copy_all_host_networks: bool = False,
     host_network_names: list[str] | tuple[str, ...] | None = None,
     host_network_profile_dir: Path | None = None,
+    copy_parent_networks: bool = False,
+    reserve_node: bool = False,
+    reserve_hostname_prefix: str = "",
+    reserve_number: int | None = None,
+    reserve_role: str = "",
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -1805,17 +1881,34 @@ def build_rpi4b_image(
         )
     if not customize:
         bundle_suite = False
-        if copy_all_host_networks or host_network_names:
+        if copy_all_host_networks or host_network_names or copy_parent_networks:
             raise ImagerBuildError("Host network profile copying requires image customization.")
 
     resolved_suite_source_path = suite_source_path
     if customize and bundle_suite and resolved_suite_source_path is None:
         resolved_suite_source_path = Path(settings.BASE_DIR)
+    resolved_host_network_names = list(host_network_names or ())
+    if copy_parent_networks and not copy_all_host_networks:
+        for profile_name in active_parent_network_names():
+            if profile_name not in resolved_host_network_names:
+                resolved_host_network_names.append(profile_name)
     network_profiles = select_host_network_profiles(
         profile_dir=host_network_profile_dir,
-        names=host_network_names,
+        names=resolved_host_network_names,
         copy_all=copy_all_host_networks,
     )
+    try:
+        reservation = (
+            plan_image_reservation(
+                hostname_prefix=reserve_hostname_prefix,
+                number=reserve_number,
+                role_name=reserve_role,
+            )
+            if reserve_node
+            else None
+        )
+    except ValueError as exc:
+        raise ImagerBuildError(str(exc)) from exc
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
@@ -1834,6 +1927,7 @@ def build_rpi4b_image(
             recovery_ssh_access=recovery_ssh_access,
             suite_source_path=resolved_suite_source_path if bundle_suite else None,
             network_profiles=network_profiles,
+            reservation=reservation,
         )
         if isinstance(raw_customization_result, ImageCustomizationResult):
             customization_result = raw_customization_result
@@ -1843,6 +1937,16 @@ def build_rpi4b_image(
     download_uri = _build_download_uri(download_base_uri, output_filename)
 
     with transaction.atomic():
+        reservation_commit = (
+            commit_image_reservation(reservation)
+            if reservation is not None
+            else None
+        )
+        reservation_payload = (
+            reservation_commit.metadata()
+            if reservation_commit is not None
+            else None
+        )
         RaspberryPiImageArtifact.objects.update_or_create(
             name=name,
             defaults={
@@ -1865,6 +1969,7 @@ def build_rpi4b_image(
                     "host_network_profiles": _network_profiles_metadata(
                         customization_result.network_profiles
                     ),
+                    "reserved_node": _reservation_metadata(reservation_payload),
                     "recovery_ssh": {
                         "enabled": bool(customize and recovery_ssh_access and recovery_ssh_access.enabled),
                         "user": recovery_ssh_access.username if recovery_ssh_access else "",
@@ -1890,4 +1995,5 @@ def build_rpi4b_image(
         build_engine=build_engine,
         build_profile=profile,
         profile_manifest=profile_manifest,
+        reservation=reservation_payload,
     )

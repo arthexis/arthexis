@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import re
 from collections.abc import Mapping
 from urllib.parse import urlsplit
 
@@ -414,6 +415,7 @@ def _update_existing_node(
         ("address", address_value),
         ("ipv4_address", ipv4_value),
         ("ipv6_address", ipv6_value),
+        ("mac_address", payload.mac_address.lower()),
         ("host_instance_id", payload.host_instance_id),
         ("port", payload.port),
     ):
@@ -469,6 +471,9 @@ def _update_existing_node(
     if trusted_allowed and not node.trusted:
         node.trusted = True
         update_fields.append("trusted")
+    if node.reserved:
+        node.reserved = False
+        update_fields.append("reserved")
     if base_site and node.base_site_id != base_site.id:
         node.base_site = base_site
         update_fields.append("base_site")
@@ -497,6 +502,38 @@ def _update_existing_node(
             "detail": f"Node already exists (id: {node.id})",
         }
     )
+
+
+def _find_reserved_node_for_payload(
+    payload: NodeRegistrationPayload,
+    *,
+    address_value: str,
+    ipv4_value: str,
+) -> Node | None:
+    """Return a reserved placeholder that matches a first-contact payload."""
+
+    hostname = (payload.hostname or "").strip()
+    address_tokens = {
+        token
+        for raw_value in (address_value, ipv4_value, payload.network_hostname)
+        for token in re.split(r"[\s,]+", raw_value or "")
+        if token
+    }
+    queryset = Node.objects.filter(reserved=True)
+    if hostname:
+        node = queryset.filter(hostname__iexact=hostname).first()
+        if node:
+            return node
+    for node in queryset.only("id", "address", "ipv4_address", "network_hostname"):
+        node_tokens = {
+            token
+            for raw_value in (node.address, node.ipv4_address, node.network_hostname)
+            for token in re.split(r"[\s,]+", raw_value or "")
+            if token
+        }
+        if node_tokens & address_tokens:
+            return node
+    return None
 
 
 @csrf_exempt
@@ -570,6 +607,12 @@ def register_node(request):
         else None
     )
     existing_node = Node.objects.filter(mac_address=mac_address).first()
+    if existing_node is None:
+        existing_node = _find_reserved_node_for_payload(
+            payload,
+            address_value=address_value,
+            ipv4_value=ipv4_value,
+        )
     relation_value = payload.relation_value
     if relation_value == Node.Relation.SELF and payload.host_instance_id:
         other_self_exists = (
@@ -650,24 +693,28 @@ def register_node(request):
     if relation_value is not None:
         defaults["current_relation"] = relation_value
 
-    try:
-        node, created = Node.objects.get_or_create(
-            mac_address=mac_address,
-            defaults=defaults,
-        )
-    except IntegrityError as error:
-        if not _is_self_host_conflict_error(
-            error,
-            relation_value=relation_value,
-            host_instance_id=payload.host_instance_id,
-        ):
-            raise
-        relation_value = Node.Relation.SIBLING
-        defaults["current_relation"] = relation_value
-        node, created = Node.objects.get_or_create(
-            mac_address=mac_address,
-            defaults=defaults,
-        )
+    if existing_node is not None:
+        node = existing_node
+        created = False
+    else:
+        try:
+            node, created = Node.objects.get_or_create(
+                mac_address=mac_address,
+                defaults=defaults,
+            )
+        except IntegrityError as error:
+            if not _is_self_host_conflict_error(
+                error,
+                relation_value=relation_value,
+                host_instance_id=payload.host_instance_id,
+            ):
+                raise
+            relation_value = Node.Relation.SIBLING
+            defaults["current_relation"] = relation_value
+            node, created = Node.objects.get_or_create(
+                mac_address=mac_address,
+                defaults=defaults,
+            )
     if not created:
         try:
             response = _update_existing_node(
