@@ -24,11 +24,13 @@ class FakeRunner:
     def __init__(self, responses: list[CommandResult] | None = None) -> None:
         self.responses = list(responses or [])
         self.commands: list[list[str]] = []
+        self.cwd_history: list[Path | None] = []
 
     def run(
         self, command: list[str], *, cwd: Path | None = None, check: bool = False
     ) -> CommandResult:
         self.commands.append(command)
+        self.cwd_history.append(cwd)
         if command[:3] == ["git", "worktree", "add"]:
             Path(command[-2]).mkdir(parents=True, exist_ok=True)
         result = (
@@ -514,7 +516,6 @@ def test_monitor_waits_on_pending_then_merges_and_cleans():
             CommandResult(0, "apps/repos/pr_oversee.py\n"),
             CommandResult(0, json.dumps(ready)),
             CommandResult(0, json.dumps(_review_threads_payload())),
-            CommandResult(0, "apps/repos/pr_oversee.py\n"),
             CommandResult(0, json.dumps(ready)),
             CommandResult(0, json.dumps(_review_threads_payload())),
             CommandResult(0, "merged"),
@@ -545,11 +546,15 @@ def test_monitor_waits_on_pending_then_merges_and_cleans():
     assert result["complete"] is True
     assert result["iterationCount"] == 2
     assert sleeps == [0]
+    diff_count = sum(
+        1 for command in runner.commands if command[:3] == ["gh", "pr", "diff"]
+    )
+    assert diff_count == 1
     assert [action["action"] for action in result["actions"]] == [
         "merge",
         "cleanup",
     ]
-    assert runner.commands[8] == [
+    assert runner.commands[7] == [
         "gh",
         "pr",
         "merge",
@@ -561,6 +566,49 @@ def test_monitor_waits_on_pending_then_merges_and_cleans():
         "head-sha",
         "--delete-branch",
     ]
+
+
+def test_monitor_validates_in_reused_worktree_before_merge(tmp_path: Path):
+    worktree = tmp_path / "pr-123"
+    worktree.mkdir()
+    ready = _pr_payload()
+    merged = _pr_payload(state="MERGED")
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(ready)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+            CommandResult(0, "check passed"),
+            CommandResult(0, "tests passed"),
+            CommandResult(0, json.dumps(ready)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "merged"),
+            CommandResult(0, json.dumps(merged)),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.monitor(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        dependency_limit=0,
+        worktree=worktree,
+        run_test_plan=True,
+        merge=True,
+        write=True,
+    )
+
+    assert result["status"] == "complete"
+    assert result["actions"][0] == {
+        "action": "checkout-reuse",
+        "worktree": str(worktree),
+    }
+    assert result["actions"][1]["action"] == "local-validation"
+    assert result["actions"][1]["cwd"] == str(worktree)
+    assert result["last"]["localValidation"]["cwd"] == str(worktree)
+    assert runner.cwd_history[3] == worktree
+    assert runner.cwd_history[4] == worktree
 
 
 def test_management_command_monitor_invokes_overseer_monitor():

@@ -649,14 +649,24 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             ),
         }
 
-    def inspect(self, number: int) -> dict[str, Any]:
+    def inspect(
+        self,
+        number: int,
+        *,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+    ) -> dict[str, Any]:
         pr = self.pr_view(number)
         review_threads = self.comments(number, unresolved_only=False)
         pr["reviewThreads"] = review_threads["threads"]
         pr["unresolvedReviewThreadCount"] = review_threads["unresolvedCount"]
         return {
             "pullRequest": pr,
-            "readiness": readiness_gate(pr),
+            "readiness": readiness_gate(
+                pr,
+                require_approval=require_approval,
+                allow_pending=allow_pending,
+            ),
         }
 
     def gate(
@@ -666,10 +676,11 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         require_approval: bool = False,
         allow_pending: bool = False,
     ) -> dict[str, Any]:
-        pr = self.inspect(number)["pullRequest"]
-        return readiness_gate(
-            pr, require_approval=require_approval, allow_pending=allow_pending
-        )
+        return self.inspect(
+            number,
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+        )["readiness"]
 
     def changed_files(self, number: int) -> list[str]:
         output = self.gh_text(
@@ -731,13 +742,15 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         commands: Iterable[Iterable[object]],
         *,
         output_limit: int = 4000,
+        cwd: Path | None = None,
     ) -> dict[str, Any]:
         """Run generated local validation commands and summarize their results."""
 
         results: list[dict[str, Any]] = []
+        execution_cwd = cwd or self.cwd
         for raw_command in commands:
             command = [str(part) for part in raw_command]
-            result = self.runner.run(command, cwd=self.cwd, check=False)
+            result = self.runner.run(command, cwd=execution_cwd, check=False)
             results.append(
                 {
                     "command": command,
@@ -748,6 +761,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             )
         return {
             "ok": all(item["returncode"] == 0 for item in results),
+            "cwd": str(execution_cwd),
             "commands": results,
         }
 
@@ -919,6 +933,12 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         deadline = self._clock() + timeout_seconds if timeout_seconds else 0.0
         iterations: list[dict[str, Any]] = []
         validation_by_head: dict[str, dict[str, Any]] = {}
+        changed_files_by_head: dict[str, list[str]] = {}
+        dependency_dedupe = (
+            self.dependency_dedupe(limit=dependency_limit)
+            if dependency_limit
+            else {}
+        )
         last_snapshot: dict[str, Any] = {}
         iteration = 0
 
@@ -929,24 +949,46 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 require_approval=require_approval,
                 allow_pending=allow_pending,
                 include_logs=include_logs,
-                dependency_limit=dependency_limit,
+                changed_files_by_head=changed_files_by_head,
+                dependency_dedupe=dependency_dedupe,
             )
             gate = snapshot["gate"]
             pr = snapshot["inspect"]["pullRequest"]
             head_sha = str(gate.get("headRefOid") or "")
 
+            state = str(pr.get("state") or "").upper()
+            if state != "MERGED" and worktree and not checkout_handled:
+                if worktree.exists():
+                    actions.append(
+                        {"action": "checkout-reuse", "worktree": str(worktree)}
+                    )
+                else:
+                    actions.append(
+                        {
+                            "action": "checkout",
+                            "result": self.checkout(
+                                number, worktree=worktree, branch=branch
+                            ),
+                        }
+                    )
+                checkout_handled = True
+
             if run_test_plan:
-                validation_key = head_sha or f"iteration-{iteration}"
+                validation_cwd = worktree if worktree else self.cwd
+                validation_head = head_sha or f"iteration-{iteration}"
+                validation_key = f"{validation_head}:{validation_cwd}"
                 validation = validation_by_head.get(validation_key)
                 if validation is None:
                     validation = self.run_validation_commands(
-                        snapshot["testPlan"]["commands"]
+                        snapshot["testPlan"]["commands"],
+                        cwd=validation_cwd,
                     )
                     validation_by_head[validation_key] = validation
                     actions.append(
                         {
                             "action": "local-validation",
                             "headRefOid": head_sha,
+                            "cwd": str(validation_cwd),
                             "ok": validation["ok"],
                         }
                     )
@@ -964,7 +1006,6 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             }
             iterations.append(iteration_summary)
 
-            state = str(pr.get("state") or "").upper()
             if state == "MERGED":
                 if cleanup:
                     if not write:
@@ -1008,22 +1049,6 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                     last=last_snapshot,
                     actions=actions,
                 )
-
-            if worktree and not checkout_handled:
-                if worktree.exists():
-                    actions.append(
-                        {"action": "checkout-reuse", "worktree": str(worktree)}
-                    )
-                else:
-                    actions.append(
-                        {
-                            "action": "checkout",
-                            "result": self.checkout(
-                                number, worktree=worktree, branch=branch
-                            ),
-                        }
-                    )
-                checkout_handled = True
 
             if gate.get("ready") and snapshot["hygiene"].get("ok"):
                 if not merge:
@@ -1116,22 +1141,21 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         require_approval: bool,
         allow_pending: bool,
         include_logs: bool,
-        dependency_limit: int,
+        changed_files_by_head: dict[str, list[str]],
+        dependency_dedupe: dict[str, Any],
     ) -> dict[str, Any]:
-        inspection = self.inspect(number)
-        pr = inspection["pullRequest"]
-        gate = readiness_gate(
-            pr,
+        inspection = self.inspect(
+            number,
             require_approval=require_approval,
             allow_pending=allow_pending,
         )
-        inspection["readiness"] = gate
-        files = self.changed_files(number)
-        dependency_dedupe = (
-            self.dependency_dedupe(limit=dependency_limit)
-            if dependency_limit
-            else {}
-        )
+        pr = inspection["pullRequest"]
+        gate = inspection["readiness"]
+        head_sha = str(gate.get("headRefOid") or pr.get("headRefOid") or "")
+        files = changed_files_by_head.get(head_sha)
+        if files is None:
+            files = self.changed_files(number)
+            changed_files_by_head[head_sha] = files
         return {
             "inspect": inspection,
             "gate": gate,
@@ -1147,10 +1171,14 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         gate = _coerce_mapping(snapshot.get("gate"))
         hygiene = _coerce_mapping(snapshot.get("hygiene"))
         validation = _coerce_mapping(snapshot.get("localValidation"))
+        pending_checks = bool(
+            _coerce_list(_coerce_mapping(gate.get("checks")).get("pending"))
+        )
         reasons = [
             f"gate:{blocker}"
             for blocker in _coerce_list(gate.get("blockers"))
             if not str(blocker).startswith("pending:")
+            and not (pending_checks and str(blocker) == "merge_state:BLOCKED")
         ]
         reasons.extend(
             f"hygiene:{failure}" for failure in _coerce_list(hygiene.get("failures"))
