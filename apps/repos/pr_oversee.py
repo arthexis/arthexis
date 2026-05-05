@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
-
 
 JSONValue = dict[str, Any] | list[Any] | str | int | float | bool | None
 
@@ -37,14 +37,17 @@ PR_FIELDS = ",".join(
 
 GOOD_CHECKS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 BAD_CHECKS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
-PENDING_CHECKS = {"EXPECTED", "PENDING", "QUEUED", "REQUESTED", "IN_PROGRESS", "WAITING"}
+PENDING_CHECKS = {
+    "EXPECTED",
+    "PENDING",
+    "QUEUED",
+    "REQUESTED",
+    "IN_PROGRESS",
+    "WAITING",
+}
 BAD_MERGE_STATES = {"BEHIND", "BLOCKED", "DIRTY", "UNKNOWN"}
 README_RE = re.compile(r"(^|/)(README|README\.[^/]+)$", re.IGNORECASE)
-DEPENDENCY_TITLE_PATTERNS = (
-    re.compile(r"\bbump\s+(.+?)\s+from\s+([^\s]+)\s+to\s+([^\s]+)", re.IGNORECASE),
-    re.compile(r"\bbump\s+(.+?)\s+to\s+([^\s]+)", re.IGNORECASE),
-    re.compile(r"\bupdate\s+dependency\s+(.+?)\s+to\s+([^\s]+)", re.IGNORECASE),
-)
+VERSION_SUFFIX_SEPARATORS = "-_/"
 
 
 class PullRequestOverseeError(RuntimeError):
@@ -85,7 +88,9 @@ class CommandRunner:
             stderr=completed.stderr or "",
         )
         if check and result.returncode != 0:
-            message = result.stderr.strip() or result.stdout.strip() or f"{command[0]} failed"
+            message = (
+                result.stderr.strip() or result.stdout.strip() or f"{command[0]} failed"
+            )
             raise PullRequestOverseeError(message)
         return result
 
@@ -96,7 +101,9 @@ def _json_loads(raw_value: str) -> JSONValue:
     try:
         return json.loads(raw_value)
     except json.JSONDecodeError as exc:
-        raise PullRequestOverseeError(f"Command did not return valid JSON: {exc}") from exc
+        raise PullRequestOverseeError(
+            f"Command did not return valid JSON: {exc}"
+        ) from exc
 
 
 def _coerce_mapping(value: object) -> dict[str, Any]:
@@ -195,8 +202,12 @@ def readiness_gate(
         blockers.append(f"review:{review_decision or 'MISSING_APPROVAL'}")
 
     checks = check_rollup_state(pr)
-    blockers.extend(f"check:{item['name']}:{item['value']}" for item in checks["failing"])
-    pending_values = [f"pending:{item['name']}:{item['value']}" for item in checks["pending"]]
+    blockers.extend(
+        f"check:{item['name']}:{item['value']}" for item in checks["failing"]
+    )
+    pending_values = [
+        f"pending:{item['name']}:{item['value']}" for item in checks["pending"]
+    ]
     if pending_values and allow_pending:
         warnings.extend(pending_values)
     else:
@@ -227,17 +238,86 @@ def readiness_gate(
     }
 
 
+def _split_marker(value: str, marker: str) -> tuple[str, str] | None:
+    index = value.lower().find(marker)
+    if index == -1:
+        return None
+    return value[:index], value[index + len(marker) :]
+
+
+def _normalize_dependency_name(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def _parse_dependency_title(title: str) -> tuple[str, str] | None:
+    stripped = title.strip()
+    lowered = stripped.lower()
+    if lowered.startswith("bump "):
+        body = stripped[5:].strip()
+    elif lowered.startswith("update dependency "):
+        body = stripped[len("update dependency ") :].strip()
+    else:
+        return None
+
+    from_split = _split_marker(body, " from ")
+    if from_split:
+        name, remaining = from_split
+        to_split = _split_marker(remaining, " to ")
+        if to_split:
+            return name.strip(), to_split[1].strip().split(maxsplit=1)[0]
+        return None
+
+    to_split = _split_marker(body, " to ")
+    if to_split:
+        return to_split[0].strip(), to_split[1].strip().split(maxsplit=1)[0]
+    return None
+
+
+def _looks_like_version_suffix(value: str) -> bool:
+    normalized = value.strip().lstrip("vV")
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+    return (
+        bool(normalized)
+        and normalized[0].isdigit()
+        and "." in normalized
+        and all(character in allowed for character in normalized)
+    )
+
+
+def _version_suffix_match(value: str) -> tuple[int, str] | None:
+    for index, character in enumerate(value):
+        if character not in VERSION_SUFFIX_SEPARATORS:
+            continue
+        candidate = value[index + 1 :]
+        if _looks_like_version_suffix(candidate):
+            return index, candidate.lstrip("vV")
+    return None
+
+
+def _version_suffix(value: str) -> str:
+    match = _version_suffix_match(value)
+    return match[1] if match else ""
+
+
+def _strip_version_suffix(value: str) -> str:
+    match = _version_suffix_match(value)
+    if not match:
+        return value
+    return value[: match[0]].rstrip(VERSION_SUFFIX_SEPARATORS)
+
+
 def dependency_key(pr: Mapping[str, Any]) -> str:
     """Return a stable dependency grouping key for a PR."""
 
     title = str(pr.get("title") or "")
-    for pattern in DEPENDENCY_TITLE_PATTERNS:
-        match = pattern.search(title)
-        if match:
-            return re.sub(r"\s+", " ", match.group(1).strip().lower())
+    title_parts = _parse_dependency_title(title)
+    if title_parts:
+        return _normalize_dependency_name(title_parts[0])
     head = str(pr.get("headRefName") or "").lower()
-    head = re.sub(r"^dependabot/[^/]+/", "", head)
-    head = re.sub(r"[-_/]?v?\d+(?:\.\d+)+(?:[-_.][a-z0-9]+)?$", "", head)
+    if head.startswith("dependabot/"):
+        parts = head.split("/", 2)
+        head = parts[2] if len(parts) == 3 else parts[-1]
+    head = _strip_version_suffix(head)
     return head or title.lower()
 
 
@@ -245,13 +325,11 @@ def dependency_target_version(pr: Mapping[str, Any]) -> str:
     """Best-effort dependency target version from title or branch."""
 
     title = str(pr.get("title") or "")
-    for pattern in DEPENDENCY_TITLE_PATTERNS:
-        match = pattern.search(title)
-        if match:
-            return match.group(match.lastindex or 1)
+    title_parts = _parse_dependency_title(title)
+    if title_parts:
+        return title_parts[1]
     head = str(pr.get("headRefName") or "")
-    match = re.search(r"v?(\d+(?:\.\d+)+(?:[-_.][A-Za-z0-9]+)?)$", head)
-    return match.group(1) if match else ""
+    return _version_suffix(head)
 
 
 def is_dependency_pr(pr: Mapping[str, Any]) -> bool:
@@ -260,7 +338,12 @@ def is_dependency_pr(pr: Mapping[str, Any]) -> bool:
     login = _author_login(pr).lower()
     title = str(pr.get("title") or "").lower()
     head = str(pr.get("headRefName") or "").lower()
-    return "dependabot" in login or "dependabot" in head or title.startswith("build(deps") or "bump " in title
+    return (
+        "dependabot" in login
+        or "dependabot" in head
+        or title.startswith("build(deps")
+        or "bump " in title
+    )
 
 
 def dependency_duplicates(prs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -325,17 +408,23 @@ def changed_files_to_test_plan(paths: Iterable[str]) -> dict[str, Any]:
         if path.endswith((".pyc", ".sqlite3", ".log")) or "__pycache__" in path:
             generated_candidates.append(path)
 
-    commands.append([".venv/bin/python", "manage.py", "check", "--fail-level", "ERROR"])
-    for app_label in sorted(apps):
-        test_dir = f"apps/{app_label}/tests"
-        commands.append([".venv/bin/python", "manage.py", "test", "run", "--", test_dir])
+    commands.append([sys.executable, "manage.py", "check", "--fail-level", "ERROR"])
+    test_paths = [f"apps/{app_label}/tests" for app_label in sorted(apps)]
+    if test_paths:
+        commands.append([sys.executable, "manage.py", "test", "run", "--", *test_paths])
     if model_change or migration_change:
-        commands.append([".venv/bin/python", "manage.py", "makemigrations", "--check", "--dry-run"])
-        commands.append([".venv/bin/python", "manage.py", "migrate", "--check"])
+        commands.append(
+            [sys.executable, "manage.py", "makemigrations", "--check", "--dry-run"]
+        )
+        commands.append([sys.executable, "manage.py", "migrate", "--check"])
     if workflow_change:
-        notes.append("Workflow files changed; inspect GitHub Actions syntax and required checks.")
+        notes.append(
+            "Workflow files changed; inspect GitHub Actions syntax and required checks."
+        )
     if docs_only:
-        notes.append("Docs-only change; app tests may be unnecessary beyond Django checks.")
+        notes.append(
+            "Docs-only change; app tests may be unnecessary beyond Django checks."
+        )
     if generated_candidates:
         notes.append("Generated artifacts detected: " + ", ".join(generated_candidates))
 
@@ -362,10 +451,17 @@ def hygiene_report(pr: Mapping[str, Any], files: Iterable[str]) -> dict[str, Any
         warnings.append("body:missing-summary")
     if "validation" not in lower_body and "test" not in lower_body:
         warnings.append("body:missing-validation")
-    if not re.search(r"\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+", body, re.IGNORECASE):
+    if not re.search(
+        r"\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+", body, re.IGNORECASE
+    ):
         warnings.append("body:missing-issue-link")
 
-    model_paths = [path for path in changed if path.startswith("apps/") and ("/models" in path or path.endswith("models.py"))]
+    model_paths = [
+        path
+        for path in changed
+        if path.startswith("apps/")
+        and ("/models" in path or path.endswith("models.py"))
+    ]
     migration_paths = [path for path in changed if "/migrations/" in path]
     if model_paths and not migration_paths:
         failures.append("model-change:missing-migration")
@@ -378,7 +474,11 @@ def hygiene_report(pr: Mapping[str, Any], files: Iterable[str]) -> dict[str, Any
     ]
     if generated:
         failures.append("generated-artifacts:" + ",".join(generated))
-    if changed and not any(path.startswith("docs/") for path in changed) and len(changed) > 5:
+    if (
+        changed
+        and not any(path.startswith("docs/") for path in changed)
+        and len(changed) > 5
+    ):
         warnings.append("docs:not-updated")
 
     return {
@@ -416,7 +516,9 @@ class PullRequestOverseer:
         return result.stdout.strip()
 
     def pr_view(self, number: int) -> dict[str, Any]:
-        payload = self.gh_json(["pr", "view", str(number), "--repo", self.repo, "--json", PR_FIELDS])
+        payload = self.gh_json(
+            ["pr", "view", str(number), "--repo", self.repo, "--json", PR_FIELDS]
+        )
         return _coerce_mapping(payload)
 
     def list_open_prs(self, limit: int = 80) -> list[dict[str, Any]]:
@@ -439,10 +541,10 @@ class PullRequestOverseer:
     def comments(self, number: int, *, unresolved_only: bool = False) -> dict[str, Any]:
         owner, name = self.repo.split("/", 1)
         query = """
-query($owner: String!, $name: String!, $number: Int!) {
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $after) {
         nodes {
           isResolved
           isOutdated
@@ -459,13 +561,19 @@ query($owner: String!, $name: String!, $number: Int!) {
             }
           }
         }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
   }
 }
 """.strip()
-        payload = self.gh_json(
-            [
+        threads: list[Any] = []
+        after = ""
+        while True:
+            command = [
                 "api",
                 "graphql",
                 "-f",
@@ -477,12 +585,24 @@ query($owner: String!, $name: String!, $number: Int!) {
                 "-F",
                 f"number={number}",
             ]
-        )
-        data = _coerce_mapping(payload)
-        pr = _coerce_mapping(
-            _coerce_mapping(_coerce_mapping(data.get("data")).get("repository")).get("pullRequest")
-        )
-        threads = _coerce_list(_coerce_mapping(pr.get("reviewThreads")).get("nodes"))
+            if after:
+                command.extend(["-F", f"after={after}"])
+            payload = self.gh_json(command)
+            data = _coerce_mapping(payload)
+            pr = _coerce_mapping(
+                _coerce_mapping(
+                    _coerce_mapping(data.get("data")).get("repository")
+                ).get("pullRequest")
+            )
+            review_threads = _coerce_mapping(pr.get("reviewThreads"))
+            threads.extend(_coerce_list(review_threads.get("nodes")))
+            page_info = _coerce_mapping(review_threads.get("pageInfo"))
+            if not page_info.get("hasNextPage"):
+                break
+            next_cursor = str(page_info.get("endCursor") or "")
+            if not next_cursor or next_cursor == after:
+                break
+            after = next_cursor
         normalized: list[dict[str, Any]] = []
         for raw_thread in threads:
             thread = _coerce_mapping(raw_thread)
@@ -490,11 +610,15 @@ query($owner: String!, $name: String!, $number: Int!) {
             if unresolved_only and is_resolved:
                 continue
             comments = []
-            for raw_comment in _coerce_list(_coerce_mapping(thread.get("comments")).get("nodes")):
+            for raw_comment in _coerce_list(
+                _coerce_mapping(thread.get("comments")).get("nodes")
+            ):
                 comment = _coerce_mapping(raw_comment)
                 comments.append(
                     {
-                        "author": str(_coerce_mapping(comment.get("author")).get("login") or ""),
+                        "author": str(
+                            _coerce_mapping(comment.get("author")).get("login") or ""
+                        ),
                         "body": str(comment.get("body") or ""),
                         "createdAt": str(comment.get("createdAt") or ""),
                         "url": str(comment.get("url") or ""),
@@ -514,7 +638,9 @@ query($owner: String!, $name: String!, $number: Int!) {
         return {
             "number": number,
             "threads": normalized,
-            "unresolvedCount": sum(1 for thread in normalized if not thread["isResolved"]),
+            "unresolvedCount": sum(
+                1 for thread in normalized if not thread["isResolved"]
+            ),
         }
 
     def inspect(self, number: int) -> dict[str, Any]:
@@ -535,16 +661,22 @@ query($owner: String!, $name: String!, $number: Int!) {
         allow_pending: bool = False,
     ) -> dict[str, Any]:
         pr = self.inspect(number)["pullRequest"]
-        return readiness_gate(pr, require_approval=require_approval, allow_pending=allow_pending)
+        return readiness_gate(
+            pr, require_approval=require_approval, allow_pending=allow_pending
+        )
 
     def changed_files(self, number: int) -> list[str]:
-        output = self.gh_text(["pr", "diff", str(number), "--repo", self.repo, "--name-only"])
+        output = self.gh_text(
+            ["pr", "diff", str(number), "--repo", self.repo, "--name-only"]
+        )
         return [line.strip() for line in output.splitlines() if line.strip()]
 
     def test_plan(self, number: int) -> dict[str, Any]:
         return changed_files_to_test_plan(self.changed_files(number))
 
-    def ci_failures(self, number: int, *, include_logs: bool = False, log_limit: int = 4000) -> dict[str, Any]:
+    def ci_failures(
+        self, number: int, *, include_logs: bool = False, log_limit: int = 4000
+    ) -> dict[str, Any]:
         pr = self.pr_view(number)
         checks = check_rollup_state(pr)
         failures = [*checks["failing"], *checks["pending"]]
@@ -556,7 +688,15 @@ query($owner: String!, $name: String!, $number: Int!) {
                 if not match:
                     continue
                 result = self.runner.run(
-                    ["gh", "run", "view", match.group(1), "--repo", self.repo, "--log-failed"],
+                    [
+                        "gh",
+                        "run",
+                        "view",
+                        match.group(1),
+                        "--repo",
+                        self.repo,
+                        "--log-failed",
+                    ],
                     cwd=self.cwd,
                     check=False,
                 )
@@ -619,9 +759,13 @@ query($owner: String!, $name: String!, $number: Int!) {
         allow_pending: bool = False,
         admin: bool = False,
     ) -> dict[str, Any]:
-        gate = self.gate(number, require_approval=require_approval, allow_pending=allow_pending)
+        gate = self.gate(
+            number, require_approval=require_approval, allow_pending=allow_pending
+        )
         if not gate["ready"]:
-            raise PullRequestOverseeError("PR is not merge-ready: " + ", ".join(gate["blockers"]))
+            raise PullRequestOverseeError(
+                "PR is not merge-ready: " + ", ".join(gate["blockers"])
+            )
         head_sha = str(gate.get("headRefOid") or "")
         if expected_head_sha and expected_head_sha != head_sha:
             raise PullRequestOverseeError(
@@ -652,10 +796,14 @@ query($owner: String!, $name: String!, $number: Int!) {
         pr = self.pr_view(number)
         state = str(pr.get("state") or "").upper()
         if state != "MERGED":
-            raise PullRequestOverseeError(f"PR #{number} is not merged; refusing cleanup")
+            raise PullRequestOverseeError(
+                f"PR #{number} is not merged; refusing cleanup"
+            )
         actions: list[dict[str, Any]] = []
         if worktree:
-            result = self.runner.run(["git", "worktree", "remove", str(worktree)], cwd=self.cwd, check=False)
+            result = self.runner.run(
+                ["git", "worktree", "remove", str(worktree)], cwd=self.cwd, check=False
+            )
             actions.append(
                 {
                     "action": "remove-worktree",
@@ -664,8 +812,11 @@ query($owner: String!, $name: String!, $number: Int!) {
                     "stderr": result.stderr.strip(),
                 }
             )
-        self.git(["fetch", "origin", "main", "--prune"])
-        actions.append({"action": "fetch-main-prune", "returncode": 0})
+        base_branch = str(pr.get("baseRefName") or "main")
+        self.git(["fetch", "origin", base_branch, "--prune"])
+        actions.append(
+            {"action": "fetch-base-prune", "branch": base_branch, "returncode": 0}
+        )
         if delete_local_branch:
             result = self.runner.run(
                 ["git", "branch", "-D", delete_local_branch],

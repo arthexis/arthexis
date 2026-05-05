@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,11 +24,15 @@ class FakeRunner:
         self.responses = list(responses or [])
         self.commands: list[list[str]] = []
 
-    def run(self, command: list[str], *, cwd: Path | None = None, check: bool = False) -> CommandResult:
+    def run(
+        self, command: list[str], *, cwd: Path | None = None, check: bool = False
+    ) -> CommandResult:
         self.commands.append(command)
         if command[:3] == ["git", "worktree", "add"]:
             Path(command[-2]).mkdir(parents=True, exist_ok=True)
-        result = self.responses.pop(0) if self.responses else CommandResult(returncode=0)
+        result = (
+            self.responses.pop(0) if self.responses else CommandResult(returncode=0)
+        )
         if check and result.returncode != 0:
             raise PullRequestOverseeError(result.stderr or result.stdout or "failed")
         return result
@@ -107,7 +112,8 @@ def test_comments_normalizes_unresolved_review_threads():
                                 "line": 1,
                                 "comments": {"nodes": []},
                             },
-                        ]
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                     }
                 }
             }
@@ -123,6 +129,62 @@ def test_comments_normalizes_unresolved_review_threads():
     assert result["threads"][0]["comments"][0]["author"] == "reviewer"
 
 
+def test_comments_paginates_review_threads():
+    first_page = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "nodes": [
+                            {
+                                "isResolved": False,
+                                "isOutdated": False,
+                                "path": "apps/repos/pr_oversee.py",
+                                "line": 42,
+                                "comments": {"nodes": []},
+                            }
+                        ],
+                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor-1"},
+                    }
+                }
+            }
+        }
+    }
+    second_page = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "nodes": [
+                            {
+                                "isResolved": False,
+                                "isOutdated": False,
+                                "path": "apps/repos/management/commands/pr_oversee.py",
+                                "line": 12,
+                                "comments": {"nodes": []},
+                            }
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+        }
+    }
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(first_page)),
+            CommandResult(0, json.dumps(second_page)),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.comments(123)
+
+    assert result["unresolvedCount"] == 2
+    assert len(result["threads"]) == 2
+    assert runner.commands[1][-1] == "after=cursor-1"
+
+
 def test_test_plan_maps_changed_apps_and_migrations_to_commands():
     result = changed_files_to_test_plan(
         [
@@ -136,9 +198,24 @@ def test_test_plan_maps_changed_apps_and_migrations_to_commands():
     assert result["apps"] == ["repos"]
     assert result["modelChange"] is True
     assert result["migrationChange"] is True
-    assert [".venv/bin/python", "manage.py", "test", "run", "--", "apps/repos/tests"] in result["commands"]
-    assert [".venv/bin/python", "manage.py", "makemigrations", "--check", "--dry-run"] in result["commands"]
-    assert result["notes"] == ["Workflow files changed; inspect GitHub Actions syntax and required checks."]
+    assert [
+        sys.executable,
+        "manage.py",
+        "test",
+        "run",
+        "--",
+        "apps/repos/tests",
+    ] in result["commands"]
+    assert [
+        sys.executable,
+        "manage.py",
+        "makemigrations",
+        "--check",
+        "--dry-run",
+    ] in result["commands"]
+    assert result["notes"] == [
+        "Workflow files changed; inspect GitHub Actions syntax and required checks."
+    ]
 
 
 def test_ci_failures_collects_failed_run_log_snippet():
@@ -164,7 +241,15 @@ def test_ci_failures_collects_failed_run_log_snippet():
 
     assert result["failures"][0]["name"] == "Tests"
     assert result["logs"] == {"Tests": "failed test log"}
-    assert runner.commands[-1] == ["gh", "run", "view", "42", "--repo", "arthexis/arthexis", "--log-failed"]
+    assert runner.commands[-1] == [
+        "gh",
+        "run",
+        "view",
+        "42",
+        "--repo",
+        "arthexis/arthexis",
+        "--log-failed",
+    ]
 
 
 def test_dependency_duplicates_marks_older_updates_superseded():
@@ -191,15 +276,52 @@ def test_dependency_duplicates_marks_older_updates_superseded():
     assert result["django"]["preferred"]["number"] == 2
 
 
+def test_dependency_duplicates_groups_versioned_dependabot_branches():
+    result = dependency_duplicates(
+        [
+            {
+                "number": 1,
+                "title": "build(deps): update django",
+                "author": {"login": "dependabot[bot]"},
+                "headRefName": "dependabot/pip/django-v5.2.12",
+                "updatedAt": "2026-05-01T00:00:00Z",
+            },
+            {
+                "number": 2,
+                "title": "build(deps): update django",
+                "author": {"login": "dependabot[bot]"},
+                "headRefName": "dependabot/pip/django-v5.2.13",
+                "updatedAt": "2026-05-02T00:00:00Z",
+            },
+        ]
+    )
+
+    assert result["django"]["items"][0]["targetVersion"] == "5.2.12"
+    assert result["django"]["preferred"]["number"] == 2
+
+
 def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
-    runner = FakeRunner([CommandResult(0, json.dumps(_pr_payload())), CommandResult(0), CommandResult(0)])
-    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner, cwd=tmp_path)
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0),
+            CommandResult(0),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
     worktree = tmp_path / "pr-123"
 
     result = overseer.checkout(123, worktree=worktree, branch="repos-pr-123")
 
     assert result["worktree"] == str(worktree)
-    assert runner.commands[1] == ["git", "fetch", "origin", "pull/123/head:refs/remotes/origin/pr/123"]
+    assert runner.commands[1] == [
+        "git",
+        "fetch",
+        "origin",
+        "pull/123/head:refs/remotes/origin/pr/123",
+    ]
     assert runner.commands[2] == [
         "git",
         "worktree",
@@ -209,11 +331,16 @@ def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
         str(worktree),
         "refs/remotes/origin/pr/123",
     ]
-    assert json.loads((worktree / ".arthexis-pr-oversee.json").read_text())["headRefOid"] == "head-sha"
+    assert (
+        json.loads((worktree / ".arthexis-pr-oversee.json").read_text())["headRefOid"]
+        == "head-sha"
+    )
 
 
 def test_merge_gates_expected_head_before_calling_gh_merge():
-    comments = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": []}}}}}
+    comments = {
+        "data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": []}}}}
+    }
     merged = _pr_payload(state="MERGED")
     runner = FakeRunner(
         [
@@ -248,6 +375,24 @@ def test_cleanup_refuses_unmerged_pr():
         overseer.cleanup(123)
 
 
+def test_cleanup_fetches_merged_pr_base_branch(tmp_path: Path):
+    runner = FakeRunner(
+        [CommandResult(0, json.dumps(_pr_payload(state="MERGED", baseRefName="trunk")))]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+
+    result = overseer.cleanup(123)
+
+    assert runner.commands[1] == ["git", "fetch", "origin", "trunk", "--prune"]
+    assert result["actions"][0] == {
+        "action": "fetch-base-prune",
+        "branch": "trunk",
+        "returncode": 0,
+    }
+
+
 def test_hygiene_detects_missing_migration_and_generated_files():
     result = hygiene_report(
         _pr_payload(body="No sections"),
@@ -264,7 +409,10 @@ def test_management_command_merge_without_write_reports_plan():
     fake = PullRequestOverseer(repo="arthexis/arthexis")
     fake.gate = lambda *args, **kwargs: {"ready": True, "blockers": [], "warnings": []}
 
-    with patch("apps.repos.management.commands.pr_oversee.PullRequestOverseer", return_value=fake):
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
         output = call_command(
             "pr_oversee",
             "--repo",
