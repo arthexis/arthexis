@@ -1881,6 +1881,10 @@ def build_rpi4b_image(
         )
     if not customize:
         bundle_suite = False
+        if reserve_node:
+            raise ImagerBuildError(
+                "Reserved node images require image customization. Remove --skip-customize or omit --reserve."
+            )
         if copy_all_host_networks or host_network_names or copy_parent_networks:
             raise ImagerBuildError("Host network profile copying requires image customization.")
 

@@ -62,6 +62,10 @@ logger = logging.getLogger("apps.nodes.views")
 registration_logger = get_register_visitor_logger()
 
 
+class ReservedNodeClaimError(RuntimeError):
+    """Raised when a reserved placeholder was claimed by another registration."""
+
+
 def _extract_response_detail(response) -> str:
     """Extract detail text from JSON and non-JSON responses."""
 
@@ -406,9 +410,19 @@ def _update_existing_node(
 ):
     """Update an existing node while preserving response compatibility."""
 
+    reserved_claimed = False
+    if node.reserved:
+        claimed = Node.objects.filter(pk=node.pk, reserved=True).update(reserved=False)
+        if not claimed:
+            raise ReservedNodeClaimError("Reserved node was already claimed.")
+        node.reserved = False
+        reserved_claimed = True
+
     previous_version = (node.installed_version or "").strip()
     previous_revision = (node.installed_revision or "").strip()
     update_fields: list[str] = []
+    if reserved_claimed:
+        update_fields.append("reserved")
     for field, value in (
         ("hostname", payload.hostname),
         ("network_hostname", payload.network_hostname),
@@ -471,9 +485,6 @@ def _update_existing_node(
     if trusted_allowed and not node.trusted:
         node.trusted = True
         update_fields.append("trusted")
-    if node.reserved:
-        node.reserved = False
-        update_fields.append("reserved")
     if base_site and node.base_site_id != base_site.id:
         node.base_site = base_site
         update_fields.append("base_site")
@@ -513,17 +524,17 @@ def _find_reserved_node_for_payload(
     """Return a reserved placeholder that matches a first-contact payload."""
 
     hostname = (payload.hostname or "").strip()
+    queryset = Node.objects.filter(reserved=True)
+    if hostname:
+        return queryset.filter(hostname__iexact=hostname).first()
     address_tokens = {
         token
         for raw_value in (address_value, ipv4_value, payload.network_hostname)
         for token in re.split(r"[\s,]+", raw_value or "")
         if token
     }
-    queryset = Node.objects.filter(reserved=True)
-    if hostname:
-        node = queryset.filter(hostname__iexact=hostname).first()
-        if node:
-            return node
+    if not address_tokens:
+        return None
     for node in queryset.only("id", "address", "ipv4_address", "network_hostname"):
         node_tokens = {
             token
@@ -749,6 +760,17 @@ def register_node(request):
                 trusted_allowed=trusted_allowed,
                 base_site=base_site,
                 request=request,
+            )
+        except ReservedNodeClaimError as error:
+            _log_registration_event(
+                "failed",
+                payload,
+                request,
+                detail=str(error),
+                level=logging.WARNING,
+            )
+            return add_cors_headers(
+                request, JsonResponse({"detail": str(error)}, status=409)
             )
         _log_registration_event(
             "succeeded", payload, request, detail=f"updated node {node.id}"

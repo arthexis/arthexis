@@ -172,17 +172,22 @@ def _interface_networks() -> list[ipaddress.IPv4Network]:
     return ordered
 
 
-def _known_neighbor_ips() -> set[str]:
+def _collect_neighbor_ips(
+    interface_name: str | None = None, *, timeout: float = 1.5
+) -> set[str]:
     ip_path = shutil_which("ip")
     if not ip_path:
         return set()
+    command = [ip_path, "-4", "neigh", "show"]
+    if interface_name:
+        command.extend(["dev", interface_name])
     try:
         result = subprocess.run(
-            [ip_path, "-4", "neigh", "show"],
+            command,
             capture_output=True,
             text=True,
             check=False,
-            timeout=1.5,
+            timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError):
         return set()
@@ -196,6 +201,10 @@ def _known_neighbor_ips() -> set[str]:
         except ValueError:
             continue
     return values
+
+
+def _known_neighbor_ips() -> set[str]:
+    return _collect_neighbor_ips()
 
 
 def shutil_which(command: str) -> str | None:
@@ -380,29 +389,7 @@ def watch_interfaces_from_env() -> list[str]:
 
 
 def _known_interface_hosts(interface_name: str) -> set[str]:
-    ip_path = shutil_which("ip")
-    if not ip_path:
-        return set()
-    try:
-        result = subprocess.run(
-            [ip_path, "-4", "neigh", "show", "dev", interface_name],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=1.0,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return set()
-    if result.returncode != 0:
-        return set()
-    hosts: set[str] = set()
-    for line in result.stdout.splitlines():
-        token = line.split(maxsplit=1)[0] if line.split() else ""
-        try:
-            hosts.add(str(ipaddress.ip_address(token)))
-        except ValueError:
-            continue
-    return hosts
+    return _collect_neighbor_ips(interface_name, timeout=1.0)
 
 
 def _node_candidate_hosts(node: Node, interfaces: list[str]) -> list[str]:
@@ -439,6 +426,17 @@ def _fetch_node_info(host: str, ports: tuple[int, ...], timeout: float) -> dict[
     return None
 
 
+def _node_info_port(info: dict[str, Any]) -> int:
+    for raw_value in (info.get("port"), info.get("_watch_port"), 8888):
+        if raw_value in (None, ""):
+            continue
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return 8888
+
+
 def _info_matches_reservation(node: Node, info: dict[str, Any]) -> bool:
     expected_hostname = (node.hostname or "").strip().lower()
     reported_hostname = str(info.get("hostname") or "").strip().lower()
@@ -468,6 +466,18 @@ def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
             status="conflict",
             detail=f"MAC address already belongs to another node: {mac_address}",
         )
+    reserved_claimed = False
+    if node.reserved:
+        claimed = Node.objects.filter(pk=node.pk, reserved=True).update(reserved=False)
+        if not claimed:
+            return ReservationWatchResult(
+                node_id=node.id,
+                hostname=node.hostname,
+                status="conflict",
+                detail="Reserved node was already claimed.",
+            )
+        node.reserved = False
+        reserved_claimed = True
 
     fields = {
         "hostname": str(info.get("hostname") or node.hostname).strip(),
@@ -476,7 +486,7 @@ def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
         "ipv4_address": ",".join(Node.sanitize_ipv4_addresses(info.get("ipv4_address") or [])),
         "ipv6_address": str(info.get("ipv6_address") or "").strip(),
         "host_instance_id": str(info.get("host_instance_id") or "").strip(),
-        "port": int(info.get("port") or 8888),
+        "port": _node_info_port(info),
         "installed_version": str(info.get("installed_version") or "")[:20],
         "installed_revision": str(info.get("installed_revision") or "")[:40],
         "public_key": str(info.get("public_key") or ""),
@@ -488,6 +498,8 @@ def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
     if role:
         fields["role"] = role
     update_fields: list[str] = []
+    if reserved_claimed:
+        update_fields.append("reserved")
     for field, value in fields.items():
         if getattr(node, field) != value:
             setattr(node, field, value)

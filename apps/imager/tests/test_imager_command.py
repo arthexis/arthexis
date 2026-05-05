@@ -18,6 +18,7 @@ from django.test import override_settings
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
     ImageReservation,
+    confirm_reserved_node,
     plan_image_reservation,
     watch_reserved_nodes_once,
 )
@@ -1051,6 +1052,24 @@ def test_build_rpi4b_image_rejects_recovery_ssh_when_customize_is_disabled(tmp_p
         )
 
 
+def test_build_rpi4b_image_rejects_reservation_when_customize_is_disabled(tmp_path: Path) -> None:
+    """Regression: reserved node images need injected metadata to be claimable."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Reserved node images require image customization"):
+        build_rpi4b_image(
+            name="reserved-no-customize",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            reserve_node=True,
+        )
+
+
 def test_build_rpi4b_image_rejects_recovery_username_without_keys(tmp_path: Path) -> None:
     """Regression: explicit recovery usernames without keys should fail fast."""
 
@@ -1323,9 +1342,10 @@ def test_watch_reserved_nodes_confirms_matching_node(monkeypatch) -> None:
             "hostname": "gway-004",
             "address": "10.42.0.4",
             "ipv4_address": "10.42.0.4",
-            "port": 8888,
+            "port": "not-a-port",
             "mac_address": "aa:bb:cc:dd:ee:04",
             "_watch_host": host,
+            "_watch_port": 8888,
         }
 
     monkeypatch.setattr("apps.imager.reservations._fetch_node_info", fake_fetch)
@@ -1336,7 +1356,40 @@ def test_watch_reserved_nodes_confirms_matching_node(monkeypatch) -> None:
     node.refresh_from_db()
     assert node.reserved is False
     assert node.mac_address == "aa:bb:cc:dd:ee:04"
+    assert node.port == 8888
     assert node.trusted is True
+
+
+@pytest.mark.django_db
+def test_confirm_reserved_node_reports_already_claimed_reservation() -> None:
+    """A stale watcher result must not overwrite a reservation claimed elsewhere."""
+
+    node = Node.objects.create(
+        hostname="gway-004",
+        address="10.42.0.4",
+        ipv4_address="10.42.0.4",
+        current_relation=Node.Relation.PEER,
+        reserved=True,
+    )
+    stale_node = Node.objects.get(pk=node.pk)
+    Node.objects.filter(pk=node.pk).update(reserved=False)
+
+    result = confirm_reserved_node(
+        stale_node,
+        {
+            "hostname": "gway-004",
+            "address": "10.42.0.4",
+            "ipv4_address": "10.42.0.4",
+            "mac_address": "aa:bb:cc:dd:ee:04",
+            "_watch_host": "10.42.0.4",
+            "_watch_port": 8888,
+        },
+    )
+
+    node.refresh_from_db()
+    assert result.status == "conflict"
+    assert node.reserved is False
+    assert node.mac_address == ""
 
 
 @pytest.mark.django_db
