@@ -148,8 +148,6 @@ def test_refresh_features_skips_auto_enable_when_linked_suite_feature_disabled(
 
 
 @pytest.mark.django_db
-
-
 @pytest.mark.django_db
 def test_refresh_features_skips_lazy_rfid_auto_detection(monkeypatch, tmp_path):
     """Feature refresh should not probe lazy RFID scanner auto-detection."""
@@ -249,9 +247,7 @@ def test_ensure_feature_enabled_does_not_probe_lazy_feature_on_remote_node(
 
 
 @pytest.mark.django_db
-def test_ensure_feature_enabled_handles_lazy_detection_exception(
-    monkeypatch, tmp_path
-):
+def test_ensure_feature_enabled_handles_lazy_detection_exception(monkeypatch, tmp_path):
     """Lazy detection exceptions should be treated as unavailable features."""
 
     node = Node.objects.create(
@@ -277,37 +273,30 @@ def test_ensure_feature_enabled_handles_lazy_detection_exception(
 
 
 @pytest.fixture
-def llm_summary_node_with_locks(tmp_path):
-    """Provide a node with lock files required for llm-summary detection."""
-    from apps.screens.startup_notifications import LCD_RUNTIME_LOCK_FILE
+def llm_summary_node(tmp_path):
+    """Provide a node for llm-summary detection."""
 
-    node = Node(
-        hostname="summary-node",
-        base_path=str(tmp_path),
-        public_endpoint="summary-node",
+    return (
+        Node(
+            hostname="summary-node",
+            base_path=str(tmp_path),
+            public_endpoint="summary-node",
+        ),
+        tmp_path,
     )
-
-    locks_dir = tmp_path / ".locks"
-    locks_dir.mkdir()
-    (locks_dir / "celery.lck").write_text("1")
-    (locks_dir / LCD_RUNTIME_LOCK_FILE).write_text("1")
-
-    return node, tmp_path
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_enables_llm_summary_when_prereqs_met(
-    llm_summary_node_with_locks,
+def test_detect_auto_feature_enables_llm_summary_without_lcd_when_config_active(
+    llm_summary_node,
 ):
-    """llm-summary auto-detection should pass when locks and config are active."""
+    """llm-summary detection should reflect generation capability, not LCD output."""
 
-    from apps.summary.services import get_summary_config
+    from apps.summary.models import LLMSummaryConfig
 
-    node, tmp_path = llm_summary_node_with_locks
+    node, tmp_path = llm_summary_node
 
-    config = get_summary_config()
-    config.is_active = True
-    config.save(update_fields=["is_active", "updated_at"])
+    LLMSummaryConfig.objects.create(is_active=True)
 
     result = node._detect_auto_feature(
         "llm-summary", base_dir=tmp_path, base_path=tmp_path
@@ -317,6 +306,38 @@ def test_detect_auto_feature_enables_llm_summary_when_prereqs_met(
 
 
 @pytest.mark.django_db
+def test_detect_auto_feature_skips_llm_summary_when_config_inactive(
+    llm_summary_node,
+):
+    """Inactive summary config should keep the node summary feature off."""
+
+    from apps.summary.models import LLMSummaryConfig
+
+    node, tmp_path = llm_summary_node
+
+    LLMSummaryConfig.objects.create(is_active=False)
+
+    result = node._detect_auto_feature(
+        "llm-summary", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_does_not_create_llm_summary_config(llm_summary_node):
+    """Feature detection should be a read-only probe."""
+
+    from apps.summary.models import LLMSummaryConfig
+
+    node, tmp_path = llm_summary_node
+
+    result = node._detect_auto_feature(
+        "llm-summary", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is False
+    assert LLMSummaryConfig.objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -410,9 +431,9 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(
     monkeypatch.setattr(
         cards_node_features,
         "check_node_feature",
-        lambda slug, *, node, base_dir, base_path: True
-        if slug == "rfid-scanner"
-        else None,
+        lambda slug, *, node, base_dir, base_path: (
+            True if slug == "rfid-scanner" else None
+        ),
     )
 
     def _setup(slug, *, node, base_dir, base_path):
