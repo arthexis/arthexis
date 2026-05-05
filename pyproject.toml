@@ -103,7 +103,7 @@ ci = [
   "import-linter==2.11",
   "ruff==0.15.11",
   "twine==6.1.0",
-  "types-requests==2.33.0.20260408",
+  "types-requests==2.33.0.20260503",
 ]
 dev = [
   "django-debug-toolbar==6.3.0",
