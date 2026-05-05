@@ -15,7 +15,6 @@ from pathlib import Path
 
 from config.loadenv import loadenv
 from config.sqlite_driver import bootstrap_sqlite_driver
-from utils import revision
 
 _RUNSERVER_STARTED_AT: float | None = None
 logger = logging.getLogger(__name__)
@@ -48,19 +47,7 @@ def _resolve_interrupt_main() -> Callable[[], None]:
     return _raise_keyboard_interrupt
 
 
-def _print_version(base_dir: Path) -> None:
-    ver_path = base_dir / "VERSION"
-    version = ver_path.read_text().strip() if ver_path.exists() else ""
-    rev_value = revision.get_revision()
-    rev_short = rev_value[-6:] if rev_value else ""
-    msg = f"Version: v{version}"
-    if rev_short:
-        msg += f" r{rev_short}"
-    print(msg)
-
-
 def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
-    _print_version(base_dir)
     try:
         from daphne.management.commands.runserver import (
             Command as DaphneRunserver,
