@@ -84,7 +84,7 @@ def _iter_forwarding_urls(node: Node, charger_id: str) -> Iterable[str]:
                 continue
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
-        for prefix in ("", "/ws"):
+        for prefix in ("/ocpp", "/ws/ocpp", ""):
             path = f"{base_path}{prefix}/{safe_id}".replace("//", "/")
             if not path.startswith("/"):
                 path = f"/{path}"

@@ -33,10 +33,12 @@ def test_candidate_forwarding_urls_builds_ws_and_wss(forwarder_instance):
     urls = list(forwarder_instance._candidate_forwarding_urls(node, charger))
 
     assert urls == [
+        "ws://example.com/base/ocpp/CP%2F42",
+        "ws://example.com/base/ws/ocpp/CP%2F42",
         "ws://example.com/base/CP%2F42",
-        "ws://example.com/base/ws/CP%2F42",
+        "wss://secure.example.com/root/ocpp/CP%2F42",
+        "wss://secure.example.com/root/ws/ocpp/CP%2F42",
         "wss://secure.example.com/root/CP%2F42",
-        "wss://secure.example.com/root/ws/CP%2F42",
     ]
 
 
@@ -52,8 +54,9 @@ def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
     urls = list(forwarder_instance._candidate_forwarding_urls(node, charger))
 
     assert urls == [
+        "ws://192.0.2.10/base/ocpp/CP%2F42",
+        "ws://192.0.2.10/base/ws/ocpp/CP%2F42",
         "ws://192.0.2.10/base/CP%2F42",
-        "ws://192.0.2.10/base/ws/CP%2F42",
     ]
 
 

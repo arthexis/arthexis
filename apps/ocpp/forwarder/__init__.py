@@ -85,7 +85,7 @@ class Forwarder:
                     continue
             scheme = "wss" if parsed.scheme == "https" else "ws"
             base_path = parsed.path.rstrip("/")
-            for prefix in ("", "/ws"):
+            for prefix in ("/ocpp", "/ws/ocpp", ""):
                 path = f"{base_path}{prefix}/{encoded_id}".replace("//", "/")
                 if not path.startswith("/"):
                     path = f"/{path}"
