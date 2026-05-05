@@ -11,6 +11,7 @@ from django.utils import timezone
 from websocket import WebSocketException
 
 from apps.ocpp.forwarder import Forwarder, ForwardingSession
+from apps.ocpp.services import health_checks
 from apps.ocpp.models import CPForwarder, Charger
 from apps.nodes.models import Node
 
@@ -36,9 +37,11 @@ def test_candidate_forwarding_urls_builds_ws_and_wss(forwarder_instance):
         "ws://example.com/base/ocpp/CP%2F42",
         "ws://example.com/base/ws/ocpp/CP%2F42",
         "ws://example.com/base/CP%2F42",
+        "ws://example.com/base/ws/CP%2F42",
         "wss://secure.example.com/root/ocpp/CP%2F42",
         "wss://secure.example.com/root/ws/ocpp/CP%2F42",
         "wss://secure.example.com/root/CP%2F42",
+        "wss://secure.example.com/root/ws/CP%2F42",
     ]
 
 
@@ -57,7 +60,50 @@ def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
         "ws://192.0.2.10/base/ocpp/CP%2F42",
         "ws://192.0.2.10/base/ws/ocpp/CP%2F42",
         "ws://192.0.2.10/base/CP%2F42",
+        "ws://192.0.2.10/base/ws/CP%2F42",
     ]
+
+
+@pytest.mark.django_db
+def test_run_check_forwarders_reports_current_and_legacy_websocket_paths(monkeypatch):
+    class Stdout:
+        def __init__(self):
+            self.lines: list[str] = []
+
+        def write(self, message: str) -> None:
+            self.lines.append(message)
+
+    local = SimpleNamespace(
+        public_endpoint="example.test",
+        public_key="public-key",
+        get_remote_host_candidates=lambda resolve_dns=False: ["example.test"],
+        iter_remote_urls=lambda path: [f"http://example.test{path}"],
+        __str__=lambda self: "local",
+    )
+    monkeypatch.setattr(health_checks.Node, "get_local", staticmethod(lambda: local))
+    monkeypatch.setattr(
+        health_checks,
+        "build_nginx_report",
+        lambda: {"mode": "", "port": "", "actual_path": "", "differs": False},
+    )
+    stdout = Stdout()
+
+    health_checks.run_check_forwarders(stdout=stdout)
+
+    current_line = next(
+        line
+        for line in stdout.lines
+        if line.startswith("  OCPP websocket endpoints: ")
+    )
+    legacy_line = next(
+        line
+        for line in stdout.lines
+        if line.startswith("  OCPP websocket endpoints (legacy / and /ws): ")
+    )
+    assert "ws://example.test/ocpp/<charger_id>" in current_line
+    assert "ws://example.test/ws/ocpp/<charger_id>" in current_line
+    assert "ws://example.test/ws/<charger_id>" in legacy_line
+    assert "ws://example.test/<charger_id>" in legacy_line
 
 
 

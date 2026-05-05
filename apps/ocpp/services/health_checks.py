@@ -8,6 +8,10 @@ from urllib.parse import urlsplit, urlunsplit
 from apps.core.system_ui import build_nginx_report, format_timestamp
 from apps.nginx import config_utils
 from apps.nodes.models import Node
+from apps.ocpp.forwarding_paths import (
+    FORWARDING_WEBSOCKET_PATHS,
+    LEGACY_FORWARDING_WEBSOCKET_PATHS,
+)
 from apps.ocpp.models import CPForwarder, Charger
 
 
@@ -32,6 +36,13 @@ def _iter_websocket_urls(node: Node, path: str) -> list[str]:
     return candidates
 
 
+def _iter_websocket_urls_for_paths(node: Node, paths: tuple[str, ...]) -> list[str]:
+    candidates: list[str] = []
+    for path in paths:
+        candidates.extend(_iter_websocket_urls(node, path))
+    return candidates
+
+
 def _has_external_websocket_config(nginx_content: str) -> bool:
     return all(directive in nginx_content for directive in config_utils.websocket_directives())
 
@@ -49,8 +60,10 @@ def run_check_forwarders(*, stdout, **_kwargs) -> None:
     else:
         host_candidates = local.get_remote_host_candidates(resolve_dns=False)
         metadata_urls = list(local.iter_remote_urls("/nodes/network/chargers/forward/"))
-        ocpp_urls = _iter_websocket_urls(local, "/ocpp/<charger_id>")
-        ocpp_ws_urls = _iter_websocket_urls(local, "/ws/ocpp/<charger_id>")
+        ocpp_urls = _iter_websocket_urls_for_paths(local, FORWARDING_WEBSOCKET_PATHS)
+        legacy_ocpp_urls = _iter_websocket_urls_for_paths(
+            local, LEGACY_FORWARDING_WEBSOCKET_PATHS
+        )
         nginx_report = build_nginx_report()
 
         stdout.write("  Registered: True")
@@ -59,7 +72,10 @@ def run_check_forwarders(*, stdout, **_kwargs) -> None:
         stdout.write(f"  Public key configured: {_format_bool(bool(local.public_key))}")
         stdout.write(f"  Metadata endpoints: {_format_list(metadata_urls)}")
         stdout.write(f"  OCPP websocket endpoints: {_format_list(ocpp_urls)}")
-        stdout.write(f"  OCPP websocket endpoints (legacy /ws): {_format_list(ocpp_ws_urls)}")
+        stdout.write(
+            "  OCPP websocket endpoints (legacy / and /ws): "
+            f"{_format_list(legacy_ocpp_urls)}"
+        )
         stdout.write("  Nginx configuration:")
         stdout.write(f"    Mode: {nginx_report.get('mode') or '—'}")
         stdout.write(f"    Backend port: {nginx_report.get('port') or '—'}")

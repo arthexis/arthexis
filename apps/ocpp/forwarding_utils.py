@@ -18,6 +18,7 @@ from django.utils.translation import gettext_lazy as _
 from requests import RequestException
 
 from apps.nodes.models import Node
+from apps.ocpp.forwarding_paths import FORWARDING_WEBSOCKET_PREFIXES
 from apps.ocpp.network import serialize_charger_for_network
 
 
@@ -84,7 +85,7 @@ def _iter_forwarding_urls(node: Node, charger_id: str) -> Iterable[str]:
                 continue
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
-        for prefix in ("/ocpp", "/ws/ocpp", ""):
+        for prefix in FORWARDING_WEBSOCKET_PREFIXES:
             path = f"{base_path}{prefix}/{safe_id}".replace("//", "/")
             if not path.startswith("/"):
                 path = f"/{path}"
