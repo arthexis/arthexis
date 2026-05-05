@@ -247,7 +247,7 @@ class Command(BaseCommand):
 
         watch_parser = subparsers.add_parser(
             "watch-reservations",
-            help="Watch reserved image nodes on wlanX/eth0 and clear reservations after first contact.",
+            help="Watch reserved image nodes on wlanX/eth0 and report peers awaiting signed registration.",
         )
         watch_parser.add_argument(
             "--interfaces",
@@ -548,7 +548,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"RPi access test passed for {result.host}."))
 
     def _handle_watch_reservations(self, options: dict[str, object]) -> None:
-        """Watch reserved nodes and clear reservations after first contact."""
+        """Watch reserved nodes and report peers awaiting signed registration."""
 
         interfaces = [
             token.strip()

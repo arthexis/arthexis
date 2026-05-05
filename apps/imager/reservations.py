@@ -17,7 +17,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 import psutil
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
 from apps.nodes.models import Node, NodeRole
 
@@ -310,12 +310,20 @@ def commit_image_reservation(reservation: ImageReservation) -> ImageReservationC
         defaults["role"] = role
 
     with transaction.atomic():
-        node = Node.objects.filter(hostname__iexact=reservation.hostname).first()
+        node = (
+            Node.objects.select_for_update()
+            .filter(hostname__iexact=reservation.hostname)
+            .first()
+        )
         created = False
         if node is None:
             node = Node.objects.create(hostname=reservation.hostname, **defaults)
             created = True
         else:
+            if not node.reserved:
+                raise ValueError(
+                    f"Reservation hostname is already used by active node: {reservation.hostname}"
+                )
             update_fields: list[str] = []
             for field, value in defaults.items():
                 if getattr(node, field) != value:
@@ -443,13 +451,6 @@ def _node_info_port(info: dict[str, Any]) -> int:
     return 8888
 
 
-def _node_info_ipv4_addresses(info: dict[str, Any]) -> str:
-    raw_value = info.get("ipv4_address") or []
-    if isinstance(raw_value, str):
-        raw_value = re.split(r"[\s,]+", raw_value)
-    return ",".join(Node.sanitize_ipv4_addresses(raw_value))
-
-
 def _info_matches_reservation(node: Node, info: dict[str, Any]) -> bool:
     expected_hostname = (node.hostname or "").strip().lower()
     reported_hostname = str(info.get("hostname") or "").strip().lower()
@@ -464,13 +465,9 @@ def _info_matches_reservation(node: Node, info: dict[str, Any]) -> bool:
     return bool(str(info.get("_watch_host") or "") in candidates)
 
 
-def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchResult:
-    """Apply discovered node information to a reservation and clear its flag."""
+def observe_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchResult:
+    """Report a matching reservation candidate without trusting the peer."""
 
-    role = None
-    role_name = str(info.get("role") or info.get("role_name") or "").strip()
-    if role_name:
-        role = NodeRole.objects.filter(name=role_name).first()
     mac_address = str(info.get("mac_address") or "").strip().lower()
     if mac_address and Node.objects.filter(mac_address=mac_address).exclude(pk=node.pk).exists():
         return ReservationWatchResult(
@@ -479,59 +476,13 @@ def confirm_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
             status="conflict",
             detail=f"MAC address already belongs to another node: {mac_address}",
         )
-    reserved_claimed = False
-    if node.reserved:
-        claimed = Node.objects.filter(pk=node.pk, reserved=True).update(reserved=False)
-        if not claimed:
-            return ReservationWatchResult(
-                node_id=node.id,
-                hostname=node.hostname,
-                status="conflict",
-                detail="Reserved node was already claimed.",
-            )
-        node.reserved = False
-        reserved_claimed = True
-
-    fields = {
-        "hostname": str(info.get("hostname") or node.hostname).strip(),
-        "network_hostname": str(info.get("network_hostname") or "").strip(),
-        "address": str(info.get("address") or info.get("_watch_host") or "").strip(),
-        "ipv4_address": _node_info_ipv4_addresses(info),
-        "ipv6_address": str(info.get("ipv6_address") or "").strip(),
-        "host_instance_id": str(info.get("host_instance_id") or "").strip(),
-        "port": _node_info_port(info),
-        "installed_version": str(info.get("installed_version") or "")[:20],
-        "installed_revision": str(info.get("installed_revision") or "")[:40],
-        "public_key": str(info.get("public_key") or ""),
-        "mac_address": mac_address,
-        "current_relation": Node.Relation.PEER,
-        "trusted": True,
-        "reserved": False,
-    }
-    if role:
-        fields["role"] = role
-    update_fields: list[str] = []
-    if reserved_claimed:
-        update_fields.append("reserved")
-    for field, value in fields.items():
-        if getattr(node, field) != value:
-            setattr(node, field, value)
-            update_fields.append(field)
-    if update_fields:
-        try:
-            node.save(update_fields=update_fields)
-        except IntegrityError as exc:
-            return ReservationWatchResult(
-                node_id=node.id,
-                hostname=node.hostname,
-                status="error",
-                detail=str(exc),
-            )
+    address = str(info.get("address") or info.get("_watch_host") or "").strip()
+    port = _node_info_port(info)
     return ReservationWatchResult(
         node_id=node.id,
         hostname=node.hostname,
-        status="confirmed",
-        detail=f"{fields['address']}:{fields['port']}",
+        status="observed",
+        detail=f"{address}:{port} matched; waiting for signed registration",
     )
 
 
@@ -541,7 +492,7 @@ def watch_reserved_nodes_once(
     ports: tuple[int, ...] = DEFAULT_RESERVATION_PORTS,
     timeout: float = 1.5,
 ) -> list[ReservationWatchResult]:
-    """Probe reserved nodes and clear reservations that respond as expected."""
+    """Probe reserved nodes and report peers that still need signed registration."""
 
     selected_interfaces = interfaces if interfaces is not None else watch_interfaces_from_env()
     results: list[ReservationWatchResult] = []
@@ -552,7 +503,7 @@ def watch_reserved_nodes_once(
             info = _fetch_node_info(host, ports, timeout)
             if not info or not _info_matches_reservation(node, info):
                 continue
-            results.append(confirm_reserved_node(node, info))
+            results.append(observe_reserved_node(node, info))
             matched = True
             break
         if not matched:

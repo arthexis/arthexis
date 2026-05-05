@@ -761,16 +761,17 @@ def register_node(request):
                 base_site=base_site,
                 request=request,
             )
-        except ReservedNodeClaimError as error:
+        except ReservedNodeClaimError:
+            detail = "Reserved node was already claimed."
             _log_registration_event(
                 "failed",
                 payload,
                 request,
-                detail=str(error),
+                detail=detail,
                 level=logging.WARNING,
             )
             return add_cors_headers(
-                request, JsonResponse({"detail": str(error)}, status=409)
+                request, JsonResponse({"detail": detail}, status=409)
             )
         _log_registration_event(
             "succeeded", payload, request, detail=f"updated node {node.id}"

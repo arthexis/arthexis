@@ -45,7 +45,7 @@ Profile selectors match the NetworkManager connection id, filename, or filename 
 
 To reserve the target node before first boot, add `--reserve`. The build creates or updates a peer `Node` row with `reserved=True`, preassigns a hostname from the parent prefix, and bakes that hostname into the image. Use `--reserve-number 4` to force a suffix such as `gway-004`, or `--reserve-prefix gway` to override the parent-derived prefix. `IMAGER_RESERVE_DEFAULT=1` makes reservation the instance default, and `--no-reserve` disables it for one build.
 
-Reserved builds can also copy the active parent Wi-Fi profile by default with `--copy-parent-network` or `IMAGER_COPY_PARENT_NETWORK_DEFAULT=1`. The reservation watcher can clear pending reservations after the burned node responds on `/nodes/info/`:
+Reserved builds can also copy the active parent Wi-Fi profile by default with `--copy-parent-network` or `IMAGER_COPY_PARENT_NETWORK_DEFAULT=1`. The reservation watcher reports pending reservations after a burned node responds on `/nodes/info/`; the reservation is cleared only by the node's signed registration request:
 
 ```bash
 .venv/bin/python manage.py imager watch-reservations --interfaces wlan0,wlan1,eth0 --interval 30

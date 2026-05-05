@@ -1941,11 +1941,14 @@ def build_rpi4b_image(
     download_uri = _build_download_uri(download_base_uri, output_filename)
 
     with transaction.atomic():
-        reservation_commit = (
-            commit_image_reservation(reservation)
-            if reservation is not None
-            else None
-        )
+        try:
+            reservation_commit = (
+                commit_image_reservation(reservation)
+                if reservation is not None
+                else None
+            )
+        except ValueError as exc:
+            raise ImagerBuildError(str(exc)) from exc
         reservation_payload = (
             reservation_commit.metadata()
             if reservation_commit is not None

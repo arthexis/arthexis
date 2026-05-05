@@ -19,7 +19,6 @@ from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
     ImageReservation,
     _fetch_node_info,
-    confirm_reserved_node,
     plan_image_reservation,
     watch_reserved_nodes_once,
 )
@@ -1306,6 +1305,52 @@ def test_build_rpi4b_image_reserves_peer_node(tmp_path: Path) -> None:
 
 
 @pytest.mark.django_db
+def test_build_rpi4b_image_rejects_reserving_active_node_hostname(tmp_path: Path) -> None:
+    """A reservation must not overwrite an existing active node row."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+    Node.objects.create(
+        hostname="gway-004",
+        address="10.42.0.4",
+        current_relation=Node.Relation.SELF,
+        reserved=False,
+    )
+    reservation = ImageReservation(
+        hostname="gway-004",
+        hostname_prefix="gway",
+        number=4,
+        ipv4_address="10.42.0.44",
+        network_cidr="10.42.0.0/16",
+        parent_hostname="gway-001",
+    )
+    customization_result = ImageCustomizationResult(reservation=reservation)
+
+    with (
+        patch("apps.imager.services.plan_image_reservation", return_value=reservation),
+        patch("apps.imager.services._customize_image", return_value=customization_result),
+        pytest.raises(ImagerBuildError, match="already used by active node"),
+    ):
+        build_rpi4b_image(
+            name="gway-004-repair",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            skip_recovery_ssh=True,
+            reserve_node=True,
+            reserve_number=4,
+        )
+
+    node = Node.objects.get(hostname="gway-004")
+    assert node.reserved is False
+    assert node.current_relation == Node.Relation.SELF
+    assert node.address == "10.42.0.4"
+    assert not RaspberryPiImageArtifact.objects.filter(name="gway-004-repair").exists()
+
+
+@pytest.mark.django_db
 def test_plan_image_reservation_uses_next_prefix_number_and_numbered_ip(monkeypatch) -> None:
     """The default reservation for gway-001 after gway-005 should be gway-006."""
 
@@ -1324,8 +1369,8 @@ def test_plan_image_reservation_uses_next_prefix_number_and_numbered_ip(monkeypa
 
 
 @pytest.mark.django_db
-def test_watch_reserved_nodes_confirms_matching_node(monkeypatch) -> None:
-    """The reservation watcher clears a placeholder after /nodes/info/ matches."""
+def test_watch_reserved_nodes_observes_matching_node_without_claiming(monkeypatch) -> None:
+    """The watcher reports matches but leaves trust to signed registration."""
 
     node = Node.objects.create(
         hostname="gway-004",
@@ -1353,13 +1398,14 @@ def test_watch_reserved_nodes_confirms_matching_node(monkeypatch) -> None:
 
     results = watch_reserved_nodes_once(interfaces=[], ports=(8888,), timeout=0.1)
 
-    assert results[0].status == "confirmed"
+    assert results[0].status == "observed"
+    assert "waiting for signed registration" in results[0].detail
     node.refresh_from_db()
-    assert node.reserved is False
+    assert node.reserved is True
     assert node.ipv4_address == "10.42.0.4"
-    assert node.mac_address == "aa:bb:cc:dd:ee:04"
+    assert node.mac_address == ""
     assert node.port == 8888
-    assert node.trusted is True
+    assert node.trusted is False
 
 
 def test_fetch_node_info_brackets_ipv6_hosts_and_reads_full_json() -> None:
@@ -1384,38 +1430,6 @@ def test_fetch_node_info_brackets_ipv6_hosts_and_reads_full_json() -> None:
     assert request.full_url == "http://[fd00::6]:8888/nodes/info/"
     assert payload["hostname"] == "gway-006"
     assert len(payload["note"]) == 9000
-
-
-@pytest.mark.django_db
-def test_confirm_reserved_node_reports_already_claimed_reservation() -> None:
-    """A stale watcher result must not overwrite a reservation claimed elsewhere."""
-
-    node = Node.objects.create(
-        hostname="gway-004",
-        address="10.42.0.4",
-        ipv4_address="10.42.0.4",
-        current_relation=Node.Relation.PEER,
-        reserved=True,
-    )
-    stale_node = Node.objects.get(pk=node.pk)
-    Node.objects.filter(pk=node.pk).update(reserved=False)
-
-    result = confirm_reserved_node(
-        stale_node,
-        {
-            "hostname": "gway-004",
-            "address": "10.42.0.4",
-            "ipv4_address": "10.42.0.4",
-            "mac_address": "aa:bb:cc:dd:ee:04",
-            "_watch_host": "10.42.0.4",
-            "_watch_port": 8888,
-        },
-    )
-
-    node.refresh_from_db()
-    assert result.status == "conflict"
-    assert node.reserved is False
-    assert node.mac_address == ""
 
 
 @pytest.mark.django_db
