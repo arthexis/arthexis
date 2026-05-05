@@ -1,5 +1,6 @@
 """Regression tests for Raspberry Pi imager workflows."""
 
+import json
 import lzma
 import shlex
 import socket
@@ -15,6 +16,12 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
+from apps.imager.reservations import (
+    ImageReservation,
+    _fetch_node_info,
+    plan_image_reservation,
+    watch_reserved_nodes_once,
+)
 from apps.imager.services import (
     TARGET_RPI4B,
     AccessCheckResult,
@@ -43,6 +50,7 @@ from apps.imager.services import (
 from apps.imager.services import (
     test_rpi_access as run_rpi_access_test,
 )
+from apps.nodes.models import Node
 
 VALID_RECOVERY_KEY_ONE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILOoi93uar4kpDufSrgJPoOKh8UzGiiAsz+GIspRlj7p recovery-one"
 VALID_RECOVERY_KEY_TWO = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxEAcOg5erwB9w67f4eyf3DZiTLQ3sPik4Q6WLTl2XB recovery-two"
@@ -355,6 +363,121 @@ def test_imager_build_command_passes_bundle_and_host_network_options(mock_build,
     assert mock_build.call_args.kwargs["suite_source_path"] == suite_source
     assert mock_build.call_args.kwargs["host_network_names"] == ["Shop WiFi"]
     assert mock_build.call_args.kwargs["host_network_profile_dir"] == network_dir
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_resolves_reservation_env_defaults(
+    mock_build,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Operators can make reservation and parent-network copying the build default."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    monkeypatch.setenv("IMAGER_RESERVE_DEFAULT", "1")
+    monkeypatch.setenv("IMAGER_COPY_PARENT_NETWORK_DEFAULT", "1")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+            "reservation": {
+                "hostname": "gway-004",
+                "ipv4_address": "10.42.0.4",
+                "node_id": 4,
+            },
+        },
+    )()
+
+    stdout = StringIO()
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "reserved",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--reserve-number",
+        "4",
+        stdout=stdout,
+    )
+
+    assert mock_build.call_args.kwargs["reserve_node"] is True
+    assert mock_build.call_args.kwargs["reserve_number"] == 4
+    assert mock_build.call_args.kwargs["copy_parent_networks"] is True
+    assert "reserved_node=gway-004 address=10.42.0.4 id=4" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_can_disable_reservation_env_default(
+    mock_build,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """An explicit --no-reserve must override the instance default."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    monkeypatch.setenv("IMAGER_RESERVE_DEFAULT", "1")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+            "reservation": None,
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "unreserved",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--no-reserve",
+    )
+
+    assert mock_build.call_args.kwargs["reserve_node"] is False
+
+
+@pytest.mark.django_db
+def test_imager_build_command_rejects_nonpositive_reserve_number(tmp_path: Path) -> None:
+    """Reservation suffixes are node numbers, so zero and negatives are invalid."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="--reserve-number must be greater than zero"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "reserved",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--reserve",
+            "--reserve-number",
+            "0",
+        )
 
 
 @pytest.mark.django_db
@@ -756,6 +879,65 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
     ]
 
 
+def test_customize_image_writes_reserved_node_metadata(tmp_path: Path) -> None:
+    """Reserved images should carry the planned hostname into first boot."""
+
+    image_path = tmp_path / "artifact.img"
+    image_path.write_bytes(b"pi")
+    reservation = ImageReservation(
+        hostname="gway-004",
+        hostname_prefix="gway",
+        number=4,
+        ipv4_address="10.42.0.4",
+        network_cidr="10.42.0.0/16",
+        parent_hostname="gway-001",
+    )
+    written_files: dict[str, tuple[str, str | None]] = {}
+    guestfish_batches: list[list[str]] = []
+
+    def capture_guestfish(
+        image_path_arg: Path,
+        commands: list[str],
+        *,
+        error_message: str,
+    ) -> None:
+        assert image_path_arg == image_path
+        assert error_message
+        guestfish_batches.append(commands)
+        for command in commands:
+            parts = shlex.split(command)
+            if parts and parts[0] == "upload":
+                written_files[parts[2]] = (Path(parts[1]).read_text(encoding="utf-8"), None)
+            elif parts and parts[0] == "chmod":
+                content, _mode = written_files[parts[2]]
+                written_files[parts[2]] = (content, parts[1])
+
+    with (
+        patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_run_commands", side_effect=capture_guestfish),
+    ):
+        _customize_image(
+            image_path,
+            git_url="https://github.com/arthexis/arthexis.git",
+            reservation=reservation,
+        )
+
+    assert "/usr/local/share/arthexis/reserved-node.env" in written_files
+    assert "/usr/local/share/arthexis/reserved-node.json" in written_files
+    env_payload, env_mode = written_files["/usr/local/share/arthexis/reserved-node.env"]
+    json_payload, json_mode = written_files["/usr/local/share/arthexis/reserved-node.json"]
+    bootstrap_script, _bootstrap_mode = written_files["/usr/local/bin/arthexis-bootstrap.sh"]
+    assert env_mode == "0600"
+    assert json_mode == "0644"
+    assert "NODE_HOSTNAME=gway-004" in env_payload
+    assert json.loads(json_payload)["hostname"] == "gway-004"
+    assert "hostnamectl set-hostname" in bootstrap_script
+    assert any(
+        "upload" in command and "/usr/local/share/arthexis/reserved-node.env" in command
+        for command in guestfish_batches[1]
+    )
+
+
 def test_customize_image_writes_suite_bundle_and_selected_network_profiles(tmp_path: Path) -> None:
     """Regression: customized images can boot from bundled source and copied Wi-Fi profiles."""
 
@@ -867,6 +1049,24 @@ def test_build_rpi4b_image_rejects_recovery_ssh_when_customize_is_disabled(tmp_p
             recovery_authorized_keys=[
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
             ],
+        )
+
+
+def test_build_rpi4b_image_rejects_reservation_when_customize_is_disabled(tmp_path: Path) -> None:
+    """Regression: reserved node images need injected metadata to be claimable."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Reserved node images require image customization"):
+        build_rpi4b_image(
+            name="reserved-no-customize",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            reserve_node=True,
         )
 
 
@@ -1059,6 +1259,209 @@ def test_build_rpi4b_image_persists_suite_and_network_metadata(tmp_path: Path) -
             "remote_path": "/etc/NetworkManager/system-connections/home.nmconnection",
         }
     ]
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_reserves_peer_node(tmp_path: Path) -> None:
+    """A reserved build should create a peer placeholder after the artifact succeeds."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+    reservation = ImageReservation(
+        hostname="gway-004",
+        hostname_prefix="gway",
+        number=4,
+        ipv4_address="10.42.0.4",
+        network_cidr="10.42.0.0/16",
+        parent_hostname="gway-001",
+    )
+    customization_result = ImageCustomizationResult(reservation=reservation)
+
+    with (
+        patch("apps.imager.services.plan_image_reservation", return_value=reservation),
+        patch("apps.imager.services._customize_image", return_value=customization_result),
+    ):
+        result = build_rpi4b_image(
+            name="gway-004-repair",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            skip_recovery_ssh=True,
+            reserve_node=True,
+            reserve_number=4,
+        )
+
+    node = Node.objects.get(hostname="gway-004")
+    artifact = RaspberryPiImageArtifact.objects.get(name="gway-004-repair")
+    assert node.reserved is True
+    assert node.current_relation == Node.Relation.PEER
+    assert node.address == "10.42.0.4"
+    assert result.reservation["hostname"] == "gway-004"
+    assert result.reservation["node_id"] == node.id
+    assert artifact.metadata["reserved_node"]["enabled"] is True
+    assert artifact.metadata["reserved_node"]["hostname"] == "gway-004"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_reserving_active_node_hostname(tmp_path: Path) -> None:
+    """A reservation must not overwrite an existing active node row."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+    Node.objects.create(
+        hostname="gway-004",
+        address="10.42.0.4",
+        current_relation=Node.Relation.SELF,
+        reserved=False,
+    )
+    reservation = ImageReservation(
+        hostname="gway-004",
+        hostname_prefix="gway",
+        number=4,
+        ipv4_address="10.42.0.44",
+        network_cidr="10.42.0.0/16",
+        parent_hostname="gway-001",
+    )
+    customization_result = ImageCustomizationResult(reservation=reservation)
+
+    with (
+        patch("apps.imager.services.plan_image_reservation", return_value=reservation),
+        patch("apps.imager.services._customize_image", return_value=customization_result),
+        pytest.raises(ImagerBuildError, match="already used by active node"),
+    ):
+        build_rpi4b_image(
+            name="gway-004-repair",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            skip_recovery_ssh=True,
+            reserve_node=True,
+            reserve_number=4,
+        )
+
+    node = Node.objects.get(hostname="gway-004")
+    assert node.reserved is False
+    assert node.current_relation == Node.Relation.SELF
+    assert node.address == "10.42.0.4"
+    assert not RaspberryPiImageArtifact.objects.filter(name="gway-004-repair").exists()
+
+
+@pytest.mark.django_db
+def test_plan_image_reservation_uses_next_prefix_number_and_numbered_ip(monkeypatch) -> None:
+    """The default reservation for gway-001 after gway-005 should be gway-006."""
+
+    Node.objects.create(hostname="gway-001")
+    Node.objects.create(hostname="gway-005")
+    monkeypatch.setenv("IMAGER_RESERVE_HOSTNAME_PREFIX", "gway")
+    monkeypatch.setenv("IMAGER_RESERVE_NETWORK_CIDR", "10.42.0.0/16")
+    monkeypatch.setattr("apps.imager.reservations._known_neighbor_ips", lambda: set())
+    monkeypatch.setattr("apps.imager.reservations.psutil.net_if_addrs", lambda: {})
+
+    reservation = plan_image_reservation()
+
+    assert reservation.hostname == "gway-006"
+    assert reservation.number == 6
+    assert reservation.ipv4_address == "10.42.0.6"
+
+
+@pytest.mark.django_db
+def test_watch_reserved_nodes_observes_matching_node_without_claiming(monkeypatch) -> None:
+    """The watcher reports matches but leaves trust to signed registration."""
+
+    node = Node.objects.create(
+        hostname="gway-004",
+        address="10.42.0.4",
+        ipv4_address="10.42.0.4",
+        current_relation=Node.Relation.PEER,
+        reserved=True,
+    )
+
+    def fake_fetch(host: str, ports: tuple[int, ...], timeout: float):
+        assert ports == (8888,)
+        if host != "10.42.0.4":
+            return None
+        return {
+            "hostname": "gway-004",
+            "address": "10.42.0.4",
+            "ipv4_address": "10.42.0.4",
+            "port": "not-a-port",
+            "mac_address": "aa:bb:cc:dd:ee:04",
+            "_watch_host": host,
+            "_watch_port": 8888,
+        }
+
+    monkeypatch.setattr("apps.imager.reservations._fetch_node_info", fake_fetch)
+
+    results = watch_reserved_nodes_once(interfaces=[], ports=(8888,), timeout=0.1)
+
+    assert results[0].status == "observed"
+    assert "waiting for signed registration" in results[0].detail
+    node.refresh_from_db()
+    assert node.reserved is True
+    assert node.ipv4_address == "10.42.0.4"
+    assert node.mac_address == ""
+    assert node.port == 8888
+    assert node.trusted is False
+
+
+def test_fetch_node_info_brackets_ipv6_hosts_and_reads_full_json() -> None:
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps({"hostname": "gway-006", "note": "x" * 9000}).encode(
+                "utf-8"
+            )
+
+    with patch("apps.imager.reservations.urlopen", return_value=FakeResponse()) as open_mock:
+        payload = _fetch_node_info("fd00::6", (8888,), timeout=0.1)
+
+    request = open_mock.call_args.args[0]
+    assert request.full_url == "http://[fd00::6]:8888/nodes/info/"
+    assert payload["hostname"] == "gway-006"
+    assert len(payload["note"]) == 9000
+
+
+@pytest.mark.django_db
+def test_watch_reserved_nodes_rejects_hostname_mismatch(monkeypatch) -> None:
+    """A different node at the reserved IP must not claim the reservation."""
+
+    node = Node.objects.create(
+        hostname="gway-004",
+        address="10.42.0.4",
+        ipv4_address="10.42.0.4",
+        current_relation=Node.Relation.PEER,
+        reserved=True,
+    )
+
+    def fake_fetch(host: str, ports: tuple[int, ...], timeout: float):
+        if host != "10.42.0.4":
+            return None
+        return {
+            "hostname": "gway-099",
+            "address": "10.42.0.4",
+            "ipv4_address": "10.42.0.4",
+            "port": 8888,
+            "_watch_host": host,
+        }
+
+    monkeypatch.setattr("apps.imager.reservations._fetch_node_info", fake_fetch)
+
+    results = watch_reserved_nodes_once(interfaces=[], ports=(8888,), timeout=0.1)
+
+    assert results[0].status == "pending"
+    node.refresh_from_db()
+    assert node.reserved is True
 
 
 @pytest.mark.django_db

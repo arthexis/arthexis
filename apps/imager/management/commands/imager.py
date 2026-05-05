@@ -6,6 +6,12 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.imager.models import RaspberryPiImageArtifact
+from apps.imager.reservations import (
+    DEFAULT_RESERVATION_PORTS,
+    resolve_optional_env_bool,
+    watch_reserved_nodes_loop,
+    watch_reserved_nodes_once,
+)
 from apps.imager.services import (
     DEFAULT_RECOVERY_SSH_USER,
     ImagerBuildError,
@@ -82,6 +88,48 @@ class Command(BaseCommand):
             "--host-network-profile-dir",
             default="",
             help="Host NetworkManager system-connections directory to read when copying network profiles.",
+        )
+        build_parser.add_argument(
+            "--copy-parent-network",
+            dest="copy_parent_network",
+            action="store_true",
+            default=None,
+            help="Copy active parent Wi-Fi NetworkManager profiles into the image.",
+        )
+        build_parser.add_argument(
+            "--no-copy-parent-network",
+            dest="copy_parent_network",
+            action="store_false",
+            help="Disable IMAGER_COPY_PARENT_NETWORK_DEFAULT for this build.",
+        )
+        build_parser.add_argument(
+            "--reserve",
+            dest="reserve",
+            action="store_true",
+            default=None,
+            help="Reserve a peer node row before first boot and bake its hostname into the image.",
+        )
+        build_parser.add_argument(
+            "--no-reserve",
+            dest="reserve",
+            action="store_false",
+            help="Disable IMAGER_RESERVE_DEFAULT for this build.",
+        )
+        build_parser.add_argument(
+            "--reserve-number",
+            type=int,
+            default=None,
+            help="Specific numeric suffix to reserve, for example 4 for gway-004.",
+        )
+        build_parser.add_argument(
+            "--reserve-prefix",
+            default="",
+            help="Hostname prefix for reserved images. Defaults to the parent node prefix.",
+        )
+        build_parser.add_argument(
+            "--reserve-role",
+            default="",
+            help="Optional node role name to assign to the reserved peer.",
         )
         build_parser.add_argument(
             "--build-engine",
@@ -197,6 +245,24 @@ class Command(BaseCommand):
         access_parser.add_argument("--skip-ssh", action="store_true", help="Skip SSH TCP/auth checks.")
         access_parser.add_argument("--skip-http", action="store_true", help="Skip HTTP suite reachability check.")
 
+        watch_parser = subparsers.add_parser(
+            "watch-reservations",
+            help="Watch reserved image nodes on wlanX/eth0 and report peers awaiting signed registration.",
+        )
+        watch_parser.add_argument(
+            "--interfaces",
+            default="",
+            help="Comma-separated interfaces to watch. Defaults to IMAGER_RESERVATION_WATCH_INTERFACES or active wlanX plus eth0.",
+        )
+        watch_parser.add_argument(
+            "--ports",
+            default=",".join(str(port) for port in DEFAULT_RESERVATION_PORTS),
+            help="Comma-separated /nodes/info/ ports to probe.",
+        )
+        watch_parser.add_argument("--timeout", type=float, default=1.5, help="Per-probe timeout in seconds.")
+        watch_parser.add_argument("--interval", type=float, default=30.0, help="Loop interval in seconds.")
+        watch_parser.add_argument("--once", action="store_true", help="Run one watch pass and exit.")
+
     def handle(self, *args, **options) -> None:
         """Dispatch command to selected action."""
 
@@ -218,6 +284,9 @@ class Command(BaseCommand):
             return
         if action == "test-access":
             self._handle_test_access(options)
+            return
+        if action == "watch-reservations":
+            self._handle_watch_reservations(options)
             return
         raise CommandError(f"Unsupported action '{action}'.")
 
@@ -249,6 +318,19 @@ class Command(BaseCommand):
             )
         if recovery_authorized_keys:
             recovery_ssh_user = recovery_ssh_user or DEFAULT_RECOVERY_SSH_USER
+        reserve_node = resolve_optional_env_bool(
+            options.get("reserve"),
+            "IMAGER_RESERVE_DEFAULT",
+            default=False,
+        )
+        copy_parent_networks = resolve_optional_env_bool(
+            options.get("copy_parent_network"),
+            "IMAGER_COPY_PARENT_NETWORK_DEFAULT",
+            default=False,
+        )
+        reserve_number = options.get("reserve_number")
+        if reserve_number is not None and int(reserve_number) <= 0:
+            raise CommandError("--reserve-number must be greater than zero.")
 
         try:
             result = build_rpi4b_image(
@@ -277,6 +359,11 @@ class Command(BaseCommand):
                 host_network_profile_dir=Path(str(options["host_network_profile_dir"]))
                 if str(options["host_network_profile_dir"]).strip()
                 else None,
+                copy_parent_networks=copy_parent_networks,
+                reserve_node=reserve_node,
+                reserve_hostname_prefix=str(options["reserve_prefix"]),
+                reserve_number=reserve_number,
+                reserve_role=str(options["reserve_role"]),
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc
@@ -288,6 +375,14 @@ class Command(BaseCommand):
             self.stdout.write(f"download_uri={result.download_uri}")
         if customize and skip_recovery_ssh:
             self.stdout.write("recovery_ssh=disabled (--skip-recovery-ssh)")
+        reservation = getattr(result, "reservation", None)
+        if reservation:
+            self.stdout.write(
+                "reserved_node="
+                f"{reservation.get('hostname')} "
+                f"address={reservation.get('ipv4_address') or '(none)'} "
+                f"id={reservation.get('node_id')}"
+            )
 
     def _read_recovery_authorized_keys(
         self,
@@ -451,3 +546,59 @@ class Command(BaseCommand):
         if not result.ok:
             raise CommandError(f"RPi access test failed for {result.host}.")
         self.stdout.write(self.style.SUCCESS(f"RPi access test passed for {result.host}."))
+
+    def _handle_watch_reservations(self, options: dict[str, object]) -> None:
+        """Watch reserved nodes and report peers awaiting signed registration."""
+
+        interfaces = [
+            token.strip()
+            for token in str(options["interfaces"]).split(",")
+            if token.strip()
+        ] or None
+        ports = self._parse_ports(str(options["ports"]))
+        timeout = float(options["timeout"])
+        interval = float(options["interval"])
+
+        if options["once"]:
+            result_sets = [
+                watch_reserved_nodes_once(
+                    interfaces=interfaces,
+                    ports=ports,
+                    timeout=timeout,
+                )
+            ]
+        else:
+            result_sets = watch_reserved_nodes_loop(
+                interfaces=interfaces,
+                ports=ports,
+                timeout=timeout,
+                interval=interval,
+            )
+
+        for results in result_sets:
+            if not results:
+                self.stdout.write("reserved_nodes=none")
+            for result in results:
+                detail = f" {result.detail}" if result.detail else ""
+                self.stdout.write(
+                    f"{result.hostname} id={result.node_id} status={result.status}{detail}"
+                )
+            if options["once"]:
+                return
+
+    def _parse_ports(self, raw_value: str) -> tuple[int, ...]:
+        ports: list[int] = []
+        for token in raw_value.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                port = int(token)
+            except ValueError as exc:
+                raise CommandError(f"Invalid port: {token}") from exc
+            if not 1 <= port <= 65535:
+                raise CommandError(f"Port out of range: {port}")
+            ports.append(port)
+        if not ports:
+            raise CommandError("At least one port is required.")
+        return tuple(ports)

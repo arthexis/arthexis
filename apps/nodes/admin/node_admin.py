@@ -92,6 +92,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "role",
         "relation",
         "trusted",
+        "reserved",
         "mesh_status_badge",
         "last_mesh_heartbeat",
         "version_display",
@@ -124,6 +125,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     "message_queue_length",
                     "current_relation",
                     "trusted",
+                    "reserved",
                 )
             },
         ),
