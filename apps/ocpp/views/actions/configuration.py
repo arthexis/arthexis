@@ -46,15 +46,18 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     msg = json.dumps([2, message_id, "GetConfiguration", payload])
     async_to_sync(context.ws.send)(msg)
+    metadata = {
+        "action": ocpp_action,
+        "charger_id": context.cid,
+        "connector_id": context.connector_value,
+        "log_key": context.log_key,
+        "requested_at": timezone.now(),
+    }
+    if keys:
+        metadata["configuration_key_filter"] = list(keys)
     store.register_pending_call(
         message_id,
-        {
-            "action": ocpp_action,
-            "charger_id": context.cid,
-            "connector_id": context.connector_value,
-            "log_key": context.log_key,
-            "requested_at": timezone.now(),
-        },
+        metadata,
     )
     store.schedule_call_timeout(
         message_id,

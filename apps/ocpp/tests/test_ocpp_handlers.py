@@ -24,6 +24,7 @@ from apps.ocpp.models import (
     CertificateRequest,
     CertificateStatusCheck,
     Charger,
+    ChargerConfiguration,
     ChargingProfile,
     ChargingSchedule,
     ClearedChargingLimitEvent,
@@ -322,6 +323,148 @@ async def test_unlock_connector_result_updates_state():
     assert result is not None
     assert result.get("success") is True
     assert (result.get("payload") or {}).get("status") == "Unlocked"
+
+
+@pytest.mark.anyio
+async def test_get_configuration_action_records_filtered_key_metadata():
+    _reset_pending_calls()
+
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    log_key = store.identity_key("CP-PARTIAL-CONFIG-2", None)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        "CP-PARTIAL-CONFIG-2",
+        None,
+        charger=None,
+        ws=ws,
+        log_key=log_key,
+    )
+
+    action_call = await anyio.to_thread.run_sync(
+        lambda: actions._handle_get_configuration(
+            context,
+            {"key": ["MeterValuesSampledData", ""]},
+        )
+    )
+
+    sent_message = json.loads(ws.sent[0])
+    assert sent_message[2] == "GetConfiguration"
+    assert sent_message[3] == {"key": ["MeterValuesSampledData"]}
+    assert store.pending_calls[action_call.message_id]["configuration_key_filter"] == [
+        "MeterValuesSampledData"
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_filtered_get_configuration_result_does_not_replace_snapshot():
+    _reset_pending_calls()
+
+    def _create_existing_configuration(charger: Charger) -> int:
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier=charger.charger_id,
+            raw_payload={
+                "configurationKey": [
+                    {
+                        "key": "BootNotification",
+                        "readonly": False,
+                        "value": "enabled",
+                    },
+                    {
+                        "key": "MeterValuesSampledData",
+                        "readonly": False,
+                        "value": "Energy.Active.Import.Register",
+                    },
+                ]
+            },
+        )
+        configuration.replace_configuration_keys(
+            [
+                {
+                    "key": "BootNotification",
+                    "readonly": False,
+                    "value": "enabled",
+                },
+                {
+                    "key": "MeterValuesSampledData",
+                    "readonly": False,
+                    "value": "Energy.Active.Import.Register",
+                },
+            ]
+        )
+        charger.configuration = configuration
+        charger.save(update_fields=["configuration"])
+        return configuration.pk
+
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-PARTIAL-CONFIG-1"
+    )
+    existing_pk = await database_sync_to_async(_create_existing_configuration)(charger)
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    message_id = "msg-partial-config"
+    metadata = {
+        "action": "GetConfiguration",
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "log_key": log_key,
+        "configuration_key_filter": ["MeterValuesSampledData"],
+    }
+    store.register_pending_call(message_id, metadata)
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = log_key
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    await consumer._handle_call_result(
+        message_id,
+        {
+            "configurationKey": [
+                {
+                    "key": "MeterValuesSampledData",
+                    "readonly": False,
+                    "value": "Power.Active.Import",
+                }
+            ]
+        },
+    )
+
+    configuration_count = await database_sync_to_async(
+        ChargerConfiguration.objects.filter(
+            charger_identifier=charger.charger_id
+        ).count
+    )()
+    updated_charger = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
+
+    def _configuration_keys() -> list[dict[str, object]]:
+        return ChargerConfiguration.objects.get(pk=existing_pk).configuration_keys
+
+    assert configuration_count == 1
+    assert updated_charger.configuration_id == existing_pk
+    assert await database_sync_to_async(_configuration_keys)() == [
+        {
+            "key": "BootNotification",
+            "readonly": False,
+            "value": "enabled",
+        },
+        {
+            "key": "MeterValuesSampledData",
+            "readonly": False,
+            "value": "Energy.Active.Import.Register",
+        },
+    ]
+    result = store.wait_for_pending_call(message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("payload", {}).get("configurationKey", [])[0]["value"] == (
+        "Power.Active.Import"
+    )
 
 
 @pytest.mark.anyio
