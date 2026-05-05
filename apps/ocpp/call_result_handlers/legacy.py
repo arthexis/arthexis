@@ -539,9 +539,22 @@ async def handle_get_configuration_result(
         f"GetConfiguration result: {payload_text}",
         log_type="charger",
     )
-    configuration = await database_sync_to_async(consumer._persist_configuration_result)(
-        payload_data, metadata.get("connector_id")
+    configuration_key_filter = metadata.get("configuration_key_filter")
+    filtered_request = (
+        isinstance(configuration_key_filter, (list, tuple))
+        and len(configuration_key_filter) > 0
     )
+    configuration = None
+    if filtered_request:
+        store.add_log(
+            log_key,
+            "Partial GetConfiguration result was not persisted as a full configuration snapshot.",
+            log_type="charger",
+        )
+    else:
+        configuration = await database_sync_to_async(consumer._persist_configuration_result)(
+            payload_data, metadata.get("connector_id")
+        )
     if configuration:
         if getattr(consumer, "charger", None) and getattr(consumer, "charger_id", None):
             if getattr(consumer.charger, "charger_id", None) == consumer.charger_id:
