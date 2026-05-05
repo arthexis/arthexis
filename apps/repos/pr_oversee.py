@@ -805,6 +805,30 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             metadata["metadataWriteError"] = True
         return metadata
 
+    def sync_worktree(self, number: int, *, worktree: Path) -> dict[str, Any]:
+        """Fetch the current PR head and move an existing worktree to it."""
+
+        if not worktree.exists():
+            raise PullRequestOverseeError(f"Worktree path does not exist: {worktree}")
+        remote_ref = f"refs/remotes/origin/pr/{number}"
+        self.git(["fetch", "origin", f"pull/{number}/head:{remote_ref}"])
+        result = self.runner.run(
+            ["git", "-C", str(worktree), "checkout", "--detach", remote_ref],
+            cwd=self.cwd,
+            check=False,
+        )
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip()
+            raise PullRequestOverseeError(
+                f"Unable to sync PR worktree {worktree}: {message}"
+            )
+        return {
+            "number": number,
+            "worktree": str(worktree),
+            "remoteRef": remote_ref,
+            "returncode": result.returncode,
+        }
+
     def merge(
         self,
         number: int,
@@ -934,6 +958,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         iterations: list[dict[str, Any]] = []
         validation_by_head: dict[str, dict[str, Any]] = {}
         changed_files_by_head: dict[str, list[str]] = {}
+        synced_worktree_head = ""
         dependency_dedupe = (
             self.dependency_dedupe(limit=dependency_limit)
             if dependency_limit
@@ -972,6 +997,20 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                         }
                     )
                 checkout_handled = True
+            if (
+                state != "MERGED"
+                and worktree
+                and head_sha
+                and synced_worktree_head != head_sha
+            ):
+                actions.append(
+                    {
+                        "action": "sync-worktree",
+                        "headRefOid": head_sha,
+                        "result": self.sync_worktree(number, worktree=worktree),
+                    }
+                )
+                synced_worktree_head = head_sha
 
             if run_test_plan:
                 validation_cwd = worktree if worktree else self.cwd
