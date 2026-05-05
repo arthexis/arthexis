@@ -455,6 +455,26 @@ def _assign_module_menu(module):
     return module
 
 
+def _limit_anon_ocpp_landings(module, request, landings: list):
+    """Keep only public supported-model navigation for anonymous OCPP visits."""
+
+    if request.user.is_authenticated:
+        return landings
+    if (module.path.rstrip("/") or "/").lower() != "/ocpp":
+        return landings
+
+    supported_models_path = "/ocpp/charge-point-models"
+    filtered_landings = [
+        landing
+        for landing in landings
+        if (landing.path.rstrip("/") or "/").lower() == supported_models_path
+    ]
+    if filtered_landings:
+        module.menu = "Supported CP Models"
+        return filtered_landings
+    return landings
+
+
 def _annotate_module_landings(
     module,
     request,
@@ -515,6 +535,7 @@ def _annotate_module_landings(
         module.path,
         _select_primary_landings(module.path, landings),
     )
+    landings = _limit_anon_ocpp_landings(module, request, landings)
 
     if not landings:
         return None

@@ -30,12 +30,12 @@
     border: 1px solid var(--bs-border-color-translucent);
     border-radius: 1rem;
     background-color: var(--bs-body-bg);
-    box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.04);
+    box-shadow: var(--bs-box-shadow-sm);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
   .supported-card:hover {
     transform: translateY(-1px);
-    box-shadow: 0 0.8rem 1.25rem rgba(15, 23, 42, 0.08);
+    box-shadow: var(--bs-box-shadow);
   }
   .rating-pill {
     border-radius: 0.85rem;
@@ -58,7 +58,7 @@
     text-transform: uppercase;
   }
   .rating-stars {
-    color: #f5c74e;
+    color: var(--bs-warning);
     letter-spacing: 0.1rem;
     font-size: 0.85rem;
   }
