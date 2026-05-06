@@ -748,7 +748,10 @@ def supported_chargers(request):
     return render(
         request,
         "ocpp/supported_chargers.html",
-        {"station_models": station_models},
+        {
+            "station_models": station_models,
+            "operator_interface_mode": False,
+        },
     )
 
 
@@ -783,5 +786,6 @@ def supported_charger_detail(request, station_model_id: int):
             "instructions_html": instructions_html,
             "images": images,
             "documents": documents,
+            "operator_interface_mode": False,
         },
     )
