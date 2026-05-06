@@ -12,10 +12,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from utils.env import env_bool
-
 from config.admin_urls import normalize_admin_url_path
 from config.settings_helpers import load_secret_key
+from utils.env import env_bool
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = _PROJECT_ROOT
@@ -62,6 +61,9 @@ NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", Fa
 NODES_ENABLE_SIBLING_IPC = env_bool("NODES_ENABLE_SIBLING_IPC", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 REPORTS_HTML_TO_PDF_ENABLED = env_bool("REPORTS_HTML_TO_PDF_ENABLED", True)
+DESKTOP_UI_ENABLED = env_bool("DESKTOP_UI_ENABLED", env_bool("DESKTOP_UI", False))
+# Legacy alias used by terminal-launching deployments.
+DESKTOP_UI = DESKTOP_UI_ENABLED
 THERMOMETER_SOURCE = os.environ.get("THERMOMETER_SOURCE", "auto").strip() or "auto"
 THERMOMETER_PATH_TEMPLATE = (
     os.environ.get(
@@ -147,9 +149,7 @@ ASGI_APPLICATION = "config.asgi.application"
 
 # Email settings
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-DEFAULT_ADMIN_EMAIL = os.environ.get(
-    "DEFAULT_ADMIN_EMAIL", ""
-).strip()
+DEFAULT_ADMIN_EMAIL = os.environ.get("DEFAULT_ADMIN_EMAIL", "").strip()
 DEFAULT_ADMIN_USERNAME = (
     os.environ.get("DEFAULT_ADMIN_USERNAME", "arthexis").strip() or "arthexis"
 )
@@ -163,8 +163,8 @@ ADMINS = [("Arthexis Admin", DEFAULT_ADMIN_EMAIL)] if DEFAULT_ADMIN_EMAIL else [
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Domain-specific settings modules
-from .channels import *  # noqa: F401,F403
-from .video import *  # noqa: F401,F403
 from .auth import *  # noqa: F401,F403
+from .channels import *  # noqa: F401,F403
 from .chat import *  # noqa: F401,F403
 from .integrations import *  # noqa: F401,F403
+from .video import *  # noqa: F401,F403

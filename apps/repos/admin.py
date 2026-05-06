@@ -3,8 +3,7 @@ from urllib.parse import urlparse
 
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
-from django.urls import path
-from django.urls import reverse
+from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -15,6 +14,7 @@ from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
+from apps.repos.models.monitoring import GitHubMonitorItem, GitHubMonitorTask
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.models.spam import RepositoryIssueSpamAssessment
@@ -213,6 +213,55 @@ class GitHubRepositoryAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     setup_token.short_description = _("Setup Token")
     setup_token.requires_queryset = False
     setup_token.dashboard_url = "admin:repos_githubrepository_setup_token"
+
+
+@admin.register(GitHubMonitorTask)
+class GitHubMonitorTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "display",
+        "repository",
+        "enabled",
+        "issue_title",
+        "inactivity_timeout_minutes",
+    )
+    list_filter = ("enabled", "repository")
+    search_fields = (
+        "name",
+        "display",
+        "issue_title",
+        "repository__owner",
+        "repository__name",
+    )
+    raw_id_fields = ("repository",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(GitHubMonitorItem)
+class GitHubMonitorItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "issue_number",
+        "issue_title",
+        "task",
+        "status",
+        "queued_at",
+        "launched_at",
+        "last_activity_at",
+    )
+    list_filter = ("status", "task")
+    search_fields = ("issue_title", "issue_number", "issue_url", "fingerprint")
+    raw_id_fields = ("task",)
+    readonly_fields = (
+        "fingerprint",
+        "queued_at",
+        "last_seen_at",
+        "launched_at",
+        "last_activity_at",
+        "completed_at",
+        "prompt",
+        "issue_body",
+        "terminal_pid_file",
+    )
 
 
 @admin.register(PackageRepository)
