@@ -368,7 +368,20 @@ def evaluate_readiness() -> dict[str, Any]:
 
 def _trusted_issue_authors(task: GitHubMonitorTask) -> set[str]:
     configured = getattr(settings, "GITHUB_MONITOR_TRUSTED_AUTHORS", ())
-    trusted = {str(author).strip().lower() for author in configured if str(author).strip()}
+    if isinstance(configured, str):
+        configured_authors = configured.replace(",", " ").split()
+    elif isinstance(configured, Mapping):
+        configured_authors = configured.values()
+    else:
+        try:
+            configured_authors = iter(configured)
+        except TypeError:
+            configured_authors = ()
+    trusted = {
+        str(author).strip().lower()
+        for author in configured_authors
+        if str(author).strip()
+    }
     repository_owner = str(task.repository.owner or "").strip().lower()
     if repository_owner:
         trusted.add(repository_owner)
