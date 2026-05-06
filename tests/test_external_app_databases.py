@@ -1,7 +1,17 @@
 """Tests for external app database wiring."""
 
+from pathlib import Path
+
 from config.settings.database import build_external_sqlite_databases
 from config.settings.external_dbs import external_app_database_alias
+
+
+def _assert_work_db_path(configs, alias):
+    path = Path(configs[alias]["NAME"])
+
+    assert path.name == f"{alias}.sqlite3"
+    assert path.parent.name == "dbs"
+    assert path.parent.parent.name == "work"
 
 
 def test_build_external_sqlite_databases_uses_work_dbs_dir():
@@ -16,12 +26,8 @@ def test_build_external_sqlite_databases_uses_work_dbs_dir():
         "external_arthexis_plugin_sample",
         "external_sync",
     ]
-    assert str(configs["external_arthexis_plugin_sample"]["NAME"]).endswith(
-        "work/dbs/external_arthexis_plugin_sample.sqlite3"
-    )
-    assert str(configs["external_sync"]["NAME"]).endswith(
-        "work/dbs/external_sync.sqlite3"
-    )
+    _assert_work_db_path(configs, "external_arthexis_plugin_sample")
+    _assert_work_db_path(configs, "external_sync")
 
 
 def test_external_alias_falls_back_when_path_has_no_suffix_token():
