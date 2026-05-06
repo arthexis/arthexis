@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from channels.db import database_sync_to_async
 
-from apps.cards.models import RFID as CoreRFID, RFIDAttempt
+from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFIDAttempt
 
 
 class AuthorizationActionHandler:
@@ -32,18 +33,22 @@ class AuthorizationActionHandler:
             tag = await self.consumer._ensure_rfid_seen(
                 id_tag,
                 tag=tag,
+                tag_created=tag_created,
                 auto_enroll=decision.should_auto_enroll,
             )
 
-        if decision.log_unlinked_rfid and tag:
+        account = await self.consumer._bind_fallback_account_for_decision(
+            decision,
+            tag=tag,
+            account=account,
+        )
+
+        if decision.log_unlinked_rfid and tag and account is None:
             self.consumer._log_unlinked_rfid(
                 tag.rfid,
                 reason=decision.reason,
                 policy=decision.policy,
             )
-
-        if decision.reason == "rfid_fallback_account_authorized" and tag:
-            account = await self.consumer._bind_rfid_to_fallback_account(tag)
 
         await self.consumer._record_rfid_attempt(
             rfid=id_tag or "",

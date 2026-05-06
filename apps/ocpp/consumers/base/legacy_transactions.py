@@ -5,7 +5,8 @@ import logging
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.cards.models import RFID as CoreRFID, RFIDAttempt
+from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFIDAttempt
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -81,17 +82,23 @@ class LegacyTransactionHandlersMixin:
                 seen_tag = await self._ensure_rfid_seen(
                     id_tag,
                     tag=tag,
+                    tag_created=tag_created,
                     auto_enroll=decision.should_auto_enroll,
                 )
                 if seen_tag:
                     tag = seen_tag
+            account = await self._bind_fallback_account_for_decision(
+                decision,
+                tag=tag,
+                account=account,
+            )
             if decision.status == "Accepted":
                 update_kwargs: dict[str, str] = {"status": "started"}
                 if ocpp_tx_id:
                     update_kwargs["transaction_id"] = ocpp_tx_id
                 for request_message_id, _ in requests_to_start:
                     store.update_transaction_request(request_message_id, **update_kwargs)
-                if decision.log_unlinked_rfid and tag:
+                if decision.log_unlinked_rfid and tag and account is None:
                     self._log_unlinked_rfid(
                         tag.rfid,
                         reason=decision.reason,
@@ -162,7 +169,7 @@ class LegacyTransactionHandlersMixin:
             }
 
         if event_type == "ended":
-            trigger_reason = str((payload.get("triggerReason") or "")).strip()
+            trigger_reason = str(payload.get("triggerReason") or "").strip()
             tx_obj = store.transactions.pop(self.store_key, None)
             if not tx_obj and ocpp_tx_id:
                 tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
@@ -270,13 +277,19 @@ class LegacyTransactionHandlersMixin:
             seen_tag = await self._ensure_rfid_seen(
                 id_tag,
                 tag=tag,
+                tag_created=tag_created,
                 auto_enroll=decision.should_auto_enroll,
             )
             if seen_tag:
                 tag = seen_tag
+        account = await self._bind_fallback_account_for_decision(
+            decision,
+            tag=tag,
+            account=account,
+        )
         await self._assign_connector(payload.get("connectorId"))
         if decision.status == "Accepted":
-            if decision.log_unlinked_rfid and tag:
+            if decision.log_unlinked_rfid and tag and account is None:
                 self._log_unlinked_rfid(
                     tag.rfid,
                     reason=decision.reason,
@@ -373,7 +386,7 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = payload.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
-            stop_reason_value = str((payload.get("reason") or "")).strip()[:64]
+            stop_reason_value = str(payload.get("reason") or "").strip()[:64]
             if stop_reason_value:
                 tx_obj.stop_reason = stop_reason_value
             if vid_value:
