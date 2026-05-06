@@ -1,0 +1,39 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can disable fallback RFID debt-account authorization to enforce strict account-linked behavior.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/ocpp/consumers/base/rfid.py",
+        "apps/ocpp/consumers/csms/actions/authorization.py",
+        "apps/cards/models/rfid.py"
+      ],
+      "created_at": "2026-05-05T00:00:00Z",
+      "display": "RFID Fallback Account",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Unknown non-blocked RFID cards can still start charging while debt is tracked against the fallback account.",
+      "public_views": [
+        "ocpp:charging"
+      ],
+      "service_requirements": "Unknown RFID tags are auto-enrolled and linked to the fallback service account when strict mode would otherwise reject.",
+      "service_views": [
+        "apps.ocpp.consumers.base.rfid.RfidMixin._evaluate_authorization_policy"
+      ],
+      "slug": "rfid-fallback-account",
+      "source": "mainstream",
+      "summary": "Auto-authorize unknown non-blocked RFIDs by attaching them to a default debt-tracking account.",
+      "updated_at": "2026-05-05T00:00:00Z"
+    }
+  }
+]

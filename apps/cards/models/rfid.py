@@ -185,6 +185,10 @@ class RFID(Entity):
         help_text="Node where this RFID record was created.",
     )
     released = models.BooleanField(default=False)
+    discovered_via_ocpp = models.BooleanField(
+        default=False,
+        help_text="Set when the RFID was first auto-discovered through OCPP authorization.",
+    )
     added_on = models.DateTimeField(auto_now_add=True)
     last_seen_on = models.DateTimeField(null=True, blank=True)
     card_designs = models.ManyToManyField(
