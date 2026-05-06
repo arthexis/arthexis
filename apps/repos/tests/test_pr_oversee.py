@@ -785,17 +785,29 @@ def test_monitor_validates_in_reused_worktree_before_merge(tmp_path: Path):
 
 
 def test_monitor_requires_write_for_run_test_plan():
-    runner = FakeRunner([CommandResult(0, json.dumps(_pr_payload()))])
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+        ]
+    )
     overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
 
     with pytest.raises(PullRequestOverseeError) as exc:
-        overseer.monitor(123, run_test_plan=True, max_iterations=1)
+        overseer.monitor(
+            123, run_test_plan=True, max_iterations=1, dependency_limit=0
+        )
 
     assert (
         str(exc.value)
         == "monitor --run-test-plan executes local code and requires --write"
     )
-    assert runner.commands == []
+    assert [command[:3] for command in runner.commands] == [
+        ["gh", "pr", "view"],
+        ["gh", "api", "graphql"],
+        ["gh", "pr", "diff"],
+    ]
 
 
 def test_monitor_resyncs_reused_worktree_when_pr_head_changes(tmp_path: Path):
@@ -840,6 +852,7 @@ def test_monitor_resyncs_reused_worktree_when_pr_head_changes(tmp_path: Path):
         dependency_limit=0,
         worktree=worktree,
         run_test_plan=True,
+        write=True,
     )
 
     sync_heads = [

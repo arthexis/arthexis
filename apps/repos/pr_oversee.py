@@ -1193,11 +1193,6 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             raise PullRequestOverseeError("interval_seconds must be zero or positive")
         if timeout_seconds < 0:
             raise PullRequestOverseeError("timeout_seconds must be zero or positive")
-        if run_test_plan and not write:
-            raise PullRequestOverseeError(
-                "monitor --run-test-plan executes local code and requires --write"
-            )
-
         actions: list[dict[str, Any]] = []
         checkout_handled = False
         deadline = self._clock() + timeout_seconds if timeout_seconds else 0.0
@@ -1228,6 +1223,11 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             head_sha = str(gate.get("headRefOid") or "")
 
             state = str(pr.get("state") or "").upper()
+            validation_would_run = run_test_plan and state != "MERGED"
+            if validation_would_run and not write:
+                raise PullRequestOverseeError(
+                    "monitor --run-test-plan executes local code and requires --write"
+                )
             if state != "MERGED" and worktree and not checkout_handled:
                 if worktree.exists():
                     actions.append(
@@ -1258,7 +1258,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 )
                 synced_worktree_head = head_sha
 
-            if run_test_plan and state != "MERGED":
+            if validation_would_run:
                 validation_cwd = worktree if worktree else self.cwd
                 validation_head = head_sha or f"iteration-{iteration}"
                 validation_key = f"{validation_head}:{validation_cwd}"
