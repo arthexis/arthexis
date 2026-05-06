@@ -401,6 +401,13 @@ def _set_related_by_identifiers(
     getattr(instance, relation_name).set(related)
 
 
+def _manifest_int(entry: dict, key: str, default: int) -> int:
+    value = entry.get(key, default)
+    if value in (None, ""):
+        value = default
+    return int(value)
+
+
 def _validate_package_agent_entries(manifest: dict) -> list[dict]:
     agents = manifest.get("agents", [])
     if not isinstance(agents, list):
@@ -490,7 +497,7 @@ def _restore_or_create_agent(entry: dict) -> Agent:
     agent.title = str(entry.get("title") or entry["slug"].replace("-", " ").title())
     agent.description = entry.get("description", "")
     agent.instructions = str(entry.get("instructions", ""))
-    agent.priority = int(entry.get("priority", 100) or 100)
+    agent.priority = _manifest_int(entry, "priority", 100)
     agent.is_default = bool(entry.get("is_default", False))
     agent.is_deleted = False
     agent.save()
@@ -528,9 +535,9 @@ def _restore_or_create_hook(entry: dict) -> Hook:
     hook.environment = (
         entry.get("environment") if isinstance(entry.get("environment"), dict) else {}
     )
-    hook.timeout_seconds = int(entry.get("timeout_seconds", 60) or 60)
+    hook.timeout_seconds = _manifest_int(entry, "timeout_seconds", 60)
     hook.enabled = bool(entry.get("enabled", True))
-    hook.priority = int(entry.get("priority", 100) or 100)
+    hook.priority = _manifest_int(entry, "priority", 100)
     hook.is_deleted = False
     hook.save()
     Hook.all_objects.filter(pk=hook.pk).update(is_seed_data=False)

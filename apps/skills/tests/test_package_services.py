@@ -180,7 +180,7 @@ def test_export_import_round_trip_includes_agents_and_hooks(tmp_path):
         title="Terminal Context",
         description="Terminal node instructions.",
         instructions="Prefer terminal-local suite commands.",
-        priority=10,
+        priority=0,
         is_default=True,
     )
     agent.node_roles.add(role)
@@ -193,7 +193,8 @@ def test_export_import_round_trip_includes_agents_and_hooks(tmp_path):
         event=Hook.Event.SESSION_START,
         platform=Hook.Platform.WINDOWS,
         command="python manage.py check --fail-level ERROR",
-        priority=20,
+        timeout_seconds=0,
+        priority=0,
     )
     hook.node_roles.add(role)
 
@@ -209,11 +210,14 @@ def test_export_import_round_trip_includes_agents_and_hooks(tmp_path):
     assert summary["agents"] == [{"slug": "terminal-context"}]
     assert summary["hooks"] == [{"slug": "session-start-check"}]
     restored_agent = Agent.objects.get(slug="terminal-context")
+    assert restored_agent.priority == 0
     assert restored_agent.node_roles.filter(pk=role.pk).exists()
     assert restored_agent.node_features.filter(pk=node_feature.pk).exists()
     assert restored_agent.suite_features.filter(pk=suite_feature.pk).exists()
     restored_hook = Hook.objects.get(slug="session-start-check")
     assert restored_hook.platform == Hook.Platform.WINDOWS
+    assert restored_hook.timeout_seconds == 0
+    assert restored_hook.priority == 0
     assert restored_hook.node_roles.filter(pk=role.pk).exists()
 
 
