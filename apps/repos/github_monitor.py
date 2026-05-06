@@ -46,8 +46,7 @@ REQUEUEABLE_MONITOR_STATUSES = {
     GitHubMonitorItem.Status.TIMED_OUT,
     GitHubMonitorItem.Status.FAILED,
 }
-TRUSTED_ISSUE_AUTHOR = "arthexis"
-TRUSTED_ISSUE_APPROVALS = 1000
+DEFAULT_TRUSTED_ISSUE_APPROVALS = 1000
 
 
 GITHUB_MONITOR_FEATURE_FIELDS = {
@@ -367,6 +366,27 @@ def evaluate_readiness() -> dict[str, Any]:
     }
 
 
+def _trusted_issue_authors(task: GitHubMonitorTask) -> set[str]:
+    configured = getattr(settings, "GITHUB_MONITOR_TRUSTED_AUTHORS", ())
+    trusted = {str(author).strip().lower() for author in configured if str(author).strip()}
+    repository_owner = str(task.repository.owner or "").strip().lower()
+    if repository_owner:
+        trusted.add(repository_owner)
+    return trusted
+
+
+def _trusted_issue_approval_threshold() -> int:
+    raw_threshold = getattr(
+        settings,
+        "GITHUB_MONITOR_TRUSTED_ISSUE_APPROVALS",
+        DEFAULT_TRUSTED_ISSUE_APPROVALS,
+    )
+    try:
+        return max(0, int(raw_threshold))
+    except (TypeError, ValueError):
+        return DEFAULT_TRUSTED_ISSUE_APPROVALS
+
+
 def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
     if "pull_request" in item:
         return False
@@ -375,12 +395,16 @@ def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
     marker = (task.issue_marker or "").strip()
     if marker and marker not in str(item.get("body") or ""):
         return False
-    author_login = str((item.get("user") or {}).get("login") or "").strip().lower()
     try:
+        author_login = str((item.get("user") or {}).get("login") or "").strip().lower()
         approvals = int((item.get("reactions") or {}).get("+1") or 0)
-    except (TypeError, ValueError):
+    except (AttributeError, TypeError, ValueError):
+        author_login = ""
         approvals = 0
-    if author_login != TRUSTED_ISSUE_AUTHOR and approvals < TRUSTED_ISSUE_APPROVALS:
+    if (
+        author_login not in _trusted_issue_authors(task)
+        and approvals < _trusted_issue_approval_threshold()
+    ):
         return False
     return isinstance(item.get("number"), int)
 

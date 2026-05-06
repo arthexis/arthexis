@@ -39,6 +39,8 @@ def _issue(number: int, title: str, marker: str) -> dict[str, object]:
         "body": f"{marker}\n\nFailure body",
         "state": "open",
         "html_url": f"https://github.example/issues/{number}",
+        "user": {"login": "octo"},
+        "reactions": {"+1": 0},
     }
 
 
@@ -68,7 +70,7 @@ def test_sync_monitor_items_accepts_trusted_or_highly_approved_issues(monkeypatc
     trusted = _issue(
         72, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
     )
-    trusted["user"] = {"login": "arthexis"}
+    trusted["user"] = {"login": "octo"}
     trusted["reactions"] = {"+1": 0}
     approved = _issue(
         73, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
@@ -86,6 +88,51 @@ def test_sync_monitor_items_accepts_trusted_or_highly_approved_issues(monkeypatc
     assert result["matched"] == 2
     assert GitHubMonitorItem.objects.filter(issue_number=72).exists()
     assert GitHubMonitorItem.objects.filter(issue_number=73).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_accepts_configured_trusted_author(monkeypatch):
+    _configure_defaults()
+    issue = _issue(
+        74, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    issue["user"] = {"login": "release-bot"}
+    monkeypatch.setattr(
+        settings,
+        "GITHUB_MONITOR_TRUSTED_AUTHORS",
+        ["release-bot"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 1
+    assert GitHubMonitorItem.objects.filter(issue_number=74).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_rejects_malformed_trust_payloads(monkeypatch):
+    _configure_defaults()
+    issue = _issue(
+        75, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    issue["user"] = "octo"
+    issue["reactions"] = "1000"
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 0
+    assert GitHubMonitorItem.objects.count() == 0
 
 
 @pytest.mark.django_db
