@@ -292,10 +292,13 @@ def configure_default_monitoring(
     task_summaries = []
     repo_obj = None
     if write:
-        repo_obj, _ = GitHubRepository.objects.update_or_create(
+        repo_obj, _ = GitHubRepository.all_objects.update_or_create(
             owner=owner,
             name=name,
-            defaults={"html_url": f"https://github.com/{owner}/{name}"},
+            defaults={
+                "html_url": f"https://github.com/{owner}/{name}",
+                "is_deleted": False,
+            },
         )
 
     for spec in DEFAULT_MONITOR_TASKS:
@@ -521,8 +524,10 @@ def _terminate_terminal(pid_file: Path) -> bool:
             for child in process.children(recursive=True):
                 child.terminate()
             process.terminate()
-        except psutil.NoSuchProcess:
-            pass
+        except psutil.Error:
+            return False
+    if _terminal_running(pid_file):
+        return False
     pid_file.unlink(missing_ok=True)
     return True
 
@@ -559,7 +564,12 @@ def maintain_active_terminal(*, now=None) -> dict[str, Any]:
         }
 
     if _item_is_inactive(item, now=now):
-        _terminate_terminal(pid_file)
+        if not _terminate_terminal(pid_file):
+            return {
+                "active": item.pk,
+                "released": False,
+                "reason": "terminate_failed",
+            }
         item.mark_status(GitHubMonitorItem.Status.TIMED_OUT)
         return {"active": None, "released": True, "reason": "inactive", "item": item.pk}
 
@@ -726,9 +736,10 @@ def complete_item(
     item = _resolve_item(item_id=item_id, fingerprint=fingerprint)
     was_active = item.status == GitHubMonitorItem.Status.ACTIVE
     pid_file = Path(item.terminal_pid_file) if item.terminal_pid_file else None
-    item.mark_status(GitHubMonitorItem.Status.COMPLETED)
     if was_active and pid_file and _terminal_running(pid_file):
-        _terminate_terminal(pid_file)
+        if not _terminate_terminal(pid_file):
+            raise RuntimeError("Active monitor terminal did not exit.")
+    item.mark_status(GitHubMonitorItem.Status.COMPLETED)
     return item
 
 
@@ -738,9 +749,10 @@ def dismiss_item(
     item = _resolve_item(item_id=item_id, fingerprint=fingerprint)
     was_active = item.status == GitHubMonitorItem.Status.ACTIVE
     pid_file = Path(item.terminal_pid_file) if item.terminal_pid_file else None
-    item.mark_status(GitHubMonitorItem.Status.DISMISSED)
     if was_active and pid_file and _terminal_running(pid_file):
-        _terminate_terminal(pid_file)
+        if not _terminate_terminal(pid_file):
+            raise RuntimeError("Active monitor terminal did not exit.")
+    item.mark_status(GitHubMonitorItem.Status.DISMISSED)
     return item
 
 

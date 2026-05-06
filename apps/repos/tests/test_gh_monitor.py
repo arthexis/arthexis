@@ -77,6 +77,24 @@ def test_configure_default_monitoring_writes_feature_tasks_and_policy_skills():
 
 
 @pytest.mark.django_db
+def test_configure_default_monitoring_restores_soft_deleted_repository():
+    repository = GitHubRepository.objects.create(
+        owner="octo",
+        name="demo",
+        html_url="https://github.example/octo/demo",
+    )
+    GitHubRepository.all_objects.filter(pk=repository.pk).update(is_seed_data=True)
+    repository = GitHubRepository.all_objects.get(pk=repository.pk)
+    repository.delete()
+
+    github_monitor.configure_default_monitoring(repository="octo/demo", write=True)
+
+    repository = GitHubRepository.all_objects.get(pk=repository.pk)
+    assert repository.is_deleted is False
+    assert repository.html_url == "https://github.com/octo/demo"
+
+
+@pytest.mark.django_db
 def test_monitor_cycle_launches_only_one_terminal(tmp_path, monkeypatch):
     _enable_monitor_feature()
     _configure_defaults()
@@ -294,6 +312,42 @@ def test_monitor_cycle_times_out_inactive_terminal_then_launches_next(
 
 
 @pytest.mark.django_db
+def test_monitor_cycle_keeps_active_item_when_terminal_termination_fails(
+    tmp_path, monkeypatch
+):
+    _enable_monitor_feature()
+    _configure_defaults()
+    now = timezone.now()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    task.inactivity_timeout_minutes = 1
+    task.save(update_fields=["inactivity_timeout_minutes"])
+    active_pid = tmp_path / "active.pid"
+    active_pid.write_text("123\nfake command\n", encoding="utf-8")
+    active = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"active").hexdigest(),
+        issue_number=10,
+        issue_title="Active",
+        issue_url="https://github.example/issues/10",
+        status=GitHubMonitorItem.Status.ACTIVE,
+        terminal_pid_file=str(active_pid),
+        launched_at=now - timedelta(minutes=10),
+        last_activity_at=now - timedelta(minutes=10),
+    )
+    monkeypatch.setattr(github_monitor, "desktop_ui_enabled", lambda: True)
+    monkeypatch.setattr(github_monitor, "sync_monitor_items", lambda: {"matched": 0})
+    monkeypatch.setattr(github_monitor, "_terminal_running", lambda pid_file: True)
+    monkeypatch.setattr(github_monitor, "_terminate_terminal", lambda pid_file: False)
+
+    result = github_monitor.run_monitor_cycle()
+
+    active.refresh_from_db()
+    assert result["active"]["reason"] == "terminate_failed"
+    assert result["launch"]["reason"] == "launch_disabled"
+    assert active.status == GitHubMonitorItem.Status.ACTIVE
+
+
+@pytest.mark.django_db
 def test_monitor_cycle_skips_when_device_lock_is_already_held(tmp_path, monkeypatch):
     _enable_monitor_feature()
     _configure_defaults()
@@ -362,6 +416,33 @@ def test_dismiss_item_terminates_active_terminal(tmp_path, monkeypatch):
     dismissed.refresh_from_db()
     assert dismissed.status == GitHubMonitorItem.Status.DISMISSED
     assert terminated == [pid_file]
+
+
+@pytest.mark.django_db
+def test_complete_item_keeps_active_status_when_terminal_termination_fails(
+    tmp_path, monkeypatch
+):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    pid_file = tmp_path / "active.pid"
+    pid_file.write_text("123\nfake command\n", encoding="utf-8")
+    item = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"complete-fail").hexdigest(),
+        issue_number=9,
+        issue_title="Install health check is failing",
+        issue_url="https://github.example/issues/9",
+        status=GitHubMonitorItem.Status.ACTIVE,
+        terminal_pid_file=str(pid_file),
+    )
+    monkeypatch.setattr(github_monitor, "_terminal_running", lambda _: True)
+    monkeypatch.setattr(github_monitor, "_terminate_terminal", lambda _: False)
+
+    with pytest.raises(RuntimeError):
+        github_monitor.complete_item(item_id=item.pk)
+
+    item.refresh_from_db()
+    assert item.status == GitHubMonitorItem.Status.ACTIVE
 
 
 @pytest.mark.django_db
