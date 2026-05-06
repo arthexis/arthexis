@@ -403,6 +403,11 @@ def _upsert_monitor_item(
     }
     item = GitHubMonitorItem.all_objects.filter(fingerprint=fingerprint).first()
     if item is None:
+        item = GitHubMonitorItem.all_objects.filter(
+            task=task,
+            issue_number=issue_number,
+        ).first()
+    if item is None:
         return GitHubMonitorItem.objects.create(
             task=task,
             fingerprint=fingerprint,
@@ -413,6 +418,9 @@ def _upsert_monitor_item(
     for field, value in defaults.items():
         setattr(item, field, value)
     update_fields = [*defaults.keys(), "is_deleted"]
+    if item.fingerprint != fingerprint:
+        item.fingerprint = fingerprint
+        update_fields.append("fingerprint")
     if (
         item.status in REQUEUEABLE_MONITOR_STATUSES
         and defaults["issue_state"].lower() == "open"
@@ -729,7 +737,11 @@ def dismiss_item(
     *, item_id: int | None = None, fingerprint: str = ""
 ) -> GitHubMonitorItem:
     item = _resolve_item(item_id=item_id, fingerprint=fingerprint)
+    was_active = item.status == GitHubMonitorItem.Status.ACTIVE
+    pid_file = Path(item.terminal_pid_file) if item.terminal_pid_file else None
     item.mark_status(GitHubMonitorItem.Status.DISMISSED)
+    if was_active and pid_file and _terminal_running(pid_file):
+        _terminate_terminal(pid_file)
     return item
 
 

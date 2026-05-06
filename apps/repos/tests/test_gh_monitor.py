@@ -181,6 +181,37 @@ def test_sync_monitor_items_requeues_completed_issue_when_seen_open_again(monkey
 
 
 @pytest.mark.django_db
+def test_sync_monitor_items_resolves_existing_row_after_repository_change(monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    issue = _issue(
+        77, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    github_monitor.sync_monitor_items(token="token", now=timezone.now())
+    item = GitHubMonitorItem.objects.get(task=task, issue_number=77)
+    old_fingerprint = item.fingerprint
+    task.repository = GitHubRepository.objects.create(
+        owner="octo",
+        name="renamed",
+        html_url="https://github.example/octo/renamed",
+    )
+    task.save(update_fields=["repository"])
+
+    github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    item.refresh_from_db()
+    assert GitHubMonitorItem.objects.filter(task=task, issue_number=77).count() == 1
+    assert item.fingerprint != old_fingerprint
+    assert item.fingerprint == github_monitor._fingerprint(task, 77)
+
+
+@pytest.mark.django_db
 def test_monitor_cycle_times_out_inactive_terminal_then_launches_next(
     tmp_path, monkeypatch
 ):
@@ -277,6 +308,36 @@ def test_heartbeat_and_complete_update_monitor_item(tmp_path, monkeypatch):
     completed = github_monitor.complete_item(item_id=item.pk)
     completed.refresh_from_db()
     assert completed.status == GitHubMonitorItem.Status.COMPLETED
+
+
+@pytest.mark.django_db
+def test_dismiss_item_terminates_active_terminal(tmp_path, monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    pid_file = tmp_path / "active.pid"
+    pid_file.write_text("123\nfake command\n", encoding="utf-8")
+    item = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"dismiss").hexdigest(),
+        issue_number=8,
+        issue_title="Install health check is failing",
+        issue_url="https://github.example/issues/8",
+        status=GitHubMonitorItem.Status.ACTIVE,
+        terminal_pid_file=str(pid_file),
+    )
+    terminated: list[Path] = []
+    monkeypatch.setattr(github_monitor, "_terminal_running", lambda _: True)
+    monkeypatch.setattr(
+        github_monitor,
+        "_terminate_terminal",
+        lambda path: terminated.append(path) or True,
+    )
+
+    dismissed = github_monitor.dismiss_item(item_id=item.pk)
+
+    dismissed.refresh_from_db()
+    assert dismissed.status == GitHubMonitorItem.Status.DISMISSED
+    assert terminated == [pid_file]
 
 
 @pytest.mark.django_db
