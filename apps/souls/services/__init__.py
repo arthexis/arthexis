@@ -7,7 +7,7 @@ from .card_sessions import (
 )
 from .checkout import attach_soul_to_order_items
 from .package import build_soul_package
-from .skill_matching import compose_skill_bundle, search_agent_skills
+from .skill_matching import compose_skill_bundle, search_skills
 from .survey import digest_normalized_answers, normalize_survey_response
 
 __all__ = [
@@ -22,5 +22,5 @@ __all__ = [
     "normalize_survey_response",
     "plan_soul_seed_card",
     "provision_soul_seed_card",
-    "search_agent_skills",
+    "search_skills",
 ]

@@ -1,7 +1,20 @@
 # AGENTS.md
 
-Guidelines for automated agents interacting with this repository.
-These instructions apply to coding agents, PR review bots, and automated tooling operating within this project.
+Static developer guidance for the Arthexis suite repository.
+These instructions apply to coding sessions, PR review bots, and automated tooling
+operating on suite source code.
+
+Local node operation uses a generated AGENTS file instead of the repository root
+file. The suite writes that node-specific context to `work/codex/AGENTS.md`
+during startup maintenance and upgrade transforms; it can also be refreshed with
+`.venv/bin/python manage.py codex_agents write`. That generated file is built
+from the local Node Role plus enabled Suite Features and Node Features, and
+Node Role context has priority over more general context.
+
+In suite terminology, an OPERATOR is the human using an LLM-assisted coding or
+operations session. Do not model OPERATOR and AGENT as separate suite actors, and
+do not use AGENT as a personality or coordination role. The `skills.Agent` model
+is for AGENTS.md context blocks selected by node role and enabled features.
 
 Agents must prioritize **clarity, correctness, and harmony with the existing codebase** over speculative improvements.
 

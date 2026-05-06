@@ -7,9 +7,9 @@ import logging
 import os
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
@@ -545,18 +545,21 @@ def _run_nodes_legacy_cleanup(checkpoint: dict[str, object]) -> TransformResult:
     )
 
 
-def _run_agent_skills_filesystem_sync(checkpoint: dict[str, object]) -> TransformResult:
-    """Sync skills from database back to SKILL.md files after upgrades."""
+def _run_operator_framework_sync(checkpoint: dict[str, object]) -> TransformResult:
+    """Sync operator framework files after upgrades."""
 
     del checkpoint
+    from apps.skills.agent_context import write_agents_context
     from apps.skills.services import sync_db_to_filesystem
 
-    updated = sync_db_to_filesystem()
+    skill_files = sync_db_to_filesystem()
+    agents_result = write_agents_context()
+    updated = skill_files + int(agents_result.written)
     return TransformResult(updated=updated, processed=updated, complete=True)
 
 
 TRANSFORMS: dict[str, TransformRunner] = {
-    "skills.sync_filesystem": _run_agent_skills_filesystem_sync,
+    "skills.sync_filesystem": _run_operator_framework_sync,
     "modules.normalize_paths": _run_module_path_normalization,
     "nodes.legacy_data_cleanup": _run_nodes_legacy_cleanup,
     "ocpp.enable_forwarders_and_exports": _run_ocpp_forwarder_default_enablement,

@@ -12,18 +12,19 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 
 from .forms import CodexSkillPackageImportForm
-from .models import AgentSkill, AgentSkillFile
+from .models import Agent, Hook, Skill, SkillFile
 from .package_services import (
     CodexSkillPackageImportError,
     import_codex_skill_package,
 )
 
-_SESSION_IMPORT_PACKAGES_KEY = "skills_agentskill_import_packages"
+_SESSION_IMPORT_PACKAGES_KEY = "skills_skill_import_packages"
 _IMPORT_UPLOAD_STORAGE_DIR = "skills/imports"
-_IMPORT_UPLOAD_PREFIX = "agentskill-package-"
+_IMPORT_UPLOAD_PREFIX = "skill-package-"
 _IMPORT_PREVIEW_TTL_SECONDS = 60 * 60
 _PACKAGE_IMPORT_ERRORS = (
     BadZipFile,
@@ -33,8 +34,8 @@ _PACKAGE_IMPORT_ERRORS = (
 )
 
 
-class AgentSkillFileInline(admin.TabularInline):
-    model = AgentSkillFile
+class SkillFileInline(admin.TabularInline):
+    model = SkillFile
     extra = 0
     fields = (
         "relative_path",
@@ -46,12 +47,12 @@ class AgentSkillFileInline(admin.TabularInline):
     readonly_fields = ("size_bytes",)
 
 
-@admin.register(AgentSkill)
-class AgentSkillAdmin(admin.ModelAdmin):
+@admin.register(Skill)
+class SkillAdmin(admin.ModelAdmin):
     list_display = ("slug", "title")
     search_fields = ("slug", "title", "markdown")
     filter_horizontal = ("node_roles",)
-    inlines = (AgentSkillFileInline,)
+    inlines = (SkillFileInline,)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -59,7 +60,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
             path(
                 "import-package/",
                 self.admin_site.admin_view(self.import_package_view),
-                name="skills_agentskill_import_package",
+                name="skills_skill_import_package",
             ),
         ]
         return custom + urls
@@ -68,12 +69,12 @@ class AgentSkillAdmin(admin.ModelAdmin):
         extra_context = dict(extra_context or {})
         if self.has_import_package_permission(request):
             extra_context["model_import_url"] = reverse(
-                "admin:skills_agentskill_import_package",
+                "admin:skills_skill_import_package",
             )
         return super().changelist_view(request, extra_context=extra_context)
 
     def has_import_package_permission(self, request: HttpRequest) -> bool:
-        file_opts = AgentSkillFile._meta
+        file_opts = SkillFile._meta
         required_file_perms = [
             f"{file_opts.app_label}.{action}_{file_opts.model_name}"
             for action in ("add", "change", "delete")
@@ -106,7 +107,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
                     self._delete_import_upload(upload_name)
                     self.message_user(
                         request,
-                        _("Could not preview Codex skill package: %(error)s")
+                        _("Could not preview operator framework package: %(error)s")
                         % {"error": error},
                         level=messages.ERROR,
                     )
@@ -132,15 +133,15 @@ class AgentSkillAdmin(admin.ModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
-            "title": _("Import Codex skill package"),
+            "title": _("Import operator framework package"),
             "form": form,
             "preview": preview,
             "preview_token": preview_token,
-            "changelist_url": reverse("admin:skills_agentskill_changelist"),
+            "changelist_url": reverse("admin:skills_skill_changelist"),
         }
         return TemplateResponse(
             request,
-            "admin/skills/agentskill/import_package.html",
+            "admin/skills/skill/import_package.html",
             context,
         )
 
@@ -149,7 +150,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
             request,
             request.POST.get("token", ""),
         )
-        import_url = reverse("admin:skills_agentskill_import_package")
+        import_url = reverse("admin:skills_skill_import_package")
         if package_path is None:
             self.message_user(
                 request,
@@ -173,7 +174,8 @@ class AgentSkillAdmin(admin.ModelAdmin):
         except _PACKAGE_IMPORT_ERRORS as error:
             self.message_user(
                 request,
-                _("Could not import Codex skill package: %(error)s") % {"error": error},
+                _("Could not import operator framework package: %(error)s")
+                % {"error": error},
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(import_url)
@@ -189,7 +191,7 @@ class AgentSkillAdmin(admin.ModelAdmin):
             ),
             level=messages.SUCCESS,
         )
-        return HttpResponseRedirect(reverse("admin:skills_agentskill_changelist"))
+        return HttpResponseRedirect(reverse("admin:skills_skill_changelist"))
 
     def _store_import_upload(self, uploaded_file) -> str:
         if hasattr(uploaded_file, "seek"):
@@ -305,8 +307,8 @@ class AgentSkillAdmin(admin.ModelAdmin):
         }
 
 
-@admin.register(AgentSkillFile)
-class AgentSkillFileAdmin(admin.ModelAdmin):
+@admin.register(SkillFile)
+class SkillFileAdmin(admin.ModelAdmin):
     list_display = (
         "skill",
         "relative_path",
@@ -316,3 +318,26 @@ class AgentSkillFileAdmin(admin.ModelAdmin):
     )
     list_filter = ("portability", "included_by_default")
     search_fields = ("skill__slug", "relative_path", "exclusion_reason", "content")
+
+
+@admin.register(Agent)
+class AgentAdmin(admin.ModelAdmin):
+    list_display = ("slug", "title", "priority", "is_default")
+    list_filter = ("is_default", "node_roles", "node_features", "suite_features")
+    search_fields = ("slug", "title", "description", "instructions")
+    filter_horizontal = ("node_roles", "node_features", "suite_features")
+
+
+@admin.register(Hook)
+class HookAdmin(admin.ModelAdmin):
+    list_display = ("slug", "title", "event", "platform", "enabled", "priority")
+    list_filter = (
+        "event",
+        "platform",
+        "enabled",
+        "node_roles",
+        "node_features",
+        "suite_features",
+    )
+    search_fields = ("slug", "title", "description", "command")
+    filter_horizontal = ("node_roles", "node_features", "suite_features")

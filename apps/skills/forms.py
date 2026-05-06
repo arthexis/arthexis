@@ -6,8 +6,8 @@ from django.utils.translation import gettext_lazy as _
 
 class CodexSkillPackageImportForm(forms.Form):
     package = forms.FileField(
-        label=_("Codex skill package"),
-        help_text=_("Upload a .zip package exported from Codex skill packages."),
+        label=_("Operator framework package"),
+        help_text=_("Upload a .zip package exported from operator framework packages."),
         widget=forms.ClearableFileInput(
             attrs={"accept": ".zip,application/zip,application/x-zip-compressed"},
         ),
@@ -16,5 +16,5 @@ class CodexSkillPackageImportForm(forms.Form):
     def clean_package(self):
         package = self.cleaned_data["package"]
         if not package.name.lower().endswith(".zip"):
-            raise forms.ValidationError(_("Upload a .zip Codex skill package."))
+            raise forms.ValidationError(_("Upload a .zip operator framework package."))
         return package

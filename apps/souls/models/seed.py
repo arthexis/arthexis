@@ -32,7 +32,9 @@ class SoulIntent(Entity):
     tags = models.JSONField(default=list, blank=True)
     role = models.CharField(max_length=64, blank=True, default="")
     constraints = models.JSONField(default=dict, blank=True)
-    risk_level = models.CharField(max_length=16, choices=RiskLevel.choices, default=RiskLevel.MEDIUM)
+    risk_level = models.CharField(
+        max_length=16, choices=RiskLevel.choices, default=RiskLevel.MEDIUM
+    )
     desired_interface = models.CharField(
         max_length=16,
         choices=InterfaceMode.choices,
@@ -75,14 +77,14 @@ class SkillBundle(Entity):
         related_name="skill_bundles",
     )
     primary_skill = models.ForeignKey(
-        "skills.AgentSkill",
+        "skills.Skill",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="primary_soul_seed_bundles",
     )
     skills = models.ManyToManyField(
-        "skills.AgentSkill",
+        "skills.Skill",
         blank=True,
         related_name="soul_seed_bundles",
     )
@@ -154,7 +156,9 @@ class SoulSeedCard(Entity):
         related_name="soul_seed_cards",
     )
     card_uid = models.CharField(max_length=255, db_index=True)
-    manifest_fingerprint = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    manifest_fingerprint = models.CharField(
+        max_length=64, blank=True, default="", db_index=True
+    )
     intent = models.ForeignKey(
         SoulIntent,
         null=True,
@@ -183,7 +187,9 @@ class SoulSeedCard(Entity):
         on_delete=models.SET_NULL,
         related_name="soul_seed_cards",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.ACTIVE
+    )
     card_payload = models.JSONField(default=dict, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -211,11 +217,16 @@ class CardSession(Entity):
     class TrustTier(models.TextChoices):
         UNKNOWN = "unknown", _("Unknown")
         LOCAL_AUTHENTICATED = "local_authenticated", _("Local authenticated")
-        TRUSTED_OPERATOR_CONSOLE = "trusted_operator_console", _("Trusted operator console")
+        TRUSTED_OPERATOR_CONSOLE = (
+            "trusted_operator_console",
+            _("Trusted operator console"),
+        )
         TRUSTED_GWAY = "trusted_gway", _("Trusted GWAY")
         PROVISIONER = "provisioner", _("Provisioner")
 
-    session_id = models.CharField(max_length=64, unique=True, default=default_card_session_id)
+    session_id = models.CharField(
+        max_length=64, unique=True, default=default_card_session_id
+    )
     card = models.ForeignKey(
         SoulSeedCard,
         null=True,
@@ -232,8 +243,12 @@ class CardSession(Entity):
     )
     reader_id = models.CharField(max_length=128, blank=True, default="")
     node_id = models.CharField(max_length=128, blank=True, default="")
-    trust_tier = models.CharField(max_length=32, choices=TrustTier.choices, default=TrustTier.UNKNOWN)
-    state = models.CharField(max_length=16, choices=State.choices, default=State.PLANNED)
+    trust_tier = models.CharField(
+        max_length=32, choices=TrustTier.choices, default=TrustTier.UNKNOWN
+    )
+    state = models.CharField(
+        max_length=16, choices=State.choices, default=State.PLANNED
+    )
     activation_plan = models.JSONField(default=dict, blank=True)
     runtime_namespace = models.CharField(max_length=128, blank=True, default="")
     started_at = models.DateTimeField(null=True, blank=True)

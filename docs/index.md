@@ -17,7 +17,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [CodeQL Configuration](development/codeql.md)
 - [Cookbook Maintainer Guide](development/cookbook-maintainer-guide.md)
 - [Cookbook QA Checklist](../apps/docs/cookbooks/cookbook-qa-checklist.md)
-- [Codex Skill Packages](development/codex-skill-packages.md)
+- [Operator Framework Packages](development/codex-skill-packages.md)
 - [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [Agent Card v1 RFID Layout](development/agent-card-v1.md)

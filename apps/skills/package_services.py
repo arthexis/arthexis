@@ -14,9 +14,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_slug
 from django.db import transaction
 
-from apps.skills.models import AgentSkill, AgentSkillFile
+from apps.skills.models import Agent, Hook, Skill, SkillFile
 
-PACKAGE_FORMAT = "arthexis.codex_skill_package.v1"
+PACKAGE_FORMAT = "arthexis.operator_framework_package.v1"
+LEGACY_PACKAGE_FORMATS = frozenset({"arthexis.codex_skill_package.v1"})
 SKILL_MARKDOWN = "SKILL.md"
 EMPTY_CONTENT_SHA256 = hashlib.sha256(b"").hexdigest()
 DEFAULT_MATERIALIZE_SIGIL_ROOTS = frozenset({"SYS"})
@@ -28,7 +29,6 @@ BLOCKED_STATE_FILENAMES = {
     "security-codes.json",
     "standard-materials.db",
     "todo.md",
-    "workgroup.md",
 }
 BLOCKED_CACHE_DIRS = {
     ".git",
@@ -62,7 +62,7 @@ MAX_PACKAGE_COMPRESSION_RATIO = 200
 
 
 class CodexSkillPackageImportError(ValueError):
-    """Raised when an uploaded Codex skill package fails validation."""
+    """Raised when an uploaded operator framework package fails validation."""
 
 
 @dataclass(frozen=True)
@@ -235,37 +235,37 @@ def classify_codex_skill_path(relative_path: str) -> SkillFileClassification | N
 
     if filename in BLOCKED_STATE_FILENAMES:
         return SkillFileClassification(
-            AgentSkillFile.Portability.STATE,
+            SkillFile.Portability.STATE,
             False,
             "runtime state is not portable",
         )
     if any(part in BLOCKED_SECRET_DIRS for part in parts):
         return SkillFileClassification(
-            AgentSkillFile.Portability.SECRET,
+            SkillFile.Portability.SECRET,
             False,
             "credential directory is not portable",
         )
     if any(fragment in filename for fragment in SECRET_NAME_FRAGMENTS):
         return SkillFileClassification(
-            AgentSkillFile.Portability.SECRET,
+            SkillFile.Portability.SECRET,
             False,
             "credential-like filename is not portable",
         )
     if any(part in BLOCKED_CACHE_DIRS for part in parts):
         return SkillFileClassification(
-            AgentSkillFile.Portability.CACHE,
+            SkillFile.Portability.CACHE,
             False,
             "cache, log, or generated runtime directory is not portable",
         )
     if any(part in GENERATED_REFERENCE_DIRS for part in parts):
         return SkillFileClassification(
-            AgentSkillFile.Portability.GENERATED_REFERENCE,
+            SkillFile.Portability.GENERATED_REFERENCE,
             False,
             "generated reference archive should be refreshed on the target",
         )
     if suffix in {".db", ".sqlite", ".sqlite3", ".pyc", ".pyo", ".log", ".tmp"}:
         return SkillFileClassification(
-            AgentSkillFile.Portability.STATE,
+            SkillFile.Portability.STATE,
             False,
             "runtime artifact file is not portable",
         )
@@ -282,22 +282,22 @@ def classify_codex_skill_file(
         return path_classification
     if content is None:
         return SkillFileClassification(
-            AgentSkillFile.Portability.DEVICE_SCOPED,
+            SkillFile.Portability.DEVICE_SCOPED,
             False,
             "binary files are not exported by this prototype",
         )
     if normalized == SKILL_MARKDOWN:
-        return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
+        return SkillFileClassification(SkillFile.Portability.PORTABLE, True)
     if any(marker in content for marker in OPERATOR_PATH_MARKERS):
         return SkillFileClassification(
-            AgentSkillFile.Portability.OPERATOR_SCOPED,
+            SkillFile.Portability.OPERATOR_SCOPED,
             False,
             "operator-local paths must be parameterized before export",
         )
     if parts[0] in PORTABLE_ROOTS:
-        return SkillFileClassification(AgentSkillFile.Portability.PORTABLE, True)
+        return SkillFileClassification(SkillFile.Portability.PORTABLE, True)
     return SkillFileClassification(
-        AgentSkillFile.Portability.DEVICE_SCOPED,
+        SkillFile.Portability.DEVICE_SCOPED,
         False,
         "file is outside portable skill package roots",
     )
@@ -347,32 +347,232 @@ def _scan_file(skill_dir: Path, path: Path) -> tuple[SkillFileScan, str]:
     )
 
 
-def _restore_or_create_skill(*, slug: str, title: str, markdown: str) -> AgentSkill:
-    skill = AgentSkill.all_objects.filter(slug=slug).first()
+def _restore_or_create_skill(
+    *,
+    slug: str,
+    title: str,
+    markdown: str,
+    description: str = "",
+) -> Skill:
+    skill = Skill.all_objects.filter(slug=slug).first()
     if skill is None:
-        return AgentSkill.objects.create(
+        return Skill.objects.create(
             slug=slug,
             title=title,
+            description=description,
             markdown=markdown,
             is_seed_data=False,
         )
     was_deleted = skill.is_deleted
     skill.title = title
+    skill.description = description
     skill.markdown = markdown
     skill.is_deleted = False
-    skill.save(update_fields=["title", "markdown", "is_deleted"])
-    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=False)
+    skill.save(update_fields=["title", "description", "markdown", "is_deleted"])
+    Skill.all_objects.filter(pk=skill.pk).update(is_seed_data=False)
     skill.is_seed_data = False
     if was_deleted:
         skill.node_roles.clear()
     return skill
 
 
-def _sync_package_files(skill: AgentSkill, file_specs: list[dict]) -> None:
+def _related_identifiers(instance, relation_name: str, field_name: str) -> list[str]:
+    return list(
+        getattr(instance, relation_name)
+        .order_by(field_name)
+        .values_list(field_name, flat=True)
+    )
+
+
+def _set_related_by_identifiers(
+    instance,
+    relation_name: str,
+    model,
+    identifiers: object,
+    field_name: str,
+) -> None:
+    if not isinstance(identifiers, list):
+        identifiers = []
+    values = [value for value in identifiers if isinstance(value, str) and value]
+    if not values:
+        getattr(instance, relation_name).clear()
+        return
+    related = model.objects.filter(**{f"{field_name}__in": values})
+    getattr(instance, relation_name).set(related)
+
+
+def _validate_package_agent_entries(manifest: dict) -> list[dict]:
+    agents = manifest.get("agents", [])
+    if not isinstance(agents, list):
+        raise CodexSkillPackageImportError("Package manifest agents must be a list")
+    validated_agents = []
+    seen_slugs = set()
+    for entry in agents:
+        if not isinstance(entry, dict):
+            raise CodexSkillPackageImportError("Package agent entries must be objects")
+        try:
+            slug = validate_package_skill_slug(entry["slug"])
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required package agent slug"
+            ) from error
+        except ValueError as error:
+            raise CodexSkillPackageImportError(str(error)) from error
+        if slug in seen_slugs:
+            raise CodexSkillPackageImportError(f"Duplicate package agent slug: {slug}")
+        seen_slugs.add(slug)
+        description = str(entry.get("description", ""))
+        if len(description) > 720:
+            raise CodexSkillPackageImportError(
+                f"Package agent description too long: {slug}"
+            )
+        validated_agents.append({**entry, "slug": slug, "description": description})
+    return validated_agents
+
+
+def _validate_package_hook_entries(manifest: dict) -> list[dict]:
+    hooks = manifest.get("hooks", [])
+    if not isinstance(hooks, list):
+        raise CodexSkillPackageImportError("Package manifest hooks must be a list")
+    valid_events = {choice.value for choice in Hook.Event}
+    valid_platforms = {choice.value for choice in Hook.Platform}
+    validated_hooks = []
+    seen_slugs = set()
+    for entry in hooks:
+        if not isinstance(entry, dict):
+            raise CodexSkillPackageImportError("Package hook entries must be objects")
+        try:
+            slug = validate_package_skill_slug(entry["slug"])
+        except KeyError as error:
+            raise CodexSkillPackageImportError(
+                "Missing required package hook slug"
+            ) from error
+        except ValueError as error:
+            raise CodexSkillPackageImportError(str(error)) from error
+        if slug in seen_slugs:
+            raise CodexSkillPackageImportError(f"Duplicate package hook slug: {slug}")
+        seen_slugs.add(slug)
+        description = str(entry.get("description", ""))
+        if len(description) > 720:
+            raise CodexSkillPackageImportError(
+                f"Package hook description too long: {slug}"
+            )
+        event = entry.get("event", Hook.Event.SESSION_START)
+        platform = entry.get("platform", Hook.Platform.ANY)
+        if event not in valid_events:
+            raise CodexSkillPackageImportError(
+                f"Unsupported package hook event: {event}"
+            )
+        if platform not in valid_platforms:
+            raise CodexSkillPackageImportError(
+                f"Unsupported package hook platform: {platform}"
+            )
+        if not str(entry.get("command", "")).strip():
+            raise CodexSkillPackageImportError(
+                f"Missing required package hook command: {slug}"
+            )
+        validated_hooks.append(
+            {
+                **entry,
+                "slug": slug,
+                "description": description,
+                "event": event,
+                "platform": platform,
+            }
+        )
+    return validated_hooks
+
+
+def _restore_or_create_agent(entry: dict) -> Agent:
+    agent = Agent.all_objects.filter(slug=entry["slug"]).first()
+    if agent is None:
+        agent = Agent(slug=entry["slug"])
+    agent.title = str(entry.get("title") or entry["slug"].replace("-", " ").title())
+    agent.description = entry.get("description", "")
+    agent.instructions = str(entry.get("instructions", ""))
+    agent.priority = int(entry.get("priority", 100) or 100)
+    agent.is_default = bool(entry.get("is_default", False))
+    agent.is_deleted = False
+    agent.save()
+    Agent.all_objects.filter(pk=agent.pk).update(is_seed_data=False)
+    _set_related_by_identifiers(
+        agent, "node_roles", _node_role_model(), entry.get("node_roles"), "name"
+    )
+    _set_related_by_identifiers(
+        agent,
+        "node_features",
+        _node_feature_model(),
+        entry.get("node_features"),
+        "slug",
+    )
+    _set_related_by_identifiers(
+        agent,
+        "suite_features",
+        _suite_feature_model(),
+        entry.get("suite_features"),
+        "slug",
+    )
+    return agent
+
+
+def _restore_or_create_hook(entry: dict) -> Hook:
+    hook = Hook.all_objects.filter(slug=entry["slug"]).first()
+    if hook is None:
+        hook = Hook(slug=entry["slug"])
+    hook.title = str(entry.get("title") or entry["slug"].replace("-", " ").title())
+    hook.description = entry.get("description", "")
+    hook.event = entry.get("event", Hook.Event.SESSION_START)
+    hook.platform = entry.get("platform", Hook.Platform.ANY)
+    hook.command = str(entry.get("command", ""))
+    hook.working_directory = str(entry.get("working_directory", ""))
+    hook.environment = (
+        entry.get("environment") if isinstance(entry.get("environment"), dict) else {}
+    )
+    hook.timeout_seconds = int(entry.get("timeout_seconds", 60) or 60)
+    hook.enabled = bool(entry.get("enabled", True))
+    hook.priority = int(entry.get("priority", 100) or 100)
+    hook.is_deleted = False
+    hook.save()
+    Hook.all_objects.filter(pk=hook.pk).update(is_seed_data=False)
+    _set_related_by_identifiers(
+        hook, "node_roles", _node_role_model(), entry.get("node_roles"), "name"
+    )
+    _set_related_by_identifiers(
+        hook, "node_features", _node_feature_model(), entry.get("node_features"), "slug"
+    )
+    _set_related_by_identifiers(
+        hook,
+        "suite_features",
+        _suite_feature_model(),
+        entry.get("suite_features"),
+        "slug",
+    )
+    return hook
+
+
+def _node_role_model():
+    from apps.nodes.models import NodeRole
+
+    return NodeRole
+
+
+def _node_feature_model():
+    from apps.nodes.models import NodeFeature
+
+    return NodeFeature
+
+
+def _suite_feature_model():
+    from apps.features.models import Feature
+
+    return Feature
+
+
+def _sync_package_files(skill: Skill, file_specs: list[dict]) -> None:
     seen_paths = {file_spec["relative_path"] for file_spec in file_specs}
     skill.package_files.exclude(relative_path__in=seen_paths).delete()
-    AgentSkillFile.objects.bulk_create(
-        [AgentSkillFile(skill=skill, **file_spec) for file_spec in file_specs],
+    SkillFile.objects.bulk_create(
+        [SkillFile(skill=skill, **file_spec) for file_spec in file_specs],
         update_conflicts=True,
         update_fields=[
             "content",
@@ -418,7 +618,9 @@ def _package_entry_info(package: ZipFile, archive_path: str):
         ) from error
 
 
-def _validate_package_entry_size(info, archive_path: str, *, max_size_bytes: int) -> None:
+def _validate_package_entry_size(
+    info, archive_path: str, *, max_size_bytes: int
+) -> None:
     if info.file_size > max_size_bytes:
         raise CodexSkillPackageImportError(f"Package file too large: {archive_path}")
     if info.compress_size > 0:
@@ -470,9 +672,7 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
         except ValueError as error:
             raise CodexSkillPackageImportError(str(error)) from error
         if slug in seen_slugs:
-            raise CodexSkillPackageImportError(
-                f"Duplicate package skill slug: {slug}"
-            )
+            raise CodexSkillPackageImportError(f"Duplicate package skill slug: {slug}")
         seen_slugs.add(slug)
         seen_paths = set()
         content_by_path = {}
@@ -506,9 +706,7 @@ def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[d
                 file_info["path"] == SKILL_MARKDOWN
                 and file_info.get("included_by_default") is False
             ):
-                raise CodexSkillPackageImportError(
-                    f"{SKILL_MARKDOWN} must be included"
-                )
+                raise CodexSkillPackageImportError(f"{SKILL_MARKDOWN} must be included")
             seen_paths.add(file_info["path"])
             archive_path = f"skills/{slug}/{file_info['path']}"
             info = _package_entry_info(package, archive_path)
@@ -611,17 +809,18 @@ def export_codex_skill_package(
     portable_only: bool = True,
 ) -> dict:
     output_path = Path(output_path)
-    queryset = AgentSkill.objects.prefetch_related("package_files")
+    queryset = Skill.objects.prefetch_related("package_files")
     if skill_slugs:
         queryset = queryset.filter(slug__in=skill_slugs)
 
-    manifest = {"format": PACKAGE_FORMAT, "skills": []}
+    manifest = {"format": PACKAGE_FORMAT, "skills": [], "agents": [], "hooks": []}
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output_path, "w", ZIP_DEFLATED) as package:
         for skill in queryset.order_by("slug"):
             skill_entry = {
                 "slug": skill.slug,
                 "title": skill.title,
+                "description": skill.description,
                 "files": [],
             }
             package_files = list(skill.package_files.all())
@@ -631,7 +830,7 @@ def export_codex_skill_package(
                 skill_entry["files"].append(
                     {
                         "path": SKILL_MARKDOWN,
-                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "portability": SkillFile.Portability.PORTABLE,
                         "included_by_default": True,
                         "exclusion_reason": "",
                         "content_sha256": hashlib.sha256(
@@ -655,11 +854,56 @@ def export_codex_skill_package(
                 )
             if skill_entry["files"]:
                 manifest["skills"].append(skill_entry)
+        for agent in Agent.objects.prefetch_related(
+            "node_roles", "node_features", "suite_features"
+        ).order_by("slug"):
+            manifest["agents"].append(
+                {
+                    "slug": agent.slug,
+                    "title": agent.title,
+                    "description": agent.description,
+                    "instructions": agent.instructions,
+                    "priority": agent.priority,
+                    "is_default": agent.is_default,
+                    "node_roles": _related_identifiers(agent, "node_roles", "name"),
+                    "node_features": _related_identifiers(
+                        agent, "node_features", "slug"
+                    ),
+                    "suite_features": _related_identifiers(
+                        agent, "suite_features", "slug"
+                    ),
+                }
+            )
+        for hook in Hook.objects.prefetch_related(
+            "node_roles", "node_features", "suite_features"
+        ).order_by("slug"):
+            manifest["hooks"].append(
+                {
+                    "slug": hook.slug,
+                    "title": hook.title,
+                    "description": hook.description,
+                    "event": hook.event,
+                    "platform": hook.platform,
+                    "command": hook.command,
+                    "working_directory": hook.working_directory,
+                    "environment": hook.environment,
+                    "timeout_seconds": hook.timeout_seconds,
+                    "enabled": hook.enabled,
+                    "priority": hook.priority,
+                    "node_roles": _related_identifiers(hook, "node_roles", "name"),
+                    "node_features": _related_identifiers(
+                        hook, "node_features", "slug"
+                    ),
+                    "suite_features": _related_identifiers(
+                        hook, "suite_features", "slug"
+                    ),
+                }
+            )
         package.writestr("manifest.json", json.dumps(manifest, indent=2))
     return manifest
 
 
-def _included_package_files(skill: AgentSkill) -> list[AgentSkillFile]:
+def _included_package_files(skill: Skill) -> list[SkillFile]:
     return [
         file_entry
         for file_entry in skill.package_files.all()
@@ -667,11 +911,11 @@ def _included_package_files(skill: AgentSkill) -> list[AgentSkillFile]:
     ]
 
 
-def _legacy_skill_file_entry(skill: AgentSkill) -> tuple[str, str]:
+def _legacy_skill_file_entry(skill: Skill) -> tuple[str, str]:
     return SKILL_MARKDOWN, skill.markdown
 
 
-def _package_file_entries(skill: AgentSkill) -> list[tuple[str, str]]:
+def _package_file_entries(skill: Skill) -> list[tuple[str, str]]:
     package_files = _included_package_files(skill)
     if not package_files:
         return [_legacy_skill_file_entry(skill)]
@@ -700,7 +944,7 @@ def materialize_codex_skill_files(
     """
 
     target_root = Path(target_root)
-    queryset = AgentSkill.objects.prefetch_related("package_files")
+    queryset = Skill.objects.prefetch_related("package_files")
     if skill_slugs:
         queryset = queryset.filter(slug__in=skill_slugs)
 
@@ -801,15 +1045,19 @@ def import_codex_skill_package(
         manifest = json.loads(manifest_text)
         if not isinstance(manifest, dict):
             raise CodexSkillPackageImportError("Package manifest must be an object")
-        if manifest.get("format") != PACKAGE_FORMAT:
+        if manifest.get("format") not in {PACKAGE_FORMAT, *LEGACY_PACKAGE_FORMATS}:
             raise CodexSkillPackageImportError(
-                "Unsupported Codex skill package format"
+                "Unsupported operator framework package format"
             )
         validated_skills = _validate_manifest_skill_entries(package, manifest)
+        validated_agents = _validate_package_agent_entries(manifest)
+        validated_hooks = _validate_package_hook_entries(manifest)
         summary = {
             "package": package_label,
             "dry_run": dry_run,
             "skills": [],
+            "agents": [],
+            "hooks": [],
         }
         if dry_run:
             for skill_entry in validated_skills:
@@ -819,6 +1067,8 @@ def import_codex_skill_package(
                         "files": len(skill_entry.get("files", [])),
                     }
                 )
+            summary["agents"] = [{"slug": entry["slug"]} for entry in validated_agents]
+            summary["hooks"] = [{"slug": entry["slug"]} for entry in validated_hooks]
             return summary
 
         with transaction.atomic():
@@ -829,6 +1079,7 @@ def import_codex_skill_package(
                 skill = _restore_or_create_skill(
                     slug=slug,
                     title=skill_entry.get("title", slug.replace("-", " ").title()),
+                    description=skill_entry.get("description", ""),
                     markdown=content_by_path.get(SKILL_MARKDOWN, ""),
                 )
                 _sync_package_files(
@@ -839,4 +1090,10 @@ def import_codex_skill_package(
                     ],
                 )
                 summary["skills"].append({"slug": slug, "files": len(files)})
+            for agent_entry in validated_agents:
+                agent = _restore_or_create_agent(agent_entry)
+                summary["agents"].append({"slug": agent.slug})
+            for hook_entry in validated_hooks:
+                hook = _restore_or_create_hook(hook_entry)
+                summary["hooks"].append({"slug": hook.slug})
         return summary
