@@ -741,7 +741,9 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
         for command in commands:
             parts = shlex.split(command)
             if parts and parts[0] == "upload":
-                written_files[parts[2]] = (Path(parts[1]).read_text(encoding="utf-8"), None)
+                uploaded_bytes = Path(parts[1]).read_bytes()
+                assert b"\r" not in uploaded_bytes
+                written_files[parts[2]] = (uploaded_bytes.decode("utf-8"), None)
             elif parts and parts[0] == "chmod":
                 content, _mode = written_files[parts[2]]
                 written_files[parts[2]] = (content, parts[1])
@@ -798,11 +800,18 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     assert bootstrap_mode == "0755"
     assert "required_packages+=(git ca-certificates)" in bootstrap_script
-    assert "for package in rpi-connect wayvnc wfplug-connect" in bootstrap_script
+    assert (
+        "for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter"
+        in bootstrap_script
+    )
     assert 'optional_connect_packages+=("$package")' in bootstrap_script
     assert '"${optional_connect_packages[@]}" || echo' in bootstrap_script
     assert "continuing bootstrap" in bootstrap_script
     assert "rpi-connect-lite" not in bootstrap_script
+    assert "systemctl disable userconfig.service" in bootstrap_script
+    assert "autologin-user=$CONNECT_SCREEN_SHARE_USER" in bootstrap_script
+    assert "autologin-session=rpd-labwc" in bootstrap_script
+    assert "rpi-connect vnc on" in bootstrap_script
     apt_update_retry = "apt-get update || { sleep 10; apt-get update; }"
     assert apt_update_retry in bootstrap_script
     assert "apt-get install -y --no-install-recommends" in bootstrap_script

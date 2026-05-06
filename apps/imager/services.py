@@ -116,9 +116,8 @@ if ! command -v git >/dev/null 2>&1; then
 elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
   required_packages+=(ca-certificates)
 fi
-
 optional_connect_packages=()
-for package in rpi-connect wayvnc wfplug-connect; do
+for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter; do
   if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
     optional_connect_packages+=("$package")
   fi
@@ -136,6 +135,35 @@ if [ "${#optional_connect_packages[@]}" -gt 0 ]; then
     apt-get install -y --no-install-recommends "${optional_connect_packages[@]}" || echo "Optional Raspberry Pi Connect packages failed to install; continuing bootstrap" >&2
   else
     echo "Optional Raspberry Pi Connect package index update failed; continuing bootstrap" >&2
+  fi
+fi
+
+CONNECT_SCREEN_SHARE_USER="${ARTHEXIS_CONNECT_USER:-arthe}"
+if id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then
+  systemctl stop userconfig.service >/dev/null 2>&1 || true
+  systemctl disable userconfig.service >/dev/null 2>&1 || true
+  loginctl enable-linger "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1 || true
+
+  if [ -d /etc/lightdm ]; then
+    install -d -m 755 /etc/lightdm/lightdm.conf.d
+    cat >/etc/lightdm/lightdm.conf.d/20-arthexis-connect.conf <<EOF
+[Seat:*]
+greeter-session=pi-greeter-labwc
+user-session=rpd-labwc
+autologin-user=$CONNECT_SCREEN_SHARE_USER
+autologin-session=rpd-labwc
+EOF
+    systemctl set-default graphical.target >/dev/null 2>&1 || true
+    systemctl enable lightdm.service >/dev/null 2>&1 || true
+    systemctl start --no-block lightdm.service >/dev/null 2>&1 || true
+  fi
+
+  if command -v rpi-connect >/dev/null 2>&1; then
+    connect_uid="$(id -u "$CONNECT_SCREEN_SHARE_USER")"
+    systemctl enable "user@${connect_uid}.service" >/dev/null 2>&1 || true
+    systemctl start --no-block "user@${connect_uid}.service" >/dev/null 2>&1 || true
+    timeout 30s runuser -u "$CONNECT_SCREEN_SHARE_USER" -- rpi-connect shell on >/dev/null 2>&1 || true
+    timeout 30s runuser -u "$CONNECT_SCREEN_SHARE_USER" -- rpi-connect vnc on >/dev/null 2>&1 || true
   fi
 fi
 
@@ -1074,6 +1102,13 @@ def _normalize_recovery_ssh_access(
     return RecoverySSHAccess(username=username, authorized_keys=normalized_keys)
 
 
+def _write_linux_text(path: Path, content: str) -> None:
+    """Write generated Linux-side text without Windows newline translation."""
+
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    path.write_text(normalized, encoding="utf-8", newline="\n")
+
+
 def _customize_image(
     image_path: Path,
     *,
@@ -1096,16 +1131,16 @@ def _customize_image(
         reservation_json = work_dir / "reserved-node.json"
         suite_bundle_info: SuiteBundleInfo | None = None
 
-        bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
-        service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
-        recovery_service.write_text(RECOVERY_SYSTEMD_SERVICE, encoding="utf-8")
-        firstrun.write_text(
+        _write_linux_text(bootstrap, BOOTSTRAP_SCRIPT)
+        _write_linux_text(service, SYSTEMD_SERVICE.format(git_url=git_url))
+        _write_linux_text(recovery_service, RECOVERY_SYSTEMD_SERVICE)
+        _write_linux_text(
+            firstrun,
             FIRST_RUN_SCRIPT.format(
                 recovery_boot_hook=RECOVERY_BOOT_HOOK
                 if recovery_ssh_access and recovery_ssh_access.enabled
                 else ""
             ),
-            encoding="utf-8",
         )
 
         _guestfish_run_commands(
@@ -1126,8 +1161,8 @@ def _customize_image(
             error_message="guestfish failed while injecting bootstrap files",
         )
         if reservation is not None:
-            reservation_env.write_text(render_reservation_env(reservation), encoding="utf-8")
-            reservation_json.write_text(render_reservation_json(reservation), encoding="utf-8")
+            _write_linux_text(reservation_env, render_reservation_env(reservation))
+            _write_linux_text(reservation_json, render_reservation_json(reservation))
             _guestfish_run_commands(
                 image_path,
                 [
@@ -1165,18 +1200,18 @@ def _customize_image(
             recovery_script = work_dir / "arthexis-recovery-access.sh"
             recovery_sshd_config = work_dir / "arthexis-recovery.conf"
 
-            recovery_keys.write_text(
+            _write_linux_text(
+                recovery_keys,
                 "\n".join(recovery_ssh_access.authorized_keys) + "\n",
-                encoding="utf-8",
             )
-            recovery_script.write_text(
+            _write_linux_text(
+                recovery_script,
                 RECOVERY_ACCESS_SCRIPT.format(
                     ssh_user=shlex.quote(recovery_ssh_access.username),
                     authorized_keys_path=RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
                 ),
-                encoding="utf-8",
             )
-            recovery_sshd_config.write_text(RECOVERY_SSHD_CONFIG, encoding="utf-8")
+            _write_linux_text(recovery_sshd_config, RECOVERY_SSHD_CONFIG)
 
             _guestfish_run_commands(
                 image_path,
