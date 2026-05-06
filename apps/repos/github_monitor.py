@@ -46,6 +46,8 @@ REQUEUEABLE_MONITOR_STATUSES = {
     GitHubMonitorItem.Status.TIMED_OUT,
     GitHubMonitorItem.Status.FAILED,
 }
+TRUSTED_ISSUE_AUTHOR = "arthexis"
+TRUSTED_ISSUE_APPROVALS = 1000
 
 
 GITHUB_MONITOR_FEATURE_FIELDS = {
@@ -372,6 +374,13 @@ def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
         return False
     marker = (task.issue_marker or "").strip()
     if marker and marker not in str(item.get("body") or ""):
+        return False
+    author_login = str((item.get("user") or {}).get("login") or "").strip().lower()
+    try:
+        approvals = int((item.get("reactions") or {}).get("+1") or 0)
+    except (TypeError, ValueError):
+        approvals = 0
+    if author_login != TRUSTED_ISSUE_AUTHOR and approvals < TRUSTED_ISSUE_APPROVALS:
         return False
     return isinstance(item.get("number"), int)
 
