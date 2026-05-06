@@ -651,6 +651,44 @@ def test_import_rejects_windows_absolute_manifest_paths(tmp_path):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "manifest_entry",
+    [
+        {"agents": [{"slug": "bad-agent", "priority": "high"}]},
+        {
+            "hooks": [
+                {
+                    "slug": "bad-hook",
+                    "command": "python manage.py check",
+                    "timeout_seconds": "fast",
+                }
+            ]
+        },
+        {
+            "hooks": [
+                {
+                    "slug": "bad-hook-priority",
+                    "command": "python manage.py check",
+                    "priority": "first",
+                }
+            ]
+        },
+    ],
+)
+def test_import_dry_run_rejects_invalid_framework_integer_fields(
+    tmp_path, manifest_entry
+):
+    package_path = tmp_path / "invalid-framework-integer.zip"
+    manifest = {"format": PACKAGE_FORMAT, "skills": []}
+    manifest.update(manifest_entry)
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="Invalid package integer"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
 def test_import_dry_run_rejects_missing_manifest_with_legacy_message(tmp_path):
     package_path = tmp_path / "missing-manifest.zip"
     with ZipFile(package_path, "w") as package:

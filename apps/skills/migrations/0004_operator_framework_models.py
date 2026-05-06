@@ -2,6 +2,40 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def preserve_renamed_model_permissions(apps, schema_editor):
+    del schema_editor
+    ContentType = apps.get_model("contenttypes", "ContentType")
+    Permission = apps.get_model("auth", "Permission")
+    renamed_models = (
+        ("agentskill", "skill", "Skill"),
+        ("agentskillfile", "skillfile", "Skill File"),
+    )
+    actions = ("add", "change", "delete", "view")
+    for old_model, new_model, verbose_name in renamed_models:
+        old_content_type = ContentType.objects.filter(
+            app_label="skills",
+            model=old_model,
+        ).first()
+        if old_content_type is None:
+            continue
+        if (
+            ContentType.objects.filter(app_label="skills", model=new_model)
+            .exclude(pk=old_content_type.pk)
+            .exists()
+        ):
+            continue
+        for action in actions:
+            Permission.objects.filter(
+                content_type=old_content_type,
+                codename=f"{action}_{old_model}",
+            ).update(
+                codename=f"{action}_{new_model}",
+                name=f"Can {action} {verbose_name}",
+            )
+        old_content_type.model = new_model
+        old_content_type.save(update_fields=["model"])
+
+
 def clear_previous_seed_framework_records(apps, schema_editor):
     del schema_editor
     Skill = apps.get_model("skills", "Skill")
@@ -14,6 +48,8 @@ def clear_previous_seed_framework_records(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
+        ("auth", "0012_alter_user_first_name_max_length"),
+        ("contenttypes", "0002_remove_content_type_name"),
         ("features", "0007_shorten_feature_slugs"),
         ("nodes", "0012_upgrade_policy_custom_controls"),
         ("souls", "0003_cardsession_souls_one_active_session"),
@@ -28,6 +64,10 @@ class Migration(migrations.Migration):
         migrations.RenameModel(
             old_name="AgentSkillFile",
             new_name="SkillFile",
+        ),
+        migrations.RunPython(
+            preserve_renamed_model_permissions,
+            migrations.RunPython.noop,
         ),
         migrations.AlterModelOptions(
             name="skill",

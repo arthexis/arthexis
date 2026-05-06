@@ -405,7 +405,13 @@ def _manifest_int(entry: dict, key: str, default: int) -> int:
     value = entry.get(key, default)
     if value in (None, ""):
         value = default
-    return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        slug = entry.get("slug", "<unknown>")
+        raise CodexSkillPackageImportError(
+            f"Invalid package integer for {slug}.{key}: {value!r}"
+        ) from error
 
 
 def _validate_package_agent_entries(manifest: dict) -> list[dict]:
@@ -433,7 +439,14 @@ def _validate_package_agent_entries(manifest: dict) -> list[dict]:
             raise CodexSkillPackageImportError(
                 f"Package agent description too long: {slug}"
             )
-        validated_agents.append({**entry, "slug": slug, "description": description})
+        validated_agents.append(
+            {
+                **entry,
+                "slug": slug,
+                "description": description,
+                "priority": _manifest_int(entry, "priority", 100),
+            }
+        )
     return validated_agents
 
 
@@ -485,6 +498,8 @@ def _validate_package_hook_entries(manifest: dict) -> list[dict]:
                 "description": description,
                 "event": event,
                 "platform": platform,
+                "timeout_seconds": _manifest_int(entry, "timeout_seconds", 60),
+                "priority": _manifest_int(entry, "priority", 100),
             }
         )
     return validated_hooks
