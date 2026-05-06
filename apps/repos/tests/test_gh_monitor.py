@@ -212,6 +212,30 @@ def test_sync_monitor_items_resolves_existing_row_after_repository_change(monkey
 
 
 @pytest.mark.django_db
+def test_sync_monitor_items_does_not_requeue_dismissed_issue(monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    issue = _issue(
+        88, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    github_monitor.sync_monitor_items(token="token", now=timezone.now())
+    item = GitHubMonitorItem.objects.get(task=task, issue_number=88)
+    item.mark_status(GitHubMonitorItem.Status.DISMISSED)
+
+    github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    item.refresh_from_db()
+    assert item.status == GitHubMonitorItem.Status.DISMISSED
+    assert item.completed_at is not None
+
+
+@pytest.mark.django_db
 def test_monitor_cycle_times_out_inactive_terminal_then_launches_next(
     tmp_path, monkeypatch
 ):

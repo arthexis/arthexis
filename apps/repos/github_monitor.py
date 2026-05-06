@@ -45,7 +45,6 @@ REQUEUEABLE_MONITOR_STATUSES = {
     GitHubMonitorItem.Status.CLOSED,
     GitHubMonitorItem.Status.TIMED_OUT,
     GitHubMonitorItem.Status.FAILED,
-    GitHubMonitorItem.Status.DISMISSED,
 }
 
 
