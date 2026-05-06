@@ -47,6 +47,7 @@ REQUEUEABLE_MONITOR_STATUSES = {
     GitHubMonitorItem.Status.FAILED,
 }
 DEFAULT_TRUSTED_ISSUE_APPROVALS = 1000
+TRUSTED_AUTHOR_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 
 GITHUB_MONITOR_FEATURE_FIELDS = {
@@ -371,7 +372,9 @@ def _trusted_issue_authors(task: GitHubMonitorTask) -> set[str]:
     if isinstance(configured, str):
         configured_authors = configured.replace(",", " ").split()
     elif isinstance(configured, Mapping):
-        configured_authors = configured.values()
+        configured_authors = [
+            author for author, enabled in configured.items() if enabled
+        ]
     else:
         try:
             configured_authors = iter(configured)
@@ -409,13 +412,19 @@ def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
     if marker and marker not in str(item.get("body") or ""):
         return False
     try:
-        author_login = str((item.get("user") or {}).get("login") or "").strip().lower()
-        approvals = int((item.get("reactions") or {}).get("+1") or 0)
+        author_login = (
+            str((item.get("user") or {}).get("login") or "").strip().lower()
+        )
     except (AttributeError, TypeError, ValueError):
         author_login = ""
+    try:
+        approvals = int((item.get("reactions") or {}).get("+1") or 0)
+    except (AttributeError, TypeError, ValueError):
         approvals = 0
+    author_association = str(item.get("author_association") or "").strip().upper()
     if (
         author_login not in _trusted_issue_authors(task)
+        and author_association not in TRUSTED_AUTHOR_ASSOCIATIONS
         and approvals < _trusted_issue_approval_threshold()
     ):
         return False

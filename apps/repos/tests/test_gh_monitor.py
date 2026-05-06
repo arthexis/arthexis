@@ -141,10 +141,55 @@ def test_sync_monitor_items_accepts_string_configured_trusted_author(monkeypatch
 
 
 @pytest.mark.django_db
-def test_sync_monitor_items_rejects_malformed_trust_payloads(monkeypatch):
+def test_sync_monitor_items_accepts_mapping_configured_trusted_author(monkeypatch):
     _configure_defaults()
     issue = _issue(
         76, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    issue["user"] = {"login": "release-bot"}
+    monkeypatch.setattr(
+        settings,
+        "GITHUB_MONITOR_TRUSTED_AUTHORS",
+        {"release-bot": True, "disabled-bot": False},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 1
+    assert GitHubMonitorItem.objects.filter(issue_number=76).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_accepts_repository_member_issue(monkeypatch):
+    _configure_defaults()
+    issue = _issue(
+        77, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    issue["user"] = {"login": "repo-member"}
+    issue["author_association"] = "MEMBER"
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 1
+    assert GitHubMonitorItem.objects.filter(issue_number=77).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_rejects_malformed_trust_payloads(monkeypatch):
+    _configure_defaults()
+    issue = _issue(
+        78, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
     )
     issue["user"] = "octo"
     issue["reactions"] = "1000"
