@@ -31,9 +31,9 @@ from django.utils import timezone
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
-    ImageReservation,
     RESERVATION_ENV_PATH,
     RESERVATION_JSON_PATH,
+    ImageReservation,
     active_parent_network_names,
     commit_image_reservation,
     plan_image_reservation,
@@ -110,22 +110,33 @@ if [ -n "${NODE_HOSTNAME:-}" ]; then
   hostnamectl set-hostname "$NODE_HOSTNAME" 2>/dev/null || hostname "$NODE_HOSTNAME" 2>/dev/null || true
 fi
 
-missing_packages=()
+required_packages=()
 if ! command -v git >/dev/null 2>&1; then
-  missing_packages+=(git ca-certificates)
+  required_packages+=(git ca-certificates)
 elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
-  missing_packages+=(ca-certificates)
+  required_packages+=(ca-certificates)
 fi
+
+optional_connect_packages=()
 for package in rpi-connect wayvnc wfplug-connect; do
   if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    missing_packages+=("$package")
+    optional_connect_packages+=("$package")
   fi
 done
 
-if [ "${#missing_packages[@]}" -gt 0 ]; then
+if [ "${#required_packages[@]}" -gt 0 ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update || { sleep 10; apt-get update; }
-  apt-get install -y --no-install-recommends "${missing_packages[@]}"
+  apt-get install -y --no-install-recommends "${required_packages[@]}"
+fi
+
+if [ "${#optional_connect_packages[@]}" -gt 0 ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  if apt-get update || { sleep 10; apt-get update; }; then
+    apt-get install -y --no-install-recommends "${optional_connect_packages[@]}" || echo "Optional Raspberry Pi Connect packages failed to install; continuing bootstrap" >&2
+  else
+    echo "Optional Raspberry Pi Connect package index update failed; continuing bootstrap" >&2
+  fi
 fi
 
 APP_HOME=/opt/arthexis

@@ -797,8 +797,11 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     sshd_config, sshd_mode = written_files["/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"]
 
     assert bootstrap_mode == "0755"
-    assert "missing_packages+=(git ca-certificates)" in bootstrap_script
+    assert "required_packages+=(git ca-certificates)" in bootstrap_script
     assert "for package in rpi-connect wayvnc wfplug-connect" in bootstrap_script
+    assert 'optional_connect_packages+=("$package")' in bootstrap_script
+    assert '"${optional_connect_packages[@]}" || echo' in bootstrap_script
+    assert "continuing bootstrap" in bootstrap_script
     assert "rpi-connect-lite" not in bootstrap_script
     apt_update_retry = "apt-get update || { sleep 10; apt-get update; }"
     assert apt_update_retry in bootstrap_script
