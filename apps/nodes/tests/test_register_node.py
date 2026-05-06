@@ -134,8 +134,8 @@ def test_register_node_updates_mesh_identity_fields(admin_user):
 
 
 @pytest.mark.django_db
-def test_register_node_claims_reserved_placeholder_by_hostname(admin_user):
-    """First contact from a reserved image should reuse and clear its peer row."""
+def test_register_node_does_not_claim_reserved_placeholder_by_hostname(admin_user):
+    """First contact must not claim reserved placeholder rows by hostname alone."""
 
     reserved = Node.objects.create(
         hostname="gway-004",
@@ -163,12 +163,11 @@ def test_register_node_claims_reserved_placeholder_by_hostname(admin_user):
 
     assert response.status_code == 200
     body = json.loads(response.content.decode())
-    assert body["id"] == reserved.id
+    assert body["id"] != reserved.id
     reserved.refresh_from_db()
-    assert reserved.reserved is False
-    assert reserved.mac_address == "aa:bb:cc:dd:ee:04"
-    assert reserved.trusted is True
-    assert Node.objects.count() == 1
+    assert reserved.reserved is True
+    assert reserved.mac_address == ""
+    assert Node.objects.count() == 2
 
 
 @pytest.mark.django_db
@@ -234,47 +233,6 @@ def test_find_reserved_node_uses_address_fallback_only_without_hostname():
     )
 
     assert match == reserved
-
-
-@pytest.mark.django_db
-def test_register_node_reports_conflict_when_reserved_placeholder_was_already_claimed(
-    admin_user, monkeypatch
-):
-    reserved = Node.objects.create(
-        hostname="gway-004",
-        address="10.42.0.4",
-        ipv4_address="10.42.0.4",
-        current_relation=Node.Relation.PEER,
-        reserved=True,
-    )
-    stale_reserved = Node.objects.get(pk=reserved.pk)
-    Node.objects.filter(pk=reserved.pk).update(reserved=False)
-    monkeypatch.setattr(
-        handlers,
-        "_find_reserved_node_for_payload",
-        lambda *_args, **_kwargs: stale_reserved,
-    )
-    payload = {
-        "hostname": "gway-004",
-        "mac_address": "aa:bb:cc:dd:ee:04",
-        "address": "10.42.0.4",
-        "ipv4_address": "10.42.0.4",
-        "port": 8888,
-        "current_relation": "Peer",
-    }
-
-    factory = RequestFactory()
-    request = _build_request(factory, payload)
-    request.user = admin_user
-    request._cached_user = admin_user
-
-    response = register_node(request)
-
-    reserved.refresh_from_db()
-    assert response.status_code == 409
-    assert reserved.reserved is False
-    assert reserved.mac_address == ""
-    assert Node.objects.count() == 1
 
 
 @pytest.mark.django_db
