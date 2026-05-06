@@ -716,7 +716,7 @@ class Charger(Ownable):
         configured = str(getattr(settings, "OCPP_AUTHORIZATION_POLICY", "") or "").strip().lower()
         if configured in self.AuthorizationPolicy.values:
             return configured
-        return self.AuthorizationPolicy.STRICT
+        return self.AuthorizationPolicy.OPEN
 
     @classmethod
     def sanitize_auto_location_name(cls, value: str) -> str:

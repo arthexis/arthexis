@@ -22,7 +22,7 @@ async def feature_cache_setup():
     )
     await database_sync_to_async(Feature.objects.update_or_create)(
         slug="rfid-fallback-account",
-        defaults={"display": "RFID Fallback Account", "is_enabled": True},
+        defaults={"display": "RFID Fallback Account", "is_enabled": False},
     )
 
 
@@ -80,10 +80,14 @@ async def _assert_fallback_transaction_bound(
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_authorization_policy_strict_accepts_unknown_tag_with_fallback_feature(
+async def test_authorization_policy_strict_rejects_unknown_tag_even_with_fallback_feature(
     feature_cache_setup,
     consumer_factory,
 ):
+    await database_sync_to_async(Feature.objects.update_or_create)(
+        slug="rfid-fallback-account",
+        defaults={"display": "RFID Fallback Account", "is_enabled": True},
+    )
     consumer = await consumer_factory(
         charger_id="CP-POLICY-STRICT",
         policy=Charger.AuthorizationPolicy.STRICT,
@@ -96,14 +100,10 @@ async def test_authorization_policy_strict_accepts_unknown_tag_with_fallback_fea
         "",
     )
 
-    assert result["idTagInfo"]["status"] == "Accepted"
+    assert result["idTagInfo"]["status"] == "Invalid"
 
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.payload["authorization_reason"] == "rfid_fallback_account_authorized"
-    account = await _fallback_account()
-    assert account.service_account is True
-    assert attempt.account_id == account.pk
-    assert await database_sync_to_async(account.rfids.filter(rfid="STRICT-UNKNOWN").exists)()
+    assert attempt.payload["authorization_reason"] == "strict_account_required"
 
 
 @pytest.mark.anyio
@@ -260,6 +260,10 @@ async def test_strict_fallback_binds_debt_account_for_transaction_flows(
     consumer_factory,
     flow,
 ):
+    await database_sync_to_async(Feature.objects.update_or_create)(
+        slug="rfid-fallback-account",
+        defaults={"display": "RFID Fallback Account", "is_enabled": True},
+    )
     consumer = await consumer_factory(
         charger_id=f"CP-POLICY-{flow.upper()}-FALLBACK",
         policy=Charger.AuthorizationPolicy.STRICT,
@@ -270,6 +274,7 @@ async def test_strict_fallback_binds_debt_account_for_transaction_flows(
     )
 
     if flow == "start_transaction":
+        await database_sync_to_async(RFID.objects.create)(rfid="START-FALLBACK", allowed=True, released=True)
         result = await consumer._handle_start_transaction_action(
             {
                 "idTag": "start-fallback",
@@ -288,6 +293,7 @@ async def test_strict_fallback_binds_debt_account_for_transaction_flows(
         )
         tag_rfid = "START-FALLBACK"
     else:
+        await database_sync_to_async(RFID.objects.create)(rfid="EVENT-FALLBACK", allowed=True, released=True)
         result = await consumer._handle_transaction_event_action(
             {
                 "eventType": "Started",
