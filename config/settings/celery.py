@@ -86,6 +86,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.log_retention.enforce_log_retention",
         "schedule": crontab(minute=15, hour=4),
     },
+    "github_monitor": {
+        "task": "apps.repos.tasks.monitor_github_readiness",
+        "schedule": crontab(minute="*/10"),
+    },
     "terminals_agent_watchdog": {
         "task": "terminals.ensure_agent_terminals",
         "schedule": crontab(minute="*/10"),

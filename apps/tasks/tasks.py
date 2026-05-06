@@ -348,6 +348,7 @@ SUMMARY_TASK_ALIASES = {
     "apps.core.tasks.heartbeat": "HB OK",
     "apps.ocpp.tasks.setup_forwarders": "OCPP FWD",
     "apps.ocpp.tasks.send_offline_charge_point_notifications": "OCPP NOTE",
+    "apps.repos.tasks.monitor_github_readiness": "GH MON",
     "terminals.ensure_agent_terminals": "TERM CHK",
 }
 

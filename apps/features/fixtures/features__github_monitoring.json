@@ -1,0 +1,44 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can enable the feature, configure monitored issue signals, review queued monitor items, and install default issue/PR policy skills.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:repos_githubmonitortask_changelist",
+        "admin:repos_githubmonitoritem_changelist"
+      ],
+      "code_locations": [
+        "apps/repos/github_monitor.py",
+        "apps/repos/management/commands/gh_monitor.py",
+        "apps/repos/models/monitoring.py",
+        "apps/repos/tasks.py"
+      ],
+      "created_at": "2026-05-06T00:00:00Z",
+      "display": "GitHub Monitoring",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "repos"
+      ],
+      "metadata": {
+        "default_repository": "arthexis/arthexis",
+        "setup_command": "python manage.py gh_monitor configure --write"
+      },
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No public interface; this is local operator automation.",
+      "public_views": [],
+      "service_requirements": "The scheduled monitor task must do nothing until monitor task rows exist. When configured, it polls GitHub issues, maintains one active terminal, times out inactive consoles, and emails admins on failures.",
+      "service_views": [
+        "Command: python manage.py gh_monitor",
+        "apps.repos.tasks.monitor_github_readiness"
+      ],
+      "slug": "github-monitoring",
+      "source": "mainstream",
+      "summary": "Monitors configured GitHub readiness issues and launches one local operator terminal at a time.",
+      "updated_at": "2026-05-06T00:00:00Z"
+    }
+  }
+]
