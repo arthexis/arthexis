@@ -140,3 +140,19 @@ def test_resolved_authorization_policy_honors_global_setting():
     charger = Charger.objects.create(charger_id="CH-POLICY-STRICT")
 
     assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
+
+
+@override_settings(OCPP_AUTHORIZATION_POLICY="strcit")
+def test_resolved_authorization_policy_invalid_global_setting_fails_closed():
+    charger = Charger.objects.create(charger_id="CH-POLICY-BAD-GLOBAL")
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
+
+
+def test_resolved_authorization_policy_invalid_charger_setting_fails_closed():
+    charger = Charger.objects.create(
+        charger_id="CH-POLICY-BAD-LOCAL",
+        authorization_policy="strcit",
+    )
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
