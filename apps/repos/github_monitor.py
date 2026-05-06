@@ -6,7 +6,6 @@ import hashlib
 import logging
 import os
 import shlex
-import signal
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -14,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import psutil
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -461,6 +461,8 @@ def _read_terminal_pid(pid_file: Path) -> int | None:
 
 
 def _terminate_terminal(pid_file: Path) -> bool:
+    if not _terminal_running(pid_file):
+        return False
     pid = _read_terminal_pid(pid_file)
     if not pid:
         pid_file.unlink(missing_ok=True)
@@ -474,8 +476,11 @@ def _terminate_terminal(pid_file: Path) -> bool:
         )
     else:
         try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
+            process = psutil.Process(pid)
+            for child in process.children(recursive=True):
+                child.terminate()
+            process.terminate()
+        except psutil.NoSuchProcess:
             pass
     pid_file.unlink(missing_ok=True)
     return True
