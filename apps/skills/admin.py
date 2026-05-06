@@ -79,10 +79,22 @@ class SkillAdmin(admin.ModelAdmin):
             f"{file_opts.app_label}.{action}_{file_opts.model_name}"
             for action in ("add", "change", "delete")
         ]
+        agent_opts = Agent._meta
+        required_agent_perms = [
+            f"{agent_opts.app_label}.{action}_{agent_opts.model_name}"
+            for action in ("add", "change")
+        ]
+        hook_opts = Hook._meta
+        required_hook_perms = [
+            f"{hook_opts.app_label}.{action}_{hook_opts.model_name}"
+            for action in ("add", "change")
+        ]
         return (
             self.has_add_permission(request)
             and self.has_change_permission(request)
-            and request.user.has_perms(required_file_perms)
+            and request.user.has_perms(
+                required_file_perms + required_agent_perms + required_hook_perms,
+            )
         )
 
     def import_package_view(self, request: HttpRequest):
