@@ -17,6 +17,10 @@ async def feature_cache_setup():
         slug="energy-accounts",
         defaults={"display": "Energy Accounts", "is_enabled": False},
     )
+    await database_sync_to_async(Feature.objects.update_or_create)(
+        slug="rfid-fallback-account",
+        defaults={"display": "RFID Fallback Account", "is_enabled": True},
+    )
 
 
 @pytest.fixture
@@ -38,7 +42,7 @@ def consumer_factory():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_authorization_policy_strict_rejects_unknown_tag(
+async def test_authorization_policy_strict_accepts_unknown_tag_with_fallback_feature(
     feature_cache_setup,
     consumer_factory,
 ):
@@ -54,10 +58,13 @@ async def test_authorization_policy_strict_rejects_unknown_tag(
         "",
     )
 
-    assert result["idTagInfo"]["status"] == "Invalid"
+    assert result["idTagInfo"]["status"] == "Accepted"
 
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.payload["authorization_reason"] == "strict_account_required"
+    assert attempt.payload["authorization_reason"] == "rfid_fallback_account_authorized"
+    account = await database_sync_to_async(CustomerAccount.objects.get)(name="RFID FALLBACK ACCOUNT")
+    assert account.service_account is True
+    assert await database_sync_to_async(account.rfids.filter(rfid="STRICT-UNKNOWN").exists)()
 
 
 @pytest.mark.anyio
@@ -154,3 +161,21 @@ async def test_authorization_policy_open_accepts_blocked_account(
     assert result["idTagInfo"]["status"] == "Accepted"
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
     assert attempt.payload["authorization_reason"] == "open_policy_insecure_compatibility_mode"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_authorization_policy_strict_rejects_unknown_when_fallback_disabled(feature_cache_setup, consumer_factory):
+    await database_sync_to_async(Feature.objects.update_or_create)(slug="rfid-fallback-account", defaults={"display": "RFID Fallback Account", "is_enabled": False})
+    consumer = await consumer_factory(charger_id="CP-POLICY-STRICT-DISABLED", policy=Charger.AuthorizationPolicy.STRICT)
+    result = await consumer._handle_authorize_action({"idTag": "strict-disabled"}, "msg-auth-policy-strict-disabled", "", "")
+    assert result["idTagInfo"]["status"] == "Invalid"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_authorization_policy_strict_rejects_blocked_tag_with_fallback(feature_cache_setup, consumer_factory):
+    consumer = await consumer_factory(charger_id="CP-POLICY-STRICT-BLOCKED", policy=Charger.AuthorizationPolicy.STRICT)
+    await database_sync_to_async(RFID.objects.create)(rfid="STRICT-BLOCKED", allowed=False, released=False)
+    result = await consumer._handle_authorize_action({"idTag": "STRICT-BLOCKED"}, "msg-auth-policy-strict-blocked", "", "")
+    assert result["idTagInfo"]["status"] == "Invalid"

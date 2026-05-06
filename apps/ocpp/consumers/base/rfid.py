@@ -16,6 +16,7 @@ from ...models import Transaction
 logger = logging.getLogger(__name__)
 
 ENERGY_ACCOUNTS_FEATURE_SLUG = "energy-accounts"
+RFID_FALLBACK_ACCOUNT_FEATURE_SLUG = "rfid-fallback-account"
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,48 @@ class RfidMixin:
             default=False,
         )
 
+
+    async def _rfid_fallback_enabled(self) -> bool:
+        """Return whether unknown RFIDs should auto-bind to a fallback debt account."""
+
+        return await database_sync_to_async(get_cached_feature_enabled)(
+            RFID_FALLBACK_ACCOUNT_FEATURE_SLUG,
+            cache_key="feature-enabled:rfid-fallback-account",
+            timeout=300,
+            default=True,
+        )
+
+    async def _get_or_create_fallback_account(self) -> CustomerAccount:
+        """Return the default fallback account used for unknown RFID debt tracking."""
+
+        def _resolve() -> CustomerAccount:
+            account, _created = CustomerAccount.objects.get_or_create(
+                name="RFID FALLBACK ACCOUNT",
+                defaults={"service_account": True},
+            )
+            if not account.service_account:
+                account.service_account = True
+                account.save(update_fields=["service_account"])
+            return account
+
+        return await database_sync_to_async(_resolve)()
+
+    async def _bind_rfid_to_fallback_account(self, tag: CoreRFID) -> CustomerAccount:
+        """Attach ``tag`` to the fallback account and return the account."""
+
+        def _bind() -> CustomerAccount:
+            account, _created = CustomerAccount.objects.get_or_create(
+                name="RFID FALLBACK ACCOUNT",
+                defaults={"service_account": True},
+            )
+            if not account.service_account:
+                account.service_account = True
+                account.save(update_fields=["service_account"])
+            account.rfids.add(tag)
+            return account
+
+        return await database_sync_to_async(_bind)()
+
     async def _energy_credits_required(self) -> bool:
         """Return whether positive credits are required for account authorization."""
 
@@ -77,6 +120,8 @@ class RfidMixin:
         """Return one reasoned authorization decision for Authorize/Start/TransactionEvent."""
 
         policy = self.charger.resolved_authorization_policy()
+        fallback_enabled = await self._rfid_fallback_enabled()
+
         energy_accounts_enabled = await self._energy_accounts_enabled()
         credits_required = await self._energy_credits_required()
 
@@ -142,6 +187,21 @@ class RfidMixin:
                 should_auto_enroll=False,
             )
 
+        if (
+            fallback_enabled
+            and policy == self.charger.AuthorizationPolicy.STRICT
+            and id_tag
+            and (tag is None or tag.allowed)
+        ):
+            return AuthorizationDecision(
+                status="Accepted",
+                reason="rfid_fallback_account_authorized",
+                policy=policy,
+                should_mark_seen=True,
+                should_auto_enroll=True,
+                log_unlinked_rfid=True,
+            )
+
         return AuthorizationDecision(
             status="Invalid",
             reason="strict_account_required",
@@ -176,6 +236,9 @@ class RfidMixin:
             if auto_enroll and not current_tag.released:
                 current_tag.released = True
                 updates.append("released")
+            if auto_enroll and not current_tag.discovered_via_ocpp:
+                current_tag.discovered_via_ocpp = True
+                updates.append("discovered_via_ocpp")
             current_tag.save(update_fields=sorted(set(updates)))
             return current_tag
 

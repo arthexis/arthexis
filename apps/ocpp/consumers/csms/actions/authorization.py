@@ -42,6 +42,9 @@ class AuthorizationActionHandler:
                 policy=decision.policy,
             )
 
+        if decision.reason == "rfid_fallback_account_authorized" and tag:
+            account = await self.consumer._bind_rfid_to_fallback_account(tag)
+
         await self.consumer._record_rfid_attempt(
             rfid=id_tag or "",
             status=(
