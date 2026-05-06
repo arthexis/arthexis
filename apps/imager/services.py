@@ -117,11 +117,14 @@ elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
   required_packages+=(ca-certificates)
 fi
 optional_connect_packages=()
-for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter; do
-  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    optional_connect_packages+=("$package")
-  fi
-done
+connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"
+if [ "$connect_bootstrap_enabled" = "1" ]; then
+  for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+      optional_connect_packages+=("$package")
+    fi
+  done
+fi
 
 if [ "${#required_packages[@]}" -gt 0 ]; then
   export DEBIAN_FRONTEND=noninteractive
@@ -139,7 +142,7 @@ if [ "${#optional_connect_packages[@]}" -gt 0 ]; then
 fi
 
 CONNECT_SCREEN_SHARE_USER="${ARTHEXIS_CONNECT_USER:-arthe}"
-if id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then
+if [ "$connect_bootstrap_enabled" = "1" ] && id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then
   systemctl stop userconfig.service >/dev/null 2>&1 || true
   systemctl disable userconfig.service >/dev/null 2>&1 || true
   loginctl enable-linger "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1 || true

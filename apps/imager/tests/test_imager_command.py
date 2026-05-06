@@ -800,14 +800,20 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     assert bootstrap_mode == "0755"
     assert "required_packages+=(git ca-certificates)" in bootstrap_script
+    assert 'connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"' in bootstrap_script
     assert (
         "for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter"
         in bootstrap_script
     )
+    assert 'if [ "$connect_bootstrap_enabled" = "1" ]; then' in bootstrap_script
     assert 'optional_connect_packages+=("$package")' in bootstrap_script
     assert '"${optional_connect_packages[@]}" || echo' in bootstrap_script
     assert "continuing bootstrap" in bootstrap_script
     assert "rpi-connect-lite" not in bootstrap_script
+    assert (
+        'if [ "$connect_bootstrap_enabled" = "1" ] && id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then'
+        in bootstrap_script
+    )
     assert "systemctl disable userconfig.service" in bootstrap_script
     assert "autologin-user=$CONNECT_SCREEN_SHARE_USER" in bootstrap_script
     assert "autologin-session=rpd-labwc" in bootstrap_script
