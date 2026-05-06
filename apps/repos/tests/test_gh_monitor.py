@@ -135,6 +135,52 @@ def test_monitor_cycle_launches_only_one_terminal(tmp_path, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_sync_monitor_items_requeues_completed_issue_when_seen_open_again(monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    issue = _issue(
+        42, github_monitor.INSTALL_HEALTH_TITLE, github_monitor.INSTALL_HEALTH_MARKER
+    )
+    first_seen = timezone.now()
+    second_seen = first_seen + timedelta(minutes=30)
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_issues",
+        lambda **_: [issue],
+    )
+
+    github_monitor.sync_monitor_items(token="token", now=first_seen)
+    item = GitHubMonitorItem.objects.get(task=task, issue_number=42)
+    item.prompt = "old prompt"
+    item.terminal_pid_file = "old.pid"
+    item.terminal_state_key = "old-state"
+    item.launched_at = first_seen
+    item.last_activity_at = first_seen
+    item.save(
+        update_fields=[
+            "prompt",
+            "terminal_pid_file",
+            "terminal_state_key",
+            "launched_at",
+            "last_activity_at",
+        ]
+    )
+    item.mark_status(GitHubMonitorItem.Status.COMPLETED)
+
+    github_monitor.sync_monitor_items(token="token", now=second_seen)
+
+    item.refresh_from_db()
+    assert item.status == GitHubMonitorItem.Status.QUEUED
+    assert item.queued_at == second_seen
+    assert item.completed_at is None
+    assert item.launched_at is None
+    assert item.last_activity_at is None
+    assert item.prompt == ""
+    assert item.terminal_pid_file == ""
+    assert item.terminal_state_key == ""
+
+
+@pytest.mark.django_db
 def test_monitor_cycle_times_out_inactive_terminal_then_launches_next(
     tmp_path, monkeypatch
 ):

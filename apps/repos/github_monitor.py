@@ -40,6 +40,13 @@ RELEASE_READINESS_MARKER = "<!-- release-readiness-report -->"
 PR_OVERSEE_POLICY_SKILL = "github-pr-oversee-policy"
 ISSUE_OVERSEE_POLICY_SKILL = "github-issue-oversee-policy"
 DEFAULT_POLICY_SKILLS = (PR_OVERSEE_POLICY_SKILL, ISSUE_OVERSEE_POLICY_SKILL)
+REQUEUEABLE_MONITOR_STATUSES = {
+    GitHubMonitorItem.Status.COMPLETED,
+    GitHubMonitorItem.Status.CLOSED,
+    GitHubMonitorItem.Status.TIMED_OUT,
+    GitHubMonitorItem.Status.FAILED,
+    GitHubMonitorItem.Status.DISMISSED,
+}
 
 
 GITHUB_MONITOR_FEATURE_FIELDS = {
@@ -405,8 +412,35 @@ def _upsert_monitor_item(
 
     for field, value in defaults.items():
         setattr(item, field, value)
+    update_fields = [*defaults.keys(), "is_deleted"]
+    if (
+        item.status in REQUEUEABLE_MONITOR_STATUSES
+        and defaults["issue_state"].lower() == "open"
+    ):
+        item.status = GitHubMonitorItem.Status.QUEUED
+        item.queued_at = now
+        item.launched_at = None
+        item.last_activity_at = None
+        item.completed_at = None
+        item.failure_message = ""
+        item.prompt = ""
+        item.terminal_state_key = ""
+        item.terminal_pid_file = ""
+        update_fields.extend(
+            [
+                "status",
+                "queued_at",
+                "launched_at",
+                "last_activity_at",
+                "completed_at",
+                "failure_message",
+                "prompt",
+                "terminal_state_key",
+                "terminal_pid_file",
+            ]
+        )
     item.is_deleted = False
-    item.save(update_fields=[*defaults.keys(), "is_deleted"])
+    item.save(update_fields=update_fields)
     return item
 
 
