@@ -229,6 +229,7 @@ class RfidMixin:
             and tag is not None
             and not tag_created
             and tag.allowed
+            and tag.released
         ):
             return AuthorizationDecision(
                 status="Accepted",

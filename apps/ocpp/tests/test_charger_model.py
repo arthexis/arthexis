@@ -6,10 +6,9 @@ from django.test import override_settings
 from django.utils import timezone
 
 from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
-from apps.ocpp.models import Charger
 from apps.groups.models import SecurityGroup
 from apps.nodes.models import Node
-
+from apps.ocpp.models import Charger
 
 pytestmark = pytest.mark.django_db
 

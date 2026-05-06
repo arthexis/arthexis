@@ -68,13 +68,14 @@ async def _assert_fallback_transaction_bound(
     account: CustomerAccount,
     transaction: Transaction,
     tag_rfid: str,
+    discovered_via_ocpp: bool = False,
 ) -> None:
     assert transaction.account_id == account.pk
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
     assert attempt.account_id == account.pk
     assert attempt.transaction_id == transaction.pk
     tag = await database_sync_to_async(RFID.objects.get)(rfid=tag_rfid)
-    assert tag.discovered_via_ocpp is True
+    assert tag.discovered_via_ocpp is discovered_via_ocpp
     assert await database_sync_to_async(account.rfids.filter(pk=tag.pk).exists)()
 
 
@@ -101,6 +102,18 @@ async def test_authorization_policy_strict_rejects_unknown_tag_even_with_fallbac
     )
 
     assert result["idTagInfo"]["status"] == "Invalid"
+
+    repeat_result = await consumer._handle_authorize_action(
+        {"idTag": "strict-unknown"},
+        "msg-auth-policy-strict-repeat",
+        "",
+        "",
+    )
+
+    assert repeat_result["idTagInfo"]["status"] == "Invalid"
+    tag = await database_sync_to_async(RFID.objects.get)(rfid="STRICT-UNKNOWN")
+    assert tag.allowed is True
+    assert tag.released is False
 
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
     assert attempt.payload["authorization_reason"] == "strict_account_required"
