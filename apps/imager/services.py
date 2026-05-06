@@ -116,6 +116,11 @@ if ! command -v git >/dev/null 2>&1; then
 elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
   missing_packages+=(ca-certificates)
 fi
+for package in rpi-connect wayvnc wfplug-connect; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+    missing_packages+=("$package")
+  fi
+done
 
 if [ "${#missing_packages[@]}" -gt 0 ]; then
   export DEBIAN_FRONTEND=noninteractive

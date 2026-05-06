@@ -798,6 +798,8 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     assert bootstrap_mode == "0755"
     assert "missing_packages+=(git ca-certificates)" in bootstrap_script
+    assert "for package in rpi-connect wayvnc wfplug-connect" in bootstrap_script
+    assert "rpi-connect-lite" not in bootstrap_script
     apt_update_retry = "apt-get update || { sleep 10; apt-get update; }"
     assert apt_update_retry in bootstrap_script
     assert "apt-get install -y --no-install-recommends" in bootstrap_script
