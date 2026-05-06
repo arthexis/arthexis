@@ -14,6 +14,17 @@ fi
 BASE_DIR="${ARTHEXIS_BASE_DIR:-$(pwd)}"
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
 LOG_FILE="${LOG_DIR}/watch-upgrade.log"
+VENV_DIR="$BASE_DIR/.venv"
+VENV_BIN="$VENV_DIR/bin"
+
+if [ -z "${ARTHEXIS_PYTHON_BIN:-}" ] && [ -x "$VENV_BIN/python" ]; then
+  export ARTHEXIS_PYTHON_BIN="$VENV_BIN/python"
+fi
+
+if [ -d "$VENV_DIR" ]; then
+  export VIRTUAL_ENV="${VIRTUAL_ENV:-$VENV_DIR}"
+  export PATH="$VENV_BIN:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+fi
 
 log() {
   echo "$(date --iso-8601=seconds) $*" >&2

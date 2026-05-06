@@ -435,9 +435,9 @@ class Command(BaseCommand):
         installed_version = self._resolve_installed_version(options.get("installed_version"))
         if not RELEASE_VERSION_PATTERN.fullmatch(installed_version):
             raise BundleVerificationError(f"Invalid installed version: {installed_version!r}")
-        bundle_dir = self._resolve_bundle_dir(target_version, options.get("bundle_dir"))
 
         try:
+            bundle_dir = self._resolve_bundle_dir(target_version, options.get("bundle_dir"))
             self._verify_bundle(bundle_dir)
             if installed_version == target_version:
                 call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
@@ -462,6 +462,15 @@ class Command(BaseCommand):
         except BundleVerificationError as exc:
             if bool(options.get("strict")):
                 raise
+            if installed_version == target_version:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"{exc}. Falling back to Django migration check."
+                    )
+                )
+                call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)
+                return
+
             self.stderr.write(self.style.WARNING(f"{exc}. Falling back to Django migrate."))
             call_command("migrate", "--noinput", stdout=self.stdout, stderr=self.stderr)
             call_command("migrate", "--check", stdout=self.stdout, stderr=self.stderr)

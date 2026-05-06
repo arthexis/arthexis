@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from apps.release import DEFAULT_PACKAGE
+from apps.release.management.commands import release as release_command
 from apps.release.services.builder import (
     _git_modified_paths,
     _pep639_license_metadata,
@@ -264,3 +265,34 @@ def test_build_rejects_unapproved_package_test_command(
             twine=False,
             package=package,
         )
+
+
+def test_apply_migrations_same_version_missing_bundle_uses_check_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source checkouts without release bundles should avoid write migrations."""
+
+    command = release_command.Command()
+    calls: list[tuple[str, ...]] = []
+
+    def fail_bundle_dir(*args, **kwargs):
+        raise release_command.BundleVerificationError("Bundle directory not found")
+
+    monkeypatch.setattr(command, "_resolve_bundle_dir", fail_bundle_dir)
+    monkeypatch.setattr(
+        release_command,
+        "call_command",
+        lambda *args, **kwargs: calls.append(tuple(str(arg) for arg in args)),
+    )
+
+    command._handle_apply_migrations(
+        {
+            "target_version": "1.2.3",
+            "installed_version": "1.2.3",
+            "bundle_dir": None,
+            "strict": False,
+            "skip_data_transforms": False,
+        }
+    )
+
+    assert calls == [("migrate", "--check")]

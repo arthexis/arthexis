@@ -44,13 +44,15 @@ delegated systemd unit is launched, and what to check if something fails.
    - `WorkingDirectory` to the project root so relative commands like
      `./upgrade.sh` resolve correctly.
    - `ARTHEXIS_BASE_DIR` and `ARTHEXIS_LOG_DIR` for the watcher.
+   - `ARTHEXIS_PYTHON_BIN`, `VIRTUAL_ENV`, and `PATH` when the repository
+     virtualenv exists, so predeploy checks use suite dependencies.
    - `StandardOutput`/`StandardError` appended to
      `logs/delegated-upgrade.log` for easy inspection.
 3. The transient unit runs `/usr/local/bin/watch-upgrade`, which:
-   - Stops the managed service.
+   - Stops the managed service stack before predeploy migration checks.
    - Executes `upgrade.sh` (default `--stable`; Celery can pass `--regular` or
      `--latest`).
-   - Restarts the service and exits with the upgrade status.
+   - Restarts the service stack and exits with the upgrade status.
 4. Celery schedules a post-upgrade health check after the run to confirm HTTP
    200 responses and records any failures.
 
