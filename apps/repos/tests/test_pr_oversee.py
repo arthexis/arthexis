@@ -784,6 +784,20 @@ def test_monitor_validates_in_reused_worktree_before_merge(tmp_path: Path):
     assert runner.cwd_history[6] == worktree
 
 
+def test_monitor_requires_write_for_run_test_plan():
+    runner = FakeRunner([CommandResult(0, json.dumps(_pr_payload()))])
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    with pytest.raises(PullRequestOverseeError) as exc:
+        overseer.monitor(123, run_test_plan=True, max_iterations=1)
+
+    assert (
+        str(exc.value)
+        == "monitor --run-test-plan executes local code and requires --write"
+    )
+    assert runner.commands == []
+
+
 def test_monitor_resyncs_reused_worktree_when_pr_head_changes(tmp_path: Path):
     worktree = tmp_path / "pr-123"
     worktree.mkdir()

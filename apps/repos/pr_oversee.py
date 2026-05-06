@@ -1193,6 +1193,10 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             raise PullRequestOverseeError("interval_seconds must be zero or positive")
         if timeout_seconds < 0:
             raise PullRequestOverseeError("timeout_seconds must be zero or positive")
+        if run_test_plan and not write:
+            raise PullRequestOverseeError(
+                "monitor --run-test-plan executes local code and requires --write"
+            )
 
         actions: list[dict[str, Any]] = []
         checkout_handled = False
