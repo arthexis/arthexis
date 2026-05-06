@@ -681,9 +681,8 @@ def complete_item(
     was_active = item.status == GitHubMonitorItem.Status.ACTIVE
     pid_file = Path(item.terminal_pid_file) if item.terminal_pid_file else None
     item.mark_status(GitHubMonitorItem.Status.COMPLETED)
-    if was_active and pid_file:
-        if _terminal_running(pid_file):
-            _terminate_terminal(pid_file)
+    if was_active and pid_file and _terminal_running(pid_file):
+        _terminate_terminal(pid_file)
     return item
 
 
