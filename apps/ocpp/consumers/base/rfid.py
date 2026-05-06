@@ -106,6 +106,32 @@ class RfidMixin:
             return await self._bind_rfid_to_fallback_account(tag)
         return account
 
+    async def _apply_rfid_authorization_side_effects(
+        self,
+        *,
+        id_tag: str,
+        decision: AuthorizationDecision,
+        tag: CoreRFID | None,
+        tag_created: bool,
+        account: CustomerAccount | None,
+    ) -> tuple[CoreRFID | None, CustomerAccount | None]:
+        """Apply tag visibility and fallback binding required by a decision."""
+        if id_tag and decision.should_mark_seen:
+            seen_tag = await self._ensure_rfid_seen(
+                id_tag,
+                tag=tag,
+                tag_created=tag_created,
+                auto_enroll=decision.should_auto_enroll,
+            )
+            if seen_tag:
+                tag = seen_tag
+        account = await self._bind_fallback_account_for_decision(
+            decision,
+            tag=tag,
+            account=account,
+        )
+        return tag, account
+
     async def _energy_credits_required(self) -> bool:
         """Return whether positive credits are required for account authorization."""
 

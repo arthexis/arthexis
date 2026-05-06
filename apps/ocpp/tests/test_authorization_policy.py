@@ -43,6 +43,41 @@ def consumer_factory():
     return _build
 
 
+async def _fallback_account() -> CustomerAccount:
+    return await database_sync_to_async(CustomerAccount.objects.get)(
+        name=str(RFID_FALLBACK_ACCOUNT_NAME)
+    )
+
+
+async def _prepare_transaction_consumer(
+    consumer: CSMSConsumer,
+    *,
+    process_meter_values: bool = False,
+) -> None:
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._start_consumption_updates = AsyncMock()
+    if process_meter_values:
+        consumer._process_meter_value_entries = AsyncMock()
+
+
+async def _assert_fallback_transaction_bound(
+    *,
+    account: CustomerAccount,
+    transaction: Transaction,
+    tag_rfid: str,
+) -> None:
+    assert transaction.account_id == account.pk
+    attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
+    assert attempt.account_id == account.pk
+    assert attempt.transaction_id == transaction.pk
+    tag = await database_sync_to_async(RFID.objects.get)(rfid=tag_rfid)
+    assert tag.discovered_via_ocpp is True
+    assert await database_sync_to_async(account.rfids.filter(pk=tag.pk).exists)()
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_authorization_policy_strict_accepts_unknown_tag_with_fallback_feature(
@@ -65,9 +100,7 @@ async def test_authorization_policy_strict_accepts_unknown_tag_with_fallback_fea
 
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
     assert attempt.payload["authorization_reason"] == "rfid_fallback_account_authorized"
-    account = await database_sync_to_async(CustomerAccount.objects.get)(
-        name=str(RFID_FALLBACK_ACCOUNT_NAME)
-    )
+    account = await _fallback_account()
     assert account.service_account is True
     assert attempt.account_id == account.pk
     assert await database_sync_to_async(account.rfids.filter(rfid="STRICT-UNKNOWN").exists)()
@@ -221,93 +254,64 @@ async def test_authorization_policy_strict_rejects_blocked_tag_with_fallback(fea
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_start_transaction_strict_fallback_binds_debt_account(
+@pytest.mark.parametrize("flow", ["start_transaction", "transaction_event"])
+async def test_strict_fallback_binds_debt_account_for_transaction_flows(
     feature_cache_setup,
     consumer_factory,
+    flow,
 ):
     consumer = await consumer_factory(
-        charger_id="CP-POLICY-START-FALLBACK",
+        charger_id=f"CP-POLICY-{flow.upper()}-FALLBACK",
         policy=Charger.AuthorizationPolicy.STRICT,
     )
-
-    async def fake_assign(connector):
-        consumer.connector_value = connector
-
-    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
-    consumer._start_consumption_updates = AsyncMock()
-
-    result = await consumer._handle_start_transaction_action(
-        {
-            "idTag": "start-fallback",
-            "connectorId": 1,
-            "meterStart": 0,
-            "timestamp": "2024-01-01T00:00:00Z",
-        },
-        "msg-start-fallback",
-        "",
-        "",
+    await _prepare_transaction_consumer(
+        consumer,
+        process_meter_values=flow == "transaction_event",
     )
 
-    assert result["idTagInfo"]["status"] == "Accepted"
-    account = await database_sync_to_async(CustomerAccount.objects.get)(
-        name=str(RFID_FALLBACK_ACCOUNT_NAME)
-    )
-    tx = await database_sync_to_async(Transaction.objects.get)(
-        charger=consumer.charger,
-        rfid="start-fallback",
-    )
-    assert tx.account_id == account.pk
-    attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.account_id == account.pk
-    assert attempt.transaction_id == tx.pk
-    tag = await database_sync_to_async(RFID.objects.get)(rfid="START-FALLBACK")
-    assert tag.discovered_via_ocpp is True
-    assert await database_sync_to_async(account.rfids.filter(pk=tag.pk).exists)()
+    if flow == "start_transaction":
+        result = await consumer._handle_start_transaction_action(
+            {
+                "idTag": "start-fallback",
+                "connectorId": 1,
+                "meterStart": 0,
+                "timestamp": "2024-01-01T00:00:00Z",
+            },
+            "msg-start-fallback",
+            "",
+            "",
+        )
+        assert result["idTagInfo"]["status"] == "Accepted"
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            charger=consumer.charger,
+            rfid="start-fallback",
+        )
+        tag_rfid = "START-FALLBACK"
+    else:
+        result = await consumer._handle_transaction_event_action(
+            {
+                "eventType": "Started",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "evse": {"id": 1, "connectorId": 1},
+                "idToken": {"idToken": "event-fallback"},
+                "transactionInfo": {
+                    "transactionId": "TX-EVENT-FALLBACK",
+                    "meterStart": 0,
+                },
+            },
+            "msg-event-fallback",
+            "",
+            "",
+        )
+        assert result["idTokenInfo"]["status"] == "Accepted"
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            charger=consumer.charger,
+            ocpp_transaction_id="TX-EVENT-FALLBACK",
+        )
+        tag_rfid = "EVENT-FALLBACK"
 
-
-@pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
-async def test_transaction_event_strict_fallback_binds_debt_account(
-    feature_cache_setup,
-    consumer_factory,
-):
-    consumer = await consumer_factory(
-        charger_id="CP-POLICY-EVENT-FALLBACK",
-        policy=Charger.AuthorizationPolicy.STRICT,
+    await _assert_fallback_transaction_bound(
+        account=await _fallback_account(),
+        transaction=tx,
+        tag_rfid=tag_rfid,
     )
-
-    async def fake_assign(connector):
-        consumer.connector_value = connector
-
-    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
-    consumer._start_consumption_updates = AsyncMock()
-    consumer._process_meter_value_entries = AsyncMock()
-
-    result = await consumer._handle_transaction_event_action(
-        {
-            "eventType": "Started",
-            "timestamp": "2024-01-01T00:00:00Z",
-            "evse": {"id": 1, "connectorId": 1},
-            "idToken": {"idToken": "event-fallback"},
-            "transactionInfo": {"transactionId": "TX-EVENT-FALLBACK", "meterStart": 0},
-        },
-        "msg-event-fallback",
-        "",
-        "",
-    )
-
-    assert result["idTokenInfo"]["status"] == "Accepted"
-    account = await database_sync_to_async(CustomerAccount.objects.get)(
-        name=str(RFID_FALLBACK_ACCOUNT_NAME)
-    )
-    tx = await database_sync_to_async(Transaction.objects.get)(
-        charger=consumer.charger,
-        ocpp_transaction_id="TX-EVENT-FALLBACK",
-    )
-    assert tx.account_id == account.pk
-    attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.account_id == account.pk
-    assert attempt.transaction_id == tx.pk
-    tag = await database_sync_to_async(RFID.objects.get)(rfid="EVENT-FALLBACK")
-    assert tag.discovered_via_ocpp is True
-    assert await database_sync_to_async(account.rfids.filter(pk=tag.pk).exists)()
