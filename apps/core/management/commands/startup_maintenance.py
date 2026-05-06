@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand
 
 from apps.ocpp.maintenance import reset_cached_statuses
 from apps.sites.maintenance import coerce_retention_days, purge_view_history
+from apps.skills.agent_context import write_agents_context
 
 
 class Command(BaseCommand):
@@ -29,3 +30,7 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Site view history entries purged (older than {days} days): {deleted}"
         )
+
+        agents_result = write_agents_context()
+        status = "written" if agents_result.written else "unchanged"
+        self.stdout.write(f"Local AGENTS context {status}: {agents_result.path}")

@@ -85,10 +85,10 @@ settings such as `[CONF.SECRET_KEY]` remain literal text.
 This keeps portable documents reusable while still allowing local behavior. It
 also sets a hard boundary: secrets and runtime state must not be moved through
 SIGILS or package files. Store secrets on each node through that node's normal
-credential path, and keep `workgroup.md` as local coordination state.
+credential path, outside portable framework packages.
 
-See [Codex Skill Packages](codex-skill-packages.md) for package materialization
-and workgroup rules.
+See [Operator Framework Packages](codex-skill-packages.md) for package
+materialization rules.
 
 ## Error behavior
 

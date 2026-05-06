@@ -8,9 +8,10 @@ from zipfile import ZipFile
 import pytest
 from django.test import override_settings
 
-from apps.nodes.models import Node, NodeRole
+from apps.features.models import Feature
+from apps.nodes.models import Node, NodeFeature, NodeRole
 from apps.sigils.models import SigilRoot
-from apps.skills.models import AgentSkill, AgentSkillFile
+from apps.skills.models import Agent, Hook, Skill, SkillFile
 from apps.skills.package_services import (
     PACKAGE_FORMAT,
     classify_codex_skill_file,
@@ -32,58 +33,58 @@ def test_classifies_portable_state_secret_and_operator_scoped_files():
         "SKILL.md", "---\nname: demo\n"
     ).included_by_default
 
-    state = classify_codex_skill_file("workgroup.md", "local state")
-    assert state.portability == AgentSkillFile.Portability.STATE
+    state = classify_codex_skill_file("todo.md", "local state")
+    assert state.portability == SkillFile.Portability.STATE
     assert state.included_by_default is False
 
     secret = classify_codex_skill_file("credentials/smtp.json", "{}")
-    assert secret.portability == AgentSkillFile.Portability.SECRET
+    assert secret.portability == SkillFile.Portability.SECRET
     assert secret.included_by_default is False
 
     operator_scoped = classify_codex_skill_file(
         "references/glossary.md",
         "Use C:\\Users\\arthexis\\.codex\\skills locally.",
     )
-    assert operator_scoped.portability == AgentSkillFile.Portability.OPERATOR_SCOPED
+    assert operator_scoped.portability == SkillFile.Portability.OPERATOR_SCOPED
     assert operator_scoped.included_by_default is False
 
     sigil_scoped = classify_codex_skill_file(
         "references/glossary.md",
         "Use [CONF.BASE_DIR] and [SYS.NODE_ROLE] for local paths.",
     )
-    assert sigil_scoped.portability == AgentSkillFile.Portability.PORTABLE
+    assert sigil_scoped.portability == SkillFile.Portability.PORTABLE
     assert sigil_scoped.included_by_default is True
 
     skill_markdown = classify_codex_skill_file(
         "SKILL.md",
         "Example path: C:\\Users\\arthexis\\.codex\\skills\\demo",
     )
-    assert skill_markdown.portability == AgentSkillFile.Portability.PORTABLE
+    assert skill_markdown.portability == SkillFile.Portability.PORTABLE
     assert skill_markdown.included_by_default is True
 
     unknown = classify_codex_skill_file("local-state.txt", "unknown root")
-    assert unknown.portability == AgentSkillFile.Portability.DEVICE_SCOPED
+    assert unknown.portability == SkillFile.Portability.DEVICE_SCOPED
     assert unknown.included_by_default is False
 
 
 @pytest.mark.django_db
 def test_scan_dry_run_reports_without_writing(tmp_path):
-    skill_dir = tmp_path / "operator-manual"
-    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+    skill_dir = tmp_path / "portable-skill"
+    _write(skill_dir / "SKILL.md", "---\nname: portable-skill\n---\n")
     _write(skill_dir / "references" / "glossary.md", "portable reference")
     _write(skill_dir / "credentials" / "smtp.json", "{}")
 
     summary = scan_codex_skill_directory(skill_dir, dry_run=True)
 
-    assert summary["slug"] == "operator-manual"
+    assert summary["slug"] == "portable-skill"
     assert summary["included"] == 2
     assert summary["excluded"] == 1
-    assert not AgentSkill.objects.filter(slug="operator-manual").exists()
+    assert not Skill.objects.filter(slug="portable-skill").exists()
 
 
 def test_scan_rejects_invalid_skill_directory_slug(tmp_path):
-    skill_dir = tmp_path / "Operator Manual"
-    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+    skill_dir = tmp_path / "Invalid Skill"
+    _write(skill_dir / "SKILL.md", "---\nname: portable-skill\n---\n")
 
     with pytest.raises(ValueError, match="Unsafe skill slug"):
         scan_codex_skill_directory(skill_dir, dry_run=True)
@@ -91,9 +92,9 @@ def test_scan_rejects_invalid_skill_directory_slug(tmp_path):
 
 @pytest.mark.django_db
 def test_scan_redacts_path_blocked_files_without_reading(tmp_path, monkeypatch):
-    skill_dir = tmp_path / "operator-manual"
+    skill_dir = tmp_path / "portable-skill"
     blocked_file = skill_dir / "logs" / "debug.log"
-    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+    _write(skill_dir / "SKILL.md", "---\nname: portable-skill\n---\n")
     _write(blocked_file, "blocked runtime log")
 
     original_read_bytes = Path.read_bytes
@@ -112,14 +113,14 @@ def test_scan_redacts_path_blocked_files_without_reading(tmp_path, monkeypatch):
         for entry in summary["files"]
         if entry["relative_path"] == "logs/debug.log"
     )
-    assert blocked_entry["portability"] == AgentSkillFile.Portability.CACHE
+    assert blocked_entry["portability"] == SkillFile.Portability.CACHE
     assert blocked_entry["included_by_default"] is False
     assert blocked_entry["size_bytes"] == 0
 
 
 @pytest.mark.django_db
 def test_scan_preserves_custom_skills_and_redacts_excluded_content(tmp_path):
-    AgentSkill.objects.create(slug="custom-existing", title="Custom", markdown="keep")
+    Skill.objects.create(slug="custom-existing", title="Custom", markdown="keep")
     skill_dir = tmp_path / "security-codes"
     _write(skill_dir / "SKILL.md", "---\nname: security-codes\n---\n")
     _write(skill_dir / "scripts" / "New-Code.ps1", "Write-Output ok")
@@ -127,8 +128,8 @@ def test_scan_preserves_custom_skills_and_redacts_excluded_content(tmp_path):
 
     scan_codex_skill_directory(skill_dir, dry_run=False)
 
-    assert AgentSkill.objects.filter(slug="custom-existing").exists()
-    skill = AgentSkill.objects.get(slug="security-codes")
+    assert Skill.objects.filter(slug="custom-existing").exists()
+    skill = Skill.objects.get(slug="security-codes")
     assert skill.package_files.count() == 3
     state_file = skill.package_files.get(relative_path="security-codes.json")
     assert state_file.included_by_default is False
@@ -145,7 +146,7 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
 
     package_path = tmp_path / "nested" / "portable-skills.zip"
     manifest = export_codex_skill_package(package_path, skill_slugs=["quotation"])
-    AgentSkill.objects.filter(slug="quotation").delete()
+    Skill.objects.filter(slug="quotation").delete()
 
     assert manifest["skills"][0]["slug"] == "quotation"
     assert {file["path"] for file in manifest["skills"][0]["files"]} == {
@@ -156,11 +157,68 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
     summary = import_codex_skill_package(package_path, dry_run=False)
 
     assert summary["skills"] == [{"slug": "quotation", "files": 2}]
-    skill = AgentSkill.objects.get(slug="quotation")
+    skill = Skill.objects.get(slug="quotation")
     assert skill.package_files.count() == 2
     assert not skill.package_files.filter(
         relative_path="credentials/odoo.json"
     ).exists()
+
+
+@pytest.mark.django_db
+def test_export_import_round_trip_includes_agents_and_hooks(tmp_path):
+    role = NodeRole.objects.create(name="Operator Context")
+    node_feature = NodeFeature.objects.create(
+        slug="operator-context-feature",
+        display="Operator Context Feature",
+    )
+    suite_feature = Feature.objects.create(
+        slug="operator-context-suite",
+        display="Operator Context Suite",
+    )
+    agent = Agent.objects.create(
+        slug="terminal-context",
+        title="Terminal Context",
+        description="Terminal node instructions.",
+        instructions="Prefer terminal-local suite commands.",
+        priority=0,
+        is_default=True,
+    )
+    agent.node_roles.add(role)
+    agent.node_features.add(node_feature)
+    agent.suite_features.add(suite_feature)
+    hook = Hook.objects.create(
+        slug="session-start-check",
+        title="Session Start Check",
+        description="Validate the suite before a Codex session.",
+        event=Hook.Event.SESSION_START,
+        platform=Hook.Platform.WINDOWS,
+        command="python manage.py check --fail-level ERROR",
+        timeout_seconds=0,
+        priority=0,
+    )
+    hook.node_roles.add(role)
+
+    package_path = tmp_path / "operator-framework.zip"
+    manifest = export_codex_skill_package(package_path)
+    Agent.objects.filter(slug="terminal-context").delete()
+    Hook.objects.filter(slug="session-start-check").delete()
+
+    summary = import_codex_skill_package(package_path, dry_run=False)
+
+    assert manifest["agents"][0]["slug"] == "terminal-context"
+    assert manifest["hooks"][0]["slug"] == "session-start-check"
+    assert summary["agents"] == [{"slug": "terminal-context"}]
+    assert summary["hooks"] == [{"slug": "session-start-check"}]
+    restored_agent = Agent.objects.get(slug="terminal-context")
+    assert restored_agent.priority == 0
+    assert restored_agent.node_roles.filter(pk=role.pk).exists()
+    assert restored_agent.node_features.filter(pk=node_feature.pk).exists()
+    assert restored_agent.suite_features.filter(pk=suite_feature.pk).exists()
+    restored_hook = Hook.objects.get(slug="session-start-check")
+    assert restored_hook.platform == Hook.Platform.WINDOWS
+    assert restored_hook.timeout_seconds == 0
+    assert restored_hook.priority == 0
+    assert restored_hook.node_roles.filter(pk=role.pk).exists()
 
 
 @pytest.mark.django_db
@@ -171,9 +229,9 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     )
     suite_root = tmp_path / "suite-root"
     target_root = tmp_path / "codex-skills"
-    skill = AgentSkill.objects.create(
-        slug="operator-manual",
-        title="Operator Manual",
+    skill = Skill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
         markdown="Use suite root [CONF.BASE_DIR] and keep [CONF.SECRET_KEY]",
     )
     portable_files = [
@@ -182,30 +240,30 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
         ("scripts/setup.ps1", "Write-Output '[CONF.BASE_DIR]'"),
     ]
     for relative_path, content in portable_files:
-        AgentSkillFile.objects.create(
+        SkillFile.objects.create(
             skill=skill,
             relative_path=relative_path,
             content=content,
             content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-            portability=AgentSkillFile.Portability.PORTABLE,
+            portability=SkillFile.Portability.PORTABLE,
             included_by_default=True,
             size_bytes=len(content.encode("utf-8")),
         )
-    AgentSkillFile.objects.create(
+    SkillFile.objects.create(
         skill=skill,
         relative_path="credentials/token.txt",
         content="",
         content_sha256=hashlib.sha256(b"").hexdigest(),
-        portability=AgentSkillFile.Portability.SECRET,
+        portability=SkillFile.Portability.SECRET,
         included_by_default=False,
         exclusion_reason="secret payload",
     )
-    AgentSkillFile.objects.create(
+    SkillFile.objects.create(
         skill=skill,
-        relative_path="workgroup.md",
+        relative_path="todo.md",
         content="",
         content_sha256=hashlib.sha256(b"").hexdigest(),
-        portability=AgentSkillFile.Portability.STATE,
+        portability=SkillFile.Portability.STATE,
         included_by_default=False,
         exclusion_reason="runtime state is not portable",
     )
@@ -213,7 +271,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
     with override_settings(BASE_DIR=suite_root):
         summary = materialize_codex_skill_files(target_root)
 
-    skill_root = target_root / "operator-manual"
+    skill_root = target_root / "portable-skill"
     assert summary["files_written"] == 3
     assert (skill_root / "SKILL.md").read_text(encoding="utf-8") == (
         f"Use suite root {suite_root} and keep [CONF.SECRET_KEY]"
@@ -225,7 +283,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
         f"Write-Output '{suite_root}'"
     )
     assert not (skill_root / "credentials" / "token.txt").exists()
-    assert not (skill_root / "workgroup.md").exists()
+    assert not (skill_root / "todo.md").exists()
 
     unresolved_target_root = tmp_path / "codex-skills-unresolved"
     with override_settings(BASE_DIR=suite_root):
@@ -234,7 +292,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
             resolve_sigils_on_write=False,
         )
 
-    unresolved_skill_root = unresolved_target_root / "operator-manual"
+    unresolved_skill_root = unresolved_target_root / "portable-skill"
     assert unresolved_summary["files_written"] == 3
     assert (unresolved_skill_root / "SKILL.md").read_text(encoding="utf-8") == (
         "Use suite root [CONF.BASE_DIR] and keep [CONF.SECRET_KEY]"
@@ -246,7 +304,7 @@ def test_materialize_writes_full_tree_resolves_sigils_and_skips_excluded(tmp_pat
         encoding="utf-8"
     ) == "Write-Output '[CONF.BASE_DIR]'"
     assert not (unresolved_skill_root / "credentials" / "token.txt").exists()
-    assert not (unresolved_skill_root / "workgroup.md").exists()
+    assert not (unresolved_skill_root / "todo.md").exists()
 
 
 @pytest.mark.django_db
@@ -256,17 +314,17 @@ def test_materialize_does_not_resolve_node_sigils_by_default(tmp_path):
         defaults={"context_type": SigilRoot.Context.ENTITY},
     )
     Node.objects.create(hostname="materialize-safe-node")
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="node-sigil-safety",
         title="Node Sigil Safety",
         markdown="Node sigil [NODE.hostname] should stay literal by default.",
     )
-    AgentSkillFile.objects.create(
+    SkillFile.objects.create(
         skill=skill,
         relative_path="SKILL.md",
         content=skill.markdown,
         content_sha256=hashlib.sha256(skill.markdown.encode("utf-8")).hexdigest(),
-        portability=AgentSkillFile.Portability.PORTABLE,
+        portability=SkillFile.Portability.PORTABLE,
         included_by_default=True,
         size_bytes=len(skill.markdown.encode("utf-8")),
     )
@@ -274,9 +332,9 @@ def test_materialize_does_not_resolve_node_sigils_by_default(tmp_path):
     target_root = tmp_path / "codex-skills"
     materialize_codex_skill_files(target_root)
 
-    assert (target_root / "node-sigil-safety" / "SKILL.md").read_text(encoding="utf-8") == (
-        "Node sigil [NODE.hostname] should stay literal by default."
-    )
+    assert (target_root / "node-sigil-safety" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == ("Node sigil [NODE.hostname] should stay literal by default.")
 
 
 @pytest.mark.django_db
@@ -285,7 +343,7 @@ def test_materialize_legacy_skill_preserves_existing_portable_tree(tmp_path):
     skill_root = target_root / "legacy-skill"
     _write(skill_root / "references" / "existing.md", "keep reference")
     _write(skill_root / "scripts" / "existing.ps1", "Write-Output keep")
-    AgentSkill.objects.create(
+    Skill.objects.create(
         slug="legacy-skill",
         title="Legacy Skill",
         markdown="legacy markdown",
@@ -309,7 +367,7 @@ def test_materialize_replaces_file_directory_path_collisions(tmp_path):
     skill_root = target_root / "portable-skill"
     _write(skill_root / "references" / "topic" / "old.md", "old directory")
     _write(skill_root / "scripts" / "setup", "old file")
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="portable-skill",
         title="Portable Skill",
         markdown="current markdown",
@@ -318,12 +376,12 @@ def test_materialize_replaces_file_directory_path_collisions(tmp_path):
         ("references/topic", "new file"),
         ("scripts/setup/install.ps1", "Write-Output install"),
     ]:
-        AgentSkillFile.objects.create(
+        SkillFile.objects.create(
             skill=skill,
             relative_path=relative_path,
             content=content,
             content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-            portability=AgentSkillFile.Portability.PORTABLE,
+            portability=SkillFile.Portability.PORTABLE,
             included_by_default=True,
             size_bytes=len(content.encode("utf-8")),
         )
@@ -342,7 +400,7 @@ def test_materialize_replaces_file_directory_path_collisions(tmp_path):
 @pytest.mark.django_db
 def test_materialize_rejects_package_path_prefix_collisions(tmp_path):
     target_root = tmp_path / "codex-skills"
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="portable-skill",
         title="Portable Skill",
         markdown="current markdown",
@@ -351,12 +409,12 @@ def test_materialize_rejects_package_path_prefix_collisions(tmp_path):
         ("references/topic", "parent file"),
         ("references/topic/child.md", "child file"),
     ]:
-        AgentSkillFile.objects.create(
+        SkillFile.objects.create(
             skill=skill,
             relative_path=relative_path,
             content=content,
             content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-            portability=AgentSkillFile.Portability.PORTABLE,
+            portability=SkillFile.Portability.PORTABLE,
             included_by_default=True,
             size_bytes=len(content.encode("utf-8")),
         )
@@ -368,7 +426,7 @@ def test_materialize_rejects_package_path_prefix_collisions(tmp_path):
 @pytest.mark.django_db
 def test_materialize_rejects_case_insensitive_prefix_collisions(tmp_path):
     target_root = tmp_path / "codex-skills"
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="portable-skill",
         title="Portable Skill",
         markdown="current markdown",
@@ -377,12 +435,12 @@ def test_materialize_rejects_case_insensitive_prefix_collisions(tmp_path):
         ("references/Topic", "parent file"),
         ("references/topic/child.md", "child file"),
     ]:
-        AgentSkillFile.objects.create(
+        SkillFile.objects.create(
             skill=skill,
             relative_path=relative_path,
             content=content,
             content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-            portability=AgentSkillFile.Portability.PORTABLE,
+            portability=SkillFile.Portability.PORTABLE,
             included_by_default=True,
             size_bytes=len(content.encode("utf-8")),
         )
@@ -405,18 +463,18 @@ def test_materialize_recovers_from_stale_parent_symlink(tmp_path):
         )
     except (NotImplementedError, OSError):
         pytest.skip("directory symlinks are unavailable")
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="portable-skill",
         title="Portable Skill",
         markdown="current markdown",
     )
     content = "new file"
-    AgentSkillFile.objects.create(
+    SkillFile.objects.create(
         skill=skill,
         relative_path="references/topic.md",
         content=content,
         content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        portability=AgentSkillFile.Portability.PORTABLE,
+        portability=SkillFile.Portability.PORTABLE,
         included_by_default=True,
         size_bytes=len(content.encode("utf-8")),
     )
@@ -443,7 +501,7 @@ def test_materialize_rejects_symlinked_skill_directory(tmp_path):
         )
     except (NotImplementedError, OSError):
         pytest.skip("directory symlinks are unavailable")
-    AgentSkill.objects.create(
+    Skill.objects.create(
         slug="portable-skill",
         title="Portable Skill",
         markdown="current markdown",
@@ -455,7 +513,7 @@ def test_materialize_rejects_symlinked_skill_directory(tmp_path):
 
 @pytest.mark.django_db
 def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
-    AgentSkill.objects.create(
+    Skill.objects.create(
         slug="legacy-skill",
         title="Legacy Skill",
         markdown="legacy markdown",
@@ -467,7 +525,7 @@ def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
     assert manifest["skills"][0]["files"] == [
         {
             "path": "SKILL.md",
-            "portability": AgentSkillFile.Portability.PORTABLE,
+            "portability": SkillFile.Portability.PORTABLE,
             "included_by_default": True,
             "exclusion_reason": "",
             "content_sha256": hashlib.sha256(b"legacy markdown").hexdigest(),
@@ -482,29 +540,27 @@ def test_export_synthesizes_legacy_skill_markdown_file(tmp_path):
 @pytest.mark.django_db
 def test_scan_restores_soft_deleted_skill_slug(tmp_path):
     role = NodeRole.objects.create(name="Old Role", acronym="OLD")
-    skill = AgentSkill.objects.create(
-        slug="operator-manual",
+    skill = Skill.objects.create(
+        slug="portable-skill",
         title="Deleted",
         markdown="old",
     )
     skill.node_roles.add(role)
-    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    Skill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
     skill.refresh_from_db()
     skill.delete()
 
-    skill_dir = tmp_path / "operator-manual"
-    _write(skill_dir / "SKILL.md", "---\nname: operator-manual\n---\n")
+    skill_dir = tmp_path / "portable-skill"
+    _write(skill_dir / "SKILL.md", "---\nname: portable-skill\n---\n")
 
     scan_codex_skill_directory(skill_dir, dry_run=False)
 
-    restored = AgentSkill.objects.get(slug="operator-manual")
+    restored = Skill.objects.get(slug="portable-skill")
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
     assert restored.is_seed_data is False
     assert not restored.node_roles.exists()
-    assert (
-        restored.markdown.replace("\r\n", "\n") == "---\nname: operator-manual\n---\n"
-    )
+    assert restored.markdown.replace("\r\n", "\n") == "---\nname: portable-skill\n---\n"
 
 
 @pytest.mark.django_db
@@ -515,14 +571,14 @@ def test_import_restores_soft_deleted_skill_slug(tmp_path):
     package_path = tmp_path / "portable-skills.zip"
     export_codex_skill_package(package_path, skill_slugs=["security-codes"])
 
-    skill = AgentSkill.objects.get(slug="security-codes")
-    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    skill = Skill.objects.get(slug="security-codes")
+    Skill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
     skill.refresh_from_db()
     skill.delete()
 
     import_codex_skill_package(package_path, dry_run=False)
 
-    restored = AgentSkill.objects.get(slug="security-codes")
+    restored = Skill.objects.get(slug="security-codes")
     assert restored.pk == skill.pk
     assert restored.is_deleted is False
     assert restored.is_seed_data is False
@@ -591,6 +647,44 @@ def test_import_rejects_windows_absolute_manifest_paths(tmp_path):
         package.writestr("manifest.json", json.dumps(manifest))
 
     with pytest.raises(ValueError, match="Unsafe package path"):
+        import_codex_skill_package(package_path, dry_run=True)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "manifest_entry",
+    [
+        {"agents": [{"slug": "bad-agent", "priority": "high"}]},
+        {
+            "hooks": [
+                {
+                    "slug": "bad-hook",
+                    "command": "python manage.py check",
+                    "timeout_seconds": "fast",
+                }
+            ]
+        },
+        {
+            "hooks": [
+                {
+                    "slug": "bad-hook-priority",
+                    "command": "python manage.py check",
+                    "priority": "first",
+                }
+            ]
+        },
+    ],
+)
+def test_import_dry_run_rejects_invalid_framework_integer_fields(
+    tmp_path, manifest_entry
+):
+    package_path = tmp_path / "invalid-framework-integer.zip"
+    manifest = {"format": PACKAGE_FORMAT, "skills": []}
+    manifest.update(manifest_entry)
+    with ZipFile(package_path, "w") as package:
+        package.writestr("manifest.json", json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="Invalid package integer"):
         import_codex_skill_package(package_path, dry_run=True)
 
 
@@ -806,12 +900,12 @@ def test_import_redacts_excluded_manifest_entries(tmp_path):
                 "files": [
                     {
                         "path": "SKILL.md",
-                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "portability": SkillFile.Portability.PORTABLE,
                         "included_by_default": True,
                     },
                     {
                         "path": "credentials/token.txt",
-                        "portability": AgentSkillFile.Portability.SECRET,
+                        "portability": SkillFile.Portability.SECRET,
                         "included_by_default": False,
                         "exclusion_reason": "secret payload",
                     },
@@ -826,7 +920,7 @@ def test_import_redacts_excluded_manifest_entries(tmp_path):
 
     import_codex_skill_package(package_path, dry_run=False)
 
-    file_entry = AgentSkillFile.objects.get(
+    file_entry = SkillFile.objects.get(
         skill__slug="excluded",
         relative_path="credentials/token.txt",
     )
@@ -847,12 +941,12 @@ def test_import_reclassifies_manifest_portability_flags(tmp_path):
                 "files": [
                     {
                         "path": "SKILL.md",
-                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "portability": SkillFile.Portability.PORTABLE,
                         "included_by_default": True,
                     },
                     {
                         "path": "credentials/token.txt",
-                        "portability": AgentSkillFile.Portability.PORTABLE,
+                        "portability": SkillFile.Portability.PORTABLE,
                         "included_by_default": True,
                     },
                 ],
@@ -866,57 +960,53 @@ def test_import_reclassifies_manifest_portability_flags(tmp_path):
 
     import_codex_skill_package(package_path, dry_run=False)
 
-    file_entry = AgentSkillFile.objects.get(
+    file_entry = SkillFile.objects.get(
         skill__slug="misclassified",
         relative_path="credentials/token.txt",
     )
     assert file_entry.content == ""
-    assert file_entry.portability == AgentSkillFile.Portability.SECRET
+    assert file_entry.portability == SkillFile.Portability.SECRET
     assert file_entry.included_by_default is False
 
 
 @pytest.mark.django_db
-def test_seed_skill_sync_preserves_custom_skills(tmp_path):
+def test_seed_skill_sync_removes_bundled_seeds_and_preserves_custom_skills(tmp_path):
     skills_root = tmp_path / "skills"
     _write(skills_root / "cp-doctor" / "SKILL.md", "diagnostic skill")
-    custom = AgentSkill.objects.create(
-        slug="operator-manual",
-        title="Operator Manual",
+    custom = Skill.objects.create(
+        slug="portable-skill",
+        title="Portable Skill",
         markdown="custom local skill",
     )
-    stale = AgentSkill.objects.create(
+    stale = Skill.objects.create(
         slug="stale-seed",
         title="Stale Seed",
         markdown="remove",
     )
-    AgentSkill.all_objects.filter(pk=stale.pk).update(is_seed_data=True)
+    Skill.all_objects.filter(pk=stale.pk).update(is_seed_data=True)
 
     with override_settings(BASE_DIR=tmp_path):
         sync_filesystem_to_db()
 
-    assert AgentSkill.objects.filter(pk=custom.pk).exists()
-    assert not AgentSkill.objects.filter(pk=stale.pk).exists()
-    synced = AgentSkill.objects.get(slug="cp-doctor")
-    assert synced.is_seed_data is True
+    assert Skill.objects.filter(pk=custom.pk).exists()
+    assert not Skill.objects.filter(pk=stale.pk).exists()
+    assert not Skill.objects.filter(slug="cp-doctor").exists()
 
 
 @pytest.mark.django_db
-def test_seed_skill_sync_restores_soft_deleted_default_skill(tmp_path):
+def test_seed_skill_sync_does_not_restore_soft_deleted_default_skill(tmp_path):
     skills_root = tmp_path / "skills"
     _write(skills_root / "cp-doctor" / "SKILL.md", "restored diagnostic skill")
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="cp-doctor",
         title="Deleted",
         markdown="old",
     )
-    AgentSkill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
+    Skill.all_objects.filter(pk=skill.pk).update(is_seed_data=True)
     skill.refresh_from_db()
     skill.delete()
 
     with override_settings(BASE_DIR=tmp_path):
         sync_filesystem_to_db()
 
-    restored = AgentSkill.objects.get(slug="cp-doctor")
-    assert restored.pk == skill.pk
-    assert restored.markdown == "restored diagnostic skill"
-    assert restored.is_seed_data is True
+    assert not Skill.objects.filter(slug="cp-doctor").exists()

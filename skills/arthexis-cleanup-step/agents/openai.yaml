@@ -1,4 +1,0 @@
-interface:
-  display_name: "Arthexis Cleanup Step"
-  short_description: "Clean up turn-owned processes."
-  default_prompt: "Use $arthexis-cleanup-step to wait for turn-owned processes and clean up lingering registered work."

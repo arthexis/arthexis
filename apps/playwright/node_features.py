@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +21,20 @@ ENGINE_TO_SLUG = {
 }
 
 
+def _ensure_windows_subprocess_event_loop_policy() -> None:
+    """Use a Windows asyncio policy that supports Playwright subprocesses."""
+
+    if sys.platform != "win32":
+        return
+
+    policy_cls = getattr(asyncio, "WindowsProactorEventLoopPolicy", None)
+    if policy_cls is None:
+        return
+    if isinstance(asyncio.get_event_loop_policy(), policy_cls):
+        return
+    asyncio.set_event_loop_policy(policy_cls())
+
+
 def _playwright_engine_available(engine: str) -> bool:
     """Return whether Playwright has an executable browser for ``engine``."""
 
@@ -28,6 +44,7 @@ def _playwright_engine_available(engine: str) -> bool:
         return False
 
     try:
+        _ensure_windows_subprocess_event_loop_policy()
         with sync_playwright() as playwright:
             launcher = getattr(playwright, engine, None)
             if launcher is None:

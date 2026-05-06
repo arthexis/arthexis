@@ -14,17 +14,23 @@ from apps.skills.package_services import (
 
 
 class Command(BaseCommand):
-    help = "Scan, export, import, or materialize portable Codex skill packages."
+    help = "Scan, export, import, or materialize portable operator framework packages."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "action", choices=["scan", "export", "import", "materialize"]
         )
-        parser.add_argument("--source", help="Codex skills root for scan.")
+        parser.add_argument("--source", help="Portable skills root for scan.")
         parser.add_argument("--output", help="ZIP package path for export.")
         parser.add_argument("--package", help="ZIP package path for import.")
         parser.add_argument("--target", help="Local skills root for materialize.")
-        parser.add_argument("--slug", action="append", dest="slugs", default=[])
+        parser.add_argument(
+            "--slug",
+            action="append",
+            dest="slugs",
+            default=[],
+            help="Limit skill file export/materialization to these skill slugs.",
+        )
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument(
             "--include-excluded",

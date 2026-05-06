@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from apps.cards.agent_card import parse_agent_card
 from apps.cards.models import RFID
-from apps.skills.models import AgentSkill, AgentSkillFile
+from apps.skills.models import Skill, SkillFile
 from apps.souls.models import (
     AgentInterfaceSpec,
     CardSession,
@@ -27,7 +27,7 @@ from apps.souls.services import (
     evict_card_session,
     evict_stale_card_sessions,
     provision_soul_seed_card,
-    search_agent_skills,
+    search_skills,
 )
 from apps.souls.services.card_sessions import _active_console_sessions
 
@@ -54,12 +54,12 @@ def _valid_agent_card_records() -> list[str]:
 
 @pytest.fixture
 def skill(db):
-    skill = AgentSkill.objects.create(
+    skill = Skill.objects.create(
         slug="rfid-triage",
         title="RFID Triage",
         markdown="Diagnose RFID reader problems, scanner service health, and card events.",
     )
-    AgentSkillFile.objects.create(
+    SkillFile.objects.create(
         skill=skill,
         relative_path="references/rfid.md",
         content="Use scan attempts, reader trust, and card UID evidence.",
@@ -70,8 +70,8 @@ def skill(db):
 
 
 @pytest.mark.django_db
-def test_search_agent_skills_scores_registered_skill_package_content(skill):
-    matches = search_agent_skills("rfid reader problem")
+def test_search_skills_scores_registered_skill_package_content(skill):
+    matches = search_skills("rfid reader problem")
 
     assert matches
     assert matches[0].slug == skill.slug
@@ -80,9 +80,9 @@ def test_search_agent_skills_scores_registered_skill_package_content(skill):
 
 
 @pytest.mark.django_db
-def test_search_agent_skills_rejects_negative_limit(skill):
+def test_search_skills_rejects_negative_limit(skill):
     with pytest.raises(ValueError, match="non-negative"):
-        search_agent_skills("rfid reader problem", limit=-1)
+        search_skills("rfid reader problem", limit=-1)
 
 
 @pytest.mark.django_db
@@ -393,7 +393,7 @@ def test_provision_soul_seed_card_revokes_stale_duplicate_active_cards(skill):
 
 @pytest.mark.django_db
 def test_provision_soul_seed_card_records_oversized_skill_note():
-    long_skill = AgentSkill.objects.create(
+    long_skill = Skill.objects.create(
         slug="skill-" + "x" * 80,
         title="Oversized Skill",
         markdown="oversized card payload test",

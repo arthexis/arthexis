@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 
-from apps.skills.models import AgentSkill
+from apps.skills.models import Skill
 from apps.souls.models import AgentInterfaceSpec, SkillBundle, SoulIntent
 
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_-]{1,}", re.IGNORECASE)
@@ -35,8 +35,8 @@ def _tokens(value: str) -> set[str]:
     return {match.group(0).lower() for match in TOKEN_RE.finditer(value or "")}
 
 
-def _skill_search_text(skill: AgentSkill) -> str:
-    parts = [skill.slug, skill.title, skill.markdown]
+def _skill_search_text(skill: Skill) -> str:
+    parts = [skill.slug, skill.title, skill.description, skill.markdown]
     package_files = skill.package_files.all()
     for package_file in package_files:
         if package_file.included_by_default:
@@ -45,7 +45,9 @@ def _skill_search_text(skill: AgentSkill) -> str:
     return "\n".join(parts)
 
 
-def _score_skill(skill: AgentSkill, prompt: str, prompt_tokens: set[str]) -> SkillMatchCandidate:
+def _score_skill(
+    skill: Skill, prompt: str, prompt_tokens: set[str]
+) -> SkillMatchCandidate:
     search_text = _skill_search_text(skill).lower()
     slug = skill.slug.lower()
     title = skill.title.lower()
@@ -90,13 +92,13 @@ def _validate_limit(limit: int) -> int:
     return normalized_limit
 
 
-def search_agent_skills(prompt: str, *, limit: int = 10) -> list[SkillMatchCandidate]:
+def search_skills(prompt: str, *, limit: int = 10) -> list[SkillMatchCandidate]:
     limit = _validate_limit(limit)
     normalized = normalize_intent_prompt(prompt)
     prompt_tokens = _tokens(normalized)
     matches = [
         _score_skill(skill, normalized, prompt_tokens)
-        for skill in AgentSkill.objects.prefetch_related("package_files").order_by("slug")
+        for skill in Skill.objects.prefetch_related("package_files").order_by("slug")
     ]
     matches = [match for match in matches if match.score > 0]
     matches.sort(key=lambda match: (-match.score, match.slug))
@@ -120,7 +122,7 @@ def compose_skill_bundle(
     dry_run: bool = True,
 ) -> dict:
     normalized = normalize_intent_prompt(prompt)
-    matches = search_agent_skills(normalized, limit=limit)
+    matches = search_skills(normalized, limit=limit)
     primary_match = matches[0] if matches else None
     strategy = (
         SkillBundle.MatchStrategy.EXACT
@@ -154,7 +156,9 @@ def compose_skill_bundle(
             "commands": ["suggest_next_action", "show_context"],
             "suggestions": [
                 _("Ask for the missing input before taking action."),
-                _("Prefer the highest-scoring registered skill before composing a workflow."),
+                _(
+                    "Prefer the highest-scoring registered skill before composing a workflow."
+                ),
             ],
             "visible_fields": ["intent", "matches", "commands", "suggestions"],
         },
@@ -178,7 +182,7 @@ def compose_skill_bundle(
             suffix += 1
             bundle_slug = f"{base_slug[:112]}-{suffix}"
         primary_skill = (
-            AgentSkill.objects.filter(pk=primary_match.skill_id).first()
+            Skill.objects.filter(pk=primary_match.skill_id).first()
             if primary_match
             else None
         )
@@ -195,7 +199,7 @@ def compose_skill_bundle(
             ),
         )
         if matches:
-            skills = AgentSkill.objects.filter(pk__in=[match.skill_id for match in matches])
+            skills = Skill.objects.filter(pk__in=[match.skill_id for match in matches])
             bundle.skills.set(skills)
         spec = AgentInterfaceSpec.objects.create(
             bundle=bundle,

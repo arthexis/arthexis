@@ -35,6 +35,22 @@
             {% endfor %}
           </tbody>
         </table>
+        {% if preview.agents %}
+          <h3>{% trans "Agents" %}</h3>
+          <ul>
+            {% for agent in preview.agents %}
+              <li>{{ agent.slug }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if preview.hooks %}
+          <h3>{% trans "Hooks" %}</h3>
+          <ul>
+            {% for hook in preview.hooks %}
+              <li>{{ hook.slug }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
       </div>
       <form method="post">
         {% csrf_token %}

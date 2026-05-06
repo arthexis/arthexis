@@ -837,8 +837,8 @@ def build_whatsapp_secretary_prompt(
             f"[SECRETARY] {secretary_name}:",
             "",
             "You are a SECRETARY agent operating for the ARTHEXIS operator.",
-            "Read the operator manual before acting if this is a new console session.",
-            "Record your current goal and owned scope in the workgroup file before taking ownership.",
+            "Use the available AGENTS context and local skills before acting.",
+            "State your current goal and owned scope before taking ownership.",
             "Treat the WhatsApp request below as the current operator request.",
             "",
             "Operator request:",
@@ -1357,11 +1357,11 @@ def registered_whatsapp_secretary_phones(*, raise_on_error: bool = False) -> set
                 is_deleted=False,
             )
         )
-    except (OperationalError, ProgrammingError):
+    except (OperationalError, ProgrammingError) as error:
         if raise_on_error:
             raise WhatsAppSecretaryAuthorizationUnavailable(
                 "WhatsApp Secretary authorization lookup is unavailable."
-            )
+            ) from error
         return set()
     return {
         str(authorization.phone).strip()

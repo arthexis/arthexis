@@ -4,7 +4,7 @@ from apps.skills.services import sync_db_to_filesystem, sync_filesystem_to_db
 
 
 class Command(BaseCommand):
-    help = "Sync agent skill SKILL.md records between filesystem and database."
+    help = "Sync portable skill records between filesystem and database."
 
     def add_arguments(self, parser):
         parser.add_argument("--direction", choices=["to-db", "to-files"], required=True)
@@ -15,4 +15,6 @@ class Command(BaseCommand):
             count = sync_filesystem_to_db()
         else:
             count = sync_db_to_filesystem()
-        self.stdout.write(self.style.SUCCESS(f"Synced {count} agent skill records ({direction})."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Synced {count} skill records ({direction}).")
+        )

@@ -71,7 +71,7 @@ suite metadata without embedding another installation's values.
 
 Do not use portable documents to move secrets or runtime coordination state
 between devices. Secrets must be configured independently on each node, and
-local files such as `workgroup.md` stay local to the device where they are used.
+operator-local coordination notes stay local to the device where they are used.
 
 ## 6. Troubleshooting and observability
 

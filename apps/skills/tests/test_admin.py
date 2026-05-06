@@ -15,7 +15,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.skills import admin as skills_admin
-from apps.skills.models import AgentSkill, AgentSkillFile
+from apps.skills.models import Skill, SkillFile
 from apps.skills.package_services import PACKAGE_FORMAT
 
 pytestmark = [pytest.mark.django_db]
@@ -88,13 +88,11 @@ def _valid_package_upload(slug: str = "admin-upload") -> SimpleUploadedFile:
     )
 
 
-def test_agent_skill_changelist_links_import_package(admin_client):
-    response = admin_client.get(reverse("admin:skills_agentskill_changelist"))
+def test_skill_changelist_links_import_package(admin_client):
+    response = admin_client.get(reverse("admin:skills_skill_changelist"))
 
     assert response.status_code == 200
-    assert (
-        reverse("admin:skills_agentskill_import_package") in response.rendered_content
-    )
+    assert reverse("admin:skills_skill_import_package") in response.rendered_content
 
 
 def test_superuser_can_preview_valid_package_without_db_writes(
@@ -102,7 +100,7 @@ def test_superuser_can_preview_valid_package_without_db_writes(
     isolated_import_storage,
 ):
     response = admin_client.post(
-        reverse("admin:skills_agentskill_import_package"),
+        reverse("admin:skills_skill_import_package"),
         {"action": "preview", "package": _valid_package_upload("admin-preview")},
     )
 
@@ -117,12 +115,12 @@ def test_superuser_can_preview_valid_package_without_db_writes(
     ]
     assert "name" in session_entry
     assert isolated_import_storage.exists(session_entry["name"])
-    assert not AgentSkill.objects.filter(slug="admin-preview").exists()
-    assert not AgentSkillFile.objects.filter(skill__slug="admin-preview").exists()
+    assert not Skill.objects.filter(slug="admin-preview").exists()
+    assert not SkillFile.objects.filter(skill__slug="admin-preview").exists()
 
 
 def test_superuser_can_import_valid_package(admin_client, isolated_import_storage):
-    url = reverse("admin:skills_agentskill_import_package")
+    url = reverse("admin:skills_skill_import_package")
     preview_response = admin_client.post(
         url,
         {"action": "preview", "package": _valid_package_upload("admin-import")},
@@ -137,10 +135,8 @@ def test_superuser_can_import_valid_package(admin_client, isolated_import_storag
     response = admin_client.post(url, {"action": "apply", "token": token}, follow=True)
 
     assert response.status_code == 200
-    assert response.redirect_chain[-1][0] == reverse(
-        "admin:skills_agentskill_changelist"
-    )
-    skill = AgentSkill.objects.get(slug="admin-import")
+    assert response.redirect_chain[-1][0] == reverse("admin:skills_skill_changelist")
+    skill = Skill.objects.get(slug="admin-import")
     assert skill.title == "Admin Upload"
     assert skill.markdown == "---\nname: admin-upload\n---\n"
     assert dict(skill.package_files.values_list("relative_path", "content")) == {
@@ -151,7 +147,7 @@ def test_superuser_can_import_valid_package(admin_client, isolated_import_storag
 
 
 def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
-    url = reverse("admin:skills_agentskill_import_package")
+    url = reverse("admin:skills_skill_import_package")
     invalid_cases = [
         (
             SimpleUploadedFile(
@@ -164,7 +160,7 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
         ),
         (
             _zip_upload({"format": "wrong", "skills": []}),
-            "Unsupported Codex skill package format",
+            "Unsupported operator framework package format",
             None,
         ),
         (
@@ -243,8 +239,8 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
     ]
 
     for upload, error_fragment, slug in invalid_cases:
-        skill_count = AgentSkill.objects.count()
-        file_count = AgentSkillFile.objects.count()
+        skill_count = Skill.objects.count()
+        file_count = SkillFile.objects.count()
 
         response = admin_client.post(url, {"action": "preview", "package": upload})
 
@@ -252,16 +248,16 @@ def test_invalid_package_preview_shows_error_and_writes_nothing(admin_client):
         assert any(
             error_fragment in str(message) for message in response.context["messages"]
         )
-        assert AgentSkill.objects.count() == skill_count
-        assert AgentSkillFile.objects.count() == file_count
+        assert Skill.objects.count() == skill_count
+        assert SkillFile.objects.count() == file_count
         if slug:
-            assert not AgentSkill.objects.filter(slug=slug).exists()
+            assert not Skill.objects.filter(slug=slug).exists()
 
 
 def test_invalid_package_filename_shows_form_error_and_writes_nothing(admin_client):
-    url = reverse("admin:skills_agentskill_import_package")
-    skill_count = AgentSkill.objects.count()
-    file_count = AgentSkillFile.objects.count()
+    url = reverse("admin:skills_skill_import_package")
+    skill_count = Skill.objects.count()
+    file_count = SkillFile.objects.count()
 
     response = admin_client.post(
         url,
@@ -278,15 +274,15 @@ def test_invalid_package_filename_shows_form_error_and_writes_nothing(admin_clie
     assert response.status_code == 200
     assert "package" in response.context["form"].errors
     assert "zip" in str(response.context["form"].errors["package"]).lower()
-    assert AgentSkill.objects.count() == skill_count
-    assert AgentSkillFile.objects.count() == file_count
+    assert Skill.objects.count() == skill_count
+    assert SkillFile.objects.count() == file_count
 
 
 def test_expired_preview_token_cannot_import_package(
     admin_client,
     isolated_import_storage,
 ):
-    url = reverse("admin:skills_agentskill_import_package")
+    url = reverse("admin:skills_skill_import_package")
     preview_response = admin_client.post(
         url,
         {"action": "preview", "package": _valid_package_upload("admin-expired")},
@@ -302,8 +298,8 @@ def test_expired_preview_token_cannot_import_package(
     response = admin_client.post(url, {"action": "apply", "token": token}, follow=True)
 
     assert response.status_code == 200
-    assert not AgentSkill.objects.filter(slug="admin-expired").exists()
-    assert not AgentSkillFile.objects.filter(skill__slug="admin-expired").exists()
+    assert not Skill.objects.filter(slug="admin-expired").exists()
+    assert not SkillFile.objects.filter(skill__slug="admin-expired").exists()
     assert not isolated_import_storage.exists(storage_name)
     assert not admin_client.session[skills_admin._SESSION_IMPORT_PACKAGES_KEY]
 
@@ -322,7 +318,7 @@ def test_preview_cleans_expired_storage_uploads(
     os.utime(old_upload, (expired_at, expired_at))
 
     response = admin_client.post(
-        reverse("admin:skills_agentskill_import_package"),
+        reverse("admin:skills_skill_import_package"),
         {"action": "preview", "package": _valid_package_upload("admin-cleanup")},
     )
 
@@ -357,7 +353,7 @@ def test_preview_cleanup_handles_use_tz_false(
     os.utime(old_upload, (expired_at, expired_at))
 
     response = admin_client.post(
-        reverse("admin:skills_agentskill_import_package"),
+        reverse("admin:skills_skill_import_package"),
         {"action": "preview", "package": _valid_package_upload("admin-naive")},
     )
 
@@ -377,15 +373,15 @@ def test_import_package_blocks_staff_without_add_and_change_permissions(
     client.force_login(user)
 
     response = client.post(
-        reverse("admin:skills_agentskill_import_package"),
+        reverse("admin:skills_skill_import_package"),
         {"action": "preview", "package": _valid_package_upload("blocked-import")},
     )
 
     assert response.status_code == 403
-    assert not AgentSkill.objects.filter(slug="blocked-import").exists()
+    assert not Skill.objects.filter(slug="blocked-import").exists()
 
 
-def test_import_package_blocks_staff_without_agent_skill_file_permissions(
+def test_import_package_blocks_staff_without_skill_file_permissions(
     client,
     django_user_model,
 ):
@@ -395,15 +391,15 @@ def test_import_package_blocks_staff_without_agent_skill_file_permissions(
         is_staff=True,
     )
     skill_perms = Permission.objects.filter(
-        codename__in=("add_agentskill", "change_agentskill"),
+        codename__in=("add_skill", "change_skill"),
     )
     user.user_permissions.add(*skill_perms)
     client.force_login(user)
 
     response = client.post(
-        reverse("admin:skills_agentskill_import_package"),
+        reverse("admin:skills_skill_import_package"),
         {"action": "preview", "package": _valid_package_upload("blocked-file-perms")},
     )
 
     assert response.status_code == 403
-    assert not AgentSkill.objects.filter(slug="blocked-file-perms").exists()
+    assert not Skill.objects.filter(slug="blocked-file-perms").exists()
