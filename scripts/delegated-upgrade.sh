@@ -46,6 +46,15 @@ fi
 
 RUN_USER="$(resolve_run_user)"
 RUN_HOME="$(resolve_home_dir "$RUN_USER")"
+VENV_DIR="$BASE_DIR/.venv"
+VENV_BIN="$VENV_DIR/bin"
+PYTHON_BIN=""
+
+if [ -n "${ARTHEXIS_PYTHON_BIN:-}" ] && [ -x "$ARTHEXIS_PYTHON_BIN" ]; then
+  PYTHON_BIN="$ARTHEXIS_PYTHON_BIN"
+elif [ -x "$VENV_BIN/python" ]; then
+  PYTHON_BIN="$VENV_BIN/python"
+fi
 
 mkdir -p "$LOG_DIR"
 
@@ -93,8 +102,20 @@ fi
 DELEGATED_CMD+=(
   --setenv "ARTHEXIS_BASE_DIR=$BASE_DIR"
   --setenv "ARTHEXIS_LOG_DIR=$LOG_DIR"
-  "$WATCH_HELPER"
 )
+
+if [ -n "$PYTHON_BIN" ]; then
+  DELEGATED_CMD+=(--setenv "ARTHEXIS_PYTHON_BIN=$PYTHON_BIN")
+fi
+
+if [ -d "$VENV_DIR" ]; then
+  DELEGATED_CMD+=(
+    --setenv "VIRTUAL_ENV=$VENV_DIR"
+    --setenv "PATH=$VENV_BIN:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+  )
+fi
+
+DELEGATED_CMD+=("$WATCH_HELPER")
 
 if [ -n "$SERVICE_NAME" ]; then
   DELEGATED_CMD+=("$SERVICE_NAME")

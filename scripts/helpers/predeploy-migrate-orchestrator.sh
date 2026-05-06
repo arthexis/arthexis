@@ -20,8 +20,11 @@ DEPLOY_CMD=("$@")
 
 # shellcheck source=scripts/helpers/common.sh
 . "$BASE_DIR/scripts/helpers/common.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/runserver_preflight.sh
 . "$BASE_DIR/scripts/helpers/runserver_preflight.sh"
+SERVICE_STACK_STOPPED=0
 
 log_event() {
   local phase="$1"
@@ -33,11 +36,16 @@ log_event() {
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$phase" "$status" "$started_at" "$ended_at" "${elapsed:-0}"
 }
 
-control_service() {
+control_unit() {
   local action="$1"
   local unit="$2"
 
   if [ -z "$unit" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if declare -F _arthexis_systemd_unit_present >/dev/null 2>&1 \
+    && ! _arthexis_systemd_unit_present "$unit"; then
     return 0
   fi
 
@@ -47,6 +55,31 @@ control_service() {
   fi
 
   "${runner[@]}" "$action" "$unit" || true
+}
+
+control_service_stack() {
+  local action="$1"
+  local service_name="$2"
+  local unit
+
+  if [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  while IFS= read -r unit; do
+    control_unit "$action" "$unit"
+  done < <(arthexis_service_unit_names "$service_name" true true true true)
+}
+
+cleanup_service_stack() {
+  local status=$?
+
+  if [ "$SERVICE_STACK_STOPPED" -eq 1 ]; then
+    control_service_stack start "$SERVICE_NAME"
+    SERVICE_STACK_STOPPED=0
+  fi
+
+  exit "$status"
 }
 
 run_predeploy_migrations() {
@@ -117,10 +150,14 @@ started_at_epoch="$(date +%s)"
 started_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log_event "deploy_orchestration" "start" "$started_at_iso" "" 0
 
-run_predeploy_migrations
-
 log_event "service_switch" "start" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "" 0
-control_service stop "$SERVICE_NAME"
+trap cleanup_service_stack EXIT
+control_service_stack stop "$SERVICE_NAME"
+if [ -n "$SERVICE_NAME" ]; then
+  SERVICE_STACK_STOPPED=1
+fi
+
+run_predeploy_migrations
 
 STATUS=0
 if [ -x "${DEPLOY_CMD[0]}" ]; then
@@ -130,7 +167,8 @@ else
   STATUS=1
 fi
 
-control_service start "$SERVICE_NAME"
+control_service_stack start "$SERVICE_NAME"
+SERVICE_STACK_STOPPED=0
 
 ended_at_epoch="$(date +%s)"
 ended_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
