@@ -7,10 +7,12 @@ from unittest.mock import AsyncMock
 import anyio
 import pytest
 from channels.db import database_sync_to_async
+from django.core.cache import cache
 from django.test import override_settings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from apps.features.models import Feature
 from apps.flows.models import Transition
 from apps.ocpp import call_error_handlers, store
 from apps.ocpp.call_result_handlers.profiles import handle_clear_charging_profile_result
@@ -101,6 +103,14 @@ def charger_factory():
         return await database_sync_to_async(Charger.objects.create)(**kwargs)
 
     return _create_charger
+
+
+async def _disable_rfid_fallback_account_feature() -> None:
+    await database_sync_to_async(cache.clear)()
+    await database_sync_to_async(Feature.objects.update_or_create)(
+        slug="rfid-fallback-account",
+        defaults={"display": "RFID Fallback Account", "is_enabled": False},
+    )
 
 
 def _reset_pending_calls() -> None:
@@ -1652,6 +1662,7 @@ async def test_transaction_event_updates_request_status(monkeypatch, charger_fac
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_transaction_event_does_not_start_request_when_authorization_fails(charger_factory):
+    await _disable_rfid_fallback_account_feature()
     charger = await charger_factory(
         charger_id="CP-TRX-RFID",
         authorization_policy=Charger.AuthorizationPolicy.STRICT,
@@ -1712,6 +1723,7 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_start_transaction_rejection_creates_transaction_record(charger_factory):
+    await _disable_rfid_fallback_account_feature()
     charger = await charger_factory(
         charger_id="CP-START-REJECT",
         authorization_policy=Charger.AuthorizationPolicy.STRICT,

@@ -1,5 +1,6 @@
 import pytest
 from channels.db import database_sync_to_async
+from django.core.cache import cache
 
 from apps.cards.models import RFID
 from apps.features.models import Feature
@@ -21,6 +22,7 @@ async def test_authorize_handler_contract_uses_existing_energy_account_rules():
         charger_id="CP-EA-HANDLER",
         require_rfid=True,
     )
+    await database_sync_to_async(cache.clear)()
     await database_sync_to_async(Feature.objects.update_or_create)(
         slug="energy-accounts",
         defaults={
