@@ -724,9 +724,7 @@ class Charger(Ownable):
             if configured in self.AuthorizationPolicy.values:
                 return configured
             return self.AuthorizationPolicy.STRICT
-        # Keep legacy compatibility unless the deployment or charger explicitly
-        # selects stricter access control.
-        return self.AuthorizationPolicy.OPEN
+        return self.AuthorizationPolicy.STRICT
 
     @classmethod
     def sanitize_auto_location_name(cls, value: str) -> str:
