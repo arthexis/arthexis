@@ -250,9 +250,9 @@ def _hypergeometric_probability(
 ) -> float:
     """Return P(X = k) for a hypergeometric distribution."""
 
-    if not 0 <= successes_drawn <= draws:
-        return 0.0
     if draws < 0 or draws > population_size:
+        return 0.0
+    if not 0 <= successes_drawn <= draws:
         return 0.0
     if successes_drawn > success_states or draws - successes_drawn > (
         population_size - success_states
@@ -266,6 +266,20 @@ def _hypergeometric_probability(
     if denominator == 0:
         return 0.0
     return numerator / denominator
+
+
+def _bounded_card_count_values(min_value: int, max_value: int):
+    safe_min = max(0, min(min_value, MAX_HYPERGEOMETRIC_INPUT))
+    safe_max = max(0, min(max_value, MAX_HYPERGEOMETRIC_INPUT))
+    if safe_min > safe_max:
+        return
+
+    for value in range(MAX_HYPERGEOMETRIC_INPUT + 1):
+        if value < safe_min:
+            continue
+        if value > safe_max:
+            break
+        yield value
 
 
 def _choice_options(
@@ -437,10 +451,10 @@ def _bivariate_hypergeometric_probability(
 
     probability = 0.0
     max_group_a = min(group_a_size, draws)
-    for group_a_drawn in range(min_group_a, max_group_a + 1):
+    for group_a_drawn in _bounded_card_count_values(min_group_a, max_group_a):
         remaining_draws = draws - group_a_drawn
         max_group_b = min(group_b_size, remaining_draws)
-        for group_b_drawn in range(min_group_b, max_group_b + 1):
+        for group_b_drawn in _bounded_card_count_values(min_group_b, max_group_b):
             other_drawn = draws - group_a_drawn - group_b_drawn
             if not 0 <= other_drawn <= other_cards:
                 continue
@@ -548,7 +562,10 @@ def _calculate_london_mulligan_odds(
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     failure_so_far = 1.0
-    for mulligans_taken in range(max_mulligans + 1):
+    safe_max_mulligans = max(0, min(max_mulligans, LONDON_MULLIGAN_DRAW_SIZE))
+    for mulligans_taken in range(LONDON_MULLIGAN_DRAW_SIZE + 1):
+        if mulligans_taken > safe_max_mulligans:
+            break
         counted_mulligans = (
             max(0, mulligans_taken - 1)
             if free_first_mulligan
