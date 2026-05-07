@@ -3,23 +3,28 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from math import comb
 from typing import Optional
 
 from django.contrib.auth.decorators import login_required
 from django.template.response import TemplateResponse
 from django.test import signals as test_signals
-from django.utils.translation import gettext as _, gettext_lazy as _lazy
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy as _lazy
 
 from apps.energy.models import EnergyTariff
 from apps.sites.utils import landing
 
 from ..models import HypergeometricTemplate
 
-
 MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
 MAX_HYPERGEOMETRIC_INPUT = 500
+MTG_PROBABILITY_THRESHOLDS = {
+    0.8: "draws_to_80_percent",
+    0.9: "draws_to_90_percent",
+    0.99: "draws_to_99_percent",
+}
 
 
 def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
@@ -241,6 +246,37 @@ def _hypergeometric_probability(
     return numerator / denominator
 
 
+def _draws_for_probability_thresholds(
+    *,
+    deck_size: int,
+    success_states: int,
+    thresholds: tuple[float, ...],
+) -> dict[float, int | None]:
+    """Return minimum draws needed to reach each probability threshold."""
+
+    if success_states <= 0:
+        return dict.fromkeys(thresholds)
+
+    draws_needed: dict[float, int | None] = dict.fromkeys(thresholds)
+    remaining = set(thresholds)
+    for draw_count in range(1, min(deck_size, MAX_HYPERGEOMETRIC_INPUT) + 1):
+        probability_none = _hypergeometric_probability(
+            population_size=deck_size,
+            success_states=success_states,
+            draws=draw_count,
+            successes_drawn=0,
+        )
+        probability_any = 1 - probability_none
+        met = {threshold for threshold in remaining if probability_any >= threshold}
+        for threshold in met:
+            draws_needed[threshold] = draw_count
+        remaining -= met
+        if not remaining:
+            break
+
+    return draws_needed
+
+
 def _calculate_hypergeometric_totals(
     *,
     deck_size: int,
@@ -278,11 +314,22 @@ def _calculate_hypergeometric_totals(
         draws=draws,
         successes_drawn=0,
     )
+    probability_any = 1 - probability_none
+    draws_to_high_chance = _draws_for_probability_thresholds(
+        deck_size=deck_size,
+        success_states=success_states,
+        thresholds=tuple(MTG_PROBABILITY_THRESHOLDS),
+    )
+
     return {
         "probability_exact": probability_exact,
         "probability_at_least": probability_at_least,
         "probability_none": probability_none,
-        "probability_any": 1 - probability_none,
+        "probability_any": probability_any,
+        **{
+            result_key: draws_to_high_chance[threshold]
+            for threshold, result_key in MTG_PROBABILITY_THRESHOLDS.items()
+        },
     }
 
 
@@ -356,7 +403,6 @@ def energy_tariff_calculator(request):
 
 
 @landing(_lazy("Electrical Power Calculator"))
-@login_required(login_url="pages:login")
 def electrical_power_calculator(request):
     """Estimate kVA, kW, and kVAr from field voltage/current measurements."""
 
@@ -442,7 +488,6 @@ def electrical_power_calculator(request):
 
 
 @landing(_lazy("EV Charging Session Calculator"))
-@login_required(login_url="pages:login")
 def ev_charging_calculator(request):
     """Estimate EV charging time and energy cost for a target SOC window."""
 
