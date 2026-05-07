@@ -129,10 +129,10 @@ def test_charge_station_manager_is_authorized_for_ws_auth(django_user_model):
     assert charger.is_ws_user_authorized(manager) is True
 
 
-def test_resolved_authorization_policy_defaults_to_open():
+def test_resolved_authorization_policy_defaults_to_strict():
     charger = Charger.objects.create(charger_id="CH-POLICY-DEFAULT")
 
-    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.OPEN
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
 
 
 @override_settings(OCPP_AUTHORIZATION_POLICY="strict")
