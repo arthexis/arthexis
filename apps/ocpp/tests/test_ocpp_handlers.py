@@ -412,6 +412,39 @@ async def test_get_configuration_action_requires_manager_or_superuser():
     )
 
     assert response.status_code == 403
+    assert json.loads(response.content) == {"detail": "insufficient permissions"}
+    assert ws.sent == []
+
+
+@pytest.mark.anyio
+async def test_get_configuration_action_without_request_fails_closed():
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    log_key = store.identity_key("CP-PARTIAL-CONFIG-4", None)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        "CP-PARTIAL-CONFIG-4",
+        None,
+        charger=None,
+        ws=ws,
+        log_key=log_key,
+        request=None,
+    )
+
+    response = await anyio.to_thread.run_sync(
+        lambda: actions._handle_get_configuration(
+            context,
+            {"key": ["AuthorizationKey"]},
+        )
+    )
+
+    assert response.status_code == 403
+    assert json.loads(response.content) == {"detail": "insufficient permissions"}
     assert ws.sent == []
 
 

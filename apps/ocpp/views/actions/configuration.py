@@ -1,11 +1,10 @@
 import json
 import uuid
 
-from django.http import HttpResponseForbidden, JsonResponse
+from asgiref.sync import async_to_sync
+from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -23,10 +22,12 @@ from .common import (
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetConfiguration")
 def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
-    user = getattr(context.request, "user", None)
-    is_manager = user_in_charge_station_manager_group(user) if user is not None else False
-    if not getattr(user, "is_superuser", False) and not is_manager:
-        return HttpResponseForbidden("insufficient permissions")
+    request = getattr(context, "request", None)
+    user = getattr(request, "user", None) if request else None
+    is_superuser = getattr(user, "is_superuser", False) if user else False
+    is_manager = user_in_charge_station_manager_group(user) if user else False
+    if not is_superuser and not is_manager:
+        return JsonResponse({"detail": "insufficient permissions"}, status=403)
     payload: dict[str, object] = {}
     raw_key = data.get("key")
     keys: list[str] = []
