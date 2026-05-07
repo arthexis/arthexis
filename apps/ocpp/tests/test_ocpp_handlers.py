@@ -335,6 +335,17 @@ async def test_unlock_connector_result_updates_state():
     assert (result.get("payload") or {}).get("status") == "Unlocked"
 
 
+
+class _DummyRequest:
+    def __init__(self, user):
+        self.user = user
+
+
+class _DummyUser:
+    def __init__(self, *, is_superuser=False):
+        self.is_superuser = is_superuser
+
+
 @pytest.mark.anyio
 async def test_get_configuration_action_records_filtered_key_metadata():
     _reset_pending_calls()
@@ -354,6 +365,7 @@ async def test_get_configuration_action_records_filtered_key_metadata():
         charger=None,
         ws=ws,
         log_key=log_key,
+        request=_DummyRequest(_DummyUser(is_superuser=True)),
     )
 
     action_call = await anyio.to_thread.run_sync(
@@ -369,6 +381,71 @@ async def test_get_configuration_action_records_filtered_key_metadata():
     assert store.pending_calls[action_call.message_id]["configuration_key_filter"] == [
         "MeterValuesSampledData"
     ]
+
+
+
+@pytest.mark.anyio
+async def test_get_configuration_action_requires_manager_or_superuser():
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    log_key = store.identity_key("CP-PARTIAL-CONFIG-3", None)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        "CP-PARTIAL-CONFIG-3",
+        None,
+        charger=None,
+        ws=ws,
+        log_key=log_key,
+        request=_DummyRequest(_DummyUser(is_superuser=False)),
+    )
+
+    response = await anyio.to_thread.run_sync(
+        lambda: actions._handle_get_configuration(
+            context,
+            {"key": ["AuthorizationKey"]},
+        )
+    )
+
+    assert response.status_code == 403
+    assert json.loads(response.content) == {"detail": "insufficient permissions"}
+    assert ws.sent == []
+
+
+@pytest.mark.anyio
+async def test_get_configuration_action_without_request_fails_closed():
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    log_key = store.identity_key("CP-PARTIAL-CONFIG-4", None)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        "CP-PARTIAL-CONFIG-4",
+        None,
+        charger=None,
+        ws=ws,
+        log_key=log_key,
+        request=None,
+    )
+
+    response = await anyio.to_thread.run_sync(
+        lambda: actions._handle_get_configuration(
+            context,
+            {"key": ["AuthorizationKey"]},
+        )
+    )
+
+    assert response.status_code == 403
+    assert json.loads(response.content) == {"detail": "insufficient permissions"}
+    assert ws.sent == []
 
 
 @pytest.mark.anyio
