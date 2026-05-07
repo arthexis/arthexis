@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from io import StringIO
 from pathlib import Path
@@ -363,6 +364,64 @@ def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
         str(worktree),
         "refs/remotes/origin/pr/123",
     ]
+    assert (
+        json.loads((worktree / ".arthexis-pr-oversee.json").read_text())["headRefOid"]
+        == "head-sha"
+    )
+
+
+def test_checkout_does_not_follow_metadata_symlink(tmp_path: Path):
+    class SymlinkRunner(FakeRunner):
+        def run(
+            self, command: list[str], *, cwd: Path | None = None, check: bool = False
+        ) -> CommandResult:
+            result = super().run(command, cwd=cwd, check=check)
+            if command[:3] == ["git", "worktree", "add"]:
+                outside_target = tmp_path / "outside.txt"
+                outside_target.write_text("sensitive\n", encoding="utf-8")
+                (Path(command[-2]) / ".arthexis-pr-oversee.json").symlink_to(
+                    outside_target
+                )
+            return result
+
+    runner = SymlinkRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0),
+            CommandResult(0),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+    worktree = tmp_path / "pr-123"
+    outside_target = tmp_path / "outside.txt"
+
+    result = overseer.checkout(123, worktree=worktree, branch="repos-pr-123")
+
+    assert result["metadataWriteError"] is True
+    assert outside_target.read_text(encoding="utf-8") == "sensitive\n"
+
+
+def test_checkout_writes_metadata_when_no_no_follow_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0),
+            CommandResult(0),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+    worktree = tmp_path / "pr-123"
+
+    result = overseer.checkout(123, worktree=worktree, branch="repos-pr-123")
+
+    assert "metadataWriteError" not in result
     assert (
         json.loads((worktree / ".arthexis-pr-oversee.json").read_text())["headRefOid"]
         == "head-sha"

@@ -880,11 +880,17 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "baseRefOid": pr.get("baseRefOid"),
             "worktree": str(worktree),
         }
+        metadata_path = worktree / PATCHWORK_METADATA
         try:
-            (worktree / PATCHWORK_METADATA).write_text(
-                json.dumps(metadata, indent=2) + "\n",
+            with open(
+                metadata_path,
+                "x",
                 encoding="utf-8",
-            )
+                opener=lambda path, flags: os.open(
+                    path, flags | getattr(os, "O_NOFOLLOW", 0), 0o600
+                ),
+            ) as handle:
+                handle.write(json.dumps(metadata, indent=2) + "\n")
         except OSError:
             metadata["metadataWriteError"] = True
         return metadata
