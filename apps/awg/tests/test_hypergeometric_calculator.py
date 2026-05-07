@@ -293,6 +293,45 @@ def test_mtg_hypergeometric_calculator_derives_cards_seen_on_play(db):
     assert "48.75%" in body
 
 
+def test_mtg_hypergeometric_opening_hand_ignores_turn_number(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draw_timing": "opening_hand",
+            "draws": "not-active",
+            "turn_number": "",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Opening hand (7 cards)" in body
+    assert "Turn Number is required" not in body
+
+
+def test_mtg_hypergeometric_ignores_disabled_section_numeric_values(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "mulligan_max": "stale",
+            "land_count": "stale",
+            "group_a_count": "stale",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "All inputs must be whole numbers." not in body
+    assert "Chance of at least selected target amount" in body
+
+
 def test_mtg_hypergeometric_calculator_warns_for_commander_copy_limits(db):
     response = Client().post(
         reverse("awg:mtg_hypergeometric"),

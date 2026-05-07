@@ -1023,7 +1023,7 @@ def mtg_hypergeometric_calculator(request):
         required_fields = ["deck_size", "success_states", "min_successes"]
         if fields["draw_timing"] == "manual":
             required_fields.append("draws")
-        else:
+        elif fields["draw_timing"] != "opening_hand":
             required_fields.append("turn_number")
         if mulligan_enabled:
             required_fields.append("mulligan_max")
@@ -1043,22 +1043,26 @@ def mtg_hypergeometric_calculator(request):
 
         if not error:
             try:
-                for integer_field in (
+                integer_fields = [
                     "deck_size",
                     "success_states",
-                    "draws",
-                    "turn_number",
                     "min_successes",
                     "exact_successes",
-                    "mulligan_max",
-                    "land_count",
-                    "min_lands",
-                    "max_lands",
-                    "group_a_count",
-                    "group_a_min",
-                    "group_b_count",
-                    "group_b_min",
-                ):
+                ]
+                if fields["draw_timing"] == "manual":
+                    integer_fields.append("draws")
+                elif fields["draw_timing"] != "opening_hand":
+                    integer_fields.append("turn_number")
+                if mulligan_enabled:
+                    integer_fields.append("mulligan_max")
+                    if fields["mulligan_condition"] == "target_lands":
+                        integer_fields.extend(["land_count", "min_lands", "max_lands"])
+                if multivariate_enabled:
+                    integer_fields.extend(
+                        ["group_a_count", "group_a_min", "group_b_count", "group_b_min"]
+                    )
+
+                for integer_field in integer_fields:
                     if fields.get(integer_field) not in (None, "", "None"):
                         parsed_values[integer_field] = int(fields[integer_field] or "0")
             except (TypeError, ValueError):
@@ -1071,6 +1075,13 @@ def mtg_hypergeometric_calculator(request):
             exact_successes = parsed_values.get("exact_successes")
             if fields["draw_timing"] == "manual":
                 draws = parsed_values["draws"]
+            elif fields["draw_timing"] == "opening_hand":
+                draws = _cards_seen_for_timing(
+                    draw_timing=fields["draw_timing"],
+                    turn_number=1,
+                )
+                parsed_values["draws"] = draws
+                fields["draws"] = str(draws)
             else:
                 turn_number = parsed_values["turn_number"]
                 if turn_number <= 0:
