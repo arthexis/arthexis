@@ -117,11 +117,14 @@ elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
   required_packages+=(ca-certificates)
 fi
 optional_connect_packages=()
-for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter; do
-  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    optional_connect_packages+=("$package")
-  fi
-done
+connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"
+if [ "$connect_bootstrap_enabled" = "1" ]; then
+  for package in rpi-connect wayvnc wfplug-connect rpd-wayland-core lightdm pi-greeter; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+      optional_connect_packages+=("$package")
+    fi
+  done
+fi
 
 if [ "${#required_packages[@]}" -gt 0 ]; then
   export DEBIAN_FRONTEND=noninteractive
@@ -139,7 +142,7 @@ if [ "${#optional_connect_packages[@]}" -gt 0 ]; then
 fi
 
 CONNECT_SCREEN_SHARE_USER="${ARTHEXIS_CONNECT_USER:-arthe}"
-if id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then
+if [ "$connect_bootstrap_enabled" = "1" ] && id "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1; then
   systemctl stop userconfig.service >/dev/null 2>&1 || true
   systemctl disable userconfig.service >/dev/null 2>&1 || true
   loginctl enable-linger "$CONNECT_SCREEN_SHARE_USER" >/dev/null 2>&1 || true
@@ -215,6 +218,17 @@ RECOVERY_STALE_FILE_PATHS = (
     RECOVERY_SYSTEMD_WANTS_PATH,
     "/etc/sudoers.d/90-arthexis-recovery",
 )
+
+
+def _render_bootstrap_script(*, connect_bootstrap_enabled: bool = False) -> str:
+    """Render first-boot bootstrap script with image-level feature defaults."""
+
+    default = "1" if connect_bootstrap_enabled else "0"
+    return BOOTSTRAP_SCRIPT.replace(
+        'connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"',
+        f'connect_bootstrap_enabled="${{ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-{default}}}"',
+    )
+
 
 RECOVERY_ACCESS_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -1117,6 +1131,7 @@ def _customize_image(
     suite_source_path: Path | None = None,
     network_profiles: tuple[NetworkProfileInfo, ...] = (),
     reservation: ImageReservation | None = None,
+    connect_bootstrap_enabled: bool = False,
 ) -> ImageCustomizationResult:
     """Inject bootstrap scripts and systemd units into the image."""
 
@@ -1131,7 +1146,12 @@ def _customize_image(
         reservation_json = work_dir / "reserved-node.json"
         suite_bundle_info: SuiteBundleInfo | None = None
 
-        _write_linux_text(bootstrap, BOOTSTRAP_SCRIPT)
+        _write_linux_text(
+            bootstrap,
+            _render_bootstrap_script(
+                connect_bootstrap_enabled=connect_bootstrap_enabled
+            ),
+        )
         _write_linux_text(service, SYSTEMD_SERVICE.format(git_url=git_url))
         _write_linux_text(recovery_service, RECOVERY_SYSTEMD_SERVICE)
         _write_linux_text(
@@ -1895,6 +1915,7 @@ def build_rpi4b_image(
     reserve_hostname_prefix: str = "",
     reserve_number: int | None = None,
     reserve_role: str = "",
+    connect_bootstrap_enabled: bool = False,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -1983,6 +2004,7 @@ def build_rpi4b_image(
             suite_source_path=resolved_suite_source_path if bundle_suite else None,
             network_profiles=network_profiles,
             reservation=reservation,
+            connect_bootstrap_enabled=connect_bootstrap_enabled,
         )
         if isinstance(raw_customization_result, ImageCustomizationResult):
             customization_result = raw_customization_result
