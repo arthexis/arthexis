@@ -381,6 +381,36 @@ def test_import_package_blocks_staff_without_add_and_change_permissions(
     assert not Skill.objects.filter(slug="blocked-import").exists()
 
 
+def test_import_package_blocks_staff_without_agent_and_hook_permissions(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(
+        username="skill-import-missing-agent-hook-perms",
+        password="pw",
+        is_staff=True,
+    )
+    skill_and_file_perms = Permission.objects.filter(
+        codename__in=(
+            "add_skill",
+            "change_skill",
+            "add_skillfile",
+            "change_skillfile",
+            "delete_skillfile",
+        ),
+    )
+    user.user_permissions.add(*skill_and_file_perms)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:skills_skill_import_package"),
+        {"action": "preview", "package": _valid_package_upload("blocked-agent-hook-perms")},
+    )
+
+    assert response.status_code == 403
+    assert not Skill.objects.filter(slug="blocked-agent-hook-perms").exists()
+
+
 def test_import_package_blocks_staff_without_skill_file_permissions(
     client,
     django_user_model,
