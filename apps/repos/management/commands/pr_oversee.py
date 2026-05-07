@@ -149,7 +149,11 @@ class Command(BaseCommand):
         monitor_parser.add_argument("--require-approval", action="store_true")
         monitor_parser.add_argument("--allow-pending", action="store_true")
         monitor_parser.add_argument("--include-logs", action="store_true")
-        monitor_parser.add_argument("--run-test-plan", action="store_true")
+        monitor_parser.add_argument(
+            "--run-test-plan",
+            action="store_true",
+            help="Run local validation commands from the selected checkout (requires --write).",
+        )
         monitor_parser.add_argument("--dependency-limit", type=int, default=80)
         monitor_parser.add_argument(
             "--worktree", default="", help="Optional PR worktree path."
@@ -174,7 +178,7 @@ class Command(BaseCommand):
         monitor_parser.add_argument(
             "--write",
             action="store_true",
-            help="Required for monitor merge and cleanup actions.",
+            help="Required for monitor local validation, merge, and cleanup actions.",
         )
 
     def handle(self, *args, **options) -> None:
