@@ -408,11 +408,14 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
 
     lock_file = lock_dir / LCD_SUMMARY_LOCK_FILE
     frames = fixed_frame_window(screens)
-    _write_lcd_frames(
-        frames,
-        lock_file=lock_file,
-        expires_at=now + LCD_SUMMARY_EXPIRES_AFTER,
-    )
+    if node.has_feature("lcd-screen"):
+        _write_lcd_frames(
+            frames,
+            lock_file=lock_file,
+            expires_at=now + LCD_SUMMARY_EXPIRES_AFTER,
+        )
+    else:
+        lock_file.unlink(missing_ok=True)
 
     config.last_run_at = now
     config.last_prompt = prompt
