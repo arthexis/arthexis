@@ -3,7 +3,8 @@
 {% block title %}{% trans "MTG Hypergeometric Calculator" %}{% endblock %}
 {% block content %}
 <style>
-  #mtg-hypergeometric-calculator input.form-control {
+  #mtg-hypergeometric-calculator input.form-control,
+  #mtg-hypergeometric-calculator select.form-select {
     height: calc(2.25rem + 2px);
   }
 </style>
@@ -12,38 +13,127 @@
 <form method="post" id="mtg-hypergeometric-calculator">
   {% csrf_token %}
   <div class="row g-4 mb-3">
-    <div class="col-lg-4">
+    <div class="col-lg-5">
       <div class="mb-3">
-        <label class="form-label" for="deck_size">{% trans "Deck Size:" %}</label>
+        <label class="form-label" for="mtg_format">{% trans "Format:" %}</label>
+        <select id="mtg_format" class="form-select" name="mtg_format">
+          {% for option in format_options %}
+          <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="deck_size">{% trans "Library Size Used for Odds:" %}</label>
         <input id="deck_size" type="number" class="form-control" name="deck_size" required min="1" value="{{ form.deck_size }}" />
       </div>
       <div class="mb-3">
-        <label class="form-label" for="success_states">{% trans "Target Cards in Deck:" %}</label>
+        <label class="form-label" for="success_states">{% trans "Target Cards in Library:" %}</label>
         <input id="success_states" type="number" class="form-control" name="success_states" required min="0" value="{{ form.success_states }}" />
       </div>
-      <div class="mb-3">
-        <label class="form-label" for="draws">{% trans "Cards Drawn:" %}</label>
-        <input id="draws" type="number" class="form-control" name="draws" required min="1" value="{{ form.draws }}" />
+      <div class="form-check mb-3">
+        <input id="allow_extra_copies" type="checkbox" class="form-check-input" name="allow_extra_copies" value="1"{% if form.allow_extra_copies %} checked{% endif %} />
+        <label class="form-check-label" for="allow_extra_copies">{% trans "Target can ignore normal copy limits" %}</label>
       </div>
       <div class="mb-3">
-        <label class="form-label" for="min_successes">{% trans "Minimum Targets Drawn:" %}</label>
-        <input id="min_successes" type="number" class="form-control" name="min_successes" required min="0" value="{{ form.min_successes }}" />
+        <label class="form-label" for="draw_timing">{% trans "Cards Seen Mode:" %}</label>
+        <select id="draw_timing" class="form-select" name="draw_timing">
+          {% for option in draw_timing_options %}
+          <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
       </div>
-      <div class="mb-3">
-        <label class="form-label" for="exact_successes">{% trans "Exact Targets Drawn:" %}</label>
-        <input id="exact_successes" type="number" class="form-control" name="exact_successes" min="0" value="{{ form.exact_successes }}" />
-        <small class="text-muted">{% trans "Optional: leave empty if exact odds are not needed." %}</small>
+      <div class="row g-3">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label" for="draws">{% trans "Manual Cards Seen:" %}</label>
+          <input id="draws" type="number" class="form-control" name="draws" min="1" value="{{ form.draws }}" />
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label" for="turn_number">{% trans "Turn Number:" %}</label>
+          <input id="turn_number" type="number" class="form-control" name="turn_number" min="1" value="{{ form.turn_number }}" />
+        </div>
       </div>
+      <div class="row g-3">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label" for="min_successes">{% trans "Minimum Targets Seen:" %}</label>
+          <input id="min_successes" type="number" class="form-control" name="min_successes" required min="0" value="{{ form.min_successes }}" />
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label" for="exact_successes">{% trans "Exact Targets Seen:" %}</label>
+          <input id="exact_successes" type="number" class="form-control" name="exact_successes" min="0" value="{{ form.exact_successes }}" />
+        </div>
+      </div>
+      <div class="border-top pt-3 mt-2">
+        <div class="form-check mb-3">
+          <input id="mulligan_enabled" type="checkbox" class="form-check-input" name="mulligan_enabled" value="1"{% if form.mulligan_enabled %} checked{% endif %} />
+          <label class="form-check-label" for="mulligan_enabled">{% trans "Calculate London mulligan odds" %}</label>
+        </div>
+        <div class="row g-3">
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="mulligan_max">{% trans "Mulligans to Evaluate:" %}</label>
+            <input id="mulligan_max" type="number" class="form-control" name="mulligan_max" min="0" max="7" value="{{ form.mulligan_max }}" />
+          </div>
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="mulligan_condition">{% trans "Keep Condition:" %}</label>
+            <select id="mulligan_condition" class="form-select" name="mulligan_condition">
+              {% for option in mulligan_condition_options %}
+              <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-check mb-3">
+          <input id="mulligan_free_first" type="checkbox" class="form-check-input" name="mulligan_free_first" value="1"{% if form.mulligan_free_first %} checked{% endif %} />
+          <label class="form-check-label" for="mulligan_free_first">{% trans "First mulligan does not reduce final hand size" %}</label>
+        </div>
+        <div class="row g-3">
+          <div class="col-sm-4 mb-3">
+            <label class="form-label" for="land_count">{% trans "Lands / Sources:" %}</label>
+            <input id="land_count" type="number" class="form-control" name="land_count" min="0" value="{{ form.land_count }}" />
+          </div>
+          <div class="col-sm-4 mb-3">
+            <label class="form-label" for="min_lands">{% trans "Minimum Lands:" %}</label>
+            <input id="min_lands" type="number" class="form-control" name="min_lands" min="0" value="{{ form.min_lands }}" />
+          </div>
+          <div class="col-sm-4 mb-3">
+            <label class="form-label" for="max_lands">{% trans "Maximum Lands:" %}</label>
+            <input id="max_lands" type="number" class="form-control" name="max_lands" min="0" value="{{ form.max_lands }}" />
+          </div>
+        </div>
+      </div>
+      <div class="border-top pt-3 mt-2">
+        <div class="form-check mb-3">
+          <input id="multivariate_enabled" type="checkbox" class="form-check-input" name="multivariate_enabled" value="1"{% if form.multivariate_enabled %} checked{% endif %} />
+          <label class="form-check-label" for="multivariate_enabled">{% trans "Calculate two-package odds" %}</label>
+        </div>
+        <div class="row g-3">
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="group_a_count">{% trans "Package A Cards:" %}</label>
+            <input id="group_a_count" type="number" class="form-control" name="group_a_count" min="0" value="{{ form.group_a_count }}" />
+          </div>
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="group_a_min">{% trans "Package A Minimum:" %}</label>
+            <input id="group_a_min" type="number" class="form-control" name="group_a_min" min="0" value="{{ form.group_a_min }}" />
+          </div>
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="group_b_count">{% trans "Package B Cards:" %}</label>
+            <input id="group_b_count" type="number" class="form-control" name="group_b_count" min="0" value="{{ form.group_b_count }}" />
+          </div>
+          <div class="col-sm-6 mb-3">
+            <label class="form-label" for="group_b_min">{% trans "Package B Minimum:" %}</label>
+            <input id="group_b_min" type="number" class="form-control" name="group_b_min" min="0" value="{{ form.group_b_min }}" />
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
     </div>
-    <div class="col-lg-8 d-flex flex-column{% if result or error %} order-first order-lg-last{% endif %}">
+    <div class="col-lg-7 d-flex flex-column{% if result or error %} order-first order-lg-last{% endif %}">
       {% if not result and not error %}
       <div class="mb-3">
         <div class="p-3 mb-3 rounded" style="border: 1px solid rgba(0, 0, 0, 0.15);">
           {% blocktrans trimmed %}
-          Use this calculator to estimate opening-hand and draw-step consistency for key cards. This tool uses hypergeometric distribution assumptions (draws without replacement) and is ideal for MTG mulligan and deck-construction planning.
+          Estimate MTG card-seeing odds with library-size, turn-position, mulligan, and disjoint package assumptions.
           {% endblocktrans %}
         </div>
-        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
       </div>
       {% if templates %}
       <div class="mb-3">
@@ -62,26 +152,80 @@
       {% if error %}
       <p class="text-danger">{% blocktrans %}Error: {{ error }}{% endblocktrans %}</p>
       {% elif result %}
+      {% if warnings %}
+      <div class="alert alert-warning">
+        <ul class="mb-0">
+          {% for warning in warnings %}
+          <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
       <div class="calc-result">
         <h2>{% trans "Calculator Results" %}</h2>
+        {% if cards_seen_label %}<p>{{ cards_seen_label }}</p>{% endif %}
         <table class="table table-sm">
           <tbody>
-            <tr><th>{% trans "Chance of at least target amount" %}</th><td>{{ result.probability_at_least|floatformat:4 }}</td></tr>
-            <tr><th>{% trans "Chance of any target card" %}</th><td>{{ result.probability_any|floatformat:4 }}</td></tr>
-            <tr><th>{% trans "Chance of no target cards" %}</th><td>{{ result.probability_none|floatformat:4 }}</td></tr>
-            <tr><th>{% trans "Estimated draws to reach 80% chance of any target" %}</th><td>{% if result.draws_to_80_percent %}{{ result.draws_to_80_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
-            <tr><th>{% trans "Estimated draws to reach 90% chance of any target" %}</th><td>{% if result.draws_to_90_percent %}{{ result.draws_to_90_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
-            <tr><th>{% trans "Estimated draws to reach 99% chance of any target" %}</th><td>{% if result.draws_to_99_percent %}{{ result.draws_to_99_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
+            <tr><th>{% trans "Chance of at least selected target amount" %}</th><td>{{ result.probability_at_least_percent|floatformat:2 }}%</td></tr>
+            <tr><th>{% trans "Chance of any target card" %}</th><td>{{ result.probability_any_percent|floatformat:2 }}%</td></tr>
+            <tr><th>{% trans "Chance of no target cards" %}</th><td>{{ result.probability_none_percent|floatformat:2 }}%</td></tr>
             {% if result.probability_exact is not None %}
-            <tr><th>{% trans "Chance of exact target amount" %}</th><td>{{ result.probability_exact|floatformat:4 }}</td></tr>
+            <tr><th>{% trans "Chance of exact target amount" %}</th><td>{{ result.probability_exact_percent|floatformat:2 }}%</td></tr>
             {% endif %}
           </tbody>
         </table>
+        <h3>{% trans "Draws to Probability Thresholds" %}</h3>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{% trans "Threshold" %}</th>
+              <th>{% trans "Any target" %}</th>
+              <th>{% trans "Selected minimum" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in result.threshold_rows %}
+            <tr>
+              <th>{{ row.label }}</th>
+              <td>{% if row.any_reachable %}{{ row.any_draws }}{% else %}{% trans "Not reachable" %}{% endif %}</td>
+              <td>{% if row.selected_reachable %}{{ row.selected_draws }}{% else %}{% trans "Not reachable" %}{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if mulligan_rows %}
+        <h3>{% trans "London Mulligan Odds" %}</h3>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{% trans "Mulligans Taken" %}</th>
+              <th>{% trans "Final Hand Size" %}</th>
+              <th>{% trans "Keepable This Hand" %}</th>
+              <th>{% trans "Cumulative Keep Chance" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in mulligan_rows %}
+            <tr>
+              <td>{{ row.mulligans_taken }}</td>
+              <td>{{ row.final_hand_size }}</td>
+              <td>{{ row.keep_probability_percent|floatformat:2 }}%</td>
+              <td>{{ row.cumulative_probability_percent|floatformat:2 }}%</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        {% if multivariate_result %}
+        <h3>{% trans "Two-Package Odds" %}</h3>
+        <table class="table table-sm">
+          <tbody>
+            <tr><th>{% trans "Chance of seeing both package minimums" %}</th><td>{{ multivariate_result.probability_percent|floatformat:2 }}%</td></tr>
+          </tbody>
+        </table>
+        {% endif %}
       </div>
       {% endif %}
-      <div class="mt-auto mb-3">
-        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate Again" %}</button>
-      </div>
       {% endif %}
     </div>
   </div>
