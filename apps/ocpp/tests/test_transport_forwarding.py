@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from asyncio import sleep
+from asyncio import get_running_loop, sleep
 from datetime import timedelta
 from threading import Lock
 from types import SimpleNamespace
@@ -60,6 +60,32 @@ async def test_forward_charge_point_reply_sends_and_clears_pending_id(monkeypatc
     wrapped = json.loads(forwarded_message)
     assert wrapped["meta"]["direction"] == "cp_to_csms_reply"
     assert "msg-1" not in session.pending_call_ids
+
+
+@pytest.mark.anyio
+async def test_forwarding_payload_local_node_lookup_stays_outside_event_loop(monkeypatch):
+    """Route metadata lookup should not run synchronous ORM work in the async loop."""
+
+    transport = DummyTransport()
+    charger = SimpleNamespace(pk=10, charger_id="CP-10", connector_id=1)
+
+    def get_local_node():
+        try:
+            get_running_loop()
+        except RuntimeError:
+            return SimpleNamespace(uuid="00000000-0000-4000-8000-000000000010")
+        raise AssertionError("Node.get_local was called in the event loop")
+
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.Node.get_local", get_local_node)
+
+    wrapped = await transport._wrap_forwarding_payload(
+        charger,
+        '[2,"msg-1","Heartbeat",{}]',
+        direction="cp_to_csms",
+    )
+
+    payload = json.loads(wrapped)
+    assert payload["meta"]["route"] == ["00000000-0000-4000-8000-000000000010"]
 
 
 @pytest.mark.anyio
