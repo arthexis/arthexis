@@ -66,7 +66,7 @@ class RfidMixin:
             RFID_FALLBACK_ACCOUNT_FEATURE_SLUG,
             cache_key="feature-enabled:rfid-fallback-account",
             timeout=300,
-            default=True,
+            default=False,
         )
 
     def _resolve_fallback_account(self) -> CustomerAccount:
@@ -226,7 +226,10 @@ class RfidMixin:
             fallback_enabled
             and policy == self.charger.AuthorizationPolicy.STRICT
             and id_tag
-            and (tag is None or tag.allowed)
+            and tag is not None
+            and not tag_created
+            and tag.allowed
+            and tag.released
         ):
             return AuthorizationDecision(
                 status="Accepted",

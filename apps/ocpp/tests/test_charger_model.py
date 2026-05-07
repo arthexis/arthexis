@@ -2,13 +2,13 @@ import datetime as dt
 from datetime import timedelta
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
-from apps.ocpp.models import Charger
 from apps.groups.models import SecurityGroup
 from apps.nodes.models import Node
-
+from apps.ocpp.models import Charger
 
 pytestmark = pytest.mark.django_db
 
@@ -127,3 +127,32 @@ def test_charge_station_manager_is_authorized_for_ws_auth(django_user_model):
     )
 
     assert charger.is_ws_user_authorized(manager) is True
+
+
+def test_resolved_authorization_policy_defaults_to_open():
+    charger = Charger.objects.create(charger_id="CH-POLICY-DEFAULT")
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.OPEN
+
+
+@override_settings(OCPP_AUTHORIZATION_POLICY="strict")
+def test_resolved_authorization_policy_honors_global_setting():
+    charger = Charger.objects.create(charger_id="CH-POLICY-STRICT")
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
+
+
+@override_settings(OCPP_AUTHORIZATION_POLICY="strcit")
+def test_resolved_authorization_policy_invalid_global_setting_fails_closed():
+    charger = Charger.objects.create(charger_id="CH-POLICY-BAD-GLOBAL")
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT
+
+
+def test_resolved_authorization_policy_invalid_charger_setting_fails_closed():
+    charger = Charger.objects.create(
+        charger_id="CH-POLICY-BAD-LOCAL",
+        authorization_policy="strcit",
+    )
+
+    assert charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.STRICT

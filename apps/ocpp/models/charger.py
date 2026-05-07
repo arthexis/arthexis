@@ -4,11 +4,15 @@ from django.conf import settings
 from django.urls import NoReverseMatch
 
 from apps.locale.models import Language
-from apps.sites.utils import SITE_OPERATOR_GROUP_NAME, user_in_charge_station_manager_group
+from apps.sites.utils import (
+    SITE_OPERATOR_GROUP_NAME,
+    user_in_charge_station_manager_group,
+)
 
 from .. import store
 from .base import *
 from .transaction import annotate_transaction_energy_bounds
+
 
 class Charger(Ownable):
     """Known charge point."""
@@ -499,7 +503,7 @@ class Charger(Ownable):
 
         return self.last_status_timestamp or self.last_heartbeat
 
-    def station_record(self) -> "Charger | None":
+    def station_record(self) -> Charger | None:
         """Return the aggregate station record for this charge point when available."""
 
         if self.connector_id is None:
@@ -512,7 +516,7 @@ class Charger(Ownable):
             .first()
         )
 
-    def offline_notification_source(self) -> "Charger":
+    def offline_notification_source(self) -> Charger:
         """Return the charger record supplying offline notification settings."""
 
         if self.email_when_offline or self.maintenance_email:
@@ -711,12 +715,18 @@ class Charger(Ownable):
     def resolved_authorization_policy(self) -> str:
         """Return charger-level auth policy with global fallback."""
         explicit = str(self.authorization_policy or "").strip().lower()
-        if explicit in self.AuthorizationPolicy.values:
-            return explicit
+        if explicit:
+            if explicit in self.AuthorizationPolicy.values:
+                return explicit
+            return self.AuthorizationPolicy.STRICT
         configured = str(getattr(settings, "OCPP_AUTHORIZATION_POLICY", "") or "").strip().lower()
-        if configured in self.AuthorizationPolicy.values:
-            return configured
-        return self.AuthorizationPolicy.STRICT
+        if configured:
+            if configured in self.AuthorizationPolicy.values:
+                return configured
+            return self.AuthorizationPolicy.STRICT
+        # Keep legacy compatibility unless the deployment or charger explicitly
+        # selects stricter access control.
+        return self.AuthorizationPolicy.OPEN
 
     @classmethod
     def sanitize_auto_location_name(cls, value: str) -> str:
