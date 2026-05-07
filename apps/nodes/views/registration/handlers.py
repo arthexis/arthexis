@@ -618,12 +618,6 @@ def register_node(request):
         else None
     )
     existing_node = Node.objects.filter(mac_address=mac_address).first()
-    if existing_node is None:
-        existing_node = _find_reserved_node_for_payload(
-            payload,
-            address_value=address_value,
-            ipv4_value=ipv4_value,
-        )
     relation_value = payload.relation_value
     if relation_value == Node.Relation.SELF and payload.host_instance_id:
         other_self_exists = (
