@@ -720,10 +720,8 @@ class Charger(Ownable):
                 return explicit
             return self.AuthorizationPolicy.STRICT
         configured = str(getattr(settings, "OCPP_AUTHORIZATION_POLICY", "") or "").strip().lower()
-        if configured:
-            if configured in self.AuthorizationPolicy.values:
-                return configured
-            return self.AuthorizationPolicy.STRICT
+        if configured in self.AuthorizationPolicy.values:
+            return configured
         return self.AuthorizationPolicy.STRICT
 
     @classmethod
