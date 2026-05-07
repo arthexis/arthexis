@@ -5,10 +5,10 @@ from django.urls import reverse
 
 from apps.awg.models import HypergeometricTemplate
 from apps.awg.views.reports import (
-    _calculate_hypergeometric_totals,
+    MAX_HYPERGEOMETRIC_INPUT,
+    MTG_PROBABILITY_THRESHOLDS,
     _draws_for_probability_thresholds,
 )
-
 
 hypergeometric_presets_migration = importlib.import_module(
     "apps.awg.migrations.0004_hypergeometric_presets"
@@ -198,13 +198,24 @@ def test_energy_tariff_is_last_navigation_tab(db):
 
 
 def test_draws_for_probability_thresholds_returns_none_without_targets():
+    thresholds = tuple(MTG_PROBABILITY_THRESHOLDS)
     result = _draws_for_probability_thresholds(
         deck_size=60,
         success_states=0,
-        thresholds=(0.8, 0.9, 0.99),
+        thresholds=thresholds,
     )
 
-    assert result == {0.8: None, 0.9: None, 0.99: None}
+    assert result == dict.fromkeys(thresholds)
+
+
+def test_draws_for_probability_thresholds_caps_large_decks():
+    result = _draws_for_probability_thresholds(
+        deck_size=MAX_HYPERGEOMETRIC_INPUT + 100,
+        success_states=1,
+        thresholds=(1.0,),
+    )
+
+    assert result == {1.0: None}
 
 
 def test_mtg_hypergeometric_results_include_draws_to_high_probability(db):
