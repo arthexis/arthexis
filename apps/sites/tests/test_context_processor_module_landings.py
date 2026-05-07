@@ -36,7 +36,7 @@ def test_sort_module_landings_keeps_non_ocpp_order():
     ]
 
 
-def test_limit_anon_ocpp_landings_handles_request_without_user():
+def test_limit_anon_ocpp_landings_keeps_charge_point_entries_for_guests():
     module = SimpleNamespace(path="/ocpp/", menu="Charge Points")
     landings = [
         SimpleNamespace(path="/ocpp/cpms/dashboard/"),
@@ -45,5 +45,8 @@ def test_limit_anon_ocpp_landings_handles_request_without_user():
 
     filtered = _limit_anon_ocpp_landings(module, SimpleNamespace(), landings)
 
-    assert [landing.path for landing in filtered] == ["/ocpp/charge-point-models/"]
-    assert str(module.menu) == "Supported CP Models"
+    assert [landing.path for landing in filtered] == [
+        "/ocpp/cpms/dashboard/",
+        "/ocpp/charge-point-models/",
+    ]
+    assert module.menu == "Charge Points"
