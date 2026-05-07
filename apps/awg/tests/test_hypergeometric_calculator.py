@@ -4,7 +4,10 @@ from django.test import Client
 from django.urls import reverse
 
 from apps.awg.models import HypergeometricTemplate
-from apps.awg.views.reports import _calculate_hypergeometric_totals
+from apps.awg.views.reports import (
+    _calculate_hypergeometric_totals,
+    _draws_for_probability_thresholds,
+)
 
 
 hypergeometric_presets_migration = importlib.import_module(
@@ -168,3 +171,71 @@ def test_mtg_hypergeometric_calculator_rejects_excessive_deck_size(db):
 
     assert response.status_code == 200
     assert "Deck size must be 500 or less." in response.content.decode()
+
+
+def test_public_calculators_accessible_without_login(db):
+    client = Client()
+
+    assert client.get(reverse("awg:calculator")).status_code == 200
+    assert client.get(reverse("awg:electrical_power")).status_code == 200
+    assert client.get(reverse("awg:ev_charging")).status_code == 200
+    assert client.get(reverse("awg:mtg_hypergeometric")).status_code == 200
+
+
+def test_energy_tariff_requires_login(db):
+    response = Client().get(reverse("awg:energy_tariff"))
+
+    assert response.status_code == 302
+    assert response["Location"].startswith("/login/?next=")
+
+
+def test_energy_tariff_is_last_navigation_tab(db):
+    response = Client().get(reverse("awg:calculator"))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert body.rfind("MTG Hypergeometric") < body.rfind("Energy Tariff")
+
+
+def test_draws_for_probability_thresholds_returns_none_without_targets():
+    result = _draws_for_probability_thresholds(
+        deck_size=60,
+        success_states=0,
+        thresholds=(0.8, 0.9, 0.99),
+    )
+
+    assert result == {0.8: None, 0.9: None, 0.99: None}
+
+
+def test_mtg_hypergeometric_results_include_draws_to_high_probability(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Estimated draws to reach 80% chance of any target" in body
+    assert "Estimated draws to reach 90% chance of any target" in body
+    assert "Estimated draws to reach 99% chance of any target" in body
+
+
+def test_mtg_hypergeometric_results_show_not_reachable_when_no_targets(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "0",
+            "draws": "7",
+            "min_successes": "0",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert body.count("Not reachable") >= 3

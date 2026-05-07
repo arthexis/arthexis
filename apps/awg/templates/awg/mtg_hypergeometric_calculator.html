@@ -69,6 +69,9 @@
             <tr><th>{% trans "Chance of at least target amount" %}</th><td>{{ result.probability_at_least|floatformat:4 }}</td></tr>
             <tr><th>{% trans "Chance of any target card" %}</th><td>{{ result.probability_any|floatformat:4 }}</td></tr>
             <tr><th>{% trans "Chance of no target cards" %}</th><td>{{ result.probability_none|floatformat:4 }}</td></tr>
+            <tr><th>{% trans "Estimated draws to reach 80% chance of any target" %}</th><td>{% if result.draws_to_80_percent %}{{ result.draws_to_80_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
+            <tr><th>{% trans "Estimated draws to reach 90% chance of any target" %}</th><td>{% if result.draws_to_90_percent %}{{ result.draws_to_90_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
+            <tr><th>{% trans "Estimated draws to reach 99% chance of any target" %}</th><td>{% if result.draws_to_99_percent %}{{ result.draws_to_99_percent }}{% else %}{% trans "Not reachable" %}{% endif %}</td></tr>
             {% if result.probability_exact is not None %}
             <tr><th>{% trans "Chance of exact target amount" %}</th><td>{{ result.probability_exact|floatformat:4 }}</td></tr>
             {% endif %}

@@ -241,6 +241,38 @@ def _hypergeometric_probability(
     return numerator / denominator
 
 
+
+
+def _draws_for_probability_thresholds(
+    *,
+    deck_size: int,
+    success_states: int,
+    thresholds: tuple[float, ...],
+) -> dict[float, Optional[int]]:
+    """Return minimum draws needed to reach each probability threshold."""
+
+    if success_states <= 0:
+        return {threshold: None for threshold in thresholds}
+
+    draws_needed: dict[float, Optional[int]] = {threshold: None for threshold in thresholds}
+    remaining = set(thresholds)
+    for draw_count in range(1, deck_size + 1):
+        probability_none = _hypergeometric_probability(
+            population_size=deck_size,
+            success_states=success_states,
+            draws=draw_count,
+            successes_drawn=0,
+        )
+        probability_any = 1 - probability_none
+        met = {threshold for threshold in remaining if probability_any >= threshold}
+        for threshold in met:
+            draws_needed[threshold] = draw_count
+        remaining -= met
+        if not remaining:
+            break
+
+    return draws_needed
+
 def _calculate_hypergeometric_totals(
     *,
     deck_size: int,
@@ -278,11 +310,21 @@ def _calculate_hypergeometric_totals(
         draws=draws,
         successes_drawn=0,
     )
+    probability_any = 1 - probability_none
+    draws_to_high_chance = _draws_for_probability_thresholds(
+        deck_size=deck_size,
+        success_states=success_states,
+        thresholds=(0.8, 0.9, 0.99),
+    )
+
     return {
         "probability_exact": probability_exact,
         "probability_at_least": probability_at_least,
         "probability_none": probability_none,
-        "probability_any": 1 - probability_none,
+        "probability_any": probability_any,
+        "draws_to_80_percent": draws_to_high_chance[0.8],
+        "draws_to_90_percent": draws_to_high_chance[0.9],
+        "draws_to_99_percent": draws_to_high_chance[0.99],
     }
 
 
@@ -356,7 +398,6 @@ def energy_tariff_calculator(request):
 
 
 @landing(_lazy("Electrical Power Calculator"))
-@login_required(login_url="pages:login")
 def electrical_power_calculator(request):
     """Estimate kVA, kW, and kVAr from field voltage/current measurements."""
 
@@ -442,7 +483,6 @@ def electrical_power_calculator(request):
 
 
 @landing(_lazy("EV Charging Session Calculator"))
-@login_required(login_url="pages:login")
 def ev_charging_calculator(request):
     """Estimate EV charging time and energy cost for a target SOC window."""
 

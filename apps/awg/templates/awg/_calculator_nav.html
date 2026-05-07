@@ -3,9 +3,6 @@
   <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'cable' %} active{% endif %}" {% if active_calculator == 'cable' %}aria-current="page"{% endif %} href="{% url 'awg:calculator' %}">
     {% trans "Cable & Conduit" %}
   </a>
-  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'energy_tariff' %} active{% endif %}" {% if active_calculator == 'energy_tariff' %}aria-current="page"{% endif %} href="{% url 'awg:energy_tariff' %}">
-    {% trans "Energy Tariff" %}
-  </a>
   <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'electrical_power' %} active{% endif %}" {% if active_calculator == 'electrical_power' %}aria-current="page"{% endif %} href="{% url 'awg:electrical_power' %}">
     {% trans "Electrical Power" %}
   </a>
@@ -14,5 +11,8 @@
   </a>
   <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'mtg_hypergeometric' %} active{% endif %}" {% if active_calculator == 'mtg_hypergeometric' %}aria-current="page"{% endif %} href="{% url 'awg:mtg_hypergeometric' %}">
     {% trans "MTG Hypergeometric" %}
+  </a>
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'energy_tariff' %} active{% endif %}" {% if active_calculator == 'energy_tariff' %}aria-current="page"{% endif %} href="{% url 'awg:energy_tariff' %}">
+    {% trans "Energy Tariff" %}
   </a>
 </nav>
