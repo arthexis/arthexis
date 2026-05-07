@@ -882,12 +882,14 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         }
         metadata_path = worktree / PATCHWORK_METADATA
         try:
-            descriptor = os.open(
+            with open(
                 metadata_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
-                0o600,
-            )
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                "x",
+                encoding="utf-8",
+                opener=lambda path, flags: os.open(
+                    path, flags | getattr(os, "O_NOFOLLOW", 0), 0o600
+                ),
+            ) as handle:
                 handle.write(json.dumps(metadata, indent=2) + "\n")
         except OSError:
             metadata["metadataWriteError"] = True
