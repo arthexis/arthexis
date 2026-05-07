@@ -46,6 +46,8 @@ REQUEUEABLE_MONITOR_STATUSES = {
     GitHubMonitorItem.Status.TIMED_OUT,
     GitHubMonitorItem.Status.FAILED,
 }
+DEFAULT_TRUSTED_ISSUE_APPROVALS = 1000
+TRUSTED_AUTHOR_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 
 GITHUB_MONITOR_FEATURE_FIELDS = {
@@ -365,6 +367,42 @@ def evaluate_readiness() -> dict[str, Any]:
     }
 
 
+def _trusted_issue_authors(task: GitHubMonitorTask) -> set[str]:
+    configured = getattr(settings, "GITHUB_MONITOR_TRUSTED_AUTHORS", ())
+    if isinstance(configured, str):
+        configured_authors = configured.replace(",", " ").split()
+    elif isinstance(configured, Mapping):
+        configured_authors = [
+            author for author, enabled in configured.items() if enabled
+        ]
+    else:
+        try:
+            configured_authors = iter(configured)
+        except TypeError:
+            configured_authors = ()
+    trusted = {
+        str(author).strip().lower()
+        for author in configured_authors
+        if str(author).strip()
+    }
+    repository_owner = str(task.repository.owner or "").strip().lower()
+    if repository_owner:
+        trusted.add(repository_owner)
+    return trusted
+
+
+def _trusted_issue_approval_threshold() -> int:
+    raw_threshold = getattr(
+        settings,
+        "GITHUB_MONITOR_TRUSTED_ISSUE_APPROVALS",
+        DEFAULT_TRUSTED_ISSUE_APPROVALS,
+    )
+    try:
+        return max(0, int(raw_threshold))
+    except (TypeError, ValueError):
+        return DEFAULT_TRUSTED_ISSUE_APPROVALS
+
+
 def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
     if "pull_request" in item:
         return False
@@ -372,6 +410,23 @@ def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
         return False
     marker = (task.issue_marker or "").strip()
     if marker and marker not in str(item.get("body") or ""):
+        return False
+    try:
+        author_login = (
+            str((item.get("user") or {}).get("login") or "").strip().lower()
+        )
+    except (AttributeError, TypeError, ValueError):
+        author_login = ""
+    try:
+        approvals = int((item.get("reactions") or {}).get("+1") or 0)
+    except (AttributeError, TypeError, ValueError):
+        approvals = 0
+    author_association = str(item.get("author_association") or "").strip().upper()
+    if (
+        author_login not in _trusted_issue_authors(task)
+        and author_association not in TRUSTED_AUTHOR_ASSOCIATIONS
+        and approvals < _trusted_issue_approval_threshold()
+    ):
         return False
     return isinstance(item.get("number"), int)
 
