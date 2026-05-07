@@ -8,10 +8,15 @@ from apps.awg.views.reports import (
     MAX_HYPERGEOMETRIC_INPUT,
     MTG_PROBABILITY_THRESHOLDS,
     _draws_for_probability_thresholds,
+    _mulligan_keep_probability,
+    _probability_at_least_successes,
 )
 
 hypergeometric_presets_migration = importlib.import_module(
     "apps.awg.migrations.0004_hypergeometric_presets"
+)
+hypergeometric_description_migration = importlib.import_module(
+    "apps.awg.migrations.0005_refresh_hypergeometric_preset_descriptions"
 )
 
 
@@ -75,6 +80,38 @@ def test_mtg_hypergeometric_calculator_includes_seeded_format_presets(db):
     assert "60-card Standard" in body
     assert "100-card Commander" in body
     assert "360-card Realm" in body
+
+
+def test_hypergeometric_description_migration_keeps_realm_preset(db):
+    user_template = HypergeometricTemplate.objects.create(
+        name="100-card Commander",
+        description="User commander preset",
+        deck_size=99,
+        success_states=1,
+        draws=10,
+        min_successes=1,
+        show_in_pages=True,
+    )
+    hypergeometric_presets_migration.create_presets(
+        MigrationApps(), MigrationSchemaEditor()
+    )
+
+    hypergeometric_description_migration.update_descriptions(
+        MigrationApps(), MigrationSchemaEditor()
+    )
+
+    user_template.refresh_from_db()
+    assert user_template.description == "User commander preset"
+    assert HypergeometricTemplate.objects.filter(
+        name="100-card Commander",
+        description__contains="99-card library after the commander",
+        is_seed_data=True,
+    ).exists()
+    assert HypergeometricTemplate.objects.filter(
+        name="360-card Realm",
+        description__contains="Realm baseline",
+        is_seed_data=True,
+    ).exists()
 
 
 def test_hypergeometric_preset_migration_preserves_duplicate_user_names(db):
@@ -154,8 +191,8 @@ def test_mtg_hypergeometric_calculator_returns_probability_results(db):
 
     assert response.status_code == 200
     body = response.content.decode()
-    assert "Chance of at least target amount" in body
-    assert "0.3995" in body
+    assert "Chance of at least selected target amount" in body
+    assert "39.95%" in body
 
 
 def test_mtg_hypergeometric_calculator_rejects_excessive_deck_size(db):
@@ -218,6 +255,119 @@ def test_draws_for_probability_thresholds_caps_large_decks():
     assert result == {1.0: None}
 
 
+def test_draws_for_probability_thresholds_respect_selected_minimum():
+    any_target = _draws_for_probability_thresholds(
+        deck_size=60,
+        success_states=4,
+        min_successes=1,
+        thresholds=(0.8,),
+    )
+    selected_minimum = _draws_for_probability_thresholds(
+        deck_size=60,
+        success_states=4,
+        min_successes=2,
+        thresholds=(0.8,),
+    )
+
+    assert any_target[0.8] is not None
+    assert selected_minimum[0.8] is not None
+    assert any_target[0.8] < selected_minimum[0.8]
+
+
+def test_mtg_hypergeometric_calculator_derives_cards_seen_on_play(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draw_timing": "on_play",
+            "draws": "7",
+            "turn_number": "3",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "By turn 3 on the play (9 cards seen)" in body
+    assert "48.75%" in body
+
+
+def test_mtg_hypergeometric_opening_hand_ignores_turn_number(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draw_timing": "opening_hand",
+            "draws": "not-active",
+            "turn_number": "",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Opening hand (7 cards)" in body
+    assert "Turn Number is required" not in body
+
+
+def test_mtg_hypergeometric_ignores_disabled_section_numeric_values(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "mulligan_max": "stale",
+            "land_count": "stale",
+            "group_a_count": "stale",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "All inputs must be whole numbers." not in body
+    assert "Chance of at least selected target amount" in body
+
+
+def test_mtg_hypergeometric_calculator_warns_for_commander_copy_limits(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "mtg_format": "commander",
+            "deck_size": "100",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Commander odds usually use a 99-card library" in body
+    assert "Commander normally allows only one copy" in body
+
+
+def test_mtg_hypergeometric_calculator_allows_limited_duplicates(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "mtg_format": "limited",
+            "deck_size": "40",
+            "success_states": "6",
+            "draws": "7",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "normally cannot include more than four" not in body
+    assert "Chance of at least selected target amount" in body
+
+
 def test_mtg_hypergeometric_results_include_draws_to_high_probability(db):
     response = Client().post(
         reverse("awg:mtg_hypergeometric"),
@@ -231,9 +381,96 @@ def test_mtg_hypergeometric_results_include_draws_to_high_probability(db):
 
     assert response.status_code == 200
     body = response.content.decode()
-    assert "Estimated draws to reach 80% chance of any target" in body
-    assert "Estimated draws to reach 90% chance of any target" in body
-    assert "Estimated draws to reach 99% chance of any target" in body
+    assert "Draws to Probability Thresholds" in body
+    assert "Any target" in body
+    assert "Selected minimum" in body
+
+
+def test_mtg_hypergeometric_results_include_london_mulligan_odds(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "mulligan_enabled": "1",
+            "mulligan_max": "2",
+            "mulligan_condition": "target_lands",
+            "land_count": "24",
+            "min_lands": "2",
+            "max_lands": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "London Mulligan Odds" in body
+    assert "Cumulative Keep Chance" in body
+    assert "Final Hand Size" in body
+
+
+def test_london_mulligan_target_only_draws_seven_before_bottoming():
+    opening_keep_odds = _probability_at_least_successes(
+        deck_size=60,
+        success_states=4,
+        draws=7,
+        min_successes=1,
+    )
+
+    mulligan_to_six_keep_odds = _mulligan_keep_probability(
+        deck_size=60,
+        success_states=4,
+        min_successes=1,
+        condition="target",
+        final_hand_size=6,
+    )
+
+    assert mulligan_to_six_keep_odds == opening_keep_odds
+
+
+def test_mtg_hypergeometric_results_include_two_package_odds(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "multivariate_enabled": "1",
+            "group_a_count": "8",
+            "group_a_min": "1",
+            "group_b_count": "10",
+            "group_b_min": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Two-Package Odds" in body
+    assert "Chance of seeing both package minimums" in body
+
+
+def test_mtg_hypergeometric_rejects_impossible_two_package_minimums(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "multivariate_enabled": "1",
+            "group_a_count": "8",
+            "group_a_min": "4",
+            "group_b_count": "10",
+            "group_b_min": "4",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Two-package minimums cannot exceed cards seen." in body
+    assert "Two-Package Odds" not in body
 
 
 def test_mtg_hypergeometric_results_show_not_reachable_when_no_targets(db):

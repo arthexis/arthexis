@@ -20,6 +20,24 @@ from ..models import HypergeometricTemplate
 
 MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
 MAX_HYPERGEOMETRIC_INPUT = 500
+LONDON_MULLIGAN_DRAW_SIZE = 7
+MTG_FORMAT_CHOICES = (
+    ("constructed", _lazy("Constructed")),
+    ("limited", _lazy("Limited")),
+    ("commander", _lazy("Commander")),
+    ("custom", _lazy("Custom / casual")),
+)
+MTG_DRAW_TIMING_CHOICES = (
+    ("manual", _lazy("Manual cards seen")),
+    ("opening_hand", _lazy("Opening hand")),
+    ("on_play", _lazy("By turn on the play")),
+    ("on_draw", _lazy("By turn on the draw")),
+    ("multiplayer", _lazy("By turn in multiplayer / Commander")),
+)
+MTG_MULLIGAN_CONDITION_CHOICES = (
+    ("target", _lazy("At least selected target count")),
+    ("target_lands", _lazy("Selected targets plus a land/source range")),
+)
 MTG_PROBABILITY_THRESHOLDS = {
     0.8: "draws_to_80_percent",
     0.9: "draws_to_90_percent",
@@ -232,6 +250,8 @@ def _hypergeometric_probability(
 ) -> float:
     """Return P(X = k) for a hypergeometric distribution."""
 
+    if draws < 0 or draws > population_size:
+        return 0.0
     if not 0 <= successes_drawn <= draws:
         return 0.0
     if successes_drawn > success_states or draws - successes_drawn > (
@@ -243,31 +263,88 @@ def _hypergeometric_probability(
         population_size - success_states, draws - successes_drawn
     )
     denominator = comb(population_size, draws)
+    if denominator == 0:
+        return 0.0
     return numerator / denominator
+
+
+def _bounded_card_count_values(min_value: int, max_value: int):
+    safe_min = max(0, min(min_value, MAX_HYPERGEOMETRIC_INPUT))
+    safe_max = max(0, min(max_value, MAX_HYPERGEOMETRIC_INPUT))
+    if safe_min > safe_max:
+        return
+
+    for value in range(MAX_HYPERGEOMETRIC_INPUT + 1):
+        if value < safe_min:
+            continue
+        if value > safe_max:
+            break
+        yield value
+
+
+def _choice_options(
+    choices: tuple[tuple[str, str], ...], selected_value: str
+) -> list[dict[str, object]]:
+    return [
+        {"value": value, "label": label, "selected": value == selected_value}
+        for value, label in choices
+    ]
+
+
+def _normalize_choice(
+    value: str | None, choices: tuple[tuple[str, str], ...], default: str
+) -> str:
+    valid_values = {choice_value for choice_value, _label in choices}
+    return value if value in valid_values else default
+
+
+def _checkbox_enabled(value: str | None) -> bool:
+    return str(value).lower() in {"1", "on", "true", "yes"}
+
+
+def _probability_at_least_successes(
+    *, deck_size: int, success_states: int, draws: int, min_successes: int
+) -> float:
+    max_possible_successes = min(draws, success_states)
+    return sum(
+        _hypergeometric_probability(
+            population_size=deck_size,
+            success_states=success_states,
+            draws=draws,
+            successes_drawn=value,
+        )
+        for value in range(min_successes, max_possible_successes + 1)
+    )
 
 
 def _draws_for_probability_thresholds(
     *,
     deck_size: int,
     success_states: int,
+    min_successes: int = 1,
     thresholds: tuple[float, ...],
 ) -> dict[float, int | None]:
     """Return minimum draws needed to reach each probability threshold."""
 
-    if success_states <= 0:
+    if min_successes <= 0:
+        return dict.fromkeys(thresholds, 0)
+    if success_states <= 0 or min_successes > success_states:
         return dict.fromkeys(thresholds)
 
     draws_needed: dict[float, int | None] = dict.fromkeys(thresholds)
     remaining = set(thresholds)
     for draw_count in range(1, min(deck_size, MAX_HYPERGEOMETRIC_INPUT) + 1):
-        probability_none = _hypergeometric_probability(
-            population_size=deck_size,
+        probability_at_least = _probability_at_least_successes(
+            deck_size=deck_size,
             success_states=success_states,
             draws=draw_count,
-            successes_drawn=0,
+            min_successes=min_successes,
         )
-        probability_any = 1 - probability_none
-        met = {threshold for threshold in remaining if probability_any >= threshold}
+        met = {
+            threshold
+            for threshold in remaining
+            if probability_at_least >= threshold
+        }
         for threshold in met:
             draws_needed[threshold] = draw_count
         remaining -= met
@@ -275,6 +352,249 @@ def _draws_for_probability_thresholds(
             break
 
     return draws_needed
+
+
+def _cards_seen_for_timing(*, draw_timing: str, turn_number: int) -> int:
+    if draw_timing == "opening_hand":
+        return 7
+    if draw_timing == "on_play":
+        return 6 + turn_number
+    if draw_timing in {"on_draw", "multiplayer"}:
+        return 7 + turn_number
+    raise ValueError("Manual card count does not derive cards seen.")
+
+
+def _cards_seen_label(*, draw_timing: str, turn_number: int, draws: int) -> str:
+    if draw_timing == "opening_hand":
+        return _("Opening hand (%(draws)s cards)") % {"draws": draws}
+    if draw_timing == "on_play":
+        return _("By turn %(turn)s on the play (%(draws)s cards seen)") % {
+            "turn": turn_number,
+            "draws": draws,
+        }
+    if draw_timing == "on_draw":
+        return _("By turn %(turn)s on the draw (%(draws)s cards seen)") % {
+            "turn": turn_number,
+            "draws": draws,
+        }
+    if draw_timing == "multiplayer":
+        return _(
+            "By turn %(turn)s in multiplayer / Commander (%(draws)s cards seen)"
+        ) % {
+            "turn": turn_number,
+            "draws": draws,
+        }
+    return _("Manual cards seen (%(draws)s cards)") % {"draws": draws}
+
+
+def _mtg_format_warnings(
+    *,
+    mtg_format: str,
+    deck_size: int,
+    success_states: int,
+    allow_extra_copies: bool,
+) -> list[str]:
+    warnings: list[str] = []
+    if mtg_format == "constructed":
+        if deck_size < 60:
+            warnings.append(
+                _("Constructed decks normally use at least a 60-card library.")
+            )
+        if success_states > 4 and not allow_extra_copies:
+            warnings.append(
+                _(
+                    "Constructed decks normally cannot include more than four "
+                    "copies of one non-basic card across deck and sideboard."
+                )
+            )
+    elif mtg_format == "limited":
+        if deck_size < 40:
+            warnings.append(
+                _("Limited decks normally use at least a 40-card library.")
+            )
+    elif mtg_format == "commander":
+        if deck_size != 99:
+            warnings.append(
+                _(
+                    "Commander odds usually use a 99-card library because the "
+                    "commander starts in the command zone."
+                )
+            )
+        if success_states > 1 and not allow_extra_copies:
+            warnings.append(
+                _(
+                    "Commander normally allows only one copy of each non-basic "
+                    "card in the 99-card library."
+                )
+            )
+    return warnings
+
+
+def _bivariate_hypergeometric_probability(
+    *,
+    population_size: int,
+    group_a_size: int,
+    group_b_size: int,
+    draws: int,
+    min_group_a: int,
+    min_group_b: int,
+) -> float:
+    """Return P(A >= min_group_a and B >= min_group_b) for disjoint groups."""
+
+    other_cards = population_size - group_a_size - group_b_size
+    if draws < 0 or draws > population_size:
+        return 0.0
+
+    denominator = comb(population_size, draws)
+    if denominator == 0:
+        return 0.0
+
+    probability = 0.0
+    max_group_a = min(group_a_size, draws)
+    for group_a_drawn in _bounded_card_count_values(min_group_a, max_group_a):
+        remaining_draws = draws - group_a_drawn
+        max_group_b = min(group_b_size, remaining_draws)
+        for group_b_drawn in _bounded_card_count_values(min_group_b, max_group_b):
+            other_drawn = draws - group_a_drawn - group_b_drawn
+            if not 0 <= other_drawn <= other_cards:
+                continue
+            numerator = (
+                comb(group_a_size, group_a_drawn)
+                * comb(group_b_size, group_b_drawn)
+                * comb(other_cards, other_drawn)
+            )
+            probability += numerator / denominator
+    return probability
+
+
+def _mulligan_hand_is_keepable(
+    *,
+    target_drawn: int,
+    lands_drawn: int,
+    min_targets: int,
+    min_lands: int,
+    max_lands: int,
+    final_hand_size: int,
+) -> bool:
+    if final_hand_size < min_targets + min_lands:
+        return False
+    if target_drawn < min_targets or lands_drawn < min_lands:
+        return False
+
+    bottom_count = LONDON_MULLIGAN_DRAW_SIZE - final_hand_size
+    lowest_kept_lands = max(min_lands, lands_drawn - bottom_count)
+    highest_kept_lands = min(max_lands, lands_drawn, final_hand_size - min_targets)
+    return lowest_kept_lands <= highest_kept_lands
+
+
+def _mulligan_keep_probability(
+    *,
+    deck_size: int,
+    success_states: int,
+    min_successes: int,
+    condition: str,
+    final_hand_size: int,
+    land_count: int | None = None,
+    min_lands: int | None = None,
+    max_lands: int | None = None,
+) -> float:
+    """Return London mulligan keep odds after drawing seven and bottoming cards."""
+
+    if final_hand_size < min_successes:
+        return 0.0
+    if deck_size < LONDON_MULLIGAN_DRAW_SIZE:
+        return 0.0
+
+    # Under the London mulligan rule every mulligan draws seven cards. The final
+    # hand size only constrains whether the drawn hand can survive bottoming.
+    opening_draw_size = LONDON_MULLIGAN_DRAW_SIZE
+    if condition == "target":
+        return _probability_at_least_successes(
+            deck_size=deck_size,
+            success_states=success_states,
+            draws=opening_draw_size,
+            min_successes=min_successes,
+        )
+
+    if land_count is None or min_lands is None or max_lands is None:
+        return 0.0
+
+    other_cards = deck_size - success_states - land_count
+    denominator = comb(deck_size, opening_draw_size)
+    if denominator == 0:
+        return 0.0
+    probability = 0.0
+    for targets_drawn in range(0, min(success_states, opening_draw_size) + 1):
+        remaining_after_targets = opening_draw_size - targets_drawn
+        for lands_drawn in range(0, min(land_count, remaining_after_targets) + 1):
+            other_drawn = opening_draw_size - targets_drawn - lands_drawn
+            if not 0 <= other_drawn <= other_cards:
+                continue
+            if not _mulligan_hand_is_keepable(
+                target_drawn=targets_drawn,
+                lands_drawn=lands_drawn,
+                min_targets=min_successes,
+                min_lands=min_lands,
+                max_lands=max_lands,
+                final_hand_size=final_hand_size,
+            ):
+                continue
+            numerator = (
+                comb(success_states, targets_drawn)
+                * comb(land_count, lands_drawn)
+                * comb(other_cards, other_drawn)
+            )
+            probability += numerator / denominator
+    return probability
+
+
+def _calculate_london_mulligan_odds(
+    *,
+    deck_size: int,
+    success_states: int,
+    min_successes: int,
+    max_mulligans: int,
+    condition: str,
+    free_first_mulligan: bool,
+    land_count: int | None = None,
+    min_lands: int | None = None,
+    max_lands: int | None = None,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    failure_so_far = 1.0
+    safe_max_mulligans = max(0, min(max_mulligans, LONDON_MULLIGAN_DRAW_SIZE))
+    for mulligans_taken in range(LONDON_MULLIGAN_DRAW_SIZE + 1):
+        if mulligans_taken > safe_max_mulligans:
+            break
+        counted_mulligans = (
+            max(0, mulligans_taken - 1)
+            if free_first_mulligan
+            else mulligans_taken
+        )
+        final_hand_size = max(0, LONDON_MULLIGAN_DRAW_SIZE - counted_mulligans)
+        keep_probability = _mulligan_keep_probability(
+            deck_size=deck_size,
+            success_states=success_states,
+            min_successes=min_successes,
+            condition=condition,
+            final_hand_size=final_hand_size,
+            land_count=land_count,
+            min_lands=min_lands,
+            max_lands=max_lands,
+        )
+        cumulative_probability = 1 - (failure_so_far * (1 - keep_probability))
+        rows.append(
+            {
+                "mulligans_taken": mulligans_taken,
+                "final_hand_size": final_hand_size,
+                "keep_probability": keep_probability,
+                "keep_probability_percent": keep_probability * 100,
+                "cumulative_probability": cumulative_probability,
+                "cumulative_probability_percent": cumulative_probability * 100,
+            }
+        )
+        failure_so_far *= 1 - keep_probability
+    return rows
 
 
 def _calculate_hypergeometric_totals(
@@ -298,15 +618,11 @@ def _calculate_hypergeometric_totals(
         else None
     )
 
-    max_possible_successes = min(draws, success_states)
-    probability_at_least = sum(
-        _hypergeometric_probability(
-            population_size=deck_size,
-            success_states=success_states,
-            draws=draws,
-            successes_drawn=value,
-        )
-        for value in range(min_successes, max_possible_successes + 1)
+    probability_at_least = _probability_at_least_successes(
+        deck_size=deck_size,
+        success_states=success_states,
+        draws=draws,
+        min_successes=min_successes,
     )
     probability_none = _hypergeometric_probability(
         population_size=deck_size,
@@ -315,19 +631,43 @@ def _calculate_hypergeometric_totals(
         successes_drawn=0,
     )
     probability_any = 1 - probability_none
-    draws_to_high_chance = _draws_for_probability_thresholds(
+    draws_to_any_chance = _draws_for_probability_thresholds(
         deck_size=deck_size,
         success_states=success_states,
+        min_successes=1,
         thresholds=tuple(MTG_PROBABILITY_THRESHOLDS),
     )
+    draws_to_selected_chance = _draws_for_probability_thresholds(
+        deck_size=deck_size,
+        success_states=success_states,
+        min_successes=min_successes,
+        thresholds=tuple(MTG_PROBABILITY_THRESHOLDS),
+    )
+    threshold_rows = [
+        {
+            "label": f"{int(threshold * 100)}%",
+            "any_draws": draws_to_any_chance[threshold],
+            "any_reachable": draws_to_any_chance[threshold] is not None,
+            "selected_draws": draws_to_selected_chance[threshold],
+            "selected_reachable": draws_to_selected_chance[threshold] is not None,
+        }
+        for threshold in MTG_PROBABILITY_THRESHOLDS
+    ]
 
     return {
         "probability_exact": probability_exact,
+        "probability_exact_percent": (
+            probability_exact * 100 if probability_exact is not None else None
+        ),
         "probability_at_least": probability_at_least,
+        "probability_at_least_percent": probability_at_least * 100,
         "probability_none": probability_none,
+        "probability_none_percent": probability_none * 100,
         "probability_any": probability_any,
+        "probability_any_percent": probability_any * 100,
+        "threshold_rows": threshold_rows,
         **{
-            result_key: draws_to_high_chance[threshold]
+            result_key: draws_to_any_chance[threshold]
             for threshold, result_key in MTG_PROBABILITY_THRESHOLDS.items()
         },
     }
@@ -598,28 +938,103 @@ def mtg_hypergeometric_calculator(request):
 
     form_data = request.POST or request.GET
     form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+    form["mtg_format"] = _normalize_choice(
+        form.get("mtg_format"), MTG_FORMAT_CHOICES, "constructed"
+    )
+    form["draw_timing"] = _normalize_choice(
+        form.get("draw_timing"), MTG_DRAW_TIMING_CHOICES, "manual"
+    )
+    form["mulligan_condition"] = _normalize_choice(
+        form.get("mulligan_condition"), MTG_MULLIGAN_CONDITION_CHOICES, "target"
+    )
     form.setdefault("deck_size", "60")
     form.setdefault("success_states", "4")
     form.setdefault("draws", "7")
     form.setdefault("min_successes", "1")
+    form.setdefault("turn_number", "1")
+    form.setdefault("mulligan_max", "2")
+    form.setdefault("land_count", "")
+    form.setdefault("min_lands", "2")
+    form.setdefault("max_lands", "5")
+    form.setdefault("group_a_count", "")
+    form.setdefault("group_a_min", "1")
+    form.setdefault("group_b_count", "")
+    form.setdefault("group_b_min", "1")
 
     templates = HypergeometricTemplate.objects.filter(show_in_pages=True).order_by(
         "name"
     )
-    context: dict[str, object] = {"form": form, "templates": templates}
+    context: dict[str, object] = {
+        "draw_timing_options": _choice_options(
+            MTG_DRAW_TIMING_CHOICES, form["draw_timing"]
+        ),
+        "form": form,
+        "format_options": _choice_options(MTG_FORMAT_CHOICES, form["mtg_format"]),
+        "mulligan_condition_options": _choice_options(
+            MTG_MULLIGAN_CONDITION_CHOICES, form["mulligan_condition"]
+        ),
+        "templates": templates,
+    }
 
     if request.method == "POST":
         error: Optional[str] = None
         fields = {
+            "mtg_format": form["mtg_format"],
             "deck_size": request.POST.get("deck_size"),
             "success_states": request.POST.get("success_states"),
+            "draw_timing": form["draw_timing"],
             "draws": request.POST.get("draws"),
+            "turn_number": request.POST.get("turn_number"),
             "min_successes": request.POST.get("min_successes"),
             "exact_successes": request.POST.get("exact_successes"),
+            "mulligan_max": request.POST.get("mulligan_max"),
+            "mulligan_condition": form["mulligan_condition"],
+            "land_count": request.POST.get("land_count"),
+            "min_lands": request.POST.get("min_lands"),
+            "max_lands": request.POST.get("max_lands"),
+            "group_a_count": request.POST.get("group_a_count"),
+            "group_a_min": request.POST.get("group_a_min"),
+            "group_b_count": request.POST.get("group_b_count"),
+            "group_b_min": request.POST.get("group_b_min"),
         }
+        allow_extra_copies = _checkbox_enabled(request.POST.get("allow_extra_copies"))
+        mulligan_enabled = _checkbox_enabled(request.POST.get("mulligan_enabled"))
+        free_first_mulligan = _checkbox_enabled(
+            request.POST.get("mulligan_free_first")
+        )
+        multivariate_enabled = _checkbox_enabled(
+            request.POST.get("multivariate_enabled")
+        )
+        form["allow_extra_copies"] = "1" if allow_extra_copies else ""
+        form["mulligan_enabled"] = "1" if mulligan_enabled else ""
+        form["mulligan_free_first"] = "1" if free_first_mulligan else ""
+        form["multivariate_enabled"] = "1" if multivariate_enabled else ""
+        context["format_options"] = _choice_options(
+            MTG_FORMAT_CHOICES, form["mtg_format"]
+        )
+        context["draw_timing_options"] = _choice_options(
+            MTG_DRAW_TIMING_CHOICES, form["draw_timing"]
+        )
+        context["mulligan_condition_options"] = _choice_options(
+            MTG_MULLIGAN_CONDITION_CHOICES, form["mulligan_condition"]
+        )
         parsed_values: dict[str, int] = {}
 
-        for required in ("deck_size", "success_states", "draws", "min_successes"):
+        required_fields = ["deck_size", "success_states", "min_successes"]
+        if fields["draw_timing"] == "manual":
+            required_fields.append("draws")
+        elif fields["draw_timing"] != "opening_hand":
+            required_fields.append("turn_number")
+        if mulligan_enabled:
+            required_fields.append("mulligan_max")
+            if fields["mulligan_condition"] == "target_lands":
+                required_fields.extend(["land_count", "min_lands", "max_lands"])
+        if multivariate_enabled:
+            required_fields.extend(
+                ["group_a_count", "group_a_min", "group_b_count", "group_b_min"]
+            )
+
+        for required in required_fields:
             if not fields[required]:
                 error = _("%(field)s is required.") % {
                     "field": required.replace("_", " ").title()
@@ -628,54 +1043,139 @@ def mtg_hypergeometric_calculator(request):
 
         if not error:
             try:
-                parsed_values["deck_size"] = int(fields["deck_size"] or "0")
-                parsed_values["success_states"] = int(fields["success_states"] or "0")
-                parsed_values["draws"] = int(fields["draws"] or "0")
-                parsed_values["min_successes"] = int(fields["min_successes"] or "0")
-                if fields["exact_successes"]:
-                    parsed_values["exact_successes"] = int(fields["exact_successes"])
+                integer_fields = [
+                    "deck_size",
+                    "success_states",
+                    "min_successes",
+                    "exact_successes",
+                ]
+                if fields["draw_timing"] == "manual":
+                    integer_fields.append("draws")
+                elif fields["draw_timing"] != "opening_hand":
+                    integer_fields.append("turn_number")
+                if mulligan_enabled:
+                    integer_fields.append("mulligan_max")
+                    if fields["mulligan_condition"] == "target_lands":
+                        integer_fields.extend(["land_count", "min_lands", "max_lands"])
+                if multivariate_enabled:
+                    integer_fields.extend(
+                        ["group_a_count", "group_a_min", "group_b_count", "group_b_min"]
+                    )
+
+                for integer_field in integer_fields:
+                    if fields.get(integer_field) not in (None, "", "None"):
+                        parsed_values[integer_field] = int(fields[integer_field] or "0")
             except (TypeError, ValueError):
                 error = _("All inputs must be whole numbers.")
 
         if not error:
             deck_size = parsed_values["deck_size"]
             success_states = parsed_values["success_states"]
-            draws = parsed_values["draws"]
             min_successes = parsed_values["min_successes"]
             exact_successes = parsed_values.get("exact_successes")
+            if fields["draw_timing"] == "manual":
+                draws = parsed_values["draws"]
+            elif fields["draw_timing"] == "opening_hand":
+                draws = _cards_seen_for_timing(
+                    draw_timing=fields["draw_timing"],
+                    turn_number=1,
+                )
+                parsed_values["draws"] = draws
+                fields["draws"] = str(draws)
+            else:
+                turn_number = parsed_values["turn_number"]
+                if turn_number <= 0:
+                    error = _("Turn number must be greater than zero.")
+                    draws = 0
+                else:
+                    draws = _cards_seen_for_timing(
+                        draw_timing=fields["draw_timing"],
+                        turn_number=turn_number,
+                    )
+                    parsed_values["draws"] = draws
+                    fields["draws"] = str(draws)
 
-            if deck_size <= 0:
-                error = _("Deck size must be greater than zero.")
-            elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
-                error = _("Deck size must be %(max_value)s or less.") % {
-                    "max_value": MAX_HYPERGEOMETRIC_INPUT
-                }
-            elif success_states < 0:
-                error = _("Success states cannot be negative.")
-            elif success_states > deck_size:
-                error = _("Success states cannot exceed deck size.")
-            elif draws <= 0:
-                error = _("Draw count must be greater than zero.")
-            elif draws > deck_size:
-                error = _("Draw count cannot exceed deck size.")
-            elif draws > MAX_HYPERGEOMETRIC_INPUT:
-                error = _("Draw count must be %(max_value)s or less.") % {
-                    "max_value": MAX_HYPERGEOMETRIC_INPUT
-                }
-            elif min_successes < 0:
-                error = _("Minimum successes cannot be negative.")
-            elif min_successes > draws:
-                error = _("Minimum successes cannot exceed draws.")
-            elif exact_successes is not None and (
-                exact_successes < 0 or exact_successes > draws
-            ):
-                error = _("Exact successes must be between 0 and draws.")
-            elif exact_successes is not None and exact_successes > success_states:
-                error = _("Exact successes cannot exceed success states.")
+            if not error:
+                if deck_size <= 0:
+                    error = _("Deck size must be greater than zero.")
+                elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
+                    error = _("Deck size must be %(max_value)s or less.") % {
+                        "max_value": MAX_HYPERGEOMETRIC_INPUT
+                    }
+                elif success_states < 0:
+                    error = _("Success states cannot be negative.")
+                elif success_states > deck_size:
+                    error = _("Success states cannot exceed deck size.")
+                elif draws <= 0:
+                    error = _("Draw count must be greater than zero.")
+                elif draws > deck_size:
+                    error = _("Draw count cannot exceed deck size.")
+                elif draws > MAX_HYPERGEOMETRIC_INPUT:
+                    error = _("Draw count must be %(max_value)s or less.") % {
+                        "max_value": MAX_HYPERGEOMETRIC_INPUT
+                    }
+                elif min_successes < 0:
+                    error = _("Minimum successes cannot be negative.")
+                elif min_successes > draws:
+                    error = _("Minimum successes cannot exceed draws.")
+                elif exact_successes is not None and (
+                    exact_successes < 0 or exact_successes > draws
+                ):
+                    error = _("Exact successes must be between 0 and draws.")
+                elif exact_successes is not None and exact_successes > success_states:
+                    error = _("Exact successes cannot exceed success states.")
+                elif mulligan_enabled and deck_size < LONDON_MULLIGAN_DRAW_SIZE:
+                    error = _("Mulligan odds require a library size of at least 7.")
+                elif mulligan_enabled:
+                    mulligan_max = parsed_values["mulligan_max"]
+                    land_count = parsed_values.get("land_count")
+                    min_lands = parsed_values.get("min_lands")
+                    max_lands = parsed_values.get("max_lands")
+                    if mulligan_max < 0 or mulligan_max > 7:
+                        error = _("Mulligans to evaluate must be between 0 and 7.")
+                    elif fields["mulligan_condition"] == "target_lands":
+                        if land_count is None or land_count < 0:
+                            error = _("Land/source count cannot be negative.")
+                        elif land_count > deck_size:
+                            error = _("Land/source count cannot exceed library size.")
+                        elif min_lands is None or max_lands is None:
+                            error = _("Enter the land/source range for mulligan odds.")
+                        elif min_lands < 0 or max_lands < 0:
+                            error = _("Land/source range cannot be negative.")
+                        elif min_lands > max_lands:
+                            error = _(
+                                "Minimum lands/sources cannot exceed maximum "
+                                "lands/sources."
+                            )
+                        elif success_states + land_count > deck_size:
+                            error = _(
+                                "Target cards and lands/sources must fit as disjoint "
+                                "groups in the library."
+                            )
+            if not error and multivariate_enabled:
+                group_a_count = parsed_values["group_a_count"]
+                group_a_min = parsed_values["group_a_min"]
+                group_b_count = parsed_values["group_b_count"]
+                group_b_min = parsed_values["group_b_min"]
+                if min(group_a_count, group_a_min, group_b_count, group_b_min) < 0:
+                    error = _("Two-package counts cannot be negative.")
+                elif group_a_count + group_b_count > deck_size:
+                    error = _(
+                        "Two-package counts must fit as disjoint groups in the library."
+                    )
+                elif group_a_min + group_b_min > draws:
+                    error = _(
+                        "Two-package minimums cannot exceed cards seen."
+                    )
+                elif group_a_min > group_a_count:
+                    error = _("Package A minimum cannot exceed Package A count.")
+                elif group_b_min > group_b_count:
+                    error = _("Package B minimum cannot exceed Package B count.")
 
         if error:
             context["error"] = error
         else:
+            turn_number = parsed_values.get("turn_number", 1)
             context["result"] = _calculate_hypergeometric_totals(
                 deck_size=parsed_values["deck_size"],
                 success_states=parsed_values["success_states"],
@@ -683,6 +1183,42 @@ def mtg_hypergeometric_calculator(request):
                 min_successes=parsed_values["min_successes"],
                 exact_successes=parsed_values.get("exact_successes"),
             )
+            context["cards_seen_label"] = _cards_seen_label(
+                draw_timing=fields["draw_timing"],
+                turn_number=turn_number,
+                draws=parsed_values["draws"],
+            )
+            context["warnings"] = _mtg_format_warnings(
+                mtg_format=fields["mtg_format"],
+                deck_size=parsed_values["deck_size"],
+                success_states=parsed_values["success_states"],
+                allow_extra_copies=allow_extra_copies,
+            )
+            if mulligan_enabled:
+                context["mulligan_rows"] = _calculate_london_mulligan_odds(
+                    deck_size=parsed_values["deck_size"],
+                    success_states=parsed_values["success_states"],
+                    min_successes=parsed_values["min_successes"],
+                    max_mulligans=parsed_values["mulligan_max"],
+                    condition=fields["mulligan_condition"],
+                    free_first_mulligan=free_first_mulligan,
+                    land_count=parsed_values.get("land_count"),
+                    min_lands=parsed_values.get("min_lands"),
+                    max_lands=parsed_values.get("max_lands"),
+                )
+            if multivariate_enabled:
+                multivariate_probability = _bivariate_hypergeometric_probability(
+                    population_size=parsed_values["deck_size"],
+                    group_a_size=parsed_values["group_a_count"],
+                    group_b_size=parsed_values["group_b_count"],
+                    draws=parsed_values["draws"],
+                    min_group_a=parsed_values["group_a_min"],
+                    min_group_b=parsed_values["group_b_min"],
+                )
+                context["multivariate_result"] = {
+                    "probability": multivariate_probability,
+                    "probability_percent": multivariate_probability * 100,
+                }
             for field, value in fields.items():
                 if value not in (None, "", "None"):
                     form[field] = value
