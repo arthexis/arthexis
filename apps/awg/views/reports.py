@@ -20,22 +20,23 @@ from ..models import HypergeometricTemplate
 
 MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
 MAX_HYPERGEOMETRIC_INPUT = 500
+LONDON_MULLIGAN_DRAW_SIZE = 7
 MTG_FORMAT_CHOICES = (
-    ("constructed", "Constructed"),
-    ("limited", "Limited"),
-    ("commander", "Commander"),
-    ("custom", "Custom / casual"),
+    ("constructed", _lazy("Constructed")),
+    ("limited", _lazy("Limited")),
+    ("commander", _lazy("Commander")),
+    ("custom", _lazy("Custom / casual")),
 )
 MTG_DRAW_TIMING_CHOICES = (
-    ("manual", "Manual cards seen"),
-    ("opening_hand", "Opening hand"),
-    ("on_play", "By turn on the play"),
-    ("on_draw", "By turn on the draw"),
-    ("multiplayer", "By turn in multiplayer / Commander"),
+    ("manual", _lazy("Manual cards seen")),
+    ("opening_hand", _lazy("Opening hand")),
+    ("on_play", _lazy("By turn on the play")),
+    ("on_draw", _lazy("By turn on the draw")),
+    ("multiplayer", _lazy("By turn in multiplayer / Commander")),
 )
 MTG_MULLIGAN_CONDITION_CHOICES = (
-    ("target", "At least selected target count"),
-    ("target_lands", "Selected targets plus a land/source range"),
+    ("target", _lazy("At least selected target count")),
+    ("target_lands", _lazy("Selected targets plus a land/source range")),
 )
 MTG_PROBABILITY_THRESHOLDS = {
     0.8: "draws_to_80_percent",
@@ -251,6 +252,8 @@ def _hypergeometric_probability(
 
     if not 0 <= successes_drawn <= draws:
         return 0.0
+    if draws < 0 or draws > population_size:
+        return 0.0
     if successes_drawn > success_states or draws - successes_drawn > (
         population_size - success_states
     ):
@@ -260,6 +263,8 @@ def _hypergeometric_probability(
         population_size - success_states, draws - successes_drawn
     )
     denominator = comb(population_size, draws)
+    if denominator == 0:
+        return 0.0
     return numerator / denominator
 
 
@@ -423,7 +428,13 @@ def _bivariate_hypergeometric_probability(
     """Return P(A >= min_group_a and B >= min_group_b) for disjoint groups."""
 
     other_cards = population_size - group_a_size - group_b_size
+    if draws < 0 or draws > population_size:
+        return 0.0
+
     denominator = comb(population_size, draws)
+    if denominator == 0:
+        return 0.0
+
     probability = 0.0
     max_group_a = min(group_a_size, draws)
     for group_a_drawn in range(min_group_a, max_group_a + 1):
@@ -456,7 +467,7 @@ def _mulligan_hand_is_keepable(
     if target_drawn < min_targets or lands_drawn < min_lands:
         return False
 
-    bottom_count = 7 - final_hand_size
+    bottom_count = LONDON_MULLIGAN_DRAW_SIZE - final_hand_size
     lowest_kept_lands = max(min_lands, lands_drawn - bottom_count)
     highest_kept_lands = min(max_lands, lands_drawn, final_hand_size - min_targets)
     return lowest_kept_lands <= highest_kept_lands
@@ -473,13 +484,21 @@ def _mulligan_keep_probability(
     min_lands: int | None = None,
     max_lands: int | None = None,
 ) -> float:
+    """Return London mulligan keep odds after drawing seven and bottoming cards."""
+
     if final_hand_size < min_successes:
         return 0.0
+    if deck_size < LONDON_MULLIGAN_DRAW_SIZE:
+        return 0.0
+
+    # Under the London mulligan rule every mulligan draws seven cards. The final
+    # hand size only constrains whether the drawn hand can survive bottoming.
+    opening_draw_size = LONDON_MULLIGAN_DRAW_SIZE
     if condition == "target":
         return _probability_at_least_successes(
             deck_size=deck_size,
             success_states=success_states,
-            draws=7,
+            draws=opening_draw_size,
             min_successes=min_successes,
         )
 
@@ -487,12 +506,14 @@ def _mulligan_keep_probability(
         return 0.0
 
     other_cards = deck_size - success_states - land_count
-    denominator = comb(deck_size, 7)
+    denominator = comb(deck_size, opening_draw_size)
+    if denominator == 0:
+        return 0.0
     probability = 0.0
-    for targets_drawn in range(0, min(success_states, 7) + 1):
-        remaining_after_targets = 7 - targets_drawn
+    for targets_drawn in range(0, min(success_states, opening_draw_size) + 1):
+        remaining_after_targets = opening_draw_size - targets_drawn
         for lands_drawn in range(0, min(land_count, remaining_after_targets) + 1):
-            other_drawn = 7 - targets_drawn - lands_drawn
+            other_drawn = opening_draw_size - targets_drawn - lands_drawn
             if not 0 <= other_drawn <= other_cards:
                 continue
             if not _mulligan_hand_is_keepable(
@@ -533,7 +554,7 @@ def _calculate_london_mulligan_odds(
             if free_first_mulligan
             else mulligans_taken
         )
-        final_hand_size = max(0, 7 - counted_mulligans)
+        final_hand_size = max(0, LONDON_MULLIGAN_DRAW_SIZE - counted_mulligans)
         keep_probability = _mulligan_keep_probability(
             deck_size=deck_size,
             success_states=success_states,
@@ -1046,63 +1067,63 @@ def mtg_hypergeometric_calculator(request):
                     parsed_values["draws"] = draws
                     fields["draws"] = str(draws)
 
-            if error:
-                pass
-            elif deck_size <= 0:
-                error = _("Deck size must be greater than zero.")
-            elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
-                error = _("Deck size must be %(max_value)s or less.") % {
-                    "max_value": MAX_HYPERGEOMETRIC_INPUT
-                }
-            elif success_states < 0:
-                error = _("Success states cannot be negative.")
-            elif success_states > deck_size:
-                error = _("Success states cannot exceed deck size.")
-            elif draws <= 0:
-                error = _("Draw count must be greater than zero.")
-            elif draws > deck_size:
-                error = _("Draw count cannot exceed deck size.")
-            elif draws > MAX_HYPERGEOMETRIC_INPUT:
-                error = _("Draw count must be %(max_value)s or less.") % {
-                    "max_value": MAX_HYPERGEOMETRIC_INPUT
-                }
-            elif min_successes < 0:
-                error = _("Minimum successes cannot be negative.")
-            elif min_successes > draws:
-                error = _("Minimum successes cannot exceed draws.")
-            elif exact_successes is not None and (
-                exact_successes < 0 or exact_successes > draws
-            ):
-                error = _("Exact successes must be between 0 and draws.")
-            elif exact_successes is not None and exact_successes > success_states:
-                error = _("Exact successes cannot exceed success states.")
-            elif mulligan_enabled and deck_size < 7:
-                error = _("Mulligan odds require a library size of at least 7.")
-            elif mulligan_enabled:
-                mulligan_max = parsed_values["mulligan_max"]
-                land_count = parsed_values.get("land_count")
-                min_lands = parsed_values.get("min_lands")
-                max_lands = parsed_values.get("max_lands")
-                if mulligan_max < 0 or mulligan_max > 7:
-                    error = _("Mulligans to evaluate must be between 0 and 7.")
-                elif fields["mulligan_condition"] == "target_lands":
-                    if land_count is None or land_count < 0:
-                        error = _("Land/source count cannot be negative.")
-                    elif land_count > deck_size:
-                        error = _("Land/source count cannot exceed library size.")
-                    elif min_lands is None or max_lands is None:
-                        error = _("Enter the land/source range for mulligan odds.")
-                    elif min_lands < 0 or max_lands < 0:
-                        error = _("Land/source range cannot be negative.")
-                    elif min_lands > max_lands:
-                        error = _(
-                            "Minimum lands/sources cannot exceed maximum lands/sources."
-                        )
-                    elif success_states + land_count > deck_size:
-                        error = _(
-                            "Target cards and lands/sources must fit as disjoint "
-                            "groups in the library."
-                        )
+            if not error:
+                if deck_size <= 0:
+                    error = _("Deck size must be greater than zero.")
+                elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
+                    error = _("Deck size must be %(max_value)s or less.") % {
+                        "max_value": MAX_HYPERGEOMETRIC_INPUT
+                    }
+                elif success_states < 0:
+                    error = _("Success states cannot be negative.")
+                elif success_states > deck_size:
+                    error = _("Success states cannot exceed deck size.")
+                elif draws <= 0:
+                    error = _("Draw count must be greater than zero.")
+                elif draws > deck_size:
+                    error = _("Draw count cannot exceed deck size.")
+                elif draws > MAX_HYPERGEOMETRIC_INPUT:
+                    error = _("Draw count must be %(max_value)s or less.") % {
+                        "max_value": MAX_HYPERGEOMETRIC_INPUT
+                    }
+                elif min_successes < 0:
+                    error = _("Minimum successes cannot be negative.")
+                elif min_successes > draws:
+                    error = _("Minimum successes cannot exceed draws.")
+                elif exact_successes is not None and (
+                    exact_successes < 0 or exact_successes > draws
+                ):
+                    error = _("Exact successes must be between 0 and draws.")
+                elif exact_successes is not None and exact_successes > success_states:
+                    error = _("Exact successes cannot exceed success states.")
+                elif mulligan_enabled and deck_size < LONDON_MULLIGAN_DRAW_SIZE:
+                    error = _("Mulligan odds require a library size of at least 7.")
+                elif mulligan_enabled:
+                    mulligan_max = parsed_values["mulligan_max"]
+                    land_count = parsed_values.get("land_count")
+                    min_lands = parsed_values.get("min_lands")
+                    max_lands = parsed_values.get("max_lands")
+                    if mulligan_max < 0 or mulligan_max > 7:
+                        error = _("Mulligans to evaluate must be between 0 and 7.")
+                    elif fields["mulligan_condition"] == "target_lands":
+                        if land_count is None or land_count < 0:
+                            error = _("Land/source count cannot be negative.")
+                        elif land_count > deck_size:
+                            error = _("Land/source count cannot exceed library size.")
+                        elif min_lands is None or max_lands is None:
+                            error = _("Enter the land/source range for mulligan odds.")
+                        elif min_lands < 0 or max_lands < 0:
+                            error = _("Land/source range cannot be negative.")
+                        elif min_lands > max_lands:
+                            error = _(
+                                "Minimum lands/sources cannot exceed maximum "
+                                "lands/sources."
+                            )
+                        elif success_states + land_count > deck_size:
+                            error = _(
+                                "Target cards and lands/sources must fit as disjoint "
+                                "groups in the library."
+                            )
             if not error and multivariate_enabled:
                 group_a_count = parsed_values["group_a_count"]
                 group_a_min = parsed_values["group_a_min"]
@@ -1114,7 +1135,7 @@ def mtg_hypergeometric_calculator(request):
                     error = _(
                         "Two-package counts must fit as disjoint groups in the library."
                     )
-                elif group_a_min > draws or group_b_min > draws:
+                elif group_a_min + group_b_min > draws:
                     error = _(
                         "Two-package minimums cannot exceed cards seen."
                     )

@@ -8,6 +8,8 @@ from apps.awg.views.reports import (
     MAX_HYPERGEOMETRIC_INPUT,
     MTG_PROBABILITY_THRESHOLDS,
     _draws_for_probability_thresholds,
+    _mulligan_keep_probability,
+    _probability_at_least_successes,
 )
 
 hypergeometric_presets_migration = importlib.import_module(
@@ -324,6 +326,7 @@ def test_mtg_hypergeometric_calculator_allows_limited_duplicates(db):
     assert response.status_code == 200
     body = response.content.decode()
     assert "normally cannot include more than four" not in body
+    assert "Chance of at least selected target amount" in body
 
 
 def test_mtg_hypergeometric_results_include_draws_to_high_probability(db):
@@ -368,6 +371,25 @@ def test_mtg_hypergeometric_results_include_london_mulligan_odds(db):
     assert "Final Hand Size" in body
 
 
+def test_london_mulligan_target_only_draws_seven_before_bottoming():
+    opening_keep_odds = _probability_at_least_successes(
+        deck_size=60,
+        success_states=4,
+        draws=7,
+        min_successes=1,
+    )
+
+    mulligan_to_six_keep_odds = _mulligan_keep_probability(
+        deck_size=60,
+        success_states=4,
+        min_successes=1,
+        condition="target",
+        final_hand_size=6,
+    )
+
+    assert mulligan_to_six_keep_odds == opening_keep_odds
+
+
 def test_mtg_hypergeometric_results_include_two_package_odds(db):
     response = Client().post(
         reverse("awg:mtg_hypergeometric"),
@@ -388,6 +410,28 @@ def test_mtg_hypergeometric_results_include_two_package_odds(db):
     body = response.content.decode()
     assert "Two-Package Odds" in body
     assert "Chance of seeing both package minimums" in body
+
+
+def test_mtg_hypergeometric_rejects_impossible_two_package_minimums(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "60",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+            "multivariate_enabled": "1",
+            "group_a_count": "8",
+            "group_a_min": "4",
+            "group_b_count": "10",
+            "group_b_min": "4",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Two-package minimums cannot exceed cards seen." in body
+    assert "Two-Package Odds" not in body
 
 
 def test_mtg_hypergeometric_results_show_not_reachable_when_no_targets(db):
