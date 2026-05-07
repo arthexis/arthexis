@@ -83,6 +83,30 @@ class Command(BaseCommand):
         )
         self._add_item_args(dismiss_parser)
 
+        prompt_parser = subparsers.add_parser(
+            "prompt",
+            help="Render the prompt for a monitor item without launching it.",
+        )
+        self._add_item_args(prompt_parser)
+
+        requeue_parser = subparsers.add_parser(
+            "requeue",
+            help="Return a monitor item to the queued state.",
+        )
+        self._add_item_args(requeue_parser)
+
+        run_terminal_parser = subparsers.add_parser(
+            "run-terminal",
+            help="Run the item's Codex command while heartbeating activity.",
+        )
+        run_terminal_parser.add_argument("--item", type=int, required=True)
+        run_terminal_parser.add_argument(
+            "--heartbeat-seconds",
+            type=int,
+            default=60,
+            help="Seconds between automatic heartbeat updates.",
+        )
+
     def handle(self, *args, **options) -> None:
         action = str(options["action"])
         try:
@@ -139,6 +163,22 @@ class Command(BaseCommand):
                 fingerprint=str(options.get("fingerprint") or ""),
             )
             return {"item": item.pk, "status": item.status}
+        if action == "prompt":
+            return github_monitor.prompt_for_item(
+                item_id=options.get("item"),
+                fingerprint=str(options.get("fingerprint") or ""),
+            )
+        if action == "requeue":
+            item = github_monitor.requeue_item(
+                item_id=options.get("item"),
+                fingerprint=str(options.get("fingerprint") or ""),
+            )
+            return {"item": item.pk, "status": item.status}
+        if action == "run-terminal":
+            return github_monitor.run_terminal_item(
+                item_id=int(options["item"]),
+                heartbeat_seconds=int(options.get("heartbeat_seconds") or 60),
+            )
         raise CommandError(f"Unsupported action: {action}")
 
     def _write_result(self, result: Any, *, json_output: bool) -> None:

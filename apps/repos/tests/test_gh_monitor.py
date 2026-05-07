@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
@@ -28,8 +29,12 @@ def _enable_monitor_feature() -> Feature:
     return feature
 
 
-def _configure_defaults() -> None:
+def _configure_defaults(*, include_pr: bool = False) -> None:
     github_monitor.configure_default_monitoring(repository="octo/demo", write=True)
+    if not include_pr:
+        GitHubMonitorTask.objects.filter(name="approved-pr-oversee").update(
+            enabled=False
+        )
 
 
 def _issue(number: int, title: str, marker: str) -> dict[str, object]:
@@ -42,6 +47,23 @@ def _issue(number: int, title: str, marker: str) -> dict[str, object]:
         "user": {"login": "octo"},
         "reactions": {"+1": 0},
     }
+
+
+def _pull_request(number: int, head_sha: str = "abc123") -> dict[str, object]:
+    return {
+        "number": number,
+        "title": f"PR {number}",
+        "body": "PR body",
+        "state": "open",
+        "html_url": f"https://github.example/pulls/{number}",
+        "draft": False,
+        "head": {"sha": head_sha},
+        "labels": [{"name": "ready"}],
+    }
+
+
+def _commit(date: str = "2026-05-07T16:00:00Z") -> dict[str, object]:
+    return {"commit": {"committer": {"date": date}}}
 
 
 @pytest.mark.django_db
@@ -206,6 +228,147 @@ def test_sync_monitor_items_rejects_malformed_trust_payloads(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_sync_monitor_items_queues_pr_approved_by_configured_reaction(monkeypatch):
+    _configure_defaults(include_pr=True)
+    GitHubMonitorTask.objects.exclude(name="approved-pr-oversee").update(enabled=False)
+    pull_request = _pull_request(91, head_sha="abc123")
+    issue_payload = {
+        "number": 91,
+        "title": "PR 91",
+        "body": "Fix body",
+        "state": "open",
+        "html_url": "https://github.example/issues/91",
+        "labels": [{"name": "ready"}],
+    }
+    reactions = [
+        {
+            "content": "+1",
+            "user": {"login": "arthexis"},
+            "created_at": "2026-05-07T17:00:00Z",
+        }
+    ]
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_pull_requests",
+        lambda **_: [pull_request],
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_issue_or_pull_request",
+        lambda **_: issue_payload,
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_issue_reactions",
+        lambda **_: reactions,
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_commit",
+        lambda **_: _commit(),
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 1
+    item = GitHubMonitorItem.objects.get(issue_number=91)
+    assert item.target_type == GitHubMonitorTask.TargetType.PULL_REQUEST
+    assert item.approved_by == "arthexis"
+    assert item.approval_emoji == "+1"
+    assert item.approved_head_sha == "abc123"
+    prompt = github_monitor.build_monitor_prompt(item)
+    assert "pr_oversee" in prompt
+    assert "--expected-head-sha abc123" in prompt
+    assert github_monitor.PR_OVERSEE_POLICY_SKILL in prompt
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_rejects_pr_without_configured_reaction(monkeypatch):
+    _configure_defaults(include_pr=True)
+    GitHubMonitorTask.objects.exclude(name="approved-pr-oversee").update(enabled=False)
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_pull_requests",
+        lambda **_: [_pull_request(92)],
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_issue_or_pull_request",
+        lambda **_: {"number": 92, "body": "", "state": "open"},
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_issue_reactions",
+        lambda **_: [{"content": "+1", "user": {"login": "someone-else"}}],
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 0
+    assert not GitHubMonitorItem.objects.filter(issue_number=92).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_rejects_pr_approval_older_than_head(monkeypatch):
+    _configure_defaults(include_pr=True)
+    GitHubMonitorTask.objects.exclude(name="approved-pr-oversee").update(enabled=False)
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_pull_requests",
+        lambda **_: [_pull_request(94, head_sha="newsha")],
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_issue_reactions",
+        lambda **_: [
+            {
+                "content": "+1",
+                "user": {"login": "arthexis"},
+                "created_at": "2026-05-07T17:00:00Z",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_commit",
+        lambda **_: _commit("2026-05-07T18:00:00Z"),
+    )
+
+    result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    assert result["matched"] == 0
+    assert not GitHubMonitorItem.objects.filter(issue_number=94).exists()
+
+
+@pytest.mark.django_db
+def test_sync_monitor_items_closes_queued_items_after_target_type_change(monkeypatch):
+    _configure_defaults(include_pr=True)
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    item = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"old-target").hexdigest(),
+        target_type=GitHubMonitorTask.TargetType.ISSUE,
+        issue_number=93,
+        issue_title="Old target",
+        issue_url="https://github.example/issues/93",
+        status=GitHubMonitorItem.Status.QUEUED,
+    )
+    task.target_type = GitHubMonitorTask.TargetType.PULL_REQUEST
+    task.save(update_fields=["target_type"])
+    GitHubMonitorTask.objects.exclude(pk=task.pk).update(enabled=False)
+    monkeypatch.setattr(
+        github_monitor.github_service,
+        "fetch_repository_pull_requests",
+        lambda **_: [],
+    )
+
+    github_monitor.sync_monitor_items(token="token", now=timezone.now())
+
+    item.refresh_from_db()
+    assert item.status == GitHubMonitorItem.Status.CLOSED
+
+
+@pytest.mark.django_db
 def test_configure_default_monitoring_writes_feature_tasks_and_policy_skills():
     result = github_monitor.configure_default_monitoring(
         repository="octo/demo",
@@ -224,13 +387,23 @@ def test_configure_default_monitoring_writes_feature_tasks_and_policy_skills():
         task.name: task
         for task in GitHubMonitorTask.objects.select_related("repository").all()
     }
-    assert set(tasks) == {"install-health", "release-readiness"}
+    assert set(tasks) == {
+        "approved-pr-oversee",
+        "install-health",
+        "release-readiness",
+    }
     assert tasks["install-health"].repository.slug == "octo/demo"
     assert tasks["install-health"].codex_command == "codex --profile monitor"
     assert tasks["install-health"].inactivity_timeout_minutes == 12
     assert tasks["install-health"].skill_slugs == list(
         github_monitor.DEFAULT_POLICY_SKILLS
     )
+    assert (
+        tasks["approved-pr-oversee"].target_type
+        == GitHubMonitorTask.TargetType.PULL_REQUEST
+    )
+    assert tasks["approved-pr-oversee"].require_approval_reaction is True
+    assert tasks["approved-pr-oversee"].approval_actor == "arthexis"
 
     assert set(
         Skill.objects.filter(slug__in=github_monitor.DEFAULT_POLICY_SKILLS).values_list(
@@ -301,6 +474,12 @@ def test_monitor_cycle_launches_only_one_terminal(tmp_path, monkeypatch):
     assert second_result["active"]["reason"] == "running"
     assert second_result["launch"]["reason"] == "launch_disabled"
     assert len(launches) == 1
+    assert launches[0]["command"][:4] == [
+        sys.executable,
+        str(Path(settings.BASE_DIR) / "manage.py"),
+        "gh_monitor",
+        "run-terminal",
+    ]
     assert (
         GitHubMonitorItem.objects.filter(status=GitHubMonitorItem.Status.ACTIVE).count()
         == 1
@@ -552,6 +731,60 @@ def test_heartbeat_and_complete_update_monitor_item(tmp_path, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_run_terminal_item_rejects_non_active_item(monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    item = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"queued-run").hexdigest(),
+        issue_number=12,
+        issue_title="Queued",
+        issue_url="https://github.example/issues/12",
+        status=GitHubMonitorItem.Status.QUEUED,
+    )
+    launched = False
+
+    def fake_popen(*args, **kwargs):
+        nonlocal launched
+        launched = True
+
+    monkeypatch.setattr(github_monitor.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(RuntimeError):
+        github_monitor.run_terminal_item(item_id=item.pk, heartbeat_seconds=1)
+
+    assert launched is False
+
+
+@pytest.mark.django_db
+def test_run_terminal_item_marks_failed_when_codex_command_is_malformed(monkeypatch):
+    _configure_defaults()
+    task = GitHubMonitorTask.objects.get(name="install-health")
+    task.codex_command = '"unterminated'
+    task.save(update_fields=["codex_command"])
+    item = GitHubMonitorItem.objects.create(
+        task=task,
+        fingerprint=hashlib.sha256(b"bad-command").hexdigest(),
+        issue_number=13,
+        issue_title="Active",
+        issue_url="https://github.example/issues/13",
+        status=GitHubMonitorItem.Status.ACTIVE,
+    )
+    monkeypatch.setattr(
+        github_monitor,
+        "notify_admins_of_failure",
+        lambda *args, **kwargs: True,
+    )
+
+    with pytest.raises(ValueError):
+        github_monitor.run_terminal_item(item_id=item.pk, heartbeat_seconds=1)
+
+    item.refresh_from_db()
+    assert item.status == GitHubMonitorItem.Status.FAILED
+    assert item.failure_message
+
+
+@pytest.mark.django_db
 def test_dismiss_item_terminates_active_terminal(tmp_path, monkeypatch):
     _configure_defaults()
     task = GitHubMonitorTask.objects.get(name="install-health")
@@ -633,11 +866,16 @@ def test_monitor_task_failure_emails_admins(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_gh_monitor_command_configure_and_evaluate(monkeypatch):
+def test_gh_monitor_command_configure_and_evaluate(monkeypatch, tmp_path):
     monkeypatch.setattr(
         github_monitor.github_service, "get_github_issue_token", lambda: "token"
     )
     monkeypatch.setattr(github_monitor, "desktop_ui_enabled", lambda: True)
+    monkeypatch.setattr(github_monitor, "patchwork_dir", lambda: tmp_path / "patchwork")
+    monkeypatch.setattr(github_monitor, "_command_available", lambda _: True)
+    monkeypatch.setattr(github_monitor, "_terminal_launcher_available", lambda: True)
+    monkeypatch.setattr(github_monitor, "_git_status_clean", lambda: True)
+    monkeypatch.setattr(github_monitor.shutil, "which", lambda command: command)
     out = StringIO()
     call_command(
         "gh_monitor",
@@ -654,7 +892,32 @@ def test_gh_monitor_command_configure_and_evaluate(monkeypatch):
     call_command("gh_monitor", "--json", "evaluate", stdout=out)
     result = json.loads(out.getvalue())
     assert result["ready"] is True
-    assert result["configured_tasks"] == 2
+    assert result["configured_tasks"] == 3
+    assert result["patchwork_dir_exists"] is True
+
+
+def test_command_available_returns_false_for_malformed_command():
+    assert github_monitor._command_available('"unterminated') is False
+
+
+@pytest.mark.django_db
+def test_gh_monitor_evaluate_requires_clean_git_checkout(monkeypatch, tmp_path):
+    _enable_monitor_feature()
+    github_monitor.configure_default_monitoring(repository="octo/demo", write=True)
+    monkeypatch.setattr(
+        github_monitor.github_service, "get_github_issue_token", lambda: "token"
+    )
+    monkeypatch.setattr(github_monitor, "desktop_ui_enabled", lambda: True)
+    monkeypatch.setattr(github_monitor, "patchwork_dir", lambda: tmp_path)
+    monkeypatch.setattr(github_monitor, "_command_available", lambda _: True)
+    monkeypatch.setattr(github_monitor, "_terminal_launcher_available", lambda: True)
+    monkeypatch.setattr(github_monitor, "_git_status_clean", lambda: False)
+    monkeypatch.setattr(github_monitor.shutil, "which", lambda command: command)
+
+    result = github_monitor.evaluate_readiness()
+
+    assert result["git_checkout_clean"] is False
+    assert result["ready"] is False
 
 
 @pytest.mark.django_db

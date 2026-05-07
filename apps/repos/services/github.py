@@ -355,6 +355,18 @@ def fetch_issue_comments(
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
+def fetch_issue_reactions(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    issue_number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{issue_number}/reactions"
+    params: dict[str, RequestParamValue] = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
 def _fetch_json_mapping(
     *,
     token: str,
@@ -416,6 +428,23 @@ def fetch_commit_status_summary(
         endpoint=endpoint,
         timeout=timeout,
         decode_error="Unable to decode commit status from GitHub",
+    )
+
+
+def fetch_commit(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    sha: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/commits/{sha}"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode commit details from GitHub",
     )
 
 

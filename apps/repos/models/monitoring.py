@@ -12,7 +12,11 @@ from apps.core.entity import Entity
 
 
 class GitHubMonitorTask(Entity):
-    """Configuration for one GitHub issue signal that can launch operator work."""
+    """Configuration for one GitHub issue or PR signal that can launch work."""
+
+    class TargetType(models.TextChoices):
+        ISSUE = "issue", _("Issue")
+        PULL_REQUEST = "pull_request", _("Pull request")
 
     name = models.SlugField(max_length=120, unique=True)
     display = models.CharField(max_length=160)
@@ -22,12 +26,25 @@ class GitHubMonitorTask(Entity):
         on_delete=models.CASCADE,
     )
     enabled = models.BooleanField(default=True)
-    issue_title = models.CharField(max_length=255)
+    target_type = models.CharField(
+        max_length=32,
+        choices=TargetType.choices,
+        default=TargetType.ISSUE,
+    )
+    issue_title = models.CharField(max_length=255, blank=True)
     issue_marker = models.CharField(
         max_length=255,
         blank=True,
         help_text=_("Optional marker that must be present in the issue body."),
     )
+    label_filter = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text=_("Optional label that must be present on the issue or PR."),
+    )
+    require_approval_reaction = models.BooleanField(default=False)
+    approval_actor = models.CharField(max_length=120, blank=True)
+    approval_emoji = models.CharField(max_length=32, blank=True, default="+1")
     terminal_title = models.CharField(max_length=160, default="Arthexis GitHub Monitor")
     terminal_state_key = models.SlugField(max_length=120, unique=True)
     codex_command = models.CharField(max_length=255, default="codex")
@@ -51,7 +68,7 @@ class GitHubMonitorTask(Entity):
 
 
 class GitHubMonitorItem(Entity):
-    """One detected GitHub issue waiting for, or owning, an operator terminal."""
+    """One detected GitHub issue or PR waiting for an operator terminal."""
 
     class Status(models.TextChoices):
         QUEUED = "queued", _("Queued")
@@ -68,11 +85,21 @@ class GitHubMonitorItem(Entity):
         on_delete=models.CASCADE,
     )
     fingerprint = models.CharField(max_length=64, unique=True)
+    target_type = models.CharField(
+        max_length=32,
+        choices=GitHubMonitorTask.TargetType.choices,
+        default=GitHubMonitorTask.TargetType.ISSUE,
+    )
     issue_number = models.PositiveIntegerField()
     issue_title = models.CharField(max_length=500)
     issue_url = models.URLField(max_length=500, blank=True)
     issue_state = models.CharField(max_length=50, default="open")
     issue_body = models.TextField(blank=True)
+    target_head_sha = models.CharField(max_length=64, blank=True)
+    approved_by = models.CharField(max_length=120, blank=True)
+    approval_emoji = models.CharField(max_length=32, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_head_sha = models.CharField(max_length=64, blank=True)
     prompt = models.TextField(blank=True)
     terminal_state_key = models.SlugField(max_length=120, blank=True)
     terminal_pid_file = models.CharField(max_length=500, blank=True)
@@ -95,6 +122,10 @@ class GitHubMonitorItem(Entity):
         indexes = [
             models.Index(fields=("status", "queued_at"), name="repos_ghmon_status_idx"),
             models.Index(fields=("task", "issue_number"), name="repos_ghmon_issue_idx"),
+            models.Index(
+                fields=("target_type", "status"),
+                name="repos_ghmon_target_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(

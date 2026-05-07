@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 from urllib.parse import urlparse
 
 from django.contrib import admin, messages
@@ -8,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
+from apps.repos import github_monitor
 from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
 from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
@@ -18,6 +20,8 @@ from apps.repos.models.monitoring import GitHubMonitorItem, GitHubMonitorTask
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.models.spam import RepositoryIssueSpamAssessment
+
+logger = logging.getLogger(__name__)
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
@@ -222,14 +226,20 @@ class GitHubMonitorTaskAdmin(admin.ModelAdmin):
         "display",
         "repository",
         "enabled",
+        "target_type",
         "issue_title",
+        "require_approval_reaction",
+        "approval_actor",
+        "approval_emoji",
         "inactivity_timeout_minutes",
     )
-    list_filter = ("enabled", "repository")
+    list_filter = ("enabled", "target_type", "require_approval_reaction", "repository")
     search_fields = (
         "name",
         "display",
         "issue_title",
+        "approval_actor",
+        "approval_emoji",
         "repository__owner",
         "repository__name",
     )
@@ -240,17 +250,28 @@ class GitHubMonitorTaskAdmin(admin.ModelAdmin):
 @admin.register(GitHubMonitorItem)
 class GitHubMonitorItemAdmin(admin.ModelAdmin):
     list_display = (
+        "target_type",
         "issue_number",
         "issue_title",
         "task",
         "status",
+        "approved_by",
+        "approved_head_sha",
         "queued_at",
         "launched_at",
         "last_activity_at",
     )
-    list_filter = ("status", "task")
-    search_fields = ("issue_title", "issue_number", "issue_url", "fingerprint")
+    list_filter = ("status", "target_type", "task")
+    search_fields = (
+        "issue_title",
+        "issue_number",
+        "issue_url",
+        "fingerprint",
+        "approved_by",
+        "approved_head_sha",
+    )
     raw_id_fields = ("task",)
+    actions = ("complete_selected", "dismiss_selected", "requeue_selected")
     readonly_fields = (
         "fingerprint",
         "queued_at",
@@ -261,7 +282,70 @@ class GitHubMonitorItemAdmin(admin.ModelAdmin):
         "prompt",
         "issue_body",
         "terminal_pid_file",
+        "target_head_sha",
+        "approved_by",
+        "approval_emoji",
+        "approved_at",
+        "approved_head_sha",
     )
+
+    @admin.action(description=_("Complete selected monitor items"))
+    def complete_selected(self, request, queryset):
+        self._run_monitor_item_action(
+            request,
+            queryset,
+            action=github_monitor.complete_item,
+            success_message=_("Completed %(count)s monitor items."),
+            failure_message=_("Failed to complete %(count)s monitor items: %(items)s"),
+        )
+
+    @admin.action(description=_("Dismiss selected monitor items"))
+    def dismiss_selected(self, request, queryset):
+        self._run_monitor_item_action(
+            request,
+            queryset,
+            action=github_monitor.dismiss_item,
+            success_message=_("Dismissed %(count)s monitor items."),
+            failure_message=_("Failed to dismiss %(count)s monitor items: %(items)s"),
+        )
+
+    @admin.action(description=_("Requeue selected monitor items"))
+    def requeue_selected(self, request, queryset):
+        self._run_monitor_item_action(
+            request,
+            queryset,
+            action=github_monitor.requeue_item,
+            success_message=_("Requeued %(count)s monitor items."),
+            failure_message=_("Failed to requeue %(count)s monitor items: %(items)s"),
+        )
+
+    def _run_monitor_item_action(
+        self,
+        request,
+        queryset,
+        *,
+        action,
+        success_message,
+        failure_message,
+    ) -> None:
+        count = 0
+        failures: list[str] = []
+        for item in queryset.iterator():
+            try:
+                action(item_id=item.pk)
+                count += 1
+            except Exception as exc:
+                logger.exception("GitHub monitor admin action failed for %s", item.pk)
+                failures.append(f"#{item.pk}: {exc}")
+        if count:
+            self.message_user(request, success_message % {"count": count})
+        if failures:
+            self.message_user(
+                request,
+                failure_message
+                % {"count": len(failures), "items": "; ".join(failures)},
+                level=messages.ERROR,
+            )
 
 
 @admin.register(PackageRepository)
