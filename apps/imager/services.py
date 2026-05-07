@@ -219,6 +219,17 @@ RECOVERY_STALE_FILE_PATHS = (
     "/etc/sudoers.d/90-arthexis-recovery",
 )
 
+
+def _render_bootstrap_script(*, connect_bootstrap_enabled: bool = False) -> str:
+    """Render first-boot bootstrap script with image-level feature defaults."""
+
+    default = "1" if connect_bootstrap_enabled else "0"
+    return BOOTSTRAP_SCRIPT.replace(
+        'connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"',
+        f'connect_bootstrap_enabled="${{ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-{default}}}"',
+    )
+
+
 RECOVERY_ACCESS_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 
@@ -1120,6 +1131,7 @@ def _customize_image(
     suite_source_path: Path | None = None,
     network_profiles: tuple[NetworkProfileInfo, ...] = (),
     reservation: ImageReservation | None = None,
+    connect_bootstrap_enabled: bool = False,
 ) -> ImageCustomizationResult:
     """Inject bootstrap scripts and systemd units into the image."""
 
@@ -1134,7 +1146,12 @@ def _customize_image(
         reservation_json = work_dir / "reserved-node.json"
         suite_bundle_info: SuiteBundleInfo | None = None
 
-        _write_linux_text(bootstrap, BOOTSTRAP_SCRIPT)
+        _write_linux_text(
+            bootstrap,
+            _render_bootstrap_script(
+                connect_bootstrap_enabled=connect_bootstrap_enabled
+            ),
+        )
         _write_linux_text(service, SYSTEMD_SERVICE.format(git_url=git_url))
         _write_linux_text(recovery_service, RECOVERY_SYSTEMD_SERVICE)
         _write_linux_text(
@@ -1898,6 +1915,7 @@ def build_rpi4b_image(
     reserve_hostname_prefix: str = "",
     reserve_number: int | None = None,
     reserve_role: str = "",
+    connect_bootstrap_enabled: bool = False,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -1986,6 +2004,7 @@ def build_rpi4b_image(
             suite_source_path=resolved_suite_source_path if bundle_suite else None,
             network_profiles=network_profiles,
             reservation=reservation,
+            connect_bootstrap_enabled=connect_bootstrap_enabled,
         )
         if isinstance(raw_customization_result, ImageCustomizationResult):
             customization_result = raw_customization_result

@@ -38,6 +38,7 @@ from apps.imager.services import (
     _guestfish_remove_file,
     _guestfish_symlink,
     _guestfish_write,
+    _render_bootstrap_script,
     _resolve_root_disk_path,
     _should_exclude_suite_bundle_path,
     _validate_remote_base_image_url,
@@ -456,6 +457,45 @@ def test_imager_build_command_can_disable_reservation_env_default(
     )
 
     assert mock_build.call_args.kwargs["reserve_node"] is False
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_can_enable_connect_bootstrap(
+    mock_build,
+    tmp_path: Path,
+) -> None:
+    """The CLI opt-in should flow into image customization."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+            "reservation": None,
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "connect-enabled",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--enable-connect-bootstrap",
+    )
+
+    assert mock_build.call_args.kwargs["connect_bootstrap_enabled"] is True
 
 
 @pytest.mark.django_db
@@ -897,6 +937,22 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
         ),
         "rm-f /etc/sudoers.d/90-arthexis-recovery",
     ]
+
+
+def test_render_bootstrap_script_can_enable_connect_default() -> None:
+    """Rendered bootstrap can bake in the Raspberry Pi Connect opt-in."""
+
+    default_script = _render_bootstrap_script()
+    enabled_script = _render_bootstrap_script(connect_bootstrap_enabled=True)
+
+    assert (
+        'connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-0}"'
+        in default_script
+    )
+    assert (
+        'connect_bootstrap_enabled="${ARTHEXIS_ENABLE_CONNECT_BOOTSTRAP:-1}"'
+        in enabled_script
+    )
 
 
 def test_customize_image_writes_reserved_node_metadata(tmp_path: Path) -> None:

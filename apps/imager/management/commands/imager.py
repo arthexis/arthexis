@@ -69,6 +69,11 @@ class Command(BaseCommand):
             help="Do not bundle a static copy of this Arthexis checkout into the image.",
         )
         build_parser.add_argument(
+            "--enable-connect-bootstrap",
+            action="store_true",
+            help="Bake in opt-in Raspberry Pi Connect bootstrap for this image.",
+        )
+        build_parser.add_argument(
             "--suite-source",
             default="",
             help="Arthexis checkout path to bundle into the image (default: current suite base directory).",
@@ -347,6 +352,7 @@ class Command(BaseCommand):
                 recovery_authorized_keys=recovery_authorized_keys,
                 skip_recovery_ssh=bool(skip_recovery_ssh),
                 bundle_suite=not bool(options["no_bundle_suite"]),
+                connect_bootstrap_enabled=bool(options["enable_connect_bootstrap"]),
                 suite_source_path=Path(str(options["suite_source"]))
                 if str(options["suite_source"]).strip()
                 else None,
