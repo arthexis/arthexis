@@ -142,7 +142,7 @@ class CPForwarder(Entity):
         help_text=_("Remote node that will receive forwarded sessions."),
     )
     enabled = models.BooleanField(
-        default=True,
+        default=False,
         help_text=_(
             "Enable to forward eligible charge points to the remote node. "
             "Charge points must also have Export transactions enabled."
