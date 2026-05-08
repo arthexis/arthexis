@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 class CSMSTransportMixin:
     """Provide forwarding transport helpers for CSMSConsumer."""
 
+    _FORWARDING_LOCAL_NODE_UNSET = object()
+
     @staticmethod
     def _forwarding_interval_seconds(session) -> float:
         interval = getattr(session, "forwarding_interval_seconds", 0.0) or 0.0
@@ -197,9 +199,13 @@ class CSMSTransportMixin:
         if allowed is not None and action not in allowed:
             return
 
-        wrapped_payload = self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
         forwarded = False
         try:
+            wrapped_payload = await self._wrap_forwarding_payload(
+                charger,
+                raw,
+                direction="cp_to_csms",
+            )
             forwarded = await self._send_or_buffer_cp_payload(
                 session=session,
                 action=action,
@@ -241,14 +247,15 @@ class CSMSTransportMixin:
             if allowed is not None and action not in allowed:
                 return
             try:
+                wrapped_payload = await self._wrap_forwarding_payload(
+                    charger,
+                    raw,
+                    direction="cp_to_csms",
+                )
                 forwarded = await self._send_or_buffer_cp_payload(
                     session=session,
                     action=action,
-                    wrapped_payload=self._wrap_forwarding_payload(
-                        charger,
-                        raw,
-                        direction="cp_to_csms",
-                    ),
+                    wrapped_payload=wrapped_payload,
                 )
             except Exception as retry_exc:  # pragma: no cover
                 logger.warning(
@@ -299,9 +306,12 @@ class CSMSTransportMixin:
                 return
             session.pending_call_ids.discard(message_id)
         try:
-            await sync_to_async(session.connection.send)(
-                self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms_reply")
+            wrapped_payload = await self._wrap_forwarding_payload(
+                charger,
+                raw,
+                direction="cp_to_csms_reply",
             )
+            await sync_to_async(session.connection.send)(wrapped_payload)
         except Exception as exc:  # pragma: no cover
             logger.warning(
                 "Failed to forward reply %s for charger %s via %s: %s",
@@ -312,7 +322,7 @@ class CSMSTransportMixin:
             )
             forwarder.remove_session(charger.pk)
 
-    def _wrap_forwarding_payload(self, charger, raw: str, *, direction: str) -> str:
+    async def _wrap_forwarding_payload(self, charger, raw: str, *, direction: str) -> str:
         """Wrap OCPP message with route metadata for forwarding channels."""
         try:
             payload = json.loads(raw)
@@ -320,7 +330,7 @@ class CSMSTransportMixin:
             return raw
         if not isinstance(payload, list):
             return raw
-        local_node = Node.get_local()
+        local_node = await self._get_local_node_for_forwarding()
         meta: dict[str, object] = {
             "charger_id": getattr(charger, "charger_id", None),
             "connector_id": getattr(charger, "connector_id", None),
@@ -329,6 +339,17 @@ class CSMSTransportMixin:
         if local_node and getattr(local_node, "uuid", None):
             meta["route"] = [str(local_node.uuid)]
         return json.dumps({"ocpp": payload, "meta": meta})
+
+    async def _get_local_node_for_forwarding(self):
+        cached_local_node = getattr(
+            self,
+            "_forwarding_local_node",
+            self._FORWARDING_LOCAL_NODE_UNSET,
+        )
+        if cached_local_node is self._FORWARDING_LOCAL_NODE_UNSET:
+            cached_local_node = await database_sync_to_async(Node.get_local)()
+            self._forwarding_local_node = cached_local_node
+        return cached_local_node
 
     @staticmethod
     def _cancel_scheduled_cp_flush(session) -> None:
