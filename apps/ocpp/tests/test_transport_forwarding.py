@@ -89,6 +89,32 @@ async def test_forwarding_payload_local_node_lookup_stays_outside_event_loop(mon
 
 
 @pytest.mark.anyio
+async def test_forwarding_payload_reuses_cached_local_node_lookup(monkeypatch):
+    """Forwarding should cache local-node lookup per transport instance."""
+
+    transport = DummyTransport()
+    charger = SimpleNamespace(pk=10, charger_id="CP-10", connector_id=1)
+    local_node = SimpleNamespace(uuid="00000000-0000-4000-8000-000000000011")
+    get_local = Mock(return_value=local_node)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.Node.get_local", get_local)
+
+    wrapped_first = await transport._wrap_forwarding_payload(
+        charger,
+        '[2,"msg-1","Heartbeat",{}]',
+        direction="cp_to_csms",
+    )
+    wrapped_second = await transport._wrap_forwarding_payload(
+        charger,
+        '[2,"msg-2","Heartbeat",{}]',
+        direction="cp_to_csms",
+    )
+
+    assert get_local.call_count == 1
+    assert json.loads(wrapped_first)["meta"]["route"] == [str(local_node.uuid)]
+    assert json.loads(wrapped_second)["meta"]["route"] == [str(local_node.uuid)]
+
+
+@pytest.mark.anyio
 async def test_forward_charge_point_reply_noops_for_non_pending_message_id(monkeypatch):
     """Replies not tracked as pending should not be forwarded or mutated."""
 

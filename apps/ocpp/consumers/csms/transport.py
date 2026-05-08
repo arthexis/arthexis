@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 class CSMSTransportMixin:
     """Provide forwarding transport helpers for CSMSConsumer."""
 
+    _FORWARDING_LOCAL_NODE_UNSET = object()
+
     @staticmethod
     def _forwarding_interval_seconds(session) -> float:
         interval = getattr(session, "forwarding_interval_seconds", 0.0) or 0.0
@@ -328,7 +330,7 @@ class CSMSTransportMixin:
             return raw
         if not isinstance(payload, list):
             return raw
-        local_node = await database_sync_to_async(Node.get_local)()
+        local_node = await self._get_local_node_for_forwarding()
         meta: dict[str, object] = {
             "charger_id": getattr(charger, "charger_id", None),
             "connector_id": getattr(charger, "connector_id", None),
@@ -337,6 +339,17 @@ class CSMSTransportMixin:
         if local_node and getattr(local_node, "uuid", None):
             meta["route"] = [str(local_node.uuid)]
         return json.dumps({"ocpp": payload, "meta": meta})
+
+    async def _get_local_node_for_forwarding(self):
+        cached_local_node = getattr(
+            self,
+            "_forwarding_local_node",
+            self._FORWARDING_LOCAL_NODE_UNSET,
+        )
+        if cached_local_node is self._FORWARDING_LOCAL_NODE_UNSET:
+            cached_local_node = await database_sync_to_async(Node.get_local)()
+            self._forwarding_local_node = cached_local_node
+        return cached_local_node
 
     @staticmethod
     def _cancel_scheduled_cp_flush(session) -> None:
