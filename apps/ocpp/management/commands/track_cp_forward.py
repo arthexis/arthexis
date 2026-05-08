@@ -257,8 +257,10 @@ class Command(BaseCommand):
         limit = int(options.get("limit") or DEFAULT_SCAN_LIMIT)
         enable_forwarder_id = options.get("enable_forwarder_id")
 
-        if not any([sample_target is not None, baseline_path, validate, enable_forwarder_id]):
-            raise CommandError("Specify --sample, --baseline, or --validate.")
+        if not any([sample_target is not None, baseline_path, validate, enable_forwarder_id is not None]):
+            raise CommandError(
+                "Specify --sample, --baseline, --validate, or --enable-forwarder."
+            )
 
         if sample_target is not None:
             output = (
@@ -289,9 +291,9 @@ class Command(BaseCommand):
                     f"(scanned {limit} entries)."
                 )
 
-        if enable_forwarder_id:
+        if enable_forwarder_id is not None:
             try:
-                forwarder = CPForwarder.objects.get(pk=enable_forwarder_id)
+                forwarder = CPForwarder.objects.select_related("target_node").get(pk=enable_forwarder_id)
             except CPForwarder.DoesNotExist as exc:
                 raise CommandError(
                     f"CP forwarder with id {enable_forwarder_id} was not found."
