@@ -166,6 +166,28 @@ class Command(BaseCommand):
                 )
             )
             return
+        if mode == 'open':
+            updated = queryset.update(
+                authorization_policy=Charger.AuthorizationPolicy.OPEN,
+                require_rfid=False,
+            )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Set authorization policy to open on {updated} charger(s).'
+                )
+            )
+            return
+        if mode == 'strict':
+            updated = queryset.update(
+                authorization_policy=Charger.AuthorizationPolicy.STRICT,
+                require_rfid=True,
+            )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Set authorization policy to strict on {updated} charger(s).'
+                )
+            )
+            return
         if mode == 'push':
             sent = self._send_local_rfid_list(chargers)
             self.stdout.write(
