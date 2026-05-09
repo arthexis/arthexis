@@ -237,6 +237,12 @@ class Command(BaseCommand):
             help="Report CP forwarder configuration on this node.",
         )
         parser.add_argument(
+            "--enable-forwarder",
+            type=int,
+            dest="enable_forwarder_id",
+            help="Enable a CP forwarder by database id.",
+        )
+        parser.add_argument(
             "--limit",
             type=int,
             default=DEFAULT_SCAN_LIMIT,
@@ -249,9 +255,12 @@ class Command(BaseCommand):
         baseline_path: Path | None = options.get("baseline")
         validate = bool(options.get("validate"))
         limit = int(options.get("limit") or DEFAULT_SCAN_LIMIT)
+        enable_forwarder_id = options.get("enable_forwarder_id")
 
-        if not any([sample_target is not None, baseline_path, validate]):
-            raise CommandError("Specify --sample, --baseline, or --validate.")
+        if not any([sample_target is not None, baseline_path, validate, enable_forwarder_id is not None]):
+            raise CommandError(
+                "Specify --sample, --baseline, --validate, or --enable-forwarder."
+            )
 
         if sample_target is not None:
             output = (
@@ -281,6 +290,20 @@ class Command(BaseCommand):
                     f"No baseline match found for {resolved_identifier} "
                     f"(scanned {limit} entries)."
                 )
+
+        if enable_forwarder_id is not None:
+            try:
+                forwarder = CPForwarder.objects.select_related("target_node").get(pk=enable_forwarder_id)
+            except CPForwarder.DoesNotExist as exc:
+                raise CommandError(
+                    f"CP forwarder with id {enable_forwarder_id} was not found."
+                ) from exc
+            if not forwarder.enabled:
+                forwarder.enabled = True
+                forwarder.save(update_fields=["enabled", "updated_at"])
+            self.stdout.write(
+                f"Enabled CP forwarder #{forwarder.pk} for target {forwarder.target_node}."
+            )
 
         if validate:
             local_node = Node.get_local()
