@@ -164,7 +164,7 @@ def build_chargers_parser(parser: argparse.ArgumentParser) -> None:
         help='Manage RFID requirements and local lists.',
         description='Manage RFID requirements and local lists.',
     )
-    rfid_parser.add_argument('rfid_action', choices=['on', 'off', 'push', 'lock'])
+    rfid_parser.add_argument('rfid_action', choices=['on', 'off', 'open', 'strict', 'push', 'lock'])
 
     auth_parser = subparsers.add_parser(
         'auth',

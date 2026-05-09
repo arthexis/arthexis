@@ -424,6 +424,39 @@ class ChargersCommandTests(TestCase):
         frame = json.loads(ws.messages[0])
         self.assertEqual(frame[2], "SendLocalList")
 
+
+    def test_rfid_open_sets_open_policy_and_disables_requirement(self) -> None:
+        """RFID open mode sets insecure compatibility auth policy per charger."""
+
+        charger = Charger.objects.create(
+            charger_id="CLI-RFID-OPEN-1",
+            connector_id=1,
+            authorization_policy=Charger.AuthorizationPolicy.STRICT,
+            require_rfid=True,
+        )
+
+        call_command("charger", "rfid", "open", "--sn", charger.charger_id, "--cp", "A")
+
+        charger.refresh_from_db()
+        self.assertEqual(charger.authorization_policy, Charger.AuthorizationPolicy.OPEN)
+        self.assertFalse(charger.require_rfid)
+
+    def test_rfid_strict_sets_strict_policy_and_enables_requirement(self) -> None:
+        """RFID strict mode leaves open mode and restores RFID requirement."""
+
+        charger = Charger.objects.create(
+            charger_id="CLI-RFID-STRICT-1",
+            connector_id=1,
+            authorization_policy=Charger.AuthorizationPolicy.OPEN,
+            require_rfid=False,
+        )
+
+        call_command("charger", "rfid", "strict", "--sn", charger.charger_id, "--cp", "A")
+
+        charger.refresh_from_db()
+        self.assertEqual(charger.authorization_policy, Charger.AuthorizationPolicy.STRICT)
+        self.assertTrue(charger.require_rfid)
+
     def test_rfid_lockdown_cannot_be_combined_with_send_local_rfids(self) -> None:
         """Lockdown rejects duplicate list-send intent on the same command call."""
 
