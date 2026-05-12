@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, Overflow
 from math import comb
 from typing import Optional
 
@@ -882,6 +882,13 @@ def ev_charging_calculator(request):
                 error = _("Battery capacity must be greater than zero.")
             elif values["charger_power_kw"] <= 0:
                 error = _("Charger power must be greater than zero.")
+            elif (
+                values["battery_kwh"] > MAX_POWER_CALCULATOR_INPUT
+                or values["charger_power_kw"] > MAX_POWER_CALCULATOR_INPUT
+            ):
+                error = _(
+                    "Battery capacity and charger power are too large to calculate safely."
+                )
             elif values["start_soc"] < 0 or values["target_soc"] > 100:
                 error = _("State of charge must stay between 0 and 100 percent.")
             elif values["target_soc"] <= values["start_soc"]:
@@ -906,7 +913,7 @@ def ev_charging_calculator(request):
                     charging_efficiency=values["charging_efficiency"],
                     tariff_mxn_kwh=values.get("tariff_mxn_kwh"),
                 )
-            except (InvalidOperation, ZeroDivisionError):
+            except (InvalidOperation, Overflow, ZeroDivisionError):
                 context["error"] = _(
                     "Unable to calculate EV charging totals for the provided values."
                 )

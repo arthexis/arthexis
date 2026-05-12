@@ -219,6 +219,44 @@ def test_public_calculators_accessible_without_login(db):
     assert client.get(reverse("awg:mtg_hypergeometric")).status_code == 200
 
 
+def test_ev_charging_calculator_rejects_excessive_battery_capacity(db):
+    response = Client().post(
+        reverse("awg:ev_charging"),
+        data={
+            "battery_kwh": "1e999999999",
+            "start_soc": "0",
+            "target_soc": "50",
+            "charger_power_kw": "1",
+            "charging_efficiency": "0.9",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        "Battery capacity and charger power are too large to calculate safely."
+        in response.content.decode()
+    )
+
+
+def test_ev_charging_calculator_rejects_excessive_charger_power(db):
+    response = Client().post(
+        reverse("awg:ev_charging"),
+        data={
+            "battery_kwh": "50",
+            "start_soc": "0",
+            "target_soc": "50",
+            "charger_power_kw": "1e999999999",
+            "charging_efficiency": "0.9",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        "Battery capacity and charger power are too large to calculate safely."
+        in response.content.decode()
+    )
+
+
 def test_energy_tariff_requires_login(db):
     response = Client().get(reverse("awg:energy_tariff"))
 

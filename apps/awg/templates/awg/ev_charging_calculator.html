@@ -10,7 +10,7 @@
   <div class="row g-3">
     <div class="col-md-4">
       <label class="form-label" for="battery_kwh">{% trans "Battery Capacity (kWh)" %}</label>
-      <input id="battery_kwh" name="battery_kwh" type="number" step="0.01" min="0.01" class="form-control" value="{{ form.battery_kwh }}" required>
+      <input id="battery_kwh" name="battery_kwh" type="number" step="0.01" min="0.01" max="1000000000" class="form-control" value="{{ form.battery_kwh }}" required>
     </div>
     <div class="col-md-4">
       <label class="form-label" for="start_soc">{% trans "Start SOC (%)" %}</label>
@@ -22,7 +22,7 @@
     </div>
     <div class="col-md-4">
       <label class="form-label" for="charger_power_kw">{% trans "Charger Power (kW)" %}</label>
-      <input id="charger_power_kw" name="charger_power_kw" type="number" step="0.01" min="0.01" class="form-control" value="{{ form.charger_power_kw }}" required>
+      <input id="charger_power_kw" name="charger_power_kw" type="number" step="0.01" min="0.01" max="1000000000" class="form-control" value="{{ form.charger_power_kw }}" required>
     </div>
     <div class="col-md-4">
       <label class="form-label" for="charging_efficiency">{% trans "Charging Efficiency (0-1)" %}</label>
