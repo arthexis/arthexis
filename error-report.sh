@@ -30,9 +30,22 @@ case "${1:-}" in
     ;;
 esac
 
-if [[ "${1:-}" == "--analyze" ]]; then
-  shift
-  exec "$BASE_DIR/.venv/bin/python" "$BASE_DIR/manage.py" diagnostics analyze "$@"
+ANALYZE_MODE=0
+ANALYZE_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--analyze" ]]; then
+    ANALYZE_MODE=1
+    continue
+  fi
+  ANALYZE_ARGS+=("$arg")
+done
+
+if [[ "$ANALYZE_MODE" -eq 1 ]]; then
+  if [[ ! -x "$BASE_DIR/.venv/bin/python" ]]; then
+    echo "Missing $BASE_DIR/.venv/bin/python. Create the virtualenv before using --analyze." >&2
+    exit 1
+  fi
+  exec "$BASE_DIR/.venv/bin/python" "$BASE_DIR/manage.py" diagnostics analyze "${ANALYZE_ARGS[@]}"
 fi
 
 select_python() {
