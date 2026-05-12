@@ -350,9 +350,12 @@ def _sanitize_storage_options(storage_options: dict[str, object]) -> dict[str, o
 
     sensitive_fragments = (
         "access_key",
+        "account_key",
         "connection_string",
         "password",
+        "private_key",
         "secret",
+        "shared_key",
         "token",
     )
 
