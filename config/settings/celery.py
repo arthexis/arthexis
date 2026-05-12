@@ -6,6 +6,7 @@ from datetime import timedelta
 from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
+from apps.core.auto_upgrade import AUTO_UPGRADE_CADENCE_HOUR, AUTO_UPGRADE_TASK_PATH
 from apps.sensors.constants import USB_LCD_STATUS_CELERY_TASK_NAME
 from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
@@ -34,6 +35,10 @@ CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
 CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
 CELERY_BEAT_SCHEDULE = {
+    "auto_upgrade_check": {
+        "task": AUTO_UPGRADE_TASK_PATH,
+        "schedule": crontab(minute=0, hour=AUTO_UPGRADE_CADENCE_HOUR),
+    },
     "heartbeat": {
         "task": "apps.core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),

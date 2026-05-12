@@ -935,19 +935,59 @@ def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
     raise ValueError("GitHub repository URL is required to export artifacts")
 
 
+def _version_at_git_ref(ref: str) -> str:
+    try:
+        return _git_stdout(["git", "show", f"{ref}^{{commit}}:VERSION"]).strip()
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return ""
+
+
+def _ensure_git_ref_version_matches_release(
+    *,
+    ref: str,
+    release: PackageRelease,
+    log_path: Path,
+    label: str,
+) -> None:
+    version = _version_at_git_ref(ref)
+    if version == release.version:
+        return
+
+    message = (
+        f"Release tag blocked: {label} VERSION is {version or 'unavailable'}, "
+        f"expected {release.version}."
+    )
+    _append_log(log_path, message)
+    raise RuntimeError(message)
+
+
 def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
     tag_name = f"v{release.version}"
     tag_ref = f"refs/tags/{tag_name}"
-    exists = subprocess.run(
+    _ensure_git_ref_version_matches_release(
+        ref="HEAD",
+        release=release,
+        log_path=log_path,
+        label="HEAD",
+    )
+    exists = GIT_ADAPTER.run(
         ["git", "rev-parse", "--verify", "-q", tag_ref],
         check=False,
-        capture_output=True,
     )
     if exists.returncode != 0:
-        subprocess.run(["git", "tag", tag_name], check=True)
+        GIT_ADAPTER.run(
+            ["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"],
+            check=True,
+        )
         _append_log(log_path, f"Created git tag {tag_name}")
     else:
         _append_log(log_path, f"Git tag {tag_name} already exists")
+    _ensure_git_ref_version_matches_release(
+        ref=tag_name,
+        release=release,
+        log_path=log_path,
+        label=tag_name,
+    )
     release_uploader._push_tag(tag_name)
     _append_log(log_path, f"Pushed git tag {tag_name} to origin")
     return tag_name
