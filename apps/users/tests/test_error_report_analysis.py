@@ -44,7 +44,9 @@ def test_analyze_error_report_package_handles_empty_findings(tmp_path):
     result = analyze_error_report_package(package_path)
 
     assert result["findings"] == []
-    assert result["max_severity"] == "low"
+    assert result["max_severity"] == "none"
+    assert result["max_severity_rank"] == 0
+    assert result["risk_score"] == 0
 
 
 def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
@@ -122,3 +124,19 @@ def test_diagnostics_analyze_fail_on_threshold(monkeypatch):
 
     with pytest.raises(CommandError, match="threshold reached"):
         call_command("diagnostics", "analyze", package="fake.zip", fail_on="medium")
+
+
+def test_diagnostics_analyze_fail_on_low_allows_clean_report(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, summary="all good", logs={"logs/runtime.log": "ok"})
+    stdout = StringIO()
+
+    call_command(
+        "diagnostics",
+        "analyze",
+        package=str(package_path),
+        fail_on="low",
+        stdout=stdout,
+    )
+
+    assert "Risk score: 0 (none)" in stdout.getvalue()

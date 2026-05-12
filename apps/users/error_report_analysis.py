@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
-SEVERITY_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 RULES = (
     ("critical", "secret_exposure", re.compile(r"(aws_secret_access_key|BEGIN\s+PRIVATE\s+KEY)", re.IGNORECASE), "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
@@ -88,7 +88,7 @@ def analyze_error_report_package(package_path: Path) -> dict:
         seen.add(key)
         unique_findings.append(finding)
 
-    max_rank = max([SEVERITY_ORDER[f["severity"]] for f in unique_findings], default=1)
+    max_rank = max([SEVERITY_ORDER[f["severity"]] for f in unique_findings], default=0)
     max_severity = next(level for level, rank in SEVERITY_ORDER.items() if rank == max_rank)
 
     return {
