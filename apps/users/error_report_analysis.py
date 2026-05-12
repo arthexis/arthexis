@@ -10,6 +10,24 @@ from zipfile import BadZipFile, ZipFile
 SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 LOG_TEXT_SUFFIXES = (".log", ".txt", ".json", ".ndjson")
 LOG_PATH_PART_PATTERN = re.compile(r"(^|[-_.])logs?($|[-_.])", re.IGNORECASE)
+PRIVATE_KEY_BLOCK_PATTERN = re.compile(
+    r"-----BEGIN(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----.*?"
+    r"-----END(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----",
+    re.IGNORECASE | re.DOTALL,
+)
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?P<prefix>"
+    r"\b(?:"
+    r"aws_secret_access_key|"
+    r"(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|secret|token|private[_-]?key)"
+    r"(?:[_-][A-Za-z0-9]+)*"
+    r")\b"
+    r"[\"']?\s*[:=]\s*"
+    r")"
+    r"(?:(?P<quote>[\"'])(?P<quoted_value>(?:\\.|(?!(?P=quote)(?=$|[\s,;}\]])).)*)"
+    r"(?P=quote)|(?P<unquoted_value>(?:[A-Za-z0-9._~+/=:@%!-]|\\+[\"']|\\+)+))",
+    re.IGNORECASE,
+)
 SECRET_EXPOSURE_PATTERN = re.compile(
     r"("
     r"BEGIN\s+PRIVATE\s+KEY|"
@@ -40,7 +58,6 @@ def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = 
 
 
 RULES = (
-    ("critical", "secret_exposure", SECRET_EXPOSURE_PATTERN, "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
     ("high", "startup", re.compile(r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)", re.IGNORECASE), "Python startup traceback detected."),
     ("medium", "service", re.compile(r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE), "Service-level instability markers detected."),
@@ -115,6 +132,16 @@ def _is_log_entry(name: str) -> bool:
 
 
 def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:
+    if SECRET_EXPOSURE_PATTERN.search(text):
+        findings.append(
+            {
+                "severity": "critical",
+                "category": "secret_exposure",
+                "message": f"Potential secret material detected.{summary_suffix}",
+                "source": source,
+            }
+        )
+
     for severity, category, pattern, message in RULES:
         if not pattern.search(text):
             continue
@@ -126,6 +153,34 @@ def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summar
                 "source": source,
             }
         )
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Return ``text`` with obvious credential material replaced for reports."""
+
+    def _replace_assignment(match: re.Match[str]) -> str:
+        quote = match.group("quote") or ""
+        return f"{match.group('prefix')}{quote}[redacted]{quote}"
+
+    redacted = PRIVATE_KEY_BLOCK_PATTERN.sub("[redacted private key]", text)
+    return SECRET_ASSIGNMENT_PATTERN.sub(_replace_assignment, redacted)
+
+
+def redact_analysis_payload(payload):
+    """Return an analysis payload safe for stdout or clear-text JSON files."""
+
+    if isinstance(payload, dict):
+        return {
+            key: redact_analysis_payload(value)
+            for key, value in payload.items()
+        }
+    if isinstance(payload, list):
+        return [redact_analysis_payload(value) for value in payload]
+    if isinstance(payload, tuple):
+        return tuple(redact_analysis_payload(value) for value in payload)
+    if isinstance(payload, str):
+        return redact_sensitive_text(payload)
+    return payload
 
 
 def analyze_error_report_package(package_path: Path) -> dict:
