@@ -14,6 +14,7 @@ from apps.repos.pr_oversee import (
     PullRequestOverseer,
     default_patchwork_dir,
     patchwork_worktree_path,
+    review_reply_summary,
 )
 
 
@@ -68,6 +69,11 @@ class Command(BaseCommand):
         checkout_parser.add_argument(
             "--branch", default="", help="Optional local branch name."
         )
+        checkout_parser.add_argument(
+            "--no-link-venv",
+            action="store_true",
+            help="Do not link the current checkout .venv into the PR worktree.",
+        )
 
         test_plan_parser = subparsers.add_parser(
             "test-plan", help="Map changed files to test commands."
@@ -90,6 +96,33 @@ class Command(BaseCommand):
             help="Find duplicate or superseded dependency PR groups.",
         )
         dedupe_parser.add_argument("--limit", type=int, default=80)
+
+        advance_parser = subparsers.add_parser(
+            "advance",
+            help="Prioritize and optionally advance open pull requests.",
+        )
+        advance_parser.add_argument("--limit", type=int, default=80)
+        advance_parser.add_argument("--include-drafts", action="store_true")
+        advance_parser.add_argument("--require-approval", action="store_true")
+        advance_parser.add_argument("--allow-pending", action="store_true")
+        advance_parser.add_argument(
+            "--ready-drafts",
+            action="store_true",
+            help="Plan or mark otherwise-ready drafts as ready for review.",
+        )
+        advance_parser.add_argument(
+            "--merge", action="store_true", help="Plan or merge ready PRs."
+        )
+        advance_parser.add_argument(
+            "--method", choices=["squash", "merge", "rebase"], default="squash"
+        )
+        advance_parser.add_argument("--delete-branch", action="store_true")
+        advance_parser.add_argument("--admin", action="store_true")
+        advance_parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Required to mark drafts ready or merge PRs.",
+        )
 
         merge_parser = subparsers.add_parser("merge", help="Gate and merge a PR.")
         self._add_pr_arg(merge_parser)
@@ -136,6 +169,23 @@ class Command(BaseCommand):
             "--write",
             action="store_true",
             help="Required to remove patchwork worktrees.",
+        )
+
+        reply_summary_parser = subparsers.add_parser(
+            "reply-summary", help="Build a terse PR review reply body."
+        )
+        reply_summary_parser.add_argument("--commit", default="")
+        reply_summary_parser.add_argument(
+            "--change", action="append", default=[], help="Change summary bullet."
+        )
+        reply_summary_parser.add_argument(
+            "--validation",
+            action="append",
+            default=[],
+            help="Validation summary bullet.",
+        )
+        reply_summary_parser.add_argument(
+            "--note", action="append", default=[], help="Optional note bullet."
         )
 
         monitor_parser = subparsers.add_parser(
@@ -231,6 +281,7 @@ class Command(BaseCommand):
                 number,
                 worktree=worktree,
                 branch=str(options.get("branch") or ""),
+                link_venv=not bool(options.get("no_link_venv")),
             )
         if action == "test-plan":
             return overseer.test_plan(number)
@@ -238,6 +289,19 @@ class Command(BaseCommand):
             return overseer.ci_failures(number, include_logs=bool(options.get("logs")))
         if action == "dependency-dedupe":
             return overseer.dependency_dedupe(limit=int(options.get("limit") or 80))
+        if action == "advance":
+            return overseer.advance(
+                limit=int(options.get("limit") or 80),
+                include_drafts=bool(options.get("include_drafts")),
+                require_approval=bool(options.get("require_approval")),
+                allow_pending=bool(options.get("allow_pending")),
+                ready_drafts=bool(options.get("ready_drafts")),
+                merge=bool(options.get("merge")),
+                method=str(options.get("method") or "squash"),
+                delete_branch=bool(options.get("delete_branch")),
+                admin=bool(options.get("admin")),
+                write=bool(options.get("write")),
+            )
         if action == "merge":
             if not options.get("write"):
                 gate = overseer.gate(
@@ -314,6 +378,13 @@ class Command(BaseCommand):
                 expected_head_sha=str(options.get("expected_head_sha") or ""),
                 admin=bool(options.get("admin")),
                 write=bool(options.get("write")),
+            )
+        if action == "reply-summary":
+            return review_reply_summary(
+                commit=str(options.get("commit") or ""),
+                changes=[str(item) for item in options.get("change") or []],
+                validations=[str(item) for item in options.get("validation") or []],
+                notes=[str(item) for item in options.get("note") or []],
             )
         raise CommandError(f"Unsupported action: {action}")
 
@@ -409,6 +480,10 @@ class Command(BaseCommand):
             self.stdout.write(f"monitor={result.get('status')}")
             for reason in result.get("manualDecisionReasons") or []:
                 self.stdout.write(f"manual={reason}")
+            return
+
+        if "body" in result:
+            self.stdout.write(str(result.get("body") or "").rstrip())
             return
 
         self.stdout.write(json.dumps(result, indent=2, sort_keys=True))

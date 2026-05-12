@@ -15,12 +15,14 @@ from apps.repos.pr_oversee import (
     CommandResult,
     PullRequestOverseeError,
     PullRequestOverseer,
+    _local_venv_link,
     changed_files_to_test_plan,
     default_patchwork_dir,
     dependency_duplicates,
     hygiene_report,
     patchwork_worktree_path,
     readiness_gate,
+    review_reply_summary,
 )
 
 
@@ -113,6 +115,34 @@ def test_readiness_gate_reports_blockers_for_review_checks_and_threads():
     assert "check:Tests:FAILURE" in result["blockers"]
     assert "pending:CodeQL:IN_PROGRESS" in result["blockers"]
     assert "review_threads:UNRESOLVED:2" in result["blockers"]
+
+
+def test_readiness_gate_ignores_superseded_cancelled_check_runs():
+    result = readiness_gate(
+        _pr_payload(
+            statusCheckRollup=[
+                {
+                    "name": "Upgrade safety gate",
+                    "workflowName": "Upgrade Gate",
+                    "status": "COMPLETED",
+                    "conclusion": "CANCELLED",
+                    "completedAt": "2026-05-12T18:00:00Z",
+                },
+                {
+                    "name": "Upgrade safety gate",
+                    "workflowName": "Upgrade Gate",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                    "completedAt": "2026-05-12T18:05:00Z",
+                },
+            ],
+        )
+    )
+
+    assert result["ready"] is True
+    assert result["blockers"] == []
+    assert result["checks"]["failing"] == []
+    assert result["checks"]["superseded"][0]["value"] == "CANCELLED"
 
 
 def test_comments_normalizes_unresolved_review_threads():
@@ -333,6 +363,87 @@ def test_dependency_duplicates_groups_versioned_dependabot_branches():
     assert result["django"]["preferred"]["number"] == 2
 
 
+def test_advance_includes_drafts_and_prioritizes_ready_work():
+    runner = FakeRunner(
+        [
+            CommandResult(
+                0,
+                json.dumps(
+                    [
+                        {
+                            "number": 123,
+                            "title": "Ready PR",
+                            "isDraft": False,
+                        },
+                        {
+                            "number": 124,
+                            "title": "Draft PR",
+                            "isDraft": True,
+                        },
+                    ]
+                ),
+            ),
+            CommandResult(0, json.dumps(_pr_payload(number=123, title="Ready PR"))),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+            CommandResult(
+                0,
+                json.dumps(_pr_payload(number=124, title="Draft PR", isDraft=True)),
+            ),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, "apps/repos/pr_oversee.py\n"),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.advance(limit=2, include_drafts=True)
+
+    assert result["consideredCount"] == 2
+    assert [item["number"] for item in result["topSuggestions"]] == [123, 124]
+    assert result["topSuggestions"][0]["readyToMerge"] is True
+    assert result["topSuggestions"][1]["canMarkReady"] is True
+
+
+def test_advance_suggests_ci_for_pending_checks():
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=FakeRunner())
+
+    command = overseer._advance_suggested_command(
+        123,
+        gate={},
+        ready_to_merge=False,
+        can_mark_ready=False,
+        blockers=["pending:Tests:IN_PROGRESS"],
+        require_approval=False,
+        allow_pending=False,
+        delete_branch=False,
+        admin=False,
+    )
+
+    assert command.endswith("ci --pr 123 --failures --logs")
+
+
+def test_advance_merge_suggestion_mirrors_enabled_flags():
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=FakeRunner())
+
+    command = overseer._advance_suggested_command(
+        123,
+        gate={"headRefOid": "head-sha"},
+        ready_to_merge=True,
+        can_mark_ready=False,
+        blockers=[],
+        require_approval=True,
+        allow_pending=True,
+        delete_branch=False,
+        admin=True,
+    )
+
+    assert "--delete-branch" not in command
+    assert "--require-approval" in command
+    assert "--allow-pending" in command
+    assert "--admin" in command
+    assert "--expected-head-sha head-sha" in command
+
+
 def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
     runner = FakeRunner(
         [
@@ -368,6 +479,26 @@ def test_checkout_fetches_pr_head_creates_worktree_and_metadata(tmp_path: Path):
         json.loads((worktree / ".arthexis-pr-oversee.json").read_text())["headRefOid"]
         == "head-sha"
     )
+
+
+def test_checkout_links_current_venv_into_worktree(tmp_path: Path):
+    (tmp_path / ".venv").mkdir()
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0),
+            CommandResult(0),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+    worktree = tmp_path / "pr-123"
+
+    result = overseer.checkout(123, worktree=worktree, branch="repos-pr-123")
+
+    assert result["venv"]["linked"] is True
+    assert (worktree / ".venv").exists()
 
 
 def test_checkout_does_not_follow_metadata_symlink(tmp_path: Path):
@@ -529,6 +660,60 @@ def test_cleanup_forces_removal_for_owned_patchwork_metadata(tmp_path: Path):
     ]
 
 
+def test_patchwork_remove_prunes_owned_residue_after_missing_worktree_error(
+    tmp_path: Path,
+):
+    patchwork_root = tmp_path / "patchwork"
+    worktree = patchwork_root / "arthexis-arthexis-pr-123"
+    worktree.mkdir(parents=True)
+    venv_source = tmp_path / "venv-source"
+    venv_source.mkdir()
+    venv = _local_venv_link(venv_source, worktree / ".venv")
+    assert venv["linked"] is True
+    (worktree / ".arthexis-pr-oversee.json").write_text(
+        json.dumps({"number": 123, "venv": venv})
+    )
+    runner = FakeRunner(
+        [
+            CommandResult(128, stderr="is not a working tree"),
+            CommandResult(128, stderr="not a git repository"),
+            CommandResult(128, stderr="is not a working tree"),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+
+    result = overseer._remove_worktree(worktree, patchwork_root=patchwork_root)
+
+    assert result["localRemove"]["removed"] is True
+    assert not worktree.exists()
+
+
+def test_patchwork_remove_preserves_real_venv_residue(tmp_path: Path):
+    patchwork_root = tmp_path / "patchwork"
+    worktree = patchwork_root / "arthexis-arthexis-pr-123"
+    worktree.mkdir(parents=True)
+    (worktree / ".arthexis-pr-oversee.json").write_text('{"number": 123}\n')
+    (worktree / ".venv").mkdir()
+    runner = FakeRunner(
+        [
+            CommandResult(128, stderr="is not a working tree"),
+            CommandResult(128, stderr="not a git repository"),
+            CommandResult(128, stderr="is not a working tree"),
+        ]
+    )
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis", runner=runner, cwd=tmp_path
+    )
+
+    result = overseer._remove_worktree(worktree, patchwork_root=patchwork_root)
+
+    assert result["localRemove"]["reason"] == "non-owned-residue"
+    assert result["localRemove"]["paths"] == [".venv"]
+    assert (worktree / ".venv").exists()
+
+
 def test_patchwork_remove_respects_git_force_failure(tmp_path: Path):
     patchwork_root = tmp_path / "patchwork"
     worktree = patchwork_root / "arthexis-arthexis-pr-123"
@@ -559,7 +744,9 @@ def test_patchwork_hygiene_marks_merged_worktrees_for_prune(tmp_path: Path):
     (worktree / ".arthexis-pr-oversee.json").write_text(
         json.dumps({"repo": "arthexis/arthexis", "number": 123})
     )
-    runner = FakeRunner([CommandResult(0, json.dumps([{"number": 123, "state": "MERGED"}]))])
+    runner = FakeRunner(
+        [CommandResult(0, json.dumps([{"number": 123, "state": "MERGED"}]))]
+    )
     overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
 
     result = overseer.patchwork_hygiene(root=tmp_path)
@@ -628,6 +815,19 @@ def test_hygiene_detects_missing_migration_and_generated_files():
     assert "model-change:missing-migration" in result["failures"]
     assert "body:missing-summary" in result["warnings"]
     assert "body:missing-validation" in result["warnings"]
+
+
+def test_review_reply_summary_formats_change_and_validation_body():
+    result = review_reply_summary(
+        commit="0123456789abcdef",
+        changes=["Linked patchwork .venv"],
+        validations=["manage.py test run -- apps/repos/tests"],
+    )
+
+    assert result["commit"] == "0123456789ab"
+    assert "Addressed in 0123456789ab." in result["body"]
+    assert "- Linked patchwork .venv" in result["body"]
+    assert "- manage.py test run -- apps/repos/tests" in result["body"]
 
 
 def test_management_command_merge_without_write_reports_plan():
@@ -699,6 +899,49 @@ def test_management_command_checkout_defaults_to_patchwork_dir(tmp_path: Path):
     assert kwargs["worktree"] == tmp_path / "arthexis-arthexis-pr-123"
 
 
+def test_management_command_advance_passes_include_drafts_and_write_flags():
+    fake = PullRequestOverseer(repo="arthexis/arthexis")
+    fake.advance = Mock(
+        return_value={
+            "repo": "arthexis/arthexis",
+            "includeDrafts": True,
+            "topSuggestions": [],
+            "items": [],
+            "actions": [],
+        }
+    )
+    buffer = StringIO()
+
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
+        call_command(
+            "pr_oversee",
+            "--repo",
+            "arthexis/arthexis",
+            "--json",
+            "advance",
+            "--include-drafts",
+            "--ready-drafts",
+            "--merge",
+            "--write",
+            "--limit",
+            "5",
+            stdout=buffer,
+        )
+
+    payload = json.loads(buffer.getvalue())
+    assert payload["includeDrafts"] is True
+    fake.advance.assert_called_once()
+    _, kwargs = fake.advance.call_args
+    assert kwargs["limit"] == 5
+    assert kwargs["include_drafts"] is True
+    assert kwargs["ready_drafts"] is True
+    assert kwargs["merge"] is True
+    assert kwargs["write"] is True
+
+
 def test_monitor_stops_for_manual_review_blocker():
     runner = FakeRunner(
         [
@@ -731,9 +974,7 @@ def test_monitor_stops_for_manual_review_blocker():
 
 def test_monitor_waits_on_pending_then_merges_and_cleans():
     pending = _pr_payload(
-        statusCheckRollup=[
-            {"name": "Tests", "status": "IN_PROGRESS", "conclusion": ""}
-        ]
+        statusCheckRollup=[{"name": "Tests", "status": "IN_PROGRESS", "conclusion": ""}]
     )
     ready = _pr_payload()
     merged = _pr_payload(state="MERGED")
@@ -854,9 +1095,7 @@ def test_monitor_requires_write_for_run_test_plan():
     overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
 
     with pytest.raises(PullRequestOverseeError) as exc:
-        overseer.monitor(
-            123, run_test_plan=True, max_iterations=1, dependency_limit=0
-        )
+        overseer.monitor(123, run_test_plan=True, max_iterations=1, dependency_limit=0)
 
     assert (
         str(exc.value)

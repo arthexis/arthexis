@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
+import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -104,6 +107,100 @@ def _status_is_patchwork_noise(lines: Iterable[str]) -> bool:
     )
 
 
+def _is_reparse_point(path: Path) -> bool:
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
+def _remove_owned_path(path: Path) -> None:
+    if path.is_symlink():
+        path.unlink()
+        return
+    if _is_reparse_point(path):
+        if path.is_dir():
+            path.rmdir()
+        else:
+            path.unlink()
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+        return
+    path.unlink(missing_ok=True)
+
+
+def _local_venv_link(source: Path, target: Path) -> dict[str, Any]:
+    if target.exists() or target.is_symlink():
+        return {
+            "linked": False,
+            "reason": "target-exists",
+            "source": str(source),
+            "target": str(target),
+        }
+    if not source.exists():
+        return {
+            "linked": False,
+            "reason": "source-missing",
+            "source": str(source),
+            "target": str(target),
+        }
+
+    resolved_source = source.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if os.name == "nt":
+            completed = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(target), str(resolved_source)],
+                check=False,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                text=True,
+            )
+            if completed.returncode != 0:
+                return {
+                    "linked": False,
+                    "reason": "junction-failed",
+                    "source": str(resolved_source),
+                    "target": str(target),
+                    "stderr": completed.stderr.strip(),
+                    "stdout": completed.stdout.strip(),
+                }
+            kind = "junction"
+        else:
+            target.symlink_to(resolved_source, target_is_directory=True)
+            kind = "symlink"
+    except OSError as exc:
+        return {
+            "linked": False,
+            "reason": "link-failed",
+            "source": str(resolved_source),
+            "target": str(target),
+            "error": str(exc),
+        }
+    return {
+        "linked": True,
+        "kind": kind,
+        "source": str(resolved_source),
+        "target": str(target),
+    }
+
+
+def _git_worktree_missing_error(*results: Any) -> bool:
+    message = " ".join(f"{result.stdout} {result.stderr}".lower() for result in results)
+    return any(
+        marker in message
+        for marker in (
+            "not a working tree",
+            "not a git repository",
+            "is not a working tree",
+            "does not exist",
+        )
+    )
+
+
 class PullRequestOverseeError(RuntimeError):
     """Raised when PR oversight cannot complete deterministically."""
 
@@ -185,27 +282,67 @@ def _check_name(check: Mapping[str, Any]) -> str:
     )
 
 
+def _check_group_key(check: Mapping[str, Any]) -> tuple[str, str, str]:
+    app = _coerce_mapping(check.get("app"))
+    return (
+        _check_name(check),
+        str(check.get("workflowName") or check.get("workflow") or ""),
+        str(app.get("name") or ""),
+    )
+
+
+def _check_order_key(check: Mapping[str, Any], index: int) -> tuple[int, str]:
+    for key in ("completedAt", "startedAt", "updatedAt", "createdAt"):
+        value = str(check.get(key) or "")
+        if value and not value.startswith("0001-"):
+            return 1, value
+    return 0, f"{index:08d}"
+
+
+def _check_entry(check: Mapping[str, Any]) -> dict[str, str]:
+    name = _check_name(check)
+    conclusion = str(check.get("conclusion") or "").upper()
+    status = str(check.get("status") or "").upper()
+    state = str(check.get("state") or "").upper()
+    return {
+        "name": name,
+        "status": status,
+        "state": state,
+        "conclusion": conclusion,
+        "value": conclusion or state or status or "UNKNOWN",
+        "detailsUrl": str(
+            check.get("detailsUrl") or check.get("targetUrl") or check.get("link") or ""
+        ),
+    }
+
+
 def check_rollup_state(pr: Mapping[str, Any]) -> dict[str, list[dict[str, str]]]:
     """Classify status check rollup entries as failing, pending, or passing."""
+
+    latest: dict[
+        tuple[str, str, str], tuple[tuple[int, str], int, Mapping[str, Any]]
+    ] = {}
+    superseded: list[dict[str, str]] = []
+    for index, raw_check in enumerate(_coerce_list(pr.get("statusCheckRollup"))):
+        check = _coerce_mapping(raw_check)
+        key = _check_group_key(check)
+        order = _check_order_key(check, index)
+        previous = latest.get(key)
+        if previous is None or order >= previous[0]:
+            if previous is not None:
+                superseded.append(_check_entry(previous[2]))
+            latest[key] = (order, index, check)
+        else:
+            superseded.append(_check_entry(check))
 
     failing: list[dict[str, str]] = []
     pending: list[dict[str, str]] = []
     passing: list[dict[str, str]] = []
-    for raw_check in _coerce_list(pr.get("statusCheckRollup")):
-        check = _coerce_mapping(raw_check)
-        name = _check_name(check)
-        conclusion = str(check.get("conclusion") or "").upper()
-        status = str(check.get("status") or "").upper()
-        state = str(check.get("state") or "").upper()
-        value = conclusion or state or status or "UNKNOWN"
-        entry = {
-            "name": name,
-            "status": status,
-            "state": state,
-            "conclusion": conclusion,
-            "value": value,
-            "detailsUrl": str(check.get("detailsUrl") or check.get("link") or ""),
-        }
+    for _order, _index, check in sorted(latest.values(), key=lambda item: item[1]):
+        entry = _check_entry(check)
+        conclusion = entry["conclusion"]
+        status = entry["status"]
+        state = entry["state"]
         if conclusion in BAD_CHECKS or state in BAD_CHECKS:
             failing.append(entry)
         elif conclusion and conclusion not in GOOD_CHECKS:
@@ -222,7 +359,12 @@ def check_rollup_state(pr: Mapping[str, Any]) -> dict[str, list[dict[str, str]]]
                 failing.append(entry)
         else:
             passing.append(entry)
-    return {"failing": failing, "pending": pending, "passing": passing}
+    return {
+        "failing": failing,
+        "pending": pending,
+        "passing": passing,
+        "superseded": superseded,
+    }
 
 
 def readiness_gate(
@@ -543,6 +685,38 @@ def hygiene_report(pr: Mapping[str, Any], files: Iterable[str]) -> dict[str, Any
     }
 
 
+def review_reply_summary(
+    *,
+    commit: str = "",
+    changes: Iterable[str] = (),
+    validations: Iterable[str] = (),
+    notes: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Build a terse review-thread reply body from structured inputs."""
+
+    cleaned_changes = [item.strip() for item in changes if item.strip()]
+    cleaned_validations = [item.strip() for item in validations if item.strip()]
+    cleaned_notes = [item.strip() for item in notes if item.strip()]
+    short_commit = commit.strip()[:12]
+    lines = [f"Addressed in {short_commit}." if short_commit else "Addressed."]
+    if cleaned_changes:
+        lines.extend(["", "Changes:"])
+        lines.extend(f"- {item}" for item in cleaned_changes)
+    if cleaned_validations:
+        lines.extend(["", "Validation:"])
+        lines.extend(f"- {item}" for item in cleaned_validations)
+    if cleaned_notes:
+        lines.extend(["", "Notes:"])
+        lines.extend(f"- {item}" for item in cleaned_notes)
+    return {
+        "commit": short_commit,
+        "changes": cleaned_changes,
+        "validations": cleaned_validations,
+        "notes": cleaned_notes,
+        "body": "\n".join(lines).strip() + "\n",
+    }
+
+
 class PullRequestOverseer:
     """Command-backed deterministic PR oversight surface."""
 
@@ -851,12 +1025,406 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
     def dependency_dedupe(self, *, limit: int = 80) -> dict[str, Any]:
         return dependency_duplicates(self.list_open_prs(limit=limit))
 
+    def advance(
+        self,
+        *,
+        limit: int = 80,
+        include_drafts: bool = False,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+        ready_drafts: bool = False,
+        merge: bool = False,
+        method: str = "squash",
+        delete_branch: bool = False,
+        admin: bool = False,
+        write: bool = False,
+    ) -> dict[str, Any]:
+        """Summarize and optionally advance open PRs by deterministic gates."""
+
+        selection = self.select_candidates(limit=limit, include_drafts=include_drafts)
+        items: list[dict[str, Any]] = []
+        action_plans: list[dict[str, Any]] = []
+        for candidate in _coerce_list(selection.get("candidates")):
+            assessment = self.assess_pr(
+                int(_coerce_mapping(candidate).get("number") or 0),
+                require_approval=require_approval,
+                allow_pending=allow_pending,
+                ready_drafts=ready_drafts,
+                merge=merge,
+                method=method,
+                delete_branch=delete_branch,
+                admin=admin,
+                write=write,
+            )
+            items.append(_coerce_mapping(assessment.get("item")))
+            action_plans.extend(_coerce_list(assessment.get("actions")))
+
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                int(item["priority"]) if "priority" in item else 99,
+                str(item.get("updatedAt") or ""),
+                int(item.get("number") or 0),
+            ),
+        )
+        return {
+            "repo": self.repo,
+            "limit": limit,
+            "includeDrafts": include_drafts,
+            "write": write,
+            "openCount": len(_coerce_list(selection.get("summaries"))),
+            "consideredCount": len(items),
+            "skipped": _coerce_list(selection.get("skipped")),
+            "topSuggestions": ordered[:3],
+            "items": ordered,
+            "actions": self.execute_actions(action_plans) if write else [],
+        }
+
+    def select_candidates(self, *, limit: int, include_drafts: bool) -> dict[str, Any]:
+        if limit <= 0:
+            raise PullRequestOverseeError("limit must be positive")
+        summaries = self.list_open_prs(limit=limit)
+        candidates: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        for summary in summaries:
+            number = int(summary.get("number") or 0)
+            if not number:
+                continue
+            if summary.get("isDraft") and not include_drafts:
+                skipped.append(
+                    {
+                        "number": number,
+                        "title": summary.get("title"),
+                        "reason": "draft",
+                    }
+                )
+                continue
+            candidates.append({"number": number, "summary": summary})
+        return {
+            "summaries": summaries,
+            "candidates": candidates,
+            "skipped": skipped,
+        }
+
+    def assess_pr(
+        self,
+        number: int,
+        *,
+        require_approval: bool,
+        allow_pending: bool,
+        ready_drafts: bool,
+        merge: bool,
+        method: str,
+        delete_branch: bool,
+        admin: bool,
+        write: bool,
+    ) -> dict[str, Any]:
+        inspection = self.inspect(
+            number,
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+        )
+        pr = inspection["pullRequest"]
+        gate = inspection["readiness"]
+        files = self.changed_files(number)
+        hygiene = hygiene_report(pr, files)
+        item = self._advance_item(pr, gate, hygiene)
+        item["suggestedCommand"] = self._advance_suggested_command(
+            number,
+            gate=gate,
+            ready_to_merge=bool(item["readyToMerge"]),
+            can_mark_ready=bool(item["canMarkReady"]),
+            blockers=[str(blocker) for blocker in item["blockers"]],
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+            delete_branch=delete_branch,
+            admin=admin,
+        )
+        action_plan = self._advance_action_plan(
+            item,
+            gate=gate,
+            ready_drafts=ready_drafts,
+            merge=merge,
+            method=method,
+            delete_branch=delete_branch,
+            require_approval=require_approval,
+            allow_pending=allow_pending,
+            admin=admin,
+        )
+        actions = []
+        if action_plan:
+            item["plannedAction"] = action_plan["commandText"]
+            if write:
+                actions.append(action_plan)
+        return {"item": item, "actions": actions}
+
+    def execute_actions(
+        self, actions_list: Iterable[Mapping[str, Any]]
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for action_plan in actions_list:
+            action = str(action_plan.get("action") or "")
+            number = int(action_plan.get("number") or 0)
+            try:
+                if action == "mark-ready":
+                    results.append(
+                        {
+                            "action": action,
+                            "number": number,
+                            "stdout": self.gh_text(
+                                [str(part) for part in action_plan["command"]]
+                            ),
+                        }
+                    )
+                elif action == "merge":
+                    results.append(
+                        {
+                            "action": action,
+                            "number": number,
+                            "result": self.merge(
+                                number,
+                                method=str(action_plan.get("method") or "squash"),
+                                delete_branch=bool(action_plan.get("deleteBranch")),
+                                require_approval=bool(
+                                    action_plan.get("requireApproval")
+                                ),
+                                expected_head_sha=str(
+                                    action_plan.get("expectedHeadSha") or ""
+                                ),
+                                allow_pending=bool(action_plan.get("allowPending")),
+                                admin=bool(action_plan.get("admin")),
+                            ),
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "action": action or "unknown",
+                            "number": number,
+                            "error": "unsupported-action",
+                        }
+                    )
+            except PullRequestOverseeError as exc:
+                results.append(
+                    {
+                        "action": action,
+                        "number": number,
+                        "error": str(exc),
+                    }
+                )
+        return results
+
+    def _advance_action_plan(
+        self,
+        item: Mapping[str, Any],
+        *,
+        gate: Mapping[str, Any],
+        ready_drafts: bool,
+        merge: bool,
+        method: str,
+        delete_branch: bool,
+        require_approval: bool,
+        allow_pending: bool,
+        admin: bool,
+    ) -> dict[str, Any] | None:
+        number = int(item.get("number") or 0)
+        if item.get("canMarkReady") and ready_drafts:
+            command = ["pr", "ready", str(number), "--repo", self.repo]
+            return {
+                "action": "mark-ready",
+                "number": number,
+                "command": command,
+                "commandText": self._quoted_command(["gh", *command]),
+            }
+        if item.get("readyToMerge") and merge:
+            expected_head_sha = str(gate.get("headRefOid") or "")
+            return {
+                "action": "merge",
+                "number": number,
+                "method": method,
+                "deleteBranch": delete_branch,
+                "requireApproval": require_approval,
+                "expectedHeadSha": expected_head_sha,
+                "allowPending": allow_pending,
+                "admin": admin,
+                "commandText": self._merge_command_text(
+                    number,
+                    method=method,
+                    expected_head_sha=expected_head_sha,
+                    delete_branch=delete_branch,
+                    admin=admin,
+                ),
+            }
+        return None
+
+    def _quoted_command(self, command: Iterable[object]) -> str:
+        parts = [str(part) for part in command]
+        if os.name == "nt":
+            return subprocess.list2cmdline(parts)
+        return shlex.join(parts)
+
+    def _manage_pr_oversee_command(self, *args: object) -> str:
+        return self._quoted_command(
+            [sys.executable, "manage.py", "pr_oversee", "--repo", self.repo, *args]
+        )
+
+    def _merge_command_text(
+        self,
+        number: int,
+        *,
+        method: str,
+        expected_head_sha: str,
+        delete_branch: bool,
+        admin: bool,
+    ) -> str:
+        command = ["gh", "pr", "merge", str(number), "--repo", self.repo, f"--{method}"]
+        if expected_head_sha:
+            command.extend(["--match-head-commit", expected_head_sha])
+        if delete_branch:
+            command.append("--delete-branch")
+        if admin:
+            command.append("--admin")
+        return self._quoted_command(command)
+
+    def _advance_item(
+        self,
+        pr: Mapping[str, Any],
+        gate: Mapping[str, Any],
+        hygiene: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        number = int(pr.get("number") or 0)
+        blockers = [str(item) for item in _coerce_list(gate.get("blockers"))]
+        non_draft_blockers = [item for item in blockers if item != "draft"]
+        is_draft = bool(pr.get("isDraft"))
+        hygiene_ok = bool(hygiene.get("ok"))
+        ready_to_merge = bool(gate.get("ready")) and hygiene_ok and not is_draft
+        can_mark_ready = is_draft and not non_draft_blockers and hygiene_ok
+        priority = self._advance_priority(
+            blockers=blockers,
+            hygiene_ok=hygiene_ok,
+            ready_to_merge=ready_to_merge,
+            can_mark_ready=can_mark_ready,
+            is_draft=is_draft,
+        )
+        return {
+            "number": number,
+            "title": pr.get("title"),
+            "url": pr.get("url"),
+            "author": _author_login(pr),
+            "headRefName": pr.get("headRefName"),
+            "headRefOid": pr.get("headRefOid"),
+            "isDraft": is_draft,
+            "updatedAt": pr.get("updatedAt"),
+            "priority": priority,
+            "status": self._advance_status(
+                blockers=blockers,
+                hygiene_ok=hygiene_ok,
+                ready_to_merge=ready_to_merge,
+                can_mark_ready=can_mark_ready,
+            ),
+            "readyToMerge": ready_to_merge,
+            "canMarkReady": can_mark_ready,
+            "blockers": blockers,
+            "warnings": _coerce_list(gate.get("warnings")),
+            "hygiene": hygiene,
+        }
+
+    def _advance_priority(
+        self,
+        *,
+        blockers: list[str],
+        hygiene_ok: bool,
+        ready_to_merge: bool,
+        can_mark_ready: bool,
+        is_draft: bool,
+    ) -> int:
+        if ready_to_merge:
+            return 0
+        if can_mark_ready:
+            return 1
+        if any(
+            blocker.startswith(("review:", "review_threads:")) for blocker in blockers
+        ):
+            return 2
+        if any(blocker.startswith("check:") for blocker in blockers):
+            return 3
+        if any(blocker.startswith("pending:") for blocker in blockers):
+            return 4
+        if any(
+            blocker.startswith(("merge_state:", "mergeable:")) for blocker in blockers
+        ):
+            return 5
+        if is_draft:
+            return 6
+        if not hygiene_ok:
+            return 7
+        return 8
+
+    def _advance_status(
+        self,
+        *,
+        blockers: list[str],
+        hygiene_ok: bool,
+        ready_to_merge: bool,
+        can_mark_ready: bool,
+    ) -> str:
+        if ready_to_merge:
+            return "ready-to-merge"
+        if can_mark_ready:
+            return "draft-ready"
+        if blockers:
+            return "blocked"
+        if not hygiene_ok:
+            return "hygiene-failed"
+        return "needs-review"
+
+    def _advance_suggested_command(
+        self,
+        number: int,
+        *,
+        gate: Mapping[str, Any],
+        ready_to_merge: bool,
+        can_mark_ready: bool,
+        blockers: list[str],
+        require_approval: bool,
+        allow_pending: bool,
+        delete_branch: bool,
+        admin: bool,
+    ) -> str:
+        if ready_to_merge:
+            command = ["monitor", "--pr", str(number), "--merge", "--write"]
+            if delete_branch:
+                command.append("--delete-branch")
+            if require_approval:
+                command.append("--require-approval")
+            if allow_pending:
+                command.append("--allow-pending")
+            if admin:
+                command.append("--admin")
+            if gate.get("headRefOid"):
+                command.extend(["--expected-head-sha", str(gate.get("headRefOid"))])
+            return self._manage_pr_oversee_command(*command)
+        if can_mark_ready:
+            return f"gh pr ready {number} --repo {self.repo}"
+        if any(blocker.startswith(("check:", "pending:")) for blocker in blockers):
+            return self._manage_pr_oversee_command(
+                "ci", "--pr", number, "--failures", "--logs"
+            )
+        if any(
+            blocker.startswith(("review:", "review_threads:")) for blocker in blockers
+        ):
+            return self._manage_pr_oversee_command(
+                "comments", "--pr", number, "--unresolved"
+            )
+        return self._manage_pr_oversee_command("inspect", "--pr", number)
+
     def checkout(
         self,
         number: int,
         *,
         worktree: Path,
         branch: str = "",
+        link_venv: bool = True,
     ) -> dict[str, Any]:
         if worktree.exists():
             raise PullRequestOverseeError(f"Worktree path already exists: {worktree}")
@@ -880,6 +1448,8 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "baseRefOid": pr.get("baseRefOid"),
             "worktree": str(worktree),
         }
+        if link_venv:
+            metadata["venv"] = _local_venv_link(self.cwd / ".venv", worktree / ".venv")
         metadata_path = worktree / PATCHWORK_METADATA
         try:
             with open(
@@ -928,6 +1498,11 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "stderr": result.stderr.strip(),
         }
         if result.returncode == 0:
+            residue = self._remove_patchwork_residue(
+                worktree, patchwork_root=patchwork_root
+            )
+            if residue.get("attempted"):
+                action["residue"] = residue
             return action
 
         metadata_exists = (worktree / PATCHWORK_METADATA).exists()
@@ -952,7 +1527,88 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 "forceStderr": forced.stderr.strip(),
             }
         )
+        if forced.returncode == 0:
+            residue = self._remove_patchwork_residue(
+                worktree, patchwork_root=patchwork_root
+            )
+            if residue.get("attempted"):
+                action["residue"] = residue
+        elif _git_worktree_missing_error(result, forced):
+            local_remove = self._remove_patchwork_residue(
+                worktree, patchwork_root=patchwork_root
+            )
+            action["localRemove"] = local_remove
         return action
+
+    def _remove_patchwork_residue(
+        self,
+        worktree: Path,
+        *,
+        patchwork_root: Path | None = None,
+    ) -> dict[str, Any]:
+        if not worktree.exists():
+            return {"attempted": False, "reason": "missing"}
+        if patchwork_root is not None and not _path_is_relative_to(
+            worktree, patchwork_root
+        ):
+            return {"attempted": False, "reason": "outside-patchwork-root"}
+        try:
+            children = list(worktree.iterdir())
+        except OSError as exc:
+            return {
+                "attempted": False,
+                "reason": "list-failed",
+                "error": str(exc),
+            }
+        metadata = self._read_patchwork_metadata(worktree)
+        blocked_names = [
+            child.name
+            for child in children
+            if not self._is_owned_residue_path(child, metadata)
+        ]
+        residue_names = sorted(child.name for child in children)
+        if blocked_names:
+            return {
+                "attempted": False,
+                "reason": "non-owned-residue",
+                "paths": sorted(blocked_names),
+            }
+        try:
+            for child in children:
+                _remove_owned_path(child)
+            worktree.rmdir()
+        except OSError as exc:
+            return {
+                "attempted": True,
+                "removed": False,
+                "reason": "remove-failed",
+                "error": str(exc),
+                "paths": residue_names,
+            }
+        return {
+            "attempted": True,
+            "removed": not worktree.exists(),
+            "paths": residue_names,
+        }
+
+    def _read_patchwork_metadata(self, worktree: Path) -> dict[str, Any]:
+        try:
+            return _coerce_mapping(
+                json.loads((worktree / PATCHWORK_METADATA).read_text())
+            )
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _is_owned_residue_path(self, child: Path, metadata: Mapping[str, Any]) -> bool:
+        if child.name not in PATCHWORK_OWNED_NOISE:
+            return False
+        if child.name != ".venv":
+            return True
+        venv_metadata = _coerce_mapping(metadata.get("venv"))
+        is_link = child.is_symlink() or _is_reparse_point(child)
+        if venv_metadata:
+            return bool(venv_metadata.get("linked")) and is_link
+        return is_link
 
     def sync_worktree(self, number: int, *, worktree: Path) -> dict[str, Any]:
         """Fetch the current PR head and move an existing worktree to it."""
@@ -1207,9 +1863,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         changed_files_by_head: dict[str, list[str]] = {}
         synced_worktree_head = ""
         dependency_dedupe = (
-            self.dependency_dedupe(limit=dependency_limit)
-            if dependency_limit
-            else {}
+            self.dependency_dedupe(limit=dependency_limit) if dependency_limit else {}
         )
         last_snapshot: dict[str, Any] = {}
         iteration = 0
@@ -1452,9 +2106,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             "gate": gate,
             "hygiene": hygiene_report(pr, files),
             "testPlan": changed_files_to_test_plan(files),
-            "ci": self._ci_failures_from_pr(
-                number, pr, include_logs=include_logs
-            ),
+            "ci": self._ci_failures_from_pr(number, pr, include_logs=include_logs),
             "dependencyDedupe": dependency_dedupe,
         }
 
