@@ -17,7 +17,11 @@ PRIVATE_KEY_BLOCK_PATTERN = re.compile(
 )
 SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>"
-    r"\b(?:aws_secret_access_key|api[_-]?key|password|secret|token|private[_-]?key)\b"
+    r"\b(?:"
+    r"aws_secret_access_key|"
+    r"(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|secret|token|private[_-]?key)"
+    r"(?:[_-][A-Za-z0-9]+)*"
+    r")\b"
     r"[\"']?\s*[:=]\s*"
     r")"
     r"(?:(?P<quote>[\"'])(?P<quoted_value>(?:\\.|(?!(?P=quote)).)*)(?P=quote)|"
