@@ -5,14 +5,17 @@
 <div id="content-main">
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
+    {{ form.non_field_errors }}
     <fieldset class="module aligned">
       <div class="form-row">
-        <label for="id_source_label">{% trans "Source label" %}</label>
-        <input type="text" name="source_label" id="id_source_label" />
+        {{ form.source_label.errors }}
+        <label for="{{ form.source_label.id_for_label }}">{% trans "Source label" %}</label>
+        {{ form.source_label }}
       </div>
       <div class="form-row">
-        <label for="id_package">{% trans "Error report zip" %}</label>
-        <input type="file" name="package" id="id_package" accept=".zip,application/zip" required />
+        {{ form.package.errors }}
+        <label for="{{ form.package.id_for_label }}">{% trans "Error report zip" %}</label>
+        {{ form.package }}
       </div>
     </fieldset>
     <div class="submit-row">

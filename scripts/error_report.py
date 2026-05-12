@@ -6,12 +6,12 @@ import json
 import os
 import platform
 import re
+import shutil
 import socket
 import subprocess
 import sys
 import time
 import zipfile
-import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -681,7 +681,16 @@ def _flush_upstream_queue(queue_dir: Path, upload_url: str, *, method: str, time
         return sent
     for candidate in sorted(queue_dir.glob("*.zip")):
         upload_report(candidate, upload_url, method=method, timeout=timeout, allow_insecure=allow_insecure)
-        candidate.unlink(missing_ok=True)
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError as exc:
+            print(
+                _("Warning: could not delete queued file {path} after upload: {error}").format(
+                    path=candidate,
+                    error=exc,
+                ),
+                file=sys.stderr,
+            )
         sent.append(candidate)
     return sent
 

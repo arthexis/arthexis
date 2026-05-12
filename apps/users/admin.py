@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 
 from django import forms
 from django.contrib import admin, messages
@@ -15,24 +16,26 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
-from webauthn.helpers.exceptions import InvalidJSONStructure, InvalidRegistrationResponse
+from webauthn.helpers.exceptions import (
+    InvalidJSONStructure,
+    InvalidRegistrationResponse,
+)
 
+from apps.celery.utils import enqueue_task
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
 
 from .diagnostics import build_diagnostic_bundle, create_manual_feedback
 from .models import (
     ChatProfile,
     PasskeyCredential,
+    UploadedErrorReport,
     User,
     UserDiagnosticBundle,
     UserDiagnosticEvent,
-    UploadedErrorReport,
     UserDiagnosticsProfile,
     UserFlag,
 )
 from .passkeys import build_registration_options, verify_registration_response
-from apps.celery.utils import enqueue_task
-
 from .tasks import analyze_uploaded_error_report
 
 PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
@@ -68,6 +71,36 @@ class PasskeyRegistrationForm(forms.Form):
 
     user = forms.ModelChoiceField(queryset=User.objects.all())
     name = forms.CharField(max_length=80)
+
+
+class UploadedErrorReportUploadForm(forms.Form):
+    """Validate uploaded error-report packages before creating records."""
+
+    source_label = forms.CharField(max_length=200, required=False)
+    package = forms.FileField(widget=forms.ClearableFileInput(attrs={"accept": ".zip,application/zip"}))
+
+    def clean_source_label(self) -> str:
+        return (self.cleaned_data.get("source_label") or "").strip()
+
+    def clean_package(self):
+        uploaded = self.cleaned_data["package"]
+        if not uploaded.name.lower().endswith(".zip"):
+            raise ValidationError(_("Choose a .zip package to upload."))
+
+        try:
+            uploaded.seek(0)
+            valid_zip = zipfile.is_zipfile(uploaded)
+        except (OSError, ValueError):
+            valid_zip = False
+        finally:
+            try:
+                uploaded.seek(0)
+            except (OSError, ValueError):
+                pass
+
+        if not valid_zip:
+            raise ValidationError(_("Choose a .zip package to upload."))
+        return uploaded
 
 
 @admin.register(ChatProfile)
@@ -297,22 +330,25 @@ class UploadedErrorReportAdmin(admin.ModelAdmin):
         return custom + super().get_urls()
 
     def upload_view(self, request: HttpRequest) -> HttpResponse:
+        if not self.has_add_permission(request):
+            messages.error(request, _("You do not have permission to upload error reports."))
+            return redirect(reverse("admin:index"))
+
+        form = UploadedErrorReportUploadForm(request.POST or None, request.FILES or None)
         if request.method == "POST":
-            uploaded = request.FILES.get("package")
-            if not uploaded:
-                messages.error(request, _("Choose a .zip package to upload."))
-                return redirect("admin:users_uploadederrorreport_upload")
-            report = UploadedErrorReport.objects.create(
-                source_label=(request.POST.get("source_label") or "").strip(),
-                uploaded_by=request.user if request.user.is_authenticated else None,
-                package=uploaded,
-            )
-            if not enqueue_task(analyze_uploaded_error_report, report.pk, require_enabled=False):
-                analyze_uploaded_error_report(report.pk)
-            return redirect(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
+            if form.is_valid():
+                report = UploadedErrorReport.objects.create(
+                    source_label=form.cleaned_data["source_label"],
+                    uploaded_by=request.user if request.user.is_authenticated else None,
+                    package=form.cleaned_data["package"],
+                )
+                if not enqueue_task(analyze_uploaded_error_report, report.pk, require_enabled=False):
+                    analyze_uploaded_error_report(report.pk)
+                return redirect(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
 
         context = {
             **self.admin_site.each_context(request),
+            "form": form,
             "opts": self.model._meta,
             "title": _("Upload error report"),
             "refresh_ms": 3000,

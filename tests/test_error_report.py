@@ -186,3 +186,36 @@ def test_upload_report_uses_explicit_method(monkeypatch: pytest.MonkeyPatch, tmp
         "timeout": 12,
         "content_type": "application/zip",
     }
+
+
+def test_flush_upstream_queue_warns_when_uploaded_file_cleanup_fails(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    queued = queue_dir / "report.zip"
+    queued.write_bytes(b"zip")
+
+    monkeypatch.setattr(error_report, "upload_report", lambda *args, **kwargs: 201)
+    original_unlink = Path.unlink
+
+    def fail_unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == queued:
+            raise OSError("locked")
+        original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+
+    sent = error_report._flush_upstream_queue(
+        queue_dir,
+        "https://example.test/upload",
+        method="PUT",
+        timeout=10,
+        allow_insecure=False,
+    )
+
+    assert sent == [queued]
+    assert queued.exists()
+    assert "could not delete queued file" in capsys.readouterr().err
