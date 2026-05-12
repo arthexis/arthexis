@@ -22,6 +22,7 @@ from apps.ocpp.call_result_handlers.transactions import (
 )
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
+from apps.ocpp.consumers.base import dispatch as dispatch_module
 from apps.ocpp.models import (
     CertificateOperation,
     CertificateRequest,
@@ -2973,3 +2974,69 @@ async def test_call_result_forwarding_does_not_block_response_handling():
     await asyncio.wait_for(started.wait(), timeout=0.5)
     assert message_id not in store.pending_calls
     release.set()
+
+
+@pytest.mark.anyio
+async def test_forward_reply_dispatch_limits_background_task_fanout(monkeypatch, caplog):
+    monkeypatch.setattr(dispatch_module, "MAX_BACKGROUND_FORWARD_REPLY_TASKS", 1)
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def _slow_forward_reply(*_args):
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+
+    consumer._dispatch_forward_reply(_slow_forward_reply, "msg-one", "[3]")
+    await asyncio.wait_for(started.wait(), timeout=0.5)
+
+    with caplog.at_level("WARNING", logger=dispatch_module.logger.name):
+        consumer._dispatch_forward_reply(_slow_forward_reply, "msg-two", "[3]")
+
+    assert calls == 1
+    assert len(consumer._background_forward_reply_tasks) == 1
+    assert "Skipping reply forwarding for message msg-two" in caplog.text
+
+    tasks = list(consumer._background_forward_reply_tasks)
+    release.set()
+    await asyncio.gather(*tasks)
+
+
+@pytest.mark.anyio
+async def test_forward_reply_dispatch_logs_failures(caplog):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    async def _failing_forward_reply(*_args):
+        raise OSError("forwarding offline")
+
+    with caplog.at_level("ERROR", logger=dispatch_module.logger.name):
+        consumer._dispatch_forward_reply(_failing_forward_reply, "msg-fail", "[3]")
+        for _ in range(5):
+            if not getattr(consumer, "_background_forward_reply_tasks", set()):
+                break
+            await asyncio.sleep(0)
+
+    assert any(
+        "Reply forwarding failed for message msg-fail" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.anyio
+async def test_forward_reply_dispatch_drains_cancelled_tasks():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    release = asyncio.Event()
+
+    async def _waiting_forward_reply(*_args):
+        await release.wait()
+
+    consumer._dispatch_forward_reply(_waiting_forward_reply, "msg-cancel", "[3]")
+    task = next(iter(consumer._background_forward_reply_tasks))
+    task.cancel()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert consumer._background_forward_reply_tasks == set()
