@@ -15,7 +15,7 @@ Operational audit artifact for endpoint-documentation status across the Arthexis
 |---|---|---|---|
 | `apps.ocpp` | `/ocpp/chargers/`, `/ocpp/chargers/<cid>/`, `/ocpp/chargers/<cid>/action/` (plus connector-scoped action endpoint variant, e.g. `/ocpp/chargers/<cid>/connector/<connector>/action/`) | Documented (current state) | Primary charging control and state APIs are documented in the inventory page. |
 | `apps.ocpp` | OCPP CSMS WebSocket catch-all (`/<...>/<cid>/`) | Documented (current state) | Auth plus retry/idempotency behavior is documented. |
-| `apps.ocpp` | Firmware download + public status/log/chart/session pages | Partially documented (current state) | Per-endpoint error payload and auth matrix details are incomplete. |
+| `apps.ocpp` | Firmware download + public status/log/chart/session pages | Documented (current state) | Per-endpoint error behavior, auth matrix, retry/idempotency notes, and model links are documented in the inventory page. |
 | `apps.nodes` | `/nodes/info/`, `/nodes/register/`, `/nodes/register/enrollment-public-key/` | Documented (current state) | Enrollment and registration contracts are documented. |
 | `apps.nodes` | `/nodes/network/chargers/`, `/nodes/network/chargers/forward/`, `/nodes/network/chargers/action/` | Documented (current state) | Signed peer sync and delegated charger control are documented. |
 | `apps.nodes` | `/nodes/net-message/`, `/nodes/net-message/pull/`, `/nodes/register/proxy/`, `/nodes/register/telemetry/` | Partially documented (current state) | Error matrices and replay-policy details are incomplete. |

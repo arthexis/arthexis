@@ -16,8 +16,8 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 | `GET /ocpp/chargers/<cid>/` | Admin/operator UI | Charger detail and live transaction info | Complete |
 | `POST /ocpp/chargers/<cid>/action/` | Admin/operator UI | Send remote OCPP action (start/stop/reset/etc.) | Complete |
 | `POST /ocpp/chargers/<cid>/connector/<connector>/action/` | Admin/operator UI | Connector-scoped action dispatch | Complete |
-| `GET /ocpp/c/<cid>/status/` + related chart/log/session/public pages | Admin/operator UI + end users | Public and operator pages around charger status/sessions | In progress |
-| `GET /ocpp/firmware/<deployment_id>/<token>/` | Charge point firmware agent | Download firmware package with tokenized URL | In progress |
+| `GET /ocpp/c/<cid>/status/` + related chart/log/session/public pages | Admin/operator UI + end users | Public and operator pages around charger status/sessions | Complete |
+| `GET /ocpp/firmware/<deployment_id>/<token>/` | Charge point firmware agent | Download firmware package with tokenized URL | Complete |
 
 ### WebSocket endpoints
 
@@ -126,6 +126,136 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 - **Business models + migrations**:
   - Models: `Charger`, `Transaction`, `ChargingProfile`, `ProtocolCall`, plus store-backed pending call metadata.
   - Migrations: `apps/ocpp/migrations/`, `apps/protocols/migrations/`.
+
+#### `GET /ocpp/c/<cid>/` and connector variant
+- **Expected caller**: end users and operator UI links.
+- **Purpose**: public charger landing page showing the charger state, active session summary, connector navigation, account summary link when applicable, and remote-start affordances for authenticated users.
+- **Variants**:
+  - `GET /ocpp/c/<cid>/`
+  - `GET /ocpp/c/<cid>/connector/<connector>/`
+- **AuthN/AuthZ**:
+  - Anonymous users may view chargers with no owner scope.
+  - If a charger has owner-user or owner-group restrictions, anonymous users are redirected to the login page.
+  - Authenticated users may view unrestricted chargers, chargers explicitly assigned to them, chargers assigned to one of their groups, or chargers visible through charge-station-manager/superuser privileges.
+  - Authenticated users outside the allowed scope receive a not-found response rather than visibility details.
+- **Example success**: HTML page (`200`) containing charger state, connector links, and live-session context.
+- **Example errors**:
+  - `302` redirect to login for anonymous access to owner-scoped chargers.
+  - `404` HTML error for invalid charger serials, invalid connector slugs, serials with no charger rows, or authenticated users outside the visibility scope.
+- **Idempotency/retry**:
+  - Retrying is safe for rendered page content.
+  - The view may clear stale cached status before rendering.
+  - Aggregate requests fall back to the first connector row when no aggregate row exists.
+  - A valid connector-scoped request may initialize that connector row if it does not already exist.
+- **Business models + migrations**:
+  - Models: `Charger`, `Transaction`, owner user/group relations, live-session store metadata.
+  - Migration roots: `apps/ocpp/migrations/`.
+
+#### `GET /ocpp/c/<cid>/status/` and status chart JSON
+- **Expected caller**: authenticated end users, charger owners, charge-station managers, and operator UI automation.
+- **Purpose**: render a charger status/session page and provide chart data for live or historic sessions.
+- **Variants**:
+  - `GET /ocpp/c/<cid>/status/`
+  - `GET /ocpp/c/<cid>/connector/<connector>/status/`
+  - `GET /ocpp/c/<cid>/status/chart/`
+  - `GET /ocpp/c/<cid>/connector/<connector>/status/chart/`
+  - Legacy status routes: `GET /ocpp/charger/<cid>/status/` and `GET /ocpp/charger/<cid>/connector/<connector>/status/`
+- **AuthN/AuthZ**:
+  - Requires an authenticated Django session (`login_required`); anonymous users are redirected to login.
+  - Visibility follows the same charger owner/group/manager rules as the public charger landing page.
+  - The chart JSON endpoint uses the same charger visibility rules and hides denied/missing data behind the same not-found payload.
+- **Query parameters**:
+  - `session=<transaction_pk>` selects a historic transaction for status/chart rendering.
+  - `dates=charger|received` selects timestamp interpretation in the HTML status view; invalid values fall back to `charger`.
+- **HTML success**: `200` charger status page with transaction history, non-transaction events, connector links, chart metadata, and operator-only admin links when the user is staff.
+- **Chart success**:
+```json
+{
+  "labels": ["2026-04-01T00:00:00+00:00"],
+  "datasets": [
+    {
+      "label": "Connector 1",
+      "values": [1.25],
+      "connector_id": 1
+    }
+  ]
+}
+```
+- **Example errors**:
+  - `302` redirect to login for anonymous requests.
+  - `404` HTML error for missing/denied status pages.
+  - Chart JSON returns `404` for denied chargers, missing chargers/connectors, or missing sessions:
+```json
+{"detail": "Not found."}
+```
+- **Idempotency/retry**:
+  - Retrying is safe for rendered page content and chart reads.
+  - Live-session chart values may naturally change while a transaction is active.
+  - HTML status views use the connector-aware page helper, so a valid connector-scoped request may initialize that connector row if it does not already exist; chart JSON is read-only and does not create charger rows.
+- **Business models + migrations**:
+  - Models: `Charger`, `Transaction`, `MeterValue`, charger owner user/group relations, live-session store metadata.
+  - Migration roots: `apps/ocpp/migrations/`.
+
+#### `GET /ocpp/c/<cid>/sessions/` and charger log pages
+- **Expected caller**: authenticated end users, charger owners, charge-station managers, and operators.
+- **Purpose**: search historic charging sessions and inspect or download charger/simulator logs.
+- **Variants**:
+  - `GET /ocpp/c/<cid>/sessions/`
+  - `GET /ocpp/c/<cid>/connector/<connector>/sessions/`
+  - `GET /ocpp/log/<cid>/`
+  - `GET /ocpp/log/<cid>/connector/<connector>/`
+- **AuthN/AuthZ**:
+  - Requires an authenticated Django session (`login_required`); anonymous users are redirected to login.
+  - Session search and charger logs use charger visibility rules for `type=charger`.
+  - Log pages support non-charger log types for authenticated simulator/debug use; those are keyed by the requested identifier rather than a charger ownership check.
+- **Query parameters**:
+  - Session search: `date=YYYY-MM-DD`, `range=today|yesterday|last7`, and `dates=charger|received`.
+  - Log page: `type=charger` by default, `limit=20|40|100|all`, and `download=1` for text download.
+- **HTML success**: `200` session search or log page. Invalid session-search dates render an empty result set; invalid log limits fall back to `20`.
+- **Download success**:
+  - `200 text/plain; charset=utf-8`
+  - `Content-Disposition: attachment; filename="<type>-<cid-or-log-key>.log"`
+- **Example errors**:
+  - `302` redirect to login for anonymous requests.
+  - `404` HTML error for invalid charger serials, invalid connector slugs, serials with no charger rows, or authenticated users outside charger visibility scope.
+- **Idempotency/retry**:
+  - Retrying is safe for rendered page content and log downloads.
+  - Log downloads are repeatable snapshots of the current in-memory or persisted log stream.
+  - Aggregate requests fall back to the first connector row when no aggregate row exists.
+  - Connector-scoped HTML requests use the connector-aware page helper, so a valid connector-scoped request may initialize that connector row if it does not already exist.
+- **Business models + migrations**:
+  - Models: `Charger`, `Transaction`, `MeterValue`, owner user/group relations, OCPP store logs.
+  - Migration roots: `apps/ocpp/migrations/`.
+
+#### `GET /ocpp/firmware/<deployment_id>/<token>/`
+- **Expected caller**: charge point/EVSE firmware download agent following an `UpdateFirmware` or `PublishFirmware` location URL.
+- **Purpose**: serve a firmware payload associated with a specific deployment through a tokenized URL.
+- **AuthN/AuthZ**:
+  - Does not require a Django login session or bearer token.
+  - Authorization is the tuple of `deployment_id`, `download_token`, and optional `download_token_expires_at`.
+  - The URL should be treated as a bearer secret and shared only with the target charge point.
+- **Success behavior**:
+  - Returns firmware bytes with `Content-Type` from the firmware record, defaulting to `application/octet-stream`.
+  - Sets `Content-Disposition` to an attachment filename derived from the firmware record.
+  - Sets `Content-Length`.
+  - Updates `CPFirmwareDeployment.downloaded_at` to the current time.
+- **Example success headers**:
+```http
+HTTP/1.1 200 OK
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="firmware_42"
+Content-Length: 1048576
+```
+- **Example errors**:
+  - Invalid deployment id or token: `404` HTML not-found response.
+  - Expired token: `403` response with an empty body.
+  - Missing firmware record or empty payload: `404` HTML not-found response.
+- **Idempotency/retry**:
+  - Payload delivery is repeatable while the token remains valid.
+  - The download has a metadata side effect (`downloaded_at` is refreshed), so callers should not use it as a pure cache-validation probe.
+- **Business models + migrations**:
+  - Models: `CPFirmwareDeployment`, `CPFirmware`, associated `Charger`.
+  - Migration roots: `apps/ocpp/migrations/`.
 
 #### OCPP WebSocket (catch-all CSMS route)
 - **Expected caller**: charge points/EVSE firmware.
