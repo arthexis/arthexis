@@ -58,7 +58,6 @@ def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = 
 
 
 RULES = (
-    ("critical", "secret_exposure", SECRET_EXPOSURE_PATTERN, "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
     ("high", "startup", re.compile(r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)", re.IGNORECASE), "Python startup traceback detected."),
     ("medium", "service", re.compile(r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE), "Service-level instability markers detected."),
@@ -133,6 +132,16 @@ def _is_log_entry(name: str) -> bool:
 
 
 def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:
+    if SECRET_EXPOSURE_PATTERN.search(text):
+        findings.append(
+            {
+                "severity": "critical",
+                "category": "secret_exposure",
+                "message": f"Potential secret material detected.{summary_suffix}",
+                "source": source,
+            }
+        )
+
     for severity, category, pattern, message in RULES:
         if not pattern.search(text):
             continue
