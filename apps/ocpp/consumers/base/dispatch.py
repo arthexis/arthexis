@@ -1,5 +1,7 @@
 import base64
 import json
+import logging
+from asyncio import CancelledError, create_task
 from functools import cached_property
 
 from ... import store
@@ -7,6 +9,10 @@ from ...call_error_handlers import dispatch_call_error
 from ...call_result_handlers import dispatch_call_result
 from ...models import Charger
 from .routing import ActionRouter
+
+
+logger = logging.getLogger(__name__)
+MAX_BACKGROUND_FORWARD_REPLY_TASKS = 32
 
 
 class DispatchMixin:
@@ -45,6 +51,40 @@ class DispatchMixin:
         if raw is None and bytes_data is not None:
             raw = base64.b64encode(bytes_data).decode("ascii")
         return raw
+
+    def _dispatch_forward_reply(self, forward_reply, message_id: str, raw: str) -> None:
+        """Send forwarding replies without blocking charger message handling."""
+        background_tasks = getattr(self, "_background_forward_reply_tasks", None)
+        if background_tasks is None:
+            background_tasks = set()
+            self._background_forward_reply_tasks = background_tasks
+
+        for done_task in tuple(background_tasks):
+            if done_task.done():
+                background_tasks.discard(done_task)
+
+        if len(background_tasks) >= MAX_BACKGROUND_FORWARD_REPLY_TASKS:
+            logger.warning(
+                "Skipping reply forwarding for message %s because %s background "
+                "forwarding tasks are still active.",
+                message_id,
+                len(background_tasks),
+            )
+            return
+
+        task = create_task(forward_reply(message_id, raw))
+        background_tasks.add(task)
+
+        def _drop_completed(done_task):
+            background_tasks.discard(done_task)
+            try:
+                done_task.result()
+            except CancelledError:
+                logger.debug("Reply forwarding task cancelled for message %s.", message_id)
+            except Exception:
+                logger.exception("Reply forwarding failed for message %s.", message_id)
+
+        task.add_done_callback(_drop_completed)
 
     def _parse_message(self, raw: str):
         try:
@@ -124,7 +164,7 @@ class DispatchMixin:
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
         if callable(forward_reply) and raw is not None:
-            await forward_reply(message_id, raw)
+            self._dispatch_forward_reply(forward_reply, message_id, raw)
         if handled:
             return
         store.record_pending_call_result(
@@ -164,7 +204,7 @@ class DispatchMixin:
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
         if callable(forward_reply) and raw is not None:
-            await forward_reply(message_id, raw)
+            self._dispatch_forward_reply(forward_reply, message_id, raw)
         if handled:
             return
         store.record_pending_call_result(
