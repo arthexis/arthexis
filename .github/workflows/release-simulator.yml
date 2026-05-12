@@ -84,6 +84,7 @@ jobs:
       actions: read
       contents: read
       issues: read
+      pull-requests: read
       security-events: read
     outputs:
       should_run: ${{ steps.evaluate.outputs.should_run }}
@@ -99,6 +100,8 @@ jobs:
           script: |
             const installIssueTitle = 'Install health check is failing';
             const installMarker = '<!-- install-health-check-failure -->';
+            const releaseReadinessReportTitle = 'Release Readiness Report';
+            const releaseReadinessReportMarker = '<!-- release-readiness-report -->';
             const defaultBranch = context.payload.repository.default_branch;
             const blockers = [];
             const fullDayMillis = 24 * 60 * 60 * 1000;
@@ -158,6 +161,9 @@ jobs:
 
               const openBlockingIssues = openIssues.filter((issue) => {
                 if (issue.pull_request) {
+                  return false;
+                }
+                if (issue.title === releaseReadinessReportTitle && issue.body?.includes(releaseReadinessReportMarker)) {
                   return false;
                 }
                 const labels = Array.isArray(issue.labels) ? issue.labels : [];

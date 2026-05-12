@@ -722,6 +722,22 @@ def test_release_simulator_requires_security_scan_settling_and_clear_alerts() ->
     assert "Unable to verify GitHub code scanning alerts" in script
 
 
+def test_release_simulator_pr_and_issue_blockers_have_required_permissions() -> None:
+    workflow = _workflow_data("release-simulator.yml")
+    evaluate_job = workflow["jobs"]["evaluate"]
+    evaluate_step = _workflow_step(
+        evaluate_job, "Evaluate release blockers from install/upgrade pipeline state"
+    )
+    script = evaluate_step["with"]["script"]
+
+    assert evaluate_job["permissions"]["pull-requests"] == "read"
+    assert "github.rest.pulls.list" in script
+    assert "releaseReadinessReportTitle = 'Release Readiness Report'" in script
+    assert "releaseReadinessReportMarker = '<!-- release-readiness-report -->'" in script
+    assert "issue.title === releaseReadinessReportTitle" in script
+    assert "issue.body?.includes(releaseReadinessReportMarker)" in script
+
+
 @pytest.mark.django_db
 def test_step_record_publish_metadata_records_github_release_url(
     monkeypatch, tmp_path: Path
