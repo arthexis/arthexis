@@ -8,8 +8,17 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+SECRET_EXPOSURE_PATTERN = re.compile(
+    r"("
+    r"BEGIN\s+PRIVATE\s+KEY|"
+    r"aws_secret_access_key[\"']?\s*[:=]\s*[\"']?"
+    r"(?!(?:\[?redacted\]?|<redacted>|\*+(?:redacted)?\*+))"
+    r"\S+"
+    r")",
+    re.IGNORECASE,
+)
 RULES = (
-    ("critical", "secret_exposure", re.compile(r"(aws_secret_access_key|BEGIN\s+PRIVATE\s+KEY)", re.IGNORECASE), "Potential secret material detected."),
+    ("critical", "secret_exposure", SECRET_EXPOSURE_PATTERN, "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
     ("high", "startup", re.compile(r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)", re.IGNORECASE), "Python startup traceback detected."),
     ("medium", "service", re.compile(r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE), "Service-level instability markers detected."),

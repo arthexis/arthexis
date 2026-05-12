@@ -37,6 +37,38 @@ def test_analyze_error_report_package_detects_high_severity(tmp_path):
     assert any(f["category"] == "migration" for f in result["findings"])
 
 
+def test_analyze_error_report_package_detects_unredacted_secret_values(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"logs/runtime.log": "AWS_SECRET_ACCESS_KEY=real-secret"})
+
+    result = analyze_error_report_package(package_path)
+
+    assert result["max_severity"] == "critical"
+    assert any(f["category"] == "secret_exposure" for f in result["findings"])
+
+
+@pytest.mark.parametrize(
+    "redacted_value",
+    [
+        "<redacted>",
+        "[REDACTED]",
+        "***redacted***",
+        "***",
+    ],
+)
+def test_analyze_error_report_package_ignores_redacted_secret_values(tmp_path, redacted_value):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(
+        package_path,
+        logs={"logs/runtime.log": f"AWS_SECRET_ACCESS_KEY={redacted_value}"},
+    )
+
+    result = analyze_error_report_package(package_path)
+
+    assert result["findings"] == []
+    assert result["max_severity"] == "none"
+
+
 def test_analyze_error_report_package_handles_empty_findings(tmp_path):
     package_path = tmp_path / "error-report.zip"
     _write_report(package_path, summary="all good", logs={"logs/runtime.log": "ok"})
@@ -56,9 +88,6 @@ def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
     result = analyze_error_report_package(package_path)
 
     assert any(f["category"] == "startup" for f in result["findings"])
-
-
-
 
 def test_analyze_error_report_package_scans_external_text_logs(tmp_path):
     package_path = tmp_path / "error-report.zip"
