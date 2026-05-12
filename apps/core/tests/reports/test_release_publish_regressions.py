@@ -527,15 +527,19 @@ def test_tag_from_version_workflow_creates_release_tag_and_dispatches_publish() 
     assert 'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
 
 
-def test_install_health_workflow_runs_on_main_push_not_schedule() -> None:
-    workflow = _workflow_data("install-hourly.yml")
+def test_install_health_workflow_runs_on_default_branch_push_not_schedule() -> None:
+    workflow = _workflow_data("install-health.yml")
     on_section = _workflow_on(workflow)
 
     assert "schedule" not in on_section
-    assert on_section["push"]["branches"] == ["main"]
+    assert on_section["push"] == {}
     assert "workflow_dispatch" in on_section
 
     install_job = workflow["jobs"]["install"]
+    assert (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        in install_job["if"]
+    )
     upload_step = _workflow_step(install_job, "Upload pytest log")
     assert upload_step["with"]["name"].startswith("install-health-pytest-results-")
 
@@ -557,6 +561,7 @@ def test_release_simulator_requires_current_main_install_health_success() -> Non
 
     assert "github.rest.repos.getBranch" in script
     assert "defaultBranchSha" in script
+    assert "const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo" in script
     assert "run.name === 'Install Health Check'" in script
     assert "run.head_sha === defaultBranchSha" in script
     assert "latestInstallHealthRun.conclusion !== 'success'" in script
@@ -573,8 +578,10 @@ def test_release_simulator_requires_security_scan_settling_and_clear_alerts() ->
 
     assert evaluate_job["permissions"]["security-events"] == "read"
     assert "securityScanQuietMillis = 2 * 60 * 60 * 1000" in script
-    assert "defaultBranchCommitDate" in script
-    assert "Security scan settling period has not elapsed" in script
+    assert "run.event === 'push'" in script
+    assert "defaultBranchAdvancedAt" in script
+    assert "Security scan settling period has not elapsed since" in script
+    assert "Unable to verify when" in script
     assert "github.rest.codeScanning.listAlertsForRepo" in script
     assert "state: 'open'" in script
     assert "Open GitHub code scanning security findings" in script
