@@ -85,13 +85,21 @@ class Command(BaseCommand):
         if not package_arg:
             raise CommandError("--package is required for 'analyze'.")
         package_path = Path(package_arg)
-        result = analyze_error_report_package(package_path)
+        try:
+            result = analyze_error_report_package(package_path)
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            raise CommandError(f"Unable to analyze package '{package_path}': {exc}") from exc
 
         output_path = (options.get("output") or "").strip()
         if output_path:
             output_target = Path(output_path)
-            output_target.parent.mkdir(parents=True, exist_ok=True)
-            output_target.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+            try:
+                output_target.parent.mkdir(parents=True, exist_ok=True)
+                output_target.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+            except OSError as exc:
+                raise CommandError(
+                    f"Unable to write analysis output to '{output_target}': {exc}"
+                ) from exc
 
         if options.get("format") == "json":
             self.stdout.write(json.dumps(result, indent=2, sort_keys=True))

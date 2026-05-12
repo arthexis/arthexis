@@ -9,6 +9,7 @@ usage() {
 Usage: ./error-report.sh [options]
 
 Options:
+  --analyze                 Run `manage.py diagnostics analyze` instead of generating a new report zip.
   --output-dir DIR          Directory for generated zip files. Defaults to work/error-reports.
   --since DURATION          Only include non-critical logs modified within DURATION, such as 12h or 7d.
   --max-log-files COUNT     Maximum number of log files to include. Defaults to 30.
@@ -28,6 +29,11 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+if [[ "${1:-}" == "--analyze" ]]; then
+  shift
+  exec "$BASE_DIR/.venv/bin/python" "$BASE_DIR/manage.py" diagnostics analyze "$@"
+fi
 
 select_python() {
   local candidate

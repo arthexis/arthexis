@@ -31,15 +31,29 @@ def _load_summary(zf: ZipFile) -> str:
 
 def _iter_log_text(zf: ZipFile):
     for name in zf.namelist():
-        if not name.endswith(".log") and "/logs/" not in name:
+        if not name.endswith(".log") and not name.startswith("logs/") and "/logs/" not in name:
             continue
         with zf.open(name) as log_fp:
-            yield name, log_fp.read().decode("utf-8", errors="replace")
+            yield name, log_fp.read(1024 * 1024).decode("utf-8", errors="replace")
+
+
+def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:
+    for severity, category, pattern, message in RULES:
+        if not pattern.search(text):
+            continue
+        findings.append(
+            {
+                "severity": severity,
+                "category": category,
+                "message": f"{message}{summary_suffix}",
+                "source": source,
+            }
+        )
 
 
 def analyze_error_report_package(package_path: Path) -> dict:
     """Return a deterministic analysis payload for an error-report zip file."""
-    if not package_path.exists():
+    if not package_path.is_file():
         raise FileNotFoundError(f"Package not found: {package_path}")
 
     try:
@@ -49,30 +63,13 @@ def analyze_error_report_package(package_path: Path) -> dict:
             warnings = list(manifest.get("warnings") or [])
             findings = []
             for log_name, log_text in _iter_log_text(zf):
-                for severity, category, pattern, message in RULES:
-                    if not pattern.search(log_text):
-                        continue
-                    findings.append(
-                        {
-                            "severity": severity,
-                            "category": category,
-                            "message": message,
-                            "source": log_name,
-                        }
-                    )
+                _scan_text_for_rules(log_name, log_text, findings)
             if summary:
-                for severity, category, pattern, message in RULES:
-                    if pattern.search(summary):
-                        findings.append(
-                            {
-                                "severity": severity,
-                                "category": category,
-                                "message": f"{message} (summary.txt)",
-                                "source": "summary.txt",
-                            }
-                        )
+                _scan_text_for_rules("summary.txt", summary, findings, summary_suffix=" (summary.txt)")
     except BadZipFile as exc:
         raise ValueError(f"Invalid zip package: {package_path}") from exc
+    except (json.JSONDecodeError, KeyError, OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Malformed error-report package: {package_path}") from exc
 
     unique_findings = []
     seen = set()
