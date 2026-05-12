@@ -8,7 +8,11 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.users.diagnostics import build_bundle_for_username
-from apps.users.error_report_analysis import analyze_error_report_package
+from apps.users.error_report_analysis import (
+    analyze_error_report_package,
+    redact_analysis_payload,
+    redact_sensitive_text,
+)
 
 
 class Command(BaseCommand):
@@ -88,30 +92,42 @@ class Command(BaseCommand):
         try:
             result = analyze_error_report_package(package_path)
         except (FileNotFoundError, ValueError, OSError) as exc:
-            raise CommandError(f"Unable to analyze package '{package_path}': {exc}") from exc
+            raise CommandError(
+                f"Unable to analyze package '{package_path}': {exc}"
+            ) from exc
 
+        safe_result = redact_analysis_payload(result)
         output_path = (options.get("output") or "").strip()
         if output_path:
             output_target = Path(output_path)
             try:
                 output_target.parent.mkdir(parents=True, exist_ok=True)
-                output_target.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+                output_target.write_text(
+                    json.dumps(safe_result, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
             except OSError as exc:
                 raise CommandError(
                     f"Unable to write analysis output to '{output_target}': {exc}"
                 ) from exc
 
         if options.get("format") == "json":
-            self.stdout.write(json.dumps(result, indent=2, sort_keys=True))
+            self.stdout.write(json.dumps(safe_result, indent=2, sort_keys=True))
         else:
-            self.stdout.write(self.style.SUCCESS(f"Analyzed: {package_path}"))
-            self.stdout.write(f"Risk score: {result['risk_score']} ({result['max_severity']})")
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Analyzed: {redact_sensitive_text(str(package_path))}"
+                )
+            )
+            self.stdout.write(
+                f"Risk score: {result['risk_score']} ({result['max_severity']})"
+            )
             self.stdout.write(f"Findings: {len(result['findings'])}")
-            if result["warnings"]:
+            if safe_result["warnings"]:
                 self.stdout.write("Warnings:")
-                for warning in result["warnings"]:
+                for warning in safe_result["warnings"]:
                     self.stdout.write(f"- {warning}")
-            for finding in result["findings"]:
+            for finding in safe_result["findings"]:
                 self.stdout.write(
                     f"[{finding['severity'].upper()}] {finding['category']}: {finding['message']}"
                 )

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
+from django.urls import reverse
 
 import apps.core.views.reports.release_publish.workflow as workflow_module
 from apps.core.views.reports.release_publish import pipeline
@@ -314,6 +315,46 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     response = pipeline.release_progress_impl(request, pk=1, action="publish")
 
     assert response.status_code == 400
+
+
+def test_reset_release_progress_redirects_to_canonical_release_route(tmp_path: Path):
+    class DummyPackage:
+        name = "arthexis"
+
+    class DummyRelease:
+        pk = 7
+        package = DummyPackage()
+        version = "1.2.3"
+        pypi_url = "https://pypi.org/project/arthexis/1.2.3/"
+        release_on = object()
+        saved_fields: list[str] | None = None
+
+        def save(self, *, update_fields):
+            self.saved_fields = list(update_fields)
+
+    release = DummyRelease()
+    request = RequestFactory().get(
+        "/admin/core/releases/7/publish/?next=https://evil.example"
+    )
+    request.session = {"release_publish_7": {"step": 3}}
+    lock_path = tmp_path / "release.lock"
+    restart_path = tmp_path / "release.restarts"
+    lock_path.write_text("locked", encoding="utf-8")
+
+    response = pipeline._reset_release_progress(
+        request,
+        release,
+        "release_publish_7",
+        lock_path,
+        restart_path,
+        tmp_path,
+        clean_repo=False,
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("release-progress", args=[7, "publish"])
+    assert "release_publish_7" not in request.session
+    assert release.saved_fields == ["pypi_url", "release_on"]
 
 
 def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path):

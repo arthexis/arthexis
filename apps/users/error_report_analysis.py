@@ -10,6 +10,17 @@ from zipfile import BadZipFile, ZipFile
 SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 LOG_TEXT_SUFFIXES = (".log", ".txt", ".json", ".ndjson")
 LOG_PATH_PART_PATTERN = re.compile(r"(^|[-_.])logs?($|[-_.])", re.IGNORECASE)
+PRIVATE_KEY_BLOCK_PATTERN = re.compile(
+    r"-----BEGIN\s+PRIVATE\s+KEY-----.*?-----END\s+PRIVATE\s+KEY-----",
+    re.IGNORECASE | re.DOTALL,
+)
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?P<prefix>"
+    r"\b(?:aws_secret_access_key|api[_-]?key|password|secret|token|private[_-]?key)\b"
+    r"[\"']?\s*[:=]\s*[\"']?"
+    r")(?P<value>[^\s\"',;]+)",
+    re.IGNORECASE,
+)
 SECRET_EXPOSURE_PATTERN = re.compile(
     r"("
     r"BEGIN\s+PRIVATE\s+KEY|"
@@ -88,6 +99,30 @@ def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summar
                 "source": source,
             }
         )
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Return ``text`` with obvious credential material replaced for reports."""
+
+    redacted = PRIVATE_KEY_BLOCK_PATTERN.sub("[redacted private key]", text)
+    return SECRET_ASSIGNMENT_PATTERN.sub(r"\g<prefix>[redacted]", redacted)
+
+
+def redact_analysis_payload(payload):
+    """Return an analysis payload safe for stdout or clear-text JSON files."""
+
+    if isinstance(payload, dict):
+        return {
+            key: redact_analysis_payload(value)
+            for key, value in payload.items()
+        }
+    if isinstance(payload, list):
+        return [redact_analysis_payload(value) for value in payload]
+    if isinstance(payload, tuple):
+        return [redact_analysis_payload(value) for value in payload]
+    if isinstance(payload, str):
+        return redact_sensitive_text(payload)
+    return payload
 
 
 def analyze_error_report_package(package_path: Path) -> dict:

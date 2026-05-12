@@ -8,7 +8,10 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from apps.users.error_report_analysis import analyze_error_report_package
+from apps.users.error_report_analysis import (
+    analyze_error_report_package,
+    redact_analysis_payload,
+)
 
 
 def _write_report(path, *, summary="", logs=None, warnings=None):
@@ -171,6 +174,82 @@ def test_diagnostics_analyze_json_output_and_write_file(monkeypatch, tmp_path):
     assert payload["risk_score"] == 22
     assert output_path.exists()
     assert json.loads(output_path.read_text(encoding="utf-8"))["findings"]
+
+
+def test_redact_analysis_payload_removes_sensitive_values():
+    payload = {
+        "package": "AWS_SECRET_ACCESS_KEY=real-secret/report.zip",
+        "warnings": ["api_key=visible-token"],
+        "findings": [
+            {
+                "severity": "critical",
+                "category": "secret_exposure",
+                "message": "password=hunter2",
+                "source": "logs/runtime.log",
+            }
+        ],
+    }
+
+    redacted = redact_analysis_payload(payload)
+    rendered = json.dumps(redacted, sort_keys=True)
+
+    assert "real-secret" not in rendered
+    assert "visible-token" not in rendered
+    assert "hunter2" not in rendered
+    assert "secret_exposure" in rendered
+    assert "[redacted]" in rendered
+
+
+def test_diagnostics_analyze_redacts_json_stdout_and_output(monkeypatch, tmp_path):
+    result = {
+        "package": "AWS_SECRET_ACCESS_KEY=real-secret/report.zip",
+        "entry_count": 1,
+        "warnings": ["token=visible-token"],
+        "findings": [
+            {
+                "severity": "critical",
+                "category": "secret_exposure",
+                "message": "password=hunter2",
+                "source": "logs/runtime.log",
+            }
+        ],
+        "max_severity": "critical",
+        "max_severity_rank": 4,
+        "risk_score": 41,
+        "severity_order": {
+            "none": 0,
+            "low": 1,
+            "medium": 2,
+            "high": 3,
+            "critical": 4,
+        },
+    }
+    monkeypatch.setattr(
+        "apps.users.management.commands.diagnostics.analyze_error_report_package",
+        lambda _path: result,
+    )
+    output_path = tmp_path / "analysis" / "result.json"
+    stdout = StringIO()
+
+    call_command(
+        "diagnostics",
+        "analyze",
+        package="fake.zip",
+        format="json",
+        output=str(output_path),
+        stdout=stdout,
+    )
+
+    rendered_stdout = stdout.getvalue()
+    rendered_file = output_path.read_text(encoding="utf-8")
+
+    assert "real-secret" not in rendered_stdout
+    assert "visible-token" not in rendered_stdout
+    assert "hunter2" not in rendered_stdout
+    assert "real-secret" not in rendered_file
+    assert "visible-token" not in rendered_file
+    assert "hunter2" not in rendered_file
+    assert "secret_exposure" in rendered_file
 
 
 def test_diagnostics_analyze_fail_on_threshold(monkeypatch):
