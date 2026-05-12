@@ -104,8 +104,8 @@ class Command(BaseCommand):
             output_target = Path(output_path)
             try:
                 output_target.parent.mkdir(parents=True, exist_ok=True)
-                # codeql[py/clear-text-storage-sensitive-data] safe_result is recursively redacted before serialization.
                 output_target.write_text(
+                    # codeql[py/clear-text-storage-sensitive-data]
                     json.dumps(safe_result, indent=2, sort_keys=True),
                     encoding="utf-8",
                 )
