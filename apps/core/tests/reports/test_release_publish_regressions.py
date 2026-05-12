@@ -563,6 +563,24 @@ def test_release_simulator_requires_current_main_install_health_success() -> Non
     assert "Install Health Check has not run for current" in script
 
 
+def test_release_simulator_requires_security_scan_settling_and_clear_alerts() -> None:
+    workflow = _workflow_data("release-simulator.yml")
+    evaluate_job = workflow["jobs"]["evaluate"]
+    evaluate_step = _workflow_step(
+        evaluate_job, "Evaluate release blockers from install/upgrade pipeline state"
+    )
+    script = evaluate_step["with"]["script"]
+
+    assert evaluate_job["permissions"]["security-events"] == "read"
+    assert "securityScanQuietMillis = 2 * 60 * 60 * 1000" in script
+    assert "defaultBranchCommitDate" in script
+    assert "Security scan settling period has not elapsed" in script
+    assert "github.rest.codeScanning.listAlertsForRepo" in script
+    assert "state: 'open'" in script
+    assert "Open GitHub code scanning security findings" in script
+    assert "Unable to verify GitHub code scanning alerts" in script
+
+
 @pytest.mark.django_db
 def test_step_record_publish_metadata_records_github_release_url(
     monkeypatch, tmp_path: Path

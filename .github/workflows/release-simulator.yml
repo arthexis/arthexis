@@ -85,6 +85,7 @@ jobs:
       actions: read
       contents: read
       issues: read
+      security-events: read
     outputs:
       should_run: ${{ steps.evaluate.outputs.should_run }}
       skip_reason: ${{ steps.evaluate.outputs.skip_reason }}
@@ -103,6 +104,7 @@ jobs:
             const blockers = [];
             const fullDayMillis = 24 * 60 * 60 * 1000;
             const releaseCutoffMillis = 3 * fullDayMillis;
+            const securityScanQuietMillis = 2 * 60 * 60 * 1000;
             let shouldRun = true;
             let skipReason = '';
 
@@ -160,6 +162,41 @@ jobs:
                 branch: defaultBranch,
               });
               const defaultBranchSha = defaultBranchData?.commit?.sha || context.sha;
+              const defaultBranchCommitDate =
+                defaultBranchData?.commit?.commit?.committer?.date
+                || defaultBranchData?.commit?.commit?.author?.date;
+
+              if (defaultBranchCommitDate) {
+                const commitTime = Date.parse(defaultBranchCommitDate);
+                const quietUntil = new Date(commitTime + securityScanQuietMillis);
+                const quietAgeMillis = Date.now() - commitTime;
+                if (quietAgeMillis < securityScanQuietMillis) {
+                  blockers.push(`Security scan settling period has not elapsed for current ${defaultBranch} commit ${defaultBranchSha}; wait until ${quietUntil.toISOString()}.`);
+                }
+              } else {
+                blockers.push(`Unable to verify ${defaultBranch} commit time before security scan readiness.`);
+              }
+
+              try {
+                const codeScanningAlerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                });
+
+                if (codeScanningAlerts.length) {
+                  const preview = codeScanningAlerts.slice(0, 5).map((alert) => {
+                    const severity = alert.rule?.security_severity_level || alert.rule?.severity || 'unknown';
+                    const rule = alert.rule?.id || alert.rule?.name || `alert ${alert.number}`;
+                    return `${severity}:${rule}${alert.html_url ? ` (${alert.html_url})` : ''}`;
+                  }).join('; ');
+                  const suffix = codeScanningAlerts.length > 5 ? `; and ${codeScanningAlerts.length - 5} more` : '';
+                  blockers.push(`Open GitHub code scanning security findings: ${codeScanningAlerts.length}. ${preview}${suffix}`);
+                }
+              } catch (error) {
+                blockers.push(`Unable to verify GitHub code scanning alerts before release readiness: ${error.message}`);
+              }
 
               const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
                 owner: context.repo.owner,
@@ -484,7 +521,7 @@ jobs:
               echo 'summary_markdown<<EOF'
               echo '### Simulation result'
               echo ''
-              echo '- ⏭️ Release simulation was skipped because install/upgrade blockers are open.'
+              echo '- ⏭️ Release simulation was skipped because release readiness blockers are open.'
               echo 'EOF'
               echo 'simulated_ok=false'
             } >> "$GITHUB_OUTPUT"
@@ -529,7 +566,7 @@ jobs:
               ? '❌ Do not release yet. Resolve blockers and wait for the next simulator run.'
               : simulatedOk
                 ? '✅ Recommendation: release can proceed once maintainers approve authorization.'
-                : '⚠️ No install/upgrade blockers were found, but release simulation did not complete.';
+                : '⚠️ No release readiness blockers were found, but release simulation did not complete.';
 
             const body = [
               marker,
@@ -541,11 +578,11 @@ jobs:
               `- Commit: ${context.sha}`,
               `- Event: ${context.eventName}`,
               '',
-              '## Install/upgrade blockers',
+              '## Release readiness blockers',
               blockerSection,
               '',
               canSimulate ? '## Release simulation' : '## Release simulation',
-              canSimulate ? simulationSummary : '- Skipped because install/upgrade blockers are currently open.',
+              canSimulate ? simulationSummary : '- Skipped because release readiness blockers are currently open.',
               '',
               '## Recommendation',
               recommendation,
