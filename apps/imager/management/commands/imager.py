@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils.translation import gettext as _
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
@@ -15,6 +16,8 @@ from apps.imager.reservations import (
 from apps.imager.services import (
     DEFAULT_RECOVERY_SSH_USER,
     ImagerBuildError,
+    STORAGE_BACKEND_LOCAL,
+    SUPPORTED_STORAGE_BACKENDS,
     RecoveryAuthorizedKeyError,
     build_rpi4b_image,
     list_block_devices,
@@ -151,10 +154,15 @@ class Command(BaseCommand):
             default="{}",
             help="JSON object carrying profile metadata, required artifacts, and rollout fields.",
         )
+        supported_storage_backends = tuple(sorted(SUPPORTED_STORAGE_BACKENDS))
         build_parser.add_argument(
             "--storage-backend",
-            default="local",
-            help="Artifact storage backend stub (local, s3, gcs, azure_blob). Local keeps artifacts on the build host.",
+            choices=supported_storage_backends,
+            default=STORAGE_BACKEND_LOCAL,
+            help=_(
+                "Artifact storage backend stub (%(supported)s). Local keeps artifacts on the build host."
+            )
+            % {"supported": ", ".join(supported_storage_backends)},
         )
         build_parser.add_argument(
             "--storage-options",

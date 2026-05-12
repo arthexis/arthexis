@@ -340,7 +340,29 @@ class BuildResult:
     build_engine: str
     build_profile: str
     profile_manifest: dict[str, object]
+    storage_backend: str
+    storage_options: dict[str, object]
     reservation: dict[str, object] | None = None
+
+
+def _sanitize_storage_options(storage_options: dict[str, object]) -> dict[str, object]:
+    """Mask sensitive storage configuration values before persisting metadata."""
+
+    sensitive_fragments = (
+        "access_key",
+        "connection_string",
+        "password",
+        "secret",
+        "token",
+    )
+    return {
+        key: (
+            "***"
+            if any(fragment in key.lower() for fragment in sensitive_fragments)
+            else value
+        )
+        for key, value in storage_options.items()
+    }
 
 
 @dataclass
@@ -1937,7 +1959,7 @@ def build_rpi4b_image(
         raise ImagerBuildError(
             "Artifact name must start with an alphanumeric character and use only letters, numbers, dot, underscore, or hyphen."
         )
-    normalized_storage_backend = str(storage_backend).strip().lower() or STORAGE_BACKEND_LOCAL
+    normalized_storage_backend = (storage_backend or "").strip().lower() or STORAGE_BACKEND_LOCAL
     if normalized_storage_backend not in SUPPORTED_STORAGE_BACKENDS:
         supported_backends = ", ".join(sorted(SUPPORTED_STORAGE_BACKENDS))
         raise ImagerBuildError(
@@ -2081,7 +2103,7 @@ def build_rpi4b_image(
                     },
                     "artifact_storage": {
                         "backend": normalized_storage_backend,
-                        "options": normalized_storage_options,
+                        "options": _sanitize_storage_options(normalized_storage_options),
                         "external_upload_configured": normalized_storage_backend != STORAGE_BACKEND_LOCAL,
                         "external_upload_implemented": False,
                     },
@@ -2102,5 +2124,7 @@ def build_rpi4b_image(
         build_engine=build_engine,
         build_profile=profile,
         profile_manifest=profile_manifest,
+        storage_backend=normalized_storage_backend,
+        storage_options=normalized_storage_options,
         reservation=reservation_payload,
     )

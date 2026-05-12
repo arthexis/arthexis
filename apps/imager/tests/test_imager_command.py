@@ -521,6 +521,90 @@ def test_imager_build_command_rejects_nonpositive_reserve_number(tmp_path: Path)
 
 
 @pytest.mark.django_db
+def test_imager_build_command_rejects_invalid_storage_options_json(tmp_path: Path) -> None:
+    """Regression: --storage-options must be valid JSON."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="--storage-options must be valid JSON."):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "bad-storage-options-json",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--storage-options",
+            "{invalid",
+        )
+
+
+@pytest.mark.django_db
+def test_imager_build_command_rejects_non_object_storage_options_json(tmp_path: Path) -> None:
+    """Regression: --storage-options must decode to a JSON object."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="--storage-options must decode to a JSON object."):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "bad-storage-options-type",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--storage-options",
+            "[1,2,3]",
+        )
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_passes_storage_options_to_backend(mock_build, tmp_path: Path) -> None:
+    """Regression: build command should pass parsed storage configuration to the backend."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "good-storage-options",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--storage-backend",
+        "s3",
+        "--storage-options",
+        '{"bucket":"artifacts","access_key":"key"}',
+    )
+
+    assert mock_build.call_args.kwargs["storage_backend"] == "s3"
+    assert mock_build.call_args.kwargs["storage_options"] == {
+        "bucket": "artifacts",
+        "access_key": "key",
+    }
+
+
+@pytest.mark.django_db
 @patch("apps.imager.management.commands.imager.build_rpi4b_image")
 def test_imager_build_command_reads_recovery_authorized_key_files(mock_build, tmp_path: Path) -> None:
     """Regression: recovery key files should flow into build customization args."""
