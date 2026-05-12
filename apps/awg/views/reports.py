@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, Overflow
 from math import comb
 from typing import Optional
 
@@ -906,7 +906,7 @@ def ev_charging_calculator(request):
                     charging_efficiency=values["charging_efficiency"],
                     tariff_mxn_kwh=values.get("tariff_mxn_kwh"),
                 )
-            except (InvalidOperation, ZeroDivisionError):
+            except (InvalidOperation, Overflow, ZeroDivisionError):
                 context["error"] = _(
                     "Unable to calculate EV charging totals for the provided values."
                 )
