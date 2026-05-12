@@ -294,20 +294,6 @@ When issue and PR workflows overlap:
 
 ---
 
-## Branch Naming
-
-Branch names must include the **affected apps**.
-
-Example:
-
-```
-billing-auth-fix-login
-charging-station-admin-ui
-users-permissions-regression
-```
-
----
-
 ## Code Review Handling
 
 When a PR review requests a bug fix:
