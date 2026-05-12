@@ -152,6 +152,16 @@ class Command(BaseCommand):
             help="JSON object carrying profile metadata, required artifacts, and rollout fields.",
         )
         build_parser.add_argument(
+            "--storage-backend",
+            default="local",
+            help="Artifact storage backend stub (local, s3, gcs, azure_blob). Local keeps artifacts on the build host.",
+        )
+        build_parser.add_argument(
+            "--storage-options",
+            default="{}",
+            help="JSON object with backend-specific storage options reserved for future external upload support.",
+        )
+        build_parser.add_argument(
             "--recovery-ssh-user",
             default="",
             help=(
@@ -304,6 +314,12 @@ class Command(BaseCommand):
             raise CommandError("--profile-metadata must be valid JSON.") from exc
         if not isinstance(profile_metadata, dict):
             raise CommandError("--profile-metadata must decode to a JSON object.")
+        try:
+            storage_options = json.loads(str(options["storage_options"]))
+        except json.JSONDecodeError as exc:
+            raise CommandError("--storage-options must be valid JSON.") from exc
+        if not isinstance(storage_options, dict):
+            raise CommandError("--storage-options must decode to a JSON object.")
 
         recovery_authorized_keys = self._read_recovery_authorized_keys(
             file_paths=[str(path) for path in options.get("recovery_authorized_key_file", [])],
@@ -370,6 +386,8 @@ class Command(BaseCommand):
                 reserve_hostname_prefix=str(options["reserve_prefix"]),
                 reserve_number=reserve_number,
                 reserve_role=str(options["reserve_role"]),
+                storage_backend=str(options["storage_backend"]),
+                storage_options=storage_options,
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc

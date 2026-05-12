@@ -42,6 +42,18 @@ from apps.imager.reservations import (
 )
 
 TARGET_RPI4B = "rpi-4b"
+STORAGE_BACKEND_LOCAL = "local"
+STORAGE_BACKEND_S3 = "s3"
+STORAGE_BACKEND_GCS = "gcs"
+STORAGE_BACKEND_AZURE_BLOB = "azure_blob"
+SUPPORTED_STORAGE_BACKENDS = frozenset(
+    {
+        STORAGE_BACKEND_LOCAL,
+        STORAGE_BACKEND_S3,
+        STORAGE_BACKEND_GCS,
+        STORAGE_BACKEND_AZURE_BLOB,
+    }
+)
 DEFAULT_RECOVERY_SSH_USER = "arthe"
 RECOVERY_SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
 RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
@@ -1916,6 +1928,8 @@ def build_rpi4b_image(
     reserve_number: int | None = None,
     reserve_role: str = "",
     connect_bootstrap_enabled: bool = False,
+    storage_backend: str = STORAGE_BACKEND_LOCAL,
+    storage_options: dict[str, object] | None = None,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -1923,6 +1937,13 @@ def build_rpi4b_image(
         raise ImagerBuildError(
             "Artifact name must start with an alphanumeric character and use only letters, numbers, dot, underscore, or hyphen."
         )
+    normalized_storage_backend = str(storage_backend).strip().lower() or STORAGE_BACKEND_LOCAL
+    if normalized_storage_backend not in SUPPORTED_STORAGE_BACKENDS:
+        supported_backends = ", ".join(sorted(SUPPORTED_STORAGE_BACKENDS))
+        raise ImagerBuildError(
+            f"Unsupported storage backend '{storage_backend}'. Available backends: {supported_backends}."
+        )
+    normalized_storage_options = dict(storage_options or {})
 
     engine = BUILD_ENGINES.get(build_engine)
     if engine is None:
@@ -2057,6 +2078,12 @@ def build_rpi4b_image(
                         if recovery_ssh_access
                         else 0,
                         "explicitly_skipped": bool(customize and skip_recovery_ssh),
+                    },
+                    "artifact_storage": {
+                        "backend": normalized_storage_backend,
+                        "options": normalized_storage_options,
+                        "external_upload_configured": normalized_storage_backend != STORAGE_BACKEND_LOCAL,
+                        "external_upload_implemented": False,
                     },
                 },
                 "build_engine": build_engine,
