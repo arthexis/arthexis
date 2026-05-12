@@ -40,6 +40,7 @@ from apps.imager.services import (
     _guestfish_write,
     _render_bootstrap_script,
     _resolve_root_disk_path,
+    _sanitize_storage_options,
     _should_exclude_suite_bundle_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
@@ -601,6 +602,40 @@ def test_imager_build_command_passes_storage_options_to_backend(mock_build, tmp_
     assert mock_build.call_args.kwargs["storage_options"] == {
         "bucket": "artifacts",
         "access_key": "key",
+    }
+
+
+def test_sanitize_storage_options_masks_nested_secret_values() -> None:
+    """Regression: persisted artifact metadata must not leak nested credentials."""
+
+    assert _sanitize_storage_options(
+        {
+            "bucket": "artifacts",
+            "credentials": {
+                "secret": "cleartext-secret",
+                "profile": {
+                    "access_key": "cleartext-access-key",
+                    "region": "us-east-1",
+                },
+            },
+            "mirrors": [
+                {"token": "cleartext-token", "endpoint": "https://example.invalid"},
+                {"name": "public"},
+            ],
+        }
+    ) == {
+        "bucket": "artifacts",
+        "credentials": {
+            "secret": "***",
+            "profile": {
+                "access_key": "***",
+                "region": "us-east-1",
+            },
+        },
+        "mirrors": [
+            {"token": "***", "endpoint": "https://example.invalid"},
+            {"name": "public"},
+        ],
     }
 
 

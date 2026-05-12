@@ -355,12 +355,22 @@ def _sanitize_storage_options(storage_options: dict[str, object]) -> dict[str, o
         "secret",
         "token",
     )
+
+    def is_sensitive_key(key: object) -> bool:
+        return any(fragment in str(key).lower() for fragment in sensitive_fragments)
+
+    def sanitize_value(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: "***" if is_sensitive_key(key) else sanitize_value(nested_value)
+                for key, nested_value in value.items()
+            }
+        if isinstance(value, list):
+            return [sanitize_value(item) for item in value]
+        return value
+
     return {
-        key: (
-            "***"
-            if any(fragment in key.lower() for fragment in sensitive_fragments)
-            else value
-        )
+        key: "***" if is_sensitive_key(key) else sanitize_value(value)
         for key, value in storage_options.items()
     }
 
