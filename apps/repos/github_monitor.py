@@ -623,46 +623,19 @@ def _reaction_approval(
     return None
 
 
-def _pull_request_head_commit_timestamp(
-    *,
-    token: str,
-    task: GitHubMonitorTask,
-    pull_request: Mapping[str, object],
-):
+def _pull_request_last_updated_at(pull_request: Mapping[str, object]):
     if not isinstance(pull_request, Mapping):
         return None
-    try:
-        head_sha = str((pull_request.get("head") or {}).get("sha") or "").strip()
-    except (AttributeError, TypeError):
-        head_sha = ""
-    if not head_sha:
-        return None
-    commit = github_service.fetch_commit(
-        token=token,
-        owner=task.repository.owner,
-        name=task.repository.name,
-        sha=head_sha,
-    )
-    try:
-        committed_at = ((commit.get("commit") or {}).get("author") or {}).get("date")
-    except (AttributeError, TypeError):
-        committed_at = None
-    return _parse_github_datetime(committed_at)
+    return _parse_github_datetime(pull_request.get("updated_at"))
 
 
 def _approval_covers_head(
     *,
-    token: str,
-    task: GitHubMonitorTask,
     approval: Mapping[str, object],
     pull_request: Mapping[str, object],
 ) -> bool:
     approved_at = approval.get("approved_at")
-    head_commit_timestamp = _pull_request_head_commit_timestamp(
-        token=token,
-        task=task,
-        pull_request=pull_request,
-    )
+    head_commit_timestamp = _pull_request_last_updated_at(pull_request)
     if approved_at is None or head_commit_timestamp is None:
         return False
     return approved_at >= head_commit_timestamp
@@ -880,8 +853,6 @@ def sync_monitor_items(*, token: str | None = None, now=None) -> dict[str, Any]:
                 if not head_sha:
                     continue
                 if task.require_approval_reaction and not _approval_covers_head(
-                    token=token,
-                    task=task,
                     approval=approval,
                     pull_request=pull_request,
                 ):
