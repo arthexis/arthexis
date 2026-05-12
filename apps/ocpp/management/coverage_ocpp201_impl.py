@@ -33,6 +33,91 @@ def _is_not_implemented_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bo
     return False
 
 
+def _protocol_call_details(
+    decorator: ast.expr, protocol_slug: str
+) -> tuple[str, str] | None:
+    if not isinstance(decorator, ast.Call):
+        return None
+    func = decorator.func
+    is_protocol_call = (
+        isinstance(func, ast.Name) and func.id == "protocol_call"
+    ) or (
+        isinstance(func, ast.Attribute) and func.attr == "protocol_call"
+    )
+    if not is_protocol_call or len(decorator.args) < 3:
+        return None
+    slug_arg = decorator.args[0]
+    direction_arg = decorator.args[1]
+    action_arg = decorator.args[2]
+    if not (
+        isinstance(slug_arg, ast.Constant)
+        and isinstance(slug_arg.value, str)
+        and slug_arg.value == protocol_slug
+    ):
+        return None
+    if not (
+        isinstance(action_arg, ast.Constant) and isinstance(action_arg.value, str)
+    ):
+        return None
+    if (
+        isinstance(direction_arg, ast.Constant)
+        and direction_arg.value == "cp_to_csms"
+    ) or (
+        isinstance(direction_arg, ast.Attribute)
+        and direction_arg.attr == "CP_TO_CSMS"
+    ):
+        return "cp_to_csms", action_arg.value
+    if (
+        isinstance(direction_arg, ast.Constant)
+        and direction_arg.value == "csms_to_cp"
+    ) or (
+        isinstance(direction_arg, ast.Attribute)
+        and direction_arg.attr == "CSMS_TO_CP"
+    ):
+        return "csms_to_cp", action_arg.value
+    return None
+
+
+def _collect_stub_decorated_actions(
+    app_dir: Path, protocol_slug: str
+) -> list[dict[str, object]]:
+    """Collect protocol actions still mapped directly to NotImplementedError stubs."""
+
+    stubs: list[dict[str, object]] = []
+    for path in app_dir.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not _is_not_implemented_stub(node):
+                continue
+            for decorator in node.decorator_list:
+                details = _protocol_call_details(decorator, protocol_slug)
+                if details is None:
+                    continue
+                direction, action = details
+                stubs.append(
+                    {
+                        "action": action,
+                        "direction": direction,
+                        "function": node.name,
+                        "line": node.lineno,
+                        "path": path.relative_to(app_dir).as_posix(),
+                    }
+                )
+    return sorted(
+        stubs,
+        key=lambda stub: (
+            str(stub["direction"]),
+            str(stub["action"]),
+            str(stub["path"]),
+            str(stub["function"]),
+        ),
+    )
+
+
 def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[set[str], set[str]]:
     """Collect protocol actions mapped to non-stub handlers for the target protocol."""
 
@@ -49,45 +134,14 @@ def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[
             if _is_not_implemented_stub(node):
                 continue
             for decorator in node.decorator_list:
-                if not isinstance(decorator, ast.Call):
+                details = _protocol_call_details(decorator, protocol_slug)
+                if details is None:
                     continue
-                func = decorator.func
-                is_protocol_call = (
-                    isinstance(func, ast.Name) and func.id == "protocol_call"
-                ) or (
-                    isinstance(func, ast.Attribute) and func.attr == "protocol_call"
-                )
-                if not is_protocol_call or len(decorator.args) < 3:
-                    continue
-                slug_arg = decorator.args[0]
-                direction_arg = decorator.args[1]
-                action_arg = decorator.args[2]
-                if not (
-                    isinstance(slug_arg, ast.Constant)
-                    and isinstance(slug_arg.value, str)
-                    and slug_arg.value == protocol_slug
-                ):
-                    continue
-                if not (
-                    isinstance(action_arg, ast.Constant) and isinstance(action_arg.value, str)
-                ):
-                    continue
-                if (
-                    isinstance(direction_arg, ast.Constant)
-                    and direction_arg.value == "cp_to_csms"
-                ) or (
-                    isinstance(direction_arg, ast.Attribute)
-                    and direction_arg.attr == "CP_TO_CSMS"
-                ):
-                    cp_to_csms.add(action_arg.value)
-                elif (
-                    isinstance(direction_arg, ast.Constant)
-                    and direction_arg.value == "csms_to_cp"
-                ) or (
-                    isinstance(direction_arg, ast.Attribute)
-                    and direction_arg.attr == "CSMS_TO_CP"
-                ):
-                    csms_to_cp.add(action_arg.value)
+                direction, action = details
+                if direction == "cp_to_csms":
+                    cp_to_csms.add(action)
+                elif direction == "csms_to_cp":
+                    csms_to_cp.add(action)
     return cp_to_csms, csms_to_cp
 
 
@@ -105,6 +159,9 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     spec_csms_to_cp = set(spec["csms_to_cp"])
     cp_to_csms_coverage = sorted(spec_cp_to_csms & implemented_cp_to_csms)
     csms_to_cp_coverage = sorted(spec_csms_to_cp & implemented_csms_to_cp)
+    missing_cp_to_csms = sorted(spec_cp_to_csms - implemented_cp_to_csms)
+    missing_csms_to_cp = sorted(spec_csms_to_cp - implemented_csms_to_cp)
+    stubbed_actions = _collect_stub_decorated_actions(app_dir, "ocpp201")
     cp_to_csms_percentage = len(cp_to_csms_coverage) / len(spec_cp_to_csms) * 100 if spec_cp_to_csms else 0.0
     csms_to_cp_percentage = len(csms_to_cp_coverage) / len(spec_csms_to_cp) * 100 if spec_csms_to_cp else 0.0
     overall_spec = spec_cp_to_csms | spec_csms_to_cp
@@ -116,6 +173,11 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
         "implemented": {
             "cp_to_csms": sorted(implemented_cp_to_csms),
             "csms_to_cp": sorted(implemented_csms_to_cp),
+        },
+        "missing": {
+            "cp_to_csms": missing_cp_to_csms,
+            "csms_to_cp": missing_csms_to_cp,
+            "overall": sorted(set(missing_cp_to_csms) | set(missing_csms_to_cp)),
         },
         "coverage": {
             "cp_to_csms": {
@@ -137,6 +199,7 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
                 "percent": round(overall_percentage, 2),
             },
         },
+        "stubbed": stubbed_actions,
     }
     output = json.dumps(summary, indent=2, sort_keys=True)
     if stdout:
@@ -158,5 +221,7 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     if overall_percentage < 100 and stderr:
         stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.")
         stderr.write(f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.")
+    if stubbed_actions and stderr:
+        stderr.write("OCPP 2.0.1 decorated handlers still contain NotImplementedError stubs.")
     if stdout:
         stdout.write("Command completed without failure.")

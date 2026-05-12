@@ -8,7 +8,10 @@ from apps.ocpp.consumers.csms.consumer import CSMSConsumer
 from apps.ocpp.consumers.csms.dispatch import build_action_registry
 from apps.ocpp.management import coverage_ocpp201_impl, coverage_ocpp21_impl
 from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
-from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
+from apps.ocpp.management.coverage_ocpp201_impl import (
+    _collect_real_decorated_actions,
+    _collect_stub_decorated_actions,
+)
 from apps.ocpp.models import (
     Charger,
 )
@@ -466,6 +469,63 @@ def from_tests():
     assert "StubByBody" not in csms_to_cp
 
 
+def test_collect_stub_decorated_actions_reports_protocol_stubs(tmp_path):
+    app_dir = tmp_path / "apps" / "ocpp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StubByBody")
+def stub_by_body():
+    raise NotImplementedError("todo")
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RealAction")
+def real_action():
+    return {}
+
+@protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "OtherProtocolStub")
+def other_protocol_stub():
+    raise NotImplementedError("todo")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    tests_dir = app_dir / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "TestStub")
+def test_stub():
+    raise NotImplementedError("todo")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    stubs = _collect_stub_decorated_actions(app_dir, "ocpp201")
+
+    assert stubs == [
+        {
+            "action": "StubByBody",
+            "direction": "cp_to_csms",
+            "function": "stub_by_body",
+            "line": 5,
+            "path": "handlers.py",
+        }
+    ]
+
+
+def test_ocpp201_has_no_decorated_not_implemented_stubs():
+    app_dir = Path(__file__).resolve().parents[1]
+
+    assert _collect_stub_decorated_actions(app_dir, "ocpp201") == []
+
+
 def test_run_coverage_ocpp21_keeps_shared_ocpp201_handlers(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "apps.ocpp.management.coverage_ocpp21_impl._load_spec",
@@ -526,6 +586,8 @@ def test_run_coverage_ocpp201_keeps_decorator_only_cp_to_csms(monkeypatch, tmp_p
     report = json.loads(json_path.read_text(encoding="utf-8"))
 
     assert report["implemented"]["cp_to_csms"] == ["Heartbeat"]
+    assert report["missing"] == {"cp_to_csms": [], "csms_to_cp": [], "overall": []}
+    assert report["stubbed"] == []
     assert report["coverage"]["cp_to_csms"]["supported"] == ["Heartbeat"]
 
 
