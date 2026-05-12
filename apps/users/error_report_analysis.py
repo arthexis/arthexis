@@ -11,14 +11,17 @@ SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 LOG_TEXT_SUFFIXES = (".log", ".txt", ".json", ".ndjson")
 LOG_PATH_PART_PATTERN = re.compile(r"(^|[-_.])logs?($|[-_.])", re.IGNORECASE)
 PRIVATE_KEY_BLOCK_PATTERN = re.compile(
-    r"-----BEGIN\s+PRIVATE\s+KEY-----.*?-----END\s+PRIVATE\s+KEY-----",
+    r"-----BEGIN(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----.*?"
+    r"-----END(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----",
     re.IGNORECASE | re.DOTALL,
 )
 SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<prefix>"
     r"\b(?:aws_secret_access_key|api[_-]?key|password|secret|token|private[_-]?key)\b"
-    r"[\"']?\s*[:=]\s*[\"']?"
-    r")(?P<value>[^\s\"',;]+)",
+    r"[\"']?\s*[:=]\s*"
+    r")"
+    r"(?:(?P<quote>[\"'])(?P<quoted_value>.*?)(?P=quote)|"
+    r"(?P<unquoted_value>[A-Za-z0-9._~+/=:@%!-]+))",
     re.IGNORECASE,
 )
 SECRET_EXPOSURE_PATTERN = re.compile(
@@ -104,8 +107,12 @@ def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summar
 def redact_sensitive_text(text: str) -> str:
     """Return ``text`` with obvious credential material replaced for reports."""
 
+    def _replace_assignment(match: re.Match[str]) -> str:
+        quote = match.group("quote") or ""
+        return f"{match.group('prefix')}{quote}[redacted]{quote}"
+
     redacted = PRIVATE_KEY_BLOCK_PATTERN.sub("[redacted private key]", text)
-    return SECRET_ASSIGNMENT_PATTERN.sub(r"\g<prefix>[redacted]", redacted)
+    return SECRET_ASSIGNMENT_PATTERN.sub(_replace_assignment, redacted)
 
 
 def redact_analysis_payload(payload):
@@ -119,7 +126,7 @@ def redact_analysis_payload(payload):
     if isinstance(payload, list):
         return [redact_analysis_payload(value) for value in payload]
     if isinstance(payload, tuple):
-        return [redact_analysis_payload(value) for value in payload]
+        return tuple(redact_analysis_payload(value) for value in payload)
     if isinstance(payload, str):
         return redact_sensitive_text(payload)
     return payload

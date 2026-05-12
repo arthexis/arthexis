@@ -92,8 +92,10 @@ class Command(BaseCommand):
         try:
             result = analyze_error_report_package(package_path)
         except (FileNotFoundError, ValueError, OSError) as exc:
+            safe_package = redact_sensitive_text(str(package_path))
+            safe_error = redact_sensitive_text(str(exc))
             raise CommandError(
-                f"Unable to analyze package '{package_path}': {exc}"
+                f"Unable to analyze package '{safe_package}': {safe_error}"
             ) from exc
 
         safe_result = redact_analysis_payload(result)
@@ -107,8 +109,10 @@ class Command(BaseCommand):
                     encoding="utf-8",
                 )
             except OSError as exc:
+                safe_target = redact_sensitive_text(str(output_target))
+                safe_error = redact_sensitive_text(str(exc))
                 raise CommandError(
-                    f"Unable to write analysis output to '{output_target}': {exc}"
+                    f"Unable to write analysis output to '{safe_target}': {safe_error}"
                 ) from exc
 
         if options.get("format") == "json":
