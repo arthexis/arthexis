@@ -550,6 +550,12 @@ def test_install_health_workflow_runs_on_default_branch_push_not_schedule() -> N
         in notify_recovery["if"]
     )
 
+    notify_failure = workflow["jobs"]["notify_failure"]
+    assert (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        in notify_failure["if"]
+    )
+
 
 def test_release_simulator_requires_current_main_install_health_success() -> None:
     workflow = _workflow_data("release-simulator.yml")

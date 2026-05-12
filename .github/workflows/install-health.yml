@@ -221,7 +221,7 @@ jobs:
             pytest-junit.xml
           if-no-files-found: warn
   notify_failure:
-    if: ${{ always() && needs.install.result == 'failure' }}
+    if: ${{ always() && needs.install.result == 'failure' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     needs:
       - install
     runs-on: ubuntu-latest
