@@ -21,6 +21,7 @@ Maintain a **single canonical migrations graph only** under `apps/*/migrations/`
 | Context | Allowed command(s) | Notes |
 | --- | --- | --- |
 | Local QA (app tests) | `.venv/bin/python manage.py test run -- <target>` | Canonical path for app test execution. |
+| Local QA (app tests, venv-agnostic wrapper) | `./py manage.py test run -- <target>` | Falls back between `.venv` and `venv`; prints bootstrap guidance when neither exists. |
 | Local QA (suite-wide/marker runs) | `.venv/bin/python manage.py test run -- -m "<expr>"` | Keep using the same management entrypoint; pass pytest args after `--`. |
 | Local QA (migration validation) | `.venv/bin/python manage.py migrations check` | Preferred migration guardrail before PRs. |
 | PR oversight | `.venv/bin/python manage.py pr_oversee <action> --pr <number>` | Deterministic PR state, gates, comments, test plans, CI failure collection, guarded merge, cleanup, and controlled monitor loops. |
