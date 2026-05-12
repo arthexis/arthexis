@@ -882,6 +882,13 @@ def ev_charging_calculator(request):
                 error = _("Battery capacity must be greater than zero.")
             elif values["charger_power_kw"] <= 0:
                 error = _("Charger power must be greater than zero.")
+            elif (
+                values["battery_kwh"] > MAX_POWER_CALCULATOR_INPUT
+                or values["charger_power_kw"] > MAX_POWER_CALCULATOR_INPUT
+            ):
+                error = _(
+                    "Battery capacity and charger power are too large to calculate safely."
+                )
             elif values["start_soc"] < 0 or values["target_soc"] > 100:
                 error = _("State of charge must stay between 0 and 100 percent.")
             elif values["target_soc"] <= values["start_soc"]:
