@@ -615,7 +615,13 @@ def test_sanitize_storage_options_masks_nested_secret_values() -> None:
                 "secret": "cleartext-secret",
                 "profile": {
                     "access_key": "cleartext-access-key",
+                    "private_key": "cleartext-private-key",
+                    "private_key_id": "cleartext-private-key-id",
                     "region": "us-east-1",
+                },
+                "azure": {
+                    "account_key": "cleartext-account-key",
+                    "shared_key": "cleartext-shared-key",
                 },
             },
             "mirrors": [
@@ -629,7 +635,13 @@ def test_sanitize_storage_options_masks_nested_secret_values() -> None:
             "secret": "***",
             "profile": {
                 "access_key": "***",
+                "private_key": "***",
+                "private_key_id": "***",
                 "region": "us-east-1",
+            },
+            "azure": {
+                "account_key": "***",
+                "shared_key": "***",
             },
         },
         "mirrors": [
