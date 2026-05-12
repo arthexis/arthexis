@@ -31,10 +31,18 @@ def _load_summary(zf: ZipFile) -> str:
 
 def _iter_log_text(zf: ZipFile):
     for name in zf.namelist():
-        if not name.endswith(".log") and not name.startswith("logs/") and "/logs/" not in name:
+        if not _is_log_entry(name):
             continue
         with zf.open(name) as log_fp:
             yield name, log_fp.read(1024 * 1024).decode("utf-8", errors="replace")
+
+
+def _is_log_entry(name: str) -> bool:
+    if name.endswith(".log"):
+        return True
+    if name.startswith("logs/") or "/logs/" in name:
+        return True
+    return name.startswith("external/") and name.endswith((".txt", ".json", ".ndjson"))
 
 
 def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:

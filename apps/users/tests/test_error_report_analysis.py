@@ -56,6 +56,17 @@ def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
     assert any(f["category"] == "startup" for f in result["findings"])
 
 
+
+
+def test_analyze_error_report_package_scans_external_text_logs(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"external/tmp/log.txt": "Traceback (most recent call last):"})
+
+    result = analyze_error_report_package(package_path)
+
+    assert any(f["category"] == "startup" for f in result["findings"])
+
+
 def test_diagnostics_analyze_requires_package():
     with pytest.raises(CommandError, match="--package is required"):
         call_command("diagnostics", "analyze")
