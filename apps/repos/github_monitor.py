@@ -623,23 +623,49 @@ def _reaction_approval(
     return None
 
 
-def _pull_request_last_updated_at(pull_request: Mapping[str, object]):
-    try:
-        updated_at = pull_request.get("updated_at")
-    except AttributeError:
+def _pull_request_head_commit_timestamp(
+    *,
+    token: str,
+    task: GitHubMonitorTask,
+    pull_request: Mapping[str, object],
+):
+    if not isinstance(pull_request, Mapping):
         return None
-    return _parse_github_datetime(updated_at)
+    try:
+        head_sha = str((pull_request.get("head") or {}).get("sha") or "").strip()
+    except (AttributeError, TypeError):
+        head_sha = ""
+    if not head_sha:
+        return None
+    commit = github_service.fetch_commit(
+        token=token,
+        owner=task.repository.owner,
+        name=task.repository.name,
+        sha=head_sha,
+    )
+    try:
+        committed_at = ((commit.get("commit") or {}).get("author") or {}).get("date")
+    except (AttributeError, TypeError):
+        committed_at = None
+    return _parse_github_datetime(committed_at)
 
 
 def _approval_covers_head(
+    *,
+    token: str,
+    task: GitHubMonitorTask,
     approval: Mapping[str, object],
     pull_request: Mapping[str, object],
 ) -> bool:
     approved_at = approval.get("approved_at")
-    last_updated_at = _pull_request_last_updated_at(pull_request)
-    if approved_at is None or last_updated_at is None:
+    head_commit_timestamp = _pull_request_head_commit_timestamp(
+        token=token,
+        task=task,
+        pull_request=pull_request,
+    )
+    if approved_at is None or head_commit_timestamp is None:
         return False
-    return approved_at >= last_updated_at
+    return approved_at >= head_commit_timestamp
 
 
 def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
@@ -854,7 +880,10 @@ def sync_monitor_items(*, token: str | None = None, now=None) -> dict[str, Any]:
                 if not head_sha:
                     continue
                 if task.require_approval_reaction and not _approval_covers_head(
-                    approval, pull_request
+                    token=token,
+                    task=task,
+                    approval=approval,
+                    pull_request=pull_request,
                 ):
                     continue
                 item = _upsert_monitor_item(
