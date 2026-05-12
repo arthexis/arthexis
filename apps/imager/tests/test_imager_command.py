@@ -40,6 +40,7 @@ from apps.imager.services import (
     _guestfish_write,
     _render_bootstrap_script,
     _resolve_root_disk_path,
+    _sanitize_storage_options,
     _should_exclude_suite_bundle_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
@@ -518,6 +519,124 @@ def test_imager_build_command_rejects_nonpositive_reserve_number(tmp_path: Path)
             "--reserve-number",
             "0",
         )
+
+
+@pytest.mark.django_db
+def test_imager_build_command_rejects_invalid_storage_options_json(tmp_path: Path) -> None:
+    """Regression: --storage-options must be valid JSON."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="--storage-options must be valid JSON."):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "bad-storage-options-json",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--storage-options",
+            "{invalid",
+        )
+
+
+@pytest.mark.django_db
+def test_imager_build_command_rejects_non_object_storage_options_json(tmp_path: Path) -> None:
+    """Regression: --storage-options must decode to a JSON object."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="--storage-options must decode to a JSON object."):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "bad-storage-options-type",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--storage-options",
+            "[1,2,3]",
+        )
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_passes_storage_options_to_backend(mock_build, tmp_path: Path) -> None:
+    """Regression: build command should pass parsed storage configuration to the backend."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "good-storage-options",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        "--storage-backend",
+        "s3",
+        "--storage-options",
+        '{"bucket":"artifacts","access_key":"key"}',
+    )
+
+    assert mock_build.call_args.kwargs["storage_backend"] == "s3"
+    assert mock_build.call_args.kwargs["storage_options"] == {
+        "bucket": "artifacts",
+        "access_key": "key",
+    }
+
+
+def test_sanitize_storage_options_masks_nested_secret_values() -> None:
+    """Regression: persisted artifact metadata must not leak nested credentials."""
+
+    assert _sanitize_storage_options(
+        {
+            "bucket": "artifacts",
+            "credentials": {
+                "secret": "cleartext-secret",
+                "profile": {
+                    "access_key": "cleartext-access-key",
+                    "region": "us-east-1",
+                },
+            },
+            "mirrors": [
+                {"token": "cleartext-token", "endpoint": "https://example.invalid"},
+                {"name": "public"},
+            ],
+        }
+    ) == {
+        "bucket": "artifacts",
+        "credentials": {
+            "secret": "***",
+            "profile": {
+                "access_key": "***",
+                "region": "us-east-1",
+            },
+        },
+        "mirrors": [
+            {"token": "***", "endpoint": "https://example.invalid"},
+            {"name": "public"},
+        ],
+    }
 
 
 @pytest.mark.django_db
