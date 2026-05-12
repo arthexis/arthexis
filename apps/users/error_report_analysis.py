@@ -19,6 +19,25 @@ SECRET_EXPOSURE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+
+MAX_MANIFEST_BYTES = 256 * 1024
+MAX_SUMMARY_BYTES = 512 * 1024
+MAX_LOG_ENTRY_BYTES = 1024 * 1024
+MAX_LOG_ENTRIES_SCANNED = 200
+MAX_TOTAL_LOG_BYTES = 16 * 1024 * 1024
+
+
+def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = "strict") -> str:
+    info = zf.getinfo(name)
+    if info.file_size > limit:
+        raise ValueError(f"{name} exceeds maximum allowed size")
+    with zf.open(info) as fp:
+        data = fp.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"{name} exceeds maximum allowed size")
+    return data.decode("utf-8", errors=errors)
+
+
 RULES = (
     ("critical", "secret_exposure", SECRET_EXPOSURE_PATTERN, "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
@@ -39,8 +58,7 @@ def _manifest_list(manifest: dict, field: str, *, string_items: bool = False) ->
 
 
 def _load_manifest(zf: ZipFile) -> dict:
-    with zf.open("manifest.json") as manifest_fp:
-        manifest = json.loads(manifest_fp.read().decode("utf-8"))
+    manifest = json.loads(_read_zip_text_limited(zf, "manifest.json", limit=MAX_MANIFEST_BYTES))
     if not isinstance(manifest, dict):
         raise ValueError("manifest.json must decode to an object")
     return manifest
@@ -48,18 +66,28 @@ def _load_manifest(zf: ZipFile) -> dict:
 
 def _load_summary(zf: ZipFile) -> str:
     try:
-        with zf.open("summary.txt") as summary_fp:
-            return summary_fp.read().decode("utf-8", errors="replace")
+        return _read_zip_text_limited(zf, "summary.txt", limit=MAX_SUMMARY_BYTES, errors="replace")
     except KeyError:
         return ""
 
 
 def _iter_log_text(zf: ZipFile):
+    scanned_entries = 0
+    scanned_bytes = 0
     for name in zf.namelist():
         if not _is_log_entry(name):
             continue
-        with zf.open(name) as log_fp:
-            yield name, log_fp.read(1024 * 1024).decode("utf-8", errors="replace")
+        if scanned_entries >= MAX_LOG_ENTRIES_SCANNED:
+            raise ValueError("too many log-like entries in package")
+        info = zf.getinfo(name)
+        bytes_to_read = min(info.file_size, MAX_LOG_ENTRY_BYTES)
+        if scanned_bytes + bytes_to_read > MAX_TOTAL_LOG_BYTES:
+            raise ValueError("log-like entries exceed total scan budget")
+        with zf.open(info) as log_fp:
+            text = log_fp.read(MAX_LOG_ENTRY_BYTES).decode("utf-8", errors="replace")
+        scanned_entries += 1
+        scanned_bytes += bytes_to_read
+        yield name, text
 
 
 def _is_log_entry(name: str) -> bool:

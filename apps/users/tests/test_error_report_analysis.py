@@ -135,6 +135,27 @@ def test_analyze_error_report_package_rejects_malformed_manifest_lists(tmp_path,
         analyze_error_report_package(package_path)
 
 
+
+
+def test_analyze_error_report_package_rejects_large_summary(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    with ZipFile(package_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"warnings": [], "entries": []}))
+        zf.writestr("summary.txt", "x" * (600 * 1024))
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
+def test_analyze_error_report_package_rejects_too_many_log_entries(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    logs = {f"logs/log-{idx}.txt": "ok" for idx in range(201)}
+    _write_report(package_path, logs=logs)
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
 def test_diagnostics_analyze_requires_package():
     with pytest.raises(CommandError, match="--package is required"):
         call_command("diagnostics", "analyze")
