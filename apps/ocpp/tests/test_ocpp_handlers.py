@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -2947,3 +2948,28 @@ async def test_reservation_status_update_ignored_for_other_connector():
     assert updated.evcs_confirmed is False
     assert updated.evcs_confirmed_at is None
     assert not store.connector_release_notifications
+
+
+@pytest.mark.anyio
+async def test_call_result_forwarding_does_not_block_response_handling():
+    _reset_pending_calls()
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-BG-FWD"
+    consumer.charger_id = consumer.store_key
+    message_id = "msg-bg-forward"
+    store.register_pending_call(
+        message_id,
+        {"action": "Heartbeat", "charger_id": consumer.charger_id, "log_key": consumer.store_key},
+    )
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_forward_reply(*_args):
+        started.set()
+        await release.wait()
+
+    consumer._forward_charge_point_reply = _slow_forward_reply
+    await consumer._handle_call_result(message_id, {"status": "Accepted"}, raw='[3,"msg-bg-forward",{}]')
+    await asyncio.wait_for(started.wait(), timeout=0.5)
+    assert message_id not in store.pending_calls
+    release.set()

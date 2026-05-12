@@ -1,5 +1,7 @@
 import base64
+import contextlib
 import json
+from asyncio import create_task
 from functools import cached_property
 
 from ... import store
@@ -45,6 +47,22 @@ class DispatchMixin:
         if raw is None and bytes_data is not None:
             raw = base64.b64encode(bytes_data).decode("ascii")
         return raw
+
+    def _dispatch_forward_reply(self, forward_reply, message_id: str, raw: str) -> None:
+        """Send forwarding replies without blocking charger message handling."""
+        task = create_task(forward_reply(message_id, raw))
+        background_tasks = getattr(self, "_background_forward_reply_tasks", None)
+        if background_tasks is None:
+            background_tasks = set()
+            self._background_forward_reply_tasks = background_tasks
+        background_tasks.add(task)
+
+        def _drop_completed(done_task):
+            background_tasks.discard(done_task)
+            with contextlib.suppress(Exception):
+                done_task.result()
+
+        task.add_done_callback(_drop_completed)
 
     def _parse_message(self, raw: str):
         try:
@@ -124,7 +142,7 @@ class DispatchMixin:
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
         if callable(forward_reply) and raw is not None:
-            await forward_reply(message_id, raw)
+            self._dispatch_forward_reply(forward_reply, message_id, raw)
         if handled:
             return
         store.record_pending_call_result(
@@ -164,7 +182,7 @@ class DispatchMixin:
         )
         forward_reply = getattr(self, "_forward_charge_point_reply", None)
         if callable(forward_reply) and raw is not None:
-            await forward_reply(message_id, raw)
+            self._dispatch_forward_reply(forward_reply, message_id, raw)
         if handled:
             return
         store.record_pending_call_result(
