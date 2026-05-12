@@ -481,6 +481,14 @@ from apps.protocols.models import ProtocolCall as ProtocolCallModel
 def stub_by_body():
     raise NotImplementedError("todo")
 
+@protocol_call(
+    protocol_slug="ocpp201",
+    direction=ProtocolCallModel.CSMS_TO_CP,
+    call_name="KeywordStub",
+)
+def keyword_stub():
+    raise NotImplementedError("todo")
+
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RealAction")
 def real_action():
     return {}
@@ -515,6 +523,13 @@ def test_stub():
             "direction": "cp_to_csms",
             "function": "stub_by_body",
             "line": 5,
+            "path": "handlers.py",
+        },
+        {
+            "action": "KeywordStub",
+            "direction": "csms_to_cp",
+            "function": "keyword_stub",
+            "line": 13,
             "path": "handlers.py",
         }
     ]

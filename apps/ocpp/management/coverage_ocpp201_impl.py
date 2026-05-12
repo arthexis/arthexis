@@ -60,16 +60,32 @@ def _normalize_direction(node: ast.AST) -> str | None:
     return None
 
 
+def _decorator_argument(
+    decorator: ast.Call, index: int, keyword: str
+) -> ast.AST | None:
+    if len(decorator.args) > index:
+        return decorator.args[index]
+    return next(
+        (kw.value for kw in decorator.keywords if kw.arg == keyword),
+        None,
+    )
+
+
 def _protocol_call_details(
     decorator: ast.expr, protocol_slug: str
 ) -> tuple[str, str] | None:
     if not isinstance(decorator, ast.Call):
         return None
-    if not _is_protocol_call_func(decorator.func) or len(decorator.args) < 3:
+    if not _is_protocol_call_func(decorator.func):
         return None
-    slug = _extract_constant_str(decorator.args[0])
-    direction = _normalize_direction(decorator.args[1])
-    action = _extract_constant_str(decorator.args[2])
+    slug_arg = _decorator_argument(decorator, 0, "protocol_slug")
+    direction_arg = _decorator_argument(decorator, 1, "direction")
+    action_arg = _decorator_argument(decorator, 2, "call_name")
+    if slug_arg is None or direction_arg is None or action_arg is None:
+        return None
+    slug = _extract_constant_str(slug_arg)
+    direction = _normalize_direction(direction_arg)
+    action = _extract_constant_str(action_arg)
     if slug != protocol_slug or direction is None or action is None:
         return None
     return direction, action
