@@ -40,6 +40,7 @@ flowchart TD
 - The same step sequence is executed by the headless scheduler through `run_headless_publish`, which builds a `NodeWorkflow` from `PUBLISH_STEPS` and writes progress logs under `LOG_DIR`.
 - Dry-run mode exercises build and publish commands against Test PyPI, restoring `VERSION` and `pyproject.toml` afterward to avoid polluting the working tree.
 - Repository hygiene safeguards (dirty checks, syncs against `origin/main`, and build stale detection) ensure releases restart when source changes appear mid-run.
+- The automated release readiness report waits at least two hours after the latest `main` commit and requires zero open GitHub code-scanning alerts before it can recommend release simulation.
 - Release tags are automatic release output. Do not create the publish tag by hand during the normal path; let the release workflow or `tag-from-version.yml` create `vVERSION` from the reviewed `VERSION` on `main`.
 
 ## Publish with PyPI Trusted Publishers (OIDC)

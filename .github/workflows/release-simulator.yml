@@ -4,9 +4,7 @@ on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
-  push:
-    branches:
-      - main
+  push: {}
 
 concurrency:
   group: release-simulator-${{ github.ref }}
@@ -16,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  mark_outdated_on_main_change:
+  mark_outdated_on_default_branch_change:
     if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-latest
     permissions:
@@ -29,6 +27,7 @@ jobs:
           script: |
             const title = 'Release Readiness Report';
             const marker = '<!-- release-readiness-report -->';
+            const defaultBranch = context.payload.repository?.default_branch || 'default branch';
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -62,9 +61,9 @@ jobs:
               repo: context.repo.repo,
               issue_number: existing.number,
               body: [
-                'Marking this report as outdated because `main` changed.',
+                `Marking this report as outdated because \`${defaultBranch}\` changed.`,
                 '',
-                `- New main commit: ${context.sha}`,
+                `- New default-branch commit: ${context.sha}`,
                 `- Push event: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
                 '',
                 'A fresh release readiness report will be created on the next scheduled simulator run.'
@@ -85,6 +84,7 @@ jobs:
       actions: read
       contents: read
       issues: read
+      security-events: read
     outputs:
       should_run: ${{ steps.evaluate.outputs.should_run }}
       skip_reason: ${{ steps.evaluate.outputs.skip_reason }}
@@ -103,6 +103,7 @@ jobs:
             const blockers = [];
             const fullDayMillis = 24 * 60 * 60 * 1000;
             const releaseCutoffMillis = 3 * fullDayMillis;
+            const securityScanQuietMillis = 2 * 60 * 60 * 1000;
             let shouldRun = true;
             let skipReason = '';
 
@@ -154,12 +155,68 @@ jobs:
                 blockers.push(`Open install failure issue: #${installFailureIssue.number}`);
               }
 
+              const { data: defaultBranchData } = await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: defaultBranch,
+              });
+              const defaultBranchSha = defaultBranchData?.commit?.sha || context.sha;
               const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 branch: defaultBranch,
                 per_page: 100,
               });
+
+              const defaultBranchHeadPushRuns = ciRuns
+                .filter((run) => run.head_sha === defaultBranchSha && run.event === 'push' && run.created_at)
+                .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+              const defaultBranchAdvancedAt = defaultBranchHeadPushRuns[0]?.created_at;
+
+              if (defaultBranchAdvancedAt) {
+                const advancedTime = Date.parse(defaultBranchAdvancedAt);
+                const quietUntil = new Date(advancedTime + securityScanQuietMillis);
+                const quietAgeMillis = Date.now() - advancedTime;
+                if (quietAgeMillis < securityScanQuietMillis) {
+                  blockers.push(`Security scan settling period has not elapsed since ${defaultBranch} advanced to commit ${defaultBranchSha}; wait until ${quietUntil.toISOString()}.`);
+                }
+              } else {
+                blockers.push(`Unable to verify when ${defaultBranch} advanced to commit ${defaultBranchSha} before security scan readiness.`);
+              }
+
+              try {
+                const codeScanningAlerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                });
+
+                if (codeScanningAlerts.length) {
+                  const preview = codeScanningAlerts.slice(0, 5).map((alert) => {
+                    const severity = alert.rule?.security_severity_level || alert.rule?.severity || 'unknown';
+                    const rule = alert.rule?.id || alert.rule?.name || `alert ${alert.number}`;
+                    return `${severity}:${rule}${alert.html_url ? ` (${alert.html_url})` : ''}`;
+                  }).join('; ');
+                  const suffix = codeScanningAlerts.length > 5 ? `; and ${codeScanningAlerts.length - 5} more` : '';
+                  blockers.push(`Open GitHub code scanning security findings: ${codeScanningAlerts.length}. ${preview}${suffix}`);
+                }
+              } catch (error) {
+                blockers.push(`Unable to verify GitHub code scanning alerts before release readiness: ${error.message}`);
+              }
+
+              const installHealthRunsForHead = ciRuns
+                .filter((run) => run.name === 'Install Health Check' && run.head_sha === defaultBranchSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              const latestInstallHealthRun = installHealthRunsForHead[0];
+
+              if (!latestInstallHealthRun) {
+                blockers.push(`Install Health Check has not run for current ${defaultBranch} commit ${defaultBranchSha}.`);
+              } else if (latestInstallHealthRun.status !== 'completed') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} is ${latestInstallHealthRun.status}: ${latestInstallHealthRun.html_url}`);
+              } else if (latestInstallHealthRun.conclusion !== 'success') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestInstallHealthRun.conclusion}: ${latestInstallHealthRun.html_url}`);
+              }
 
               const latestCiRun = ciRuns
                 .filter((run) => run.name === 'Upgrade Gate')
@@ -464,7 +521,7 @@ jobs:
               echo 'summary_markdown<<EOF'
               echo '### Simulation result'
               echo ''
-              echo '- ⏭️ Release simulation was skipped because install/upgrade blockers are open.'
+              echo '- ⏭️ Release simulation was skipped because release readiness blockers are open.'
               echo 'EOF'
               echo 'simulated_ok=false'
             } >> "$GITHUB_OUTPUT"
@@ -509,7 +566,7 @@ jobs:
               ? '❌ Do not release yet. Resolve blockers and wait for the next simulator run.'
               : simulatedOk
                 ? '✅ Recommendation: release can proceed once maintainers approve authorization.'
-                : '⚠️ No install/upgrade blockers were found, but release simulation did not complete.';
+                : '⚠️ No release readiness blockers were found, but release simulation did not complete.';
 
             const body = [
               marker,
@@ -521,11 +578,11 @@ jobs:
               `- Commit: ${context.sha}`,
               `- Event: ${context.eventName}`,
               '',
-              '## Install/upgrade blockers',
+              '## Release readiness blockers',
               blockerSection,
               '',
               canSimulate ? '## Release simulation' : '## Release simulation',
-              canSimulate ? simulationSummary : '- Skipped because install/upgrade blockers are currently open.',
+              canSimulate ? simulationSummary : '- Skipped because release readiness blockers are currently open.',
               '',
               '## Recommendation',
               recommendation,
