@@ -49,7 +49,11 @@ def _issue(number: int, title: str, marker: str) -> dict[str, object]:
     }
 
 
-def _pull_request(number: int, head_sha: str = "abc123") -> dict[str, object]:
+def _pull_request(
+    number: int,
+    head_sha: str = "abc123",
+    updated_at: str = "2026-05-07T16:00:00Z",
+) -> dict[str, object]:
     return {
         "number": number,
         "title": f"PR {number}",
@@ -59,11 +63,8 @@ def _pull_request(number: int, head_sha: str = "abc123") -> dict[str, object]:
         "draft": False,
         "head": {"sha": head_sha},
         "labels": [{"name": "ready"}],
+        "updated_at": updated_at,
     }
-
-
-def _commit(date: str = "2026-05-07T16:00:00Z") -> dict[str, object]:
-    return {"commit": {"committer": {"date": date}}}
 
 
 @pytest.mark.django_db
@@ -262,11 +263,6 @@ def test_sync_monitor_items_queues_pr_approved_by_configured_reaction(monkeypatc
         "fetch_issue_reactions",
         lambda **_: reactions,
     )
-    monkeypatch.setattr(
-        github_monitor.github_service,
-        "fetch_commit",
-        lambda **_: _commit(),
-    )
 
     result = github_monitor.sync_monitor_items(token="token", now=timezone.now())
 
@@ -315,7 +311,7 @@ def test_sync_monitor_items_rejects_pr_approval_older_than_head(monkeypatch):
     monkeypatch.setattr(
         github_monitor.github_service,
         "fetch_repository_pull_requests",
-        lambda **_: [_pull_request(94, head_sha="newsha")],
+        lambda **_: [_pull_request(94, head_sha="newsha", updated_at="2026-05-07T18:00:00Z")],
     )
     monkeypatch.setattr(
         github_monitor.github_service,
@@ -327,11 +323,6 @@ def test_sync_monitor_items_rejects_pr_approval_older_than_head(monkeypatch):
                 "created_at": "2026-05-07T17:00:00Z",
             }
         ],
-    )
-    monkeypatch.setattr(
-        github_monitor.github_service,
-        "fetch_commit",
-        lambda **_: _commit("2026-05-07T18:00:00Z"),
     )
 
     result = github_monitor.sync_monitor_items(token="token", now=timezone.now())

@@ -623,25 +623,22 @@ def _reaction_approval(
     return None
 
 
-def _head_commit_timestamp(commit_payload: Mapping[str, object]):
-    try:
-        commit = commit_payload.get("commit") or {}
-        committer = commit.get("committer") or {}
-        authored = commit.get("author") or {}
-    except AttributeError:
+def _pull_request_last_updated_at(pull_request: Mapping[str, object]):
+    if not isinstance(pull_request, Mapping):
         return None
-    return _parse_github_datetime(committer.get("date") or authored.get("date"))
+    return _parse_github_datetime(pull_request.get("updated_at"))
 
 
 def _approval_covers_head(
+    *,
     approval: Mapping[str, object],
-    commit_payload: Mapping[str, object],
+    pull_request: Mapping[str, object],
 ) -> bool:
     approved_at = approval.get("approved_at")
-    committed_at = _head_commit_timestamp(commit_payload)
-    if approved_at is None or committed_at is None:
+    head_commit_timestamp = _pull_request_last_updated_at(pull_request)
+    if approved_at is None or head_commit_timestamp is None:
         return False
-    return approved_at >= committed_at
+    return approved_at >= head_commit_timestamp
 
 
 def _issue_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
@@ -855,15 +852,11 @@ def sync_monitor_items(*, token: str | None = None, now=None) -> dict[str, Any]:
                     head_sha = ""
                 if not head_sha:
                     continue
-                if task.require_approval_reaction:
-                    commit_payload = github_service.fetch_commit(
-                        token=token,
-                        owner=task.repository.owner,
-                        name=task.repository.name,
-                        sha=head_sha,
-                    )
-                    if not _approval_covers_head(approval, commit_payload):
-                        continue
+                if task.require_approval_reaction and not _approval_covers_head(
+                    approval=approval,
+                    pull_request=pull_request,
+                ):
+                    continue
                 item = _upsert_monitor_item(
                     task,
                     pull_request,
