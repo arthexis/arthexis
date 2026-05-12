@@ -16,9 +16,23 @@ RULES = (
 )
 
 
+def _manifest_list(manifest: dict, field: str, *, string_items: bool = False) -> list:
+    value = manifest.get(field)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"manifest.{field} must be a list")
+    if string_items and not all(isinstance(item, str) for item in value):
+        raise ValueError(f"manifest.{field} entries must be strings")
+    return list(value)
+
+
 def _load_manifest(zf: ZipFile) -> dict:
     with zf.open("manifest.json") as manifest_fp:
-        return json.loads(manifest_fp.read().decode("utf-8"))
+        manifest = json.loads(manifest_fp.read().decode("utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest.json must decode to an object")
+    return manifest
 
 
 def _load_summary(zf: ZipFile) -> str:
@@ -68,7 +82,8 @@ def analyze_error_report_package(package_path: Path) -> dict:
         with ZipFile(package_path) as zf:
             manifest = _load_manifest(zf)
             summary = _load_summary(zf)
-            warnings = list(manifest.get("warnings") or [])
+            warnings = _manifest_list(manifest, "warnings", string_items=True)
+            entry_count = len(_manifest_list(manifest, "entries"))
             findings = []
             for log_name, log_text in _iter_log_text(zf):
                 _scan_text_for_rules(log_name, log_text, findings)
@@ -76,7 +91,7 @@ def analyze_error_report_package(package_path: Path) -> dict:
                 _scan_text_for_rules("summary.txt", summary, findings, summary_suffix=" (summary.txt)")
     except BadZipFile as exc:
         raise ValueError(f"Invalid zip package: {package_path}") from exc
-    except (json.JSONDecodeError, KeyError, OSError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, KeyError, OSError, UnicodeDecodeError, ValueError) as exc:
         raise ValueError(f"Malformed error-report package: {package_path}") from exc
 
     unique_findings = []
@@ -93,7 +108,7 @@ def analyze_error_report_package(package_path: Path) -> dict:
 
     return {
         "package": str(package_path),
-        "entry_count": len(manifest.get("entries") or []),
+        "entry_count": entry_count,
         "warnings": warnings,
         "findings": unique_findings,
         "max_severity": max_severity,

@@ -69,6 +69,24 @@ def test_analyze_error_report_package_scans_external_text_logs(tmp_path):
     assert any(f["category"] == "startup" for f in result["findings"])
 
 
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {"warnings": "abc", "entries": []},
+        {"warnings": [], "entries": "abc"},
+        {"warnings": [1], "entries": []},
+    ],
+)
+def test_analyze_error_report_package_rejects_malformed_manifest_lists(tmp_path, manifest):
+    package_path = tmp_path / "error-report.zip"
+    with ZipFile(package_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        zf.writestr("summary.txt", "ok")
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
 def test_diagnostics_analyze_requires_package():
     with pytest.raises(CommandError, match="--package is required"):
         call_command("diagnostics", "analyze")
@@ -83,7 +101,7 @@ def test_diagnostics_analyze_json_output_and_write_file(monkeypatch, tmp_path):
         "max_severity": "medium",
         "max_severity_rank": 2,
         "risk_score": 22,
-        "severity_order": {"low": 1, "medium": 2, "high": 3, "critical": 4},
+        "severity_order": {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4},
     }
     monkeypatch.setattr(
         "apps.users.management.commands.diagnostics.analyze_error_report_package",
@@ -118,7 +136,7 @@ def test_diagnostics_analyze_fail_on_threshold(monkeypatch):
             "max_severity": "high",
             "max_severity_rank": 3,
             "risk_score": 30,
-            "severity_order": {"low": 1, "medium": 2, "high": 3, "critical": 4},
+            "severity_order": {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4},
         },
     )
 
