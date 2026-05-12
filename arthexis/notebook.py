@@ -19,6 +19,7 @@ CSRF_TOKEN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 DEFAULT_ADMIN_URL_PATH = "admin/"
+DEFAULT_SESSION_COOKIE_NAME = "sessionid"
 
 
 class ArthexisNotebookError(RuntimeError):
@@ -58,27 +59,29 @@ class Node:
         session: requests.Session | None = None,
         timeout: float = 30.0,
         admin_path: str | None = None,
+        session_cookie_name: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.session = session or requests.Session()
         self.timeout = timeout
         self.admin_path = normalize_admin_url_path(admin_path or _default_admin_url_path())
+        self.session_cookie_name = session_cookie_name or _default_session_cookie_name()
 
     def login(self, username: str, password: str) -> None:
         login_url = self._absolute_url(f"/{self.admin_path}login/")
         csrf = self._fetch_login_csrf(login_url)
-        response = self.session.post(
-            login_url,
-            data={
-                "username": username,
-                "password": password,
-                "csrfmiddlewaretoken": csrf,
-                "next": f"/{self.admin_path}",
-            },
-            headers={"Referer": login_url},
-            timeout=self.timeout,
-        )
         try:
+            response = self.session.post(
+                login_url,
+                data={
+                    "username": username,
+                    "password": password,
+                    "csrfmiddlewaretoken": csrf,
+                    "next": f"/{self.admin_path}",
+                },
+                headers={"Referer": login_url},
+                timeout=self.timeout,
+            )
             response.raise_for_status()
         except requests.RequestException as exc:
             raise ArthexisNotebookError("Login request failed.") from exc
@@ -87,7 +90,7 @@ class Node:
 
     @property
     def is_authenticated(self) -> bool:
-        return "sessionid" in self.session.cookies
+        return self.session_cookie_name in self.session.cookies
 
     def chargers(self) -> list[Charger]:
         payload = self._get_json("/ocpp/chargers/")
@@ -146,6 +149,12 @@ def _default_admin_url_path() -> str:
     if settings.configured:
         return str(getattr(settings, "ADMIN_URL_PATH", DEFAULT_ADMIN_URL_PATH))
     return DEFAULT_ADMIN_URL_PATH
+
+
+def _default_session_cookie_name() -> str:
+    if settings.configured:
+        return str(getattr(settings, "SESSION_COOKIE_NAME", DEFAULT_SESSION_COOKIE_NAME))
+    return DEFAULT_SESSION_COOKIE_NAME
 
 
 __all__ = ["ArthexisNotebookError", "Charger", "Node"]

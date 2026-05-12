@@ -92,6 +92,33 @@ def test_node_login_sets_authenticated_session():
     assert node.is_authenticated is True
 
 
+def test_is_authenticated_uses_configured_session_cookie_name():
+    session = requests.Session()
+    session.cookies.set("customsession", "abc123")
+
+    node = Node(
+        "https://example.com",
+        session=session,
+        session_cookie_name="customsession",
+    )
+
+    assert node.is_authenticated is True
+
+
+def test_login_wraps_post_request_errors():
+    session = requests.Session()
+    session.get = Mock(
+        return_value=_Response(
+            text='<form><input name="csrfmiddlewaretoken" value="token123"/></form>'
+        )
+    )
+    session.post = Mock(side_effect=requests.Timeout("slow network"))
+    node = Node("https://example.com", session=session)
+
+    with pytest.raises(ArthexisNotebookError, match="Login request failed"):
+        node.login("user", "pass")
+
+
 def test_extract_csrf_token_handles_attribute_order_and_quotes():
     html = (
         "<form>"
