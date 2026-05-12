@@ -8,6 +8,8 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+LOG_TEXT_SUFFIXES = (".log", ".txt", ".json", ".ndjson")
+LOG_PATH_PART_PATTERN = re.compile(r"(^|[-_.])logs?($|[-_.])", re.IGNORECASE)
 SECRET_EXPOSURE_PATTERN = re.compile(
     r"("
     r"BEGIN\s+PRIVATE\s+KEY|"
@@ -61,11 +63,17 @@ def _iter_log_text(zf: ZipFile):
 
 
 def _is_log_entry(name: str) -> bool:
-    if name.endswith(".log"):
+    normalized_name = name.replace("\\", "/")
+    lower_name = normalized_name.lower()
+    if lower_name.endswith(".log"):
         return True
-    if name.startswith("logs/") or "/logs/" in name:
+    if lower_name.startswith("logs/") or "/logs/" in lower_name:
         return True
-    return name.startswith("external/") and name.endswith((".txt", ".json", ".ndjson"))
+    if not lower_name.endswith(LOG_TEXT_SUFFIXES):
+        return False
+    if lower_name.startswith("external/"):
+        return True
+    return any(LOG_PATH_PART_PATTERN.search(part) for part in lower_name.split("/"))
 
 
 def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:

@@ -89,9 +89,28 @@ def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
 
     assert any(f["category"] == "startup" for f in result["findings"])
 
+
+def test_analyze_error_report_package_scans_in_repo_log_text_paths(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"work/app-logs/server.txt": "Traceback (most recent call last):"})
+
+    result = analyze_error_report_package(package_path)
+
+    assert any(f["category"] == "startup" for f in result["findings"])
+
+
 def test_analyze_error_report_package_scans_external_text_logs(tmp_path):
     package_path = tmp_path / "error-report.zip"
     _write_report(package_path, logs={"external/tmp/log.txt": "Traceback (most recent call last):"})
+
+    result = analyze_error_report_package(package_path)
+
+    assert any(f["category"] == "startup" for f in result["findings"])
+
+
+def test_analyze_error_report_package_scans_external_text_logs_case_insensitively(tmp_path):
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"external/tmp/error.TXT": "Traceback (most recent call last):"})
 
     result = analyze_error_report_package(package_path)
 
