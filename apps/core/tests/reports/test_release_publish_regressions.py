@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from django.http import HttpResponse
@@ -13,6 +14,25 @@ from apps.core.views.reports.release_publish.exceptions import PublishPending
 from apps.core.views.reports.release_publish.workflow import ReleasePublishContext
 from apps.release import RepositoryTarget
 from apps.release.models import Package, PackageRelease
+
+
+def _run_git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _init_release_repo(cwd: Path, version: str) -> None:
+    _run_git(cwd, "init")
+    _run_git(cwd, "config", "user.email", "release@example.test")
+    _run_git(cwd, "config", "user.name", "Release Tester")
+    (cwd / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+    _run_git(cwd, "add", "VERSION")
+    _run_git(cwd, "commit", "-m", f"version {version}")
 
 
 def _publish_workflow_jobs() -> dict[str, object]:
@@ -122,6 +142,36 @@ def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
         pipeline._broadcast_release_message(DummyRelease())
 
     assert "Failed to broadcast release Net Message" in caplog.text
+
+
+def test_ensure_release_tag_rejects_head_version_mismatch(
+    monkeypatch, tmp_path: Path
+) -> None:
+    _init_release_repo(tmp_path, "1.2.2")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline.release_uploader, "_push_tag", lambda _tag: None)
+
+    release = SimpleNamespace(version="1.2.3")
+
+    with pytest.raises(RuntimeError, match="HEAD VERSION is 1.2.2, expected 1.2.3"):
+        pipeline._ensure_release_tag(release, tmp_path / "publish.log")
+
+
+def test_ensure_release_tag_rejects_existing_tag_version_mismatch(
+    monkeypatch, tmp_path: Path
+) -> None:
+    _init_release_repo(tmp_path, "1.2.2")
+    _run_git(tmp_path, "tag", "-a", "v1.2.3", "-m", "Release v1.2.3")
+    (tmp_path / "VERSION").write_text("1.2.3\n", encoding="utf-8")
+    _run_git(tmp_path, "add", "VERSION")
+    _run_git(tmp_path, "commit", "-m", "version 1.2.3")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline.release_uploader, "_push_tag", lambda _tag: None)
+
+    release = SimpleNamespace(version="1.2.3")
+
+    with pytest.raises(RuntimeError, match="v1.2.3 VERSION is 1.2.2"):
+        pipeline._ensure_release_tag(release, tmp_path / "publish.log")
 
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):

@@ -11,10 +11,12 @@ delegated systemd unit is launched, and what to check if something fails.
   `arthexis`) so the watcher knows which unit to stop and restart.
 - The service user can run `systemd-run` (with passwordless sudo when required).
 - `upgrade.sh` remains executable in the project root.
-- The Celery beat schedule is kept in sync with `.locks/auto_upgrade.lck`; when
-  the lock is removed, the periodic task is removed as well, and any
-  environment override set with `ARTHEXIS_UPGRADE_FREQ` is ignored unless it is
-  a positive integer.
+- The suite-controlled `auto_upgrade_check` entry in `config/settings/celery.py`
+  runs `apps.nodes.tasks.apply_upgrade_policies` once per day through the
+  normal Celery beat service. This path does not depend on the home-level
+  upgrade watchdog. `ARTHEXIS_UPGRADE_FREQ` can still affect policy recency
+  checks inside the task, but it does not make the static beat entry fire more
+  often than the configured daily cadence.
 - Auto-upgrade channels are grouped into three tiers:
   - `stable`/`lts`: patch upgrades can proceed weekly, minor upgrades can
     proceed monthly, and major upgrades are blocked.
@@ -39,8 +41,11 @@ delegated systemd unit is launched, and what to check if something fails.
 
 ## How delegation works
 
-1. Celery calls `scripts/delegated-upgrade.sh` when an update is required.
-2. `scripts/delegated-upgrade.sh` launches a transient unit with `systemd-run`, setting:
+1. Celery beat queues `apps.nodes.tasks.apply_upgrade_policies` daily. The task
+   checks the local node's assigned upgrade policies and exits without action
+   when the feature is disabled, no policy is assigned, or no policy is due.
+2. Celery calls `scripts/delegated-upgrade.sh` when an update is required.
+3. `scripts/delegated-upgrade.sh` launches a transient unit with `systemd-run`, setting:
    - `WorkingDirectory` to the project root so relative commands like
      `./upgrade.sh` resolve correctly.
    - `ARTHEXIS_BASE_DIR` and `ARTHEXIS_LOG_DIR` for the watcher.
@@ -48,12 +53,12 @@ delegated systemd unit is launched, and what to check if something fails.
      virtualenv exists, so predeploy checks use suite dependencies.
    - `StandardOutput`/`StandardError` appended to
      `logs/delegated-upgrade.log` for easy inspection.
-3. The transient unit runs `/usr/local/bin/watch-upgrade`, which:
+4. The transient unit runs `/usr/local/bin/watch-upgrade`, which:
    - Stops the managed service stack before predeploy migration checks.
    - Executes `upgrade.sh` (default `--stable`; Celery can pass `--regular` or
      `--latest`).
    - Restarts the service stack and exits with the upgrade status.
-4. Celery schedules a post-upgrade health check after the run to confirm HTTP
+5. Celery schedules a post-upgrade health check after the run to confirm HTTP
    200 responses and records any failures.
 
 ## Triggering an upgrade manually
