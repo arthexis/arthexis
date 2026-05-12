@@ -148,6 +148,6 @@ If you decide to use our suite for your energy projects, you may contact us at [
 
 ## License and Support
 
-Arthexis is distributed under the Arthexis Reciprocity General License 1.0. Contributions through code, documentation, reviews, and maintenance all help keep the project healthy.
+Arthexis is distributed under the Arthexis Reciprocity General License 1.0. Contributions through code, documentation, reviews, and maintenance are all recognized as valid forms of contribution that help keep the project healthy.
 
-If Arthexis helps your team, please review the license terms in [`LICENSE`](https://github.com/arthexis/arthexis/blob/main/LICENSE) and support the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible.
+If Arthexis helps your team, please review the license terms in [LICENSE](LICENSE) and support the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible.

@@ -15,6 +15,6 @@ For targeted notes about notable test-suite decisions and historical changes, se
 
 ## License and Support
 
-Arthexis is released under the Arthexis Reciprocity General License 1.0. Test fixes, maintenance, and documentation updates are all valuable contributions to this stack.
+Arthexis is distributed under the Arthexis Reciprocity General License 1.0. Test fixes, maintenance, and documentation updates are all recognized as valid forms of contribution to this stack.
 
 Please review the repository [`LICENSE`](../LICENSE) and support the maintainers of the dependencies that make this suite and its automated testing possible.
