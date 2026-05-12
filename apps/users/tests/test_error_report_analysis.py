@@ -301,6 +301,7 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
         "token='visible-token'\n"
         "{\"token\":\"abc\\\"def\"}\n"
         "token='abc\\''def'\n"
+        r"token=backslash\trail" "\n"
         "client_secret=client-value\n"
         "refresh_token=refresh-value\n"
         "refresh_token=abc\\\"def\n"
@@ -316,6 +317,8 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
     assert "visible-token" not in redacted
     assert "abc" not in redacted
     assert "def" not in redacted
+    assert "backslash" not in redacted
+    assert "trail" not in redacted
     assert "double" not in redacted
     assert "escaped" not in redacted
     assert "client-value" not in redacted
