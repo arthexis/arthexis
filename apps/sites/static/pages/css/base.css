@@ -1012,3 +1012,9 @@ html[data-bs-theme='dark'] .funding-banner {
   }
 
 }
+
+
+.controller-zoom-active body {
+  transform: scale(1.08);
+  transform-origin: var(--controller-zoom-origin-x, 50%) var(--controller-zoom-origin-y, 50%);
+}

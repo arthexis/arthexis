@@ -456,6 +456,119 @@ const setupFundingBannerDismissal = () => {
   });
 };
 
+
+const setupControllerButtonMappings = () => {
+  if (!document.documentElement.classList.contains('controller-mode') || !navigator.getGamepads) {
+    return;
+  }
+
+  const L2_BUTTON_INDEX = 6;
+  const L1_BUTTON_INDEX = 4;
+  const R1_BUTTON_INDEX = 5;
+  const R2_BUTTON_INDEX = 7;
+  const pressedButtons = new Set();
+  let animationFrameId = null;
+  let lastPointerX = Math.round(window.innerWidth / 2);
+  let lastPointerY = Math.round(window.innerHeight / 2);
+
+  const focusSelector = '.navbar-nav .nav-link, .toolbar .btn, .toolbar a.btn';
+  const modulePillSelector = '.navbar-nav .nav-link';
+  const toolbarSelector = '#theme-toggle, .user-info-trigger';
+
+  const getVisibleElements = selector => Array.from(document.querySelectorAll(selector)).filter(node => {
+    if (!node || node.disabled) {
+      return false;
+    }
+    const style = window.getComputedStyle(node);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  });
+
+  const cycleFocus = (selector, direction) => {
+    const nodes = getVisibleElements(selector);
+    if (!nodes.length) {
+      return;
+    }
+    const currentIndex = nodes.indexOf(document.activeElement);
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + nodes.length) % nodes.length;
+    nodes[nextIndex].focus();
+  };
+
+  const dispatchFeedbackToggle = () => {
+    document.dispatchEvent(new Event('pages:feedback-toggle'));
+  };
+
+  const applyZoomAroundCursor = () => {
+    document.documentElement.classList.add('controller-zoom-active');
+    document.documentElement.style.setProperty('--controller-zoom-origin-x', `${lastPointerX}px`);
+    document.documentElement.style.setProperty('--controller-zoom-origin-y', `${lastPointerY}px`);
+    const target = document.elementFromPoint(lastPointerX, lastPointerY);
+    if (target) {
+      target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: lastPointerX, clientY: lastPointerY }));
+      if (target.focus && target.matches && target.matches(focusSelector)) {
+        target.focus();
+      }
+    }
+  };
+
+  const releaseZoom = () => {
+    document.documentElement.classList.remove('controller-zoom-active');
+  };
+
+  document.addEventListener('mousemove', event => {
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+  });
+
+  const handleButtonPress = buttonIndex => {
+    if (buttonIndex === R2_BUTTON_INDEX) {
+      dispatchFeedbackToggle();
+      return;
+    }
+    if (buttonIndex === R1_BUTTON_INDEX) {
+      cycleFocus(toolbarSelector, 1);
+      return;
+    }
+    if (buttonIndex === L1_BUTTON_INDEX) {
+      cycleFocus(modulePillSelector, 1);
+      return;
+    }
+    if (buttonIndex === L2_BUTTON_INDEX) {
+      applyZoomAroundCursor();
+    }
+  };
+
+  const pollGamepad = () => {
+    const gamepads = navigator.getGamepads();
+    const gamepad = gamepads && gamepads[0];
+    if (gamepad && gamepad.buttons) {
+      gamepad.buttons.forEach((button, index) => {
+        if (button.pressed) {
+          if (!pressedButtons.has(index)) {
+            pressedButtons.add(index);
+            handleButtonPress(index);
+          }
+          return;
+        }
+        if (pressedButtons.has(index)) {
+          pressedButtons.delete(index);
+          if (index === L2_BUTTON_INDEX) {
+            releaseZoom();
+          }
+        }
+      });
+    }
+    animationFrameId = window.requestAnimationFrame(pollGamepad);
+  };
+
+  pollGamepad();
+  window.addEventListener('beforeunload', () => {
+    if (animationFrameId) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+    releaseZoom();
+  });
+};
+
 setupControllerMode();
 applySiteThemeVariables();
 setupThemeToggle();
@@ -466,4 +579,5 @@ setupLanguageSelect();
 setupShareModal();
 setupSiteHighlightDismissal();
 setupFundingBannerDismissal();
+setupControllerButtonMappings();
 window.addEventListener('load', syncDebugToolbarTheme);

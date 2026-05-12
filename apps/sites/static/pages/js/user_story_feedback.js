@@ -1,5 +1,8 @@
 (() => {
   const DIALOG_OPENED_EVENT = 'pages:dialog-opened';
+  const FEEDBACK_TOGGLE_EVENT = 'pages:feedback-toggle';
+  const FEEDBACK_OPEN_EVENT = 'pages:feedback-open';
+  const FEEDBACK_CLOSE_EVENT = 'pages:feedback-close';
 
   const toggle = document.getElementById('user-story-toggle');
   const overlay = document.getElementById('user-story-overlay');
@@ -382,6 +385,23 @@
     if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
       closeOverlay();
     }
+  });
+
+
+  document.addEventListener(FEEDBACK_TOGGLE_EVENT, () => {
+    if (overlay.hasAttribute('hidden')) {
+      openOverlay();
+      return;
+    }
+    closeOverlay();
+  });
+
+  document.addEventListener(FEEDBACK_OPEN_EVENT, () => {
+    openOverlay();
+  });
+
+  document.addEventListener(FEEDBACK_CLOSE_EVENT, () => {
+    closeOverlay();
   });
 
   document.addEventListener(DIALOG_OPENED_EVENT, event => {
