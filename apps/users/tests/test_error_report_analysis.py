@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from io import StringIO
+from io import BytesIO, StringIO
 from zipfile import ZipFile
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from apps.users import error_report_analysis
 from apps.users.error_report_analysis import analyze_error_report_package
 
 
@@ -135,8 +136,6 @@ def test_analyze_error_report_package_rejects_malformed_manifest_lists(tmp_path,
         analyze_error_report_package(package_path)
 
 
-
-
 def test_analyze_error_report_package_rejects_large_summary(tmp_path):
     package_path = tmp_path / "error-report.zip"
     with ZipFile(package_path, "w") as zf:
@@ -154,6 +153,49 @@ def test_analyze_error_report_package_rejects_too_many_log_entries(tmp_path):
 
     with pytest.raises(ValueError, match="Malformed error-report package"):
         analyze_error_report_package(package_path)
+
+
+def test_analyze_error_report_package_rejects_too_many_total_entries(monkeypatch, tmp_path):
+    monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_ENTRIES", 3)
+    package_path = tmp_path / "error-report.zip"
+    with ZipFile(package_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"warnings": [], "entries": []}))
+        zf.writestr("summary.txt", "ok")
+        zf.writestr("attachments/one.bin", "ok")
+        zf.writestr("attachments/two.bin", "ok")
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
+def test_iter_log_text_tracks_actual_bytes_not_zip_metadata(monkeypatch):
+    class FakeZipInfo:
+        def __init__(self, filename):
+            self.filename = filename
+            self.file_size = 0
+
+    class FakeZipFile:
+        def __init__(self):
+            self.infos = [FakeZipInfo("logs/one.log"), FakeZipInfo("logs/two.log")]
+            self.payloads = {
+                "logs/one.log": b"12345",
+                "logs/two.log": b"6",
+            }
+
+        def infolist(self):
+            return self.infos
+
+        def open(self, info):
+            return BytesIO(self.payloads[info.filename])
+
+    monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_LOG_BYTES", 5)
+    monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRY_BYTES", 5)
+
+    log_iter = error_report_analysis._iter_log_text(FakeZipFile())
+
+    assert next(log_iter) == ("logs/one.log", "12345")
+    with pytest.raises(ValueError, match="total scan budget"):
+        next(log_iter)
 
 
 def test_diagnostics_analyze_requires_package():

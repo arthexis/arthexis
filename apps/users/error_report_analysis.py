@@ -25,6 +25,7 @@ MAX_SUMMARY_BYTES = 512 * 1024
 MAX_LOG_ENTRY_BYTES = 1024 * 1024
 MAX_LOG_ENTRIES_SCANNED = 200
 MAX_TOTAL_LOG_BYTES = 16 * 1024 * 1024
+MAX_TOTAL_ENTRIES = 2000
 
 
 def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = "strict") -> str:
@@ -74,19 +75,24 @@ def _load_summary(zf: ZipFile) -> str:
 def _iter_log_text(zf: ZipFile):
     scanned_entries = 0
     scanned_bytes = 0
-    for name in zf.namelist():
+    infos = zf.infolist()
+    if len(infos) > MAX_TOTAL_ENTRIES:
+        raise ValueError("too many entries in package")
+    for info in infos:
+        name = info.filename
         if not _is_log_entry(name):
             continue
         if scanned_entries >= MAX_LOG_ENTRIES_SCANNED:
             raise ValueError("too many log-like entries in package")
-        info = zf.getinfo(name)
-        bytes_to_read = min(info.file_size, MAX_LOG_ENTRY_BYTES)
-        if scanned_bytes + bytes_to_read > MAX_TOTAL_LOG_BYTES:
+        remaining_bytes = MAX_TOTAL_LOG_BYTES - scanned_bytes
+        if remaining_bytes <= 0:
             raise ValueError("log-like entries exceed total scan budget")
+        bytes_to_read = min(MAX_LOG_ENTRY_BYTES, remaining_bytes)
         with zf.open(info) as log_fp:
-            text = log_fp.read(MAX_LOG_ENTRY_BYTES).decode("utf-8", errors="replace")
+            raw_data = log_fp.read(bytes_to_read)
         scanned_entries += 1
-        scanned_bytes += bytes_to_read
+        scanned_bytes += len(raw_data)
+        text = raw_data.decode("utf-8", errors="replace")
         yield name, text
 
 
