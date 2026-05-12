@@ -416,7 +416,7 @@ def _reset_release_progress(
         f.unlink()
     if message_text:
         messages.info(request, message_text)
-    return redirect(_clean_redirect_path(request, request.path))
+    return redirect(reverse("release-progress", args=[release.pk, "publish"]))
 
 
 def _load_release_context(
@@ -970,13 +970,12 @@ def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
         log_path=log_path,
         label="HEAD",
     )
-    exists = subprocess.run(
+    exists = GIT_ADAPTER.run(
         ["git", "rev-parse", "--verify", "-q", tag_ref],
         check=False,
-        capture_output=True,
     )
     if exists.returncode != 0:
-        subprocess.run(
+        GIT_ADAPTER.run(
             ["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"],
             check=True,
         )

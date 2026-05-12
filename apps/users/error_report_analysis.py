@@ -10,6 +10,24 @@ from zipfile import BadZipFile, ZipFile
 SEVERITY_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 LOG_TEXT_SUFFIXES = (".log", ".txt", ".json", ".ndjson")
 LOG_PATH_PART_PATTERN = re.compile(r"(^|[-_.])logs?($|[-_.])", re.IGNORECASE)
+PRIVATE_KEY_BLOCK_PATTERN = re.compile(
+    r"-----BEGIN(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----.*?"
+    r"-----END(?:\s+[A-Z0-9]+)*\s+PRIVATE\s+KEY-----",
+    re.IGNORECASE | re.DOTALL,
+)
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?P<prefix>"
+    r"\b(?:"
+    r"aws_secret_access_key|"
+    r"(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|secret|token|private[_-]?key)"
+    r"(?:[_-][A-Za-z0-9]+)*"
+    r")\b"
+    r"[\"']?\s*[:=]\s*"
+    r")"
+    r"(?:(?P<quote>[\"'])(?P<quoted_value>(?:\\.|(?!(?P=quote)(?=$|[\s,;}\]])).)*)"
+    r"(?P=quote)|(?P<unquoted_value>(?:[A-Za-z0-9._~+/=:@%!-]|\\+[\"']|\\+)+))",
+    re.IGNORECASE,
+)
 SECRET_EXPOSURE_PATTERN = re.compile(
     r"("
     r"BEGIN\s+PRIVATE\s+KEY|"
@@ -19,8 +37,27 @@ SECRET_EXPOSURE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+
+MAX_MANIFEST_BYTES = 256 * 1024
+MAX_SUMMARY_BYTES = 512 * 1024
+MAX_LOG_ENTRY_BYTES = 1024 * 1024
+MAX_LOG_ENTRIES_SCANNED = 200
+MAX_TOTAL_LOG_BYTES = 16 * 1024 * 1024
+MAX_TOTAL_ENTRIES = 2000
+
+
+def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = "strict") -> str:
+    info = zf.getinfo(name)
+    if info.file_size > limit:
+        raise ValueError(f"{name} exceeds maximum allowed size")
+    with zf.open(info) as fp:
+        data = fp.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"{name} exceeds maximum allowed size")
+    return data.decode("utf-8", errors=errors)
+
+
 RULES = (
-    ("critical", "secret_exposure", SECRET_EXPOSURE_PATTERN, "Potential secret material detected."),
     ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
     ("high", "startup", re.compile(r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)", re.IGNORECASE), "Python startup traceback detected."),
     ("medium", "service", re.compile(r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE), "Service-level instability markers detected."),
@@ -39,8 +76,7 @@ def _manifest_list(manifest: dict, field: str, *, string_items: bool = False) ->
 
 
 def _load_manifest(zf: ZipFile) -> dict:
-    with zf.open("manifest.json") as manifest_fp:
-        manifest = json.loads(manifest_fp.read().decode("utf-8"))
+    manifest = json.loads(_read_zip_text_limited(zf, "manifest.json", limit=MAX_MANIFEST_BYTES))
     if not isinstance(manifest, dict):
         raise ValueError("manifest.json must decode to an object")
     return manifest
@@ -48,18 +84,37 @@ def _load_manifest(zf: ZipFile) -> dict:
 
 def _load_summary(zf: ZipFile) -> str:
     try:
-        with zf.open("summary.txt") as summary_fp:
-            return summary_fp.read().decode("utf-8", errors="replace")
+        return _read_zip_text_limited(zf, "summary.txt", limit=MAX_SUMMARY_BYTES, errors="replace")
     except KeyError:
         return ""
 
 
 def _iter_log_text(zf: ZipFile):
-    for name in zf.namelist():
+    scanned_entries = 0
+    scanned_bytes = 0
+    infos = zf.infolist()
+    if len(infos) > MAX_TOTAL_ENTRIES:
+        raise ValueError("too many entries in package")
+    for info in infos:
+        name = info.filename
         if not _is_log_entry(name):
             continue
-        with zf.open(name) as log_fp:
-            yield name, log_fp.read(1024 * 1024).decode("utf-8", errors="replace")
+        if scanned_entries >= MAX_LOG_ENTRIES_SCANNED:
+            break
+        remaining_bytes = MAX_TOTAL_LOG_BYTES - scanned_bytes
+        if remaining_bytes <= 0:
+            raise ValueError("log-like entries exceed total scan budget")
+        bytes_to_read = min(MAX_LOG_ENTRY_BYTES, remaining_bytes)
+        with zf.open(info) as log_fp:
+            raw_data = log_fp.read(bytes_to_read + 1)
+        if len(raw_data) > bytes_to_read:
+            if bytes_to_read < MAX_LOG_ENTRY_BYTES:
+                raise ValueError("log-like entries exceed total scan budget")
+            raise ValueError(f"{name} exceeds maximum allowed size")
+        scanned_entries += 1
+        scanned_bytes += len(raw_data)
+        text = raw_data.decode("utf-8", errors="replace")
+        yield name, text
 
 
 def _is_log_entry(name: str) -> bool:
@@ -77,6 +132,16 @@ def _is_log_entry(name: str) -> bool:
 
 
 def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:
+    if SECRET_EXPOSURE_PATTERN.search(text):
+        findings.append(
+            {
+                "severity": "critical",
+                "category": "secret_exposure",
+                "message": f"Potential secret material detected.{summary_suffix}",
+                "source": source,
+            }
+        )
+
     for severity, category, pattern, message in RULES:
         if not pattern.search(text):
             continue
@@ -88,6 +153,34 @@ def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summar
                 "source": source,
             }
         )
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Return ``text`` with obvious credential material replaced for reports."""
+
+    def _replace_assignment(match: re.Match[str]) -> str:
+        quote = match.group("quote") or ""
+        return f"{match.group('prefix')}{quote}[redacted]{quote}"
+
+    redacted = PRIVATE_KEY_BLOCK_PATTERN.sub("[redacted private key]", text)
+    return SECRET_ASSIGNMENT_PATTERN.sub(_replace_assignment, redacted)
+
+
+def redact_analysis_payload(payload):
+    """Return an analysis payload safe for stdout or clear-text JSON files."""
+
+    if isinstance(payload, dict):
+        return {
+            key: redact_analysis_payload(value)
+            for key, value in payload.items()
+        }
+    if isinstance(payload, list):
+        return [redact_analysis_payload(value) for value in payload]
+    if isinstance(payload, tuple):
+        return tuple(redact_analysis_payload(value) for value in payload)
+    if isinstance(payload, str):
+        return redact_sensitive_text(payload)
+    return payload
 
 
 def analyze_error_report_package(package_path: Path) -> dict:

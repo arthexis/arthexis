@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
+from django.urls import reverse
 
 import apps.core.views.reports.release_publish.workflow as workflow_module
 from apps.core.views.reports.release_publish import pipeline
@@ -172,6 +173,43 @@ def test_ensure_release_tag_rejects_existing_tag_version_mismatch(
 
     with pytest.raises(RuntimeError, match="v1.2.3 VERSION is 1.2.2"):
         pipeline._ensure_release_tag(release, tmp_path / "publish.log")
+
+
+def test_ensure_release_tag_uses_git_adapter_for_tag_creation(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeGitAdapter:
+        def __init__(self) -> None:
+            self.calls: list[tuple[list[str], bool]] = []
+
+        def run(self, args, *, check=True, input_text=None, timeout=None):
+            self.calls.append((list(args), check))
+            stdout = ""
+            returncode = 0
+            if args[:2] == ["git", "show"]:
+                stdout = "1.2.3\n"
+            elif args[:4] == ["git", "rev-parse", "--verify", "-q"]:
+                returncode = 1
+            return subprocess.CompletedProcess(
+                args,
+                returncode,
+                stdout=stdout,
+                stderr="",
+            )
+
+    adapter = FakeGitAdapter()
+    monkeypatch.setattr(pipeline, "GIT_ADAPTER", adapter)
+    monkeypatch.setattr(pipeline.release_uploader, "_push_tag", lambda _tag: None)
+
+    tag_name = pipeline._ensure_release_tag(
+        SimpleNamespace(version="1.2.3"), tmp_path / "publish.log"
+    )
+
+    assert tag_name == "v1.2.3"
+    assert (
+        ["git", "tag", "-a", "v1.2.3", "-m", "Release v1.2.3"],
+        True,
+    ) in adapter.calls
 
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
@@ -364,6 +402,46 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     response = pipeline.release_progress_impl(request, pk=1, action="publish")
 
     assert response.status_code == 400
+
+
+def test_reset_release_progress_redirects_to_canonical_release_route(tmp_path: Path):
+    class DummyPackage:
+        name = "arthexis"
+
+    class DummyRelease:
+        pk = 7
+        package = DummyPackage()
+        version = "1.2.3"
+        pypi_url = "https://pypi.org/project/arthexis/1.2.3/"
+        release_on = object()
+        saved_fields: list[str] | None = None
+
+        def save(self, *, update_fields):
+            self.saved_fields = list(update_fields)
+
+    release = DummyRelease()
+    request = RequestFactory().get(
+        "/admin/core/releases/7/publish/?next=https://evil.example"
+    )
+    request.session = {"release_publish_7": {"step": 3}}
+    lock_path = tmp_path / "release.lock"
+    restart_path = tmp_path / "release.restarts"
+    lock_path.write_text("locked", encoding="utf-8")
+
+    response = pipeline._reset_release_progress(
+        request,
+        release,
+        "release_publish_7",
+        lock_path,
+        restart_path,
+        tmp_path,
+        clean_repo=False,
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("release-progress", args=[7, "publish"])
+    assert "release_publish_7" not in request.session
+    assert release.saved_fields == ["pypi_url", "release_on"]
 
 
 def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path):
@@ -575,6 +653,73 @@ def test_tag_from_version_workflow_creates_release_tag_and_dispatches_publish() 
     dispatch_run = dispatch_step["run"]
     assert 'tag="v${VERSION}"' in dispatch_run
     assert 'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
+
+
+def test_install_health_workflow_runs_on_default_branch_push_not_schedule() -> None:
+    workflow = _workflow_data("install-health.yml")
+    on_section = _workflow_on(workflow)
+
+    assert "schedule" not in on_section
+    assert on_section["push"] == {}
+    assert "workflow_dispatch" in on_section
+
+    install_job = workflow["jobs"]["install"]
+    assert (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        in install_job["if"]
+    )
+    upload_step = _workflow_step(install_job, "Upload pytest log")
+    assert upload_step["with"]["name"].startswith("install-health-pytest-results-")
+
+    notify_recovery = workflow["jobs"]["notify_recovery"]
+    assert "github.event_name == 'schedule'" not in notify_recovery["if"]
+    assert (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        in notify_recovery["if"]
+    )
+
+    notify_failure = workflow["jobs"]["notify_failure"]
+    assert (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        in notify_failure["if"]
+    )
+
+
+def test_release_simulator_requires_current_main_install_health_success() -> None:
+    workflow = _workflow_data("release-simulator.yml")
+    evaluate_job = workflow["jobs"]["evaluate"]
+    evaluate_step = _workflow_step(
+        evaluate_job, "Evaluate release blockers from install/upgrade pipeline state"
+    )
+    script = evaluate_step["with"]["script"]
+
+    assert "github.rest.repos.getBranch" in script
+    assert "defaultBranchSha" in script
+    assert "const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo" in script
+    assert "run.name === 'Install Health Check'" in script
+    assert "run.head_sha === defaultBranchSha" in script
+    assert "latestInstallHealthRun.conclusion !== 'success'" in script
+    assert "Install Health Check has not run for current" in script
+
+
+def test_release_simulator_requires_security_scan_settling_and_clear_alerts() -> None:
+    workflow = _workflow_data("release-simulator.yml")
+    evaluate_job = workflow["jobs"]["evaluate"]
+    evaluate_step = _workflow_step(
+        evaluate_job, "Evaluate release blockers from install/upgrade pipeline state"
+    )
+    script = evaluate_step["with"]["script"]
+
+    assert evaluate_job["permissions"]["security-events"] == "read"
+    assert "securityScanQuietMillis = 2 * 60 * 60 * 1000" in script
+    assert "run.event === 'push'" in script
+    assert "defaultBranchAdvancedAt" in script
+    assert "Security scan settling period has not elapsed since" in script
+    assert "Unable to verify when" in script
+    assert "github.rest.codeScanning.listAlertsForRepo" in script
+    assert "state: 'open'" in script
+    assert "Open GitHub code scanning security findings" in script
+    assert "Unable to verify GitHub code scanning alerts" in script
 
 
 @pytest.mark.django_db
