@@ -89,7 +89,11 @@ def _iter_log_text(zf: ZipFile):
             raise ValueError("log-like entries exceed total scan budget")
         bytes_to_read = min(MAX_LOG_ENTRY_BYTES, remaining_bytes)
         with zf.open(info) as log_fp:
-            raw_data = log_fp.read(bytes_to_read)
+            raw_data = log_fp.read(bytes_to_read + 1)
+        if len(raw_data) > bytes_to_read:
+            if bytes_to_read < MAX_LOG_ENTRY_BYTES:
+                raise ValueError("log-like entries exceed total scan budget")
+            raise ValueError(f"{name} exceeds maximum allowed size")
         scanned_entries += 1
         scanned_bytes += len(raw_data)
         text = raw_data.decode("utf-8", errors="replace")

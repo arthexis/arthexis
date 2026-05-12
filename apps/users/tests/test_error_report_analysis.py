@@ -155,6 +155,26 @@ def test_analyze_error_report_package_rejects_too_many_log_entries(tmp_path):
         analyze_error_report_package(package_path)
 
 
+def test_analyze_error_report_package_rejects_large_log_entry(monkeypatch, tmp_path):
+    monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRY_BYTES", 5)
+    monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_LOG_BYTES", 20)
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"logs/runtime.log": "x" * 6})
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
+def test_analyze_error_report_package_rejects_log_bytes_over_total(monkeypatch, tmp_path):
+    monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRY_BYTES", 20)
+    monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_LOG_BYTES", 5)
+    package_path = tmp_path / "error-report.zip"
+    _write_report(package_path, logs={"logs/runtime.log": "x" * 6})
+
+    with pytest.raises(ValueError, match="Malformed error-report package"):
+        analyze_error_report_package(package_path)
+
+
 def test_analyze_error_report_package_rejects_too_many_total_entries(monkeypatch, tmp_path):
     monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_ENTRIES", 3)
     package_path = tmp_path / "error-report.zip"
