@@ -230,6 +230,11 @@
       "UpdateFirmware"
     ]
   },
+  "missing": {
+    "cp_to_csms": [],
+    "csms_to_cp": [],
+    "overall": []
+  },
   "spec": {
     "cp_to_csms": [
       "Authorize",
@@ -300,5 +305,6 @@
       "UnpublishFirmware",
       "UpdateFirmware"
     ]
-  }
+  },
+  "stubbed": []
 }
