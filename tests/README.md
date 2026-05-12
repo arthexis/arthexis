@@ -13,8 +13,8 @@ For targeted notes about notable test-suite decisions and historical changes, se
 - [Test Suite Notes](../docs/development/testing/test-suite-notes.md)
 - [Command Matrix](../docs/development/command-matrix.md)
 
-## License and Sponsorship
+## License and Support
 
-Arthexis is released under the Arthexis Reciprocity General License 1.0. In addition to test fixes and maintenance, we consider sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies that support this test stack to be a valid and important contribution.
+Arthexis is distributed under the Arthexis Reciprocity General License 1.0. Test fixes, maintenance, and documentation updates are all recognized as valid forms of contribution to this stack.
 
-Please review the repository [`LICENSE`](../LICENSE) and consider supporting the maintainers of the dependencies that make this suite and its automated testing possible.
+Please review the repository [`LICENSE`](../LICENSE) and support the maintainers of the dependencies that make this suite and its automated testing possible.
