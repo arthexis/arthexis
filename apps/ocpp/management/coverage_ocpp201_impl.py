@@ -233,9 +233,11 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
         encoding="utf-8",
     )
     if overall_percentage < 100 and stderr:
-        stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.")
-        stderr.write(f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.")
+        stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.\n")
+        stderr.write(
+            f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.\n"
+        )
     if stubbed_actions and stderr:
-        stderr.write("OCPP 2.0.1 decorated handlers still contain NotImplementedError stubs.")
+        stderr.write("OCPP 2.0.1 decorated handlers still contain NotImplementedError stubs.\n")
     if stdout:
         stdout.write("Command completed without failure.")
