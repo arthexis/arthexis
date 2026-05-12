@@ -10,8 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -215,7 +216,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}
+          name: install-health-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}
           path: |
             pytest.log
             pytest-junit.xml
@@ -288,7 +289,7 @@ jobs:
             const body = [
               marker,
               '',
-              'The hourly **Install Health Check** workflow failed.',
+              'The **Install Health Check** workflow failed.',
               '',
               `- Workflow run: ${runUrl}`,
               `- Workflow run API: ${runApiUrl}`,
@@ -345,7 +346,7 @@ jobs:
             core.info(`Created issue #${created.data.number}.`);
 
   notify_recovery:
-    if: ${{ always() && needs.install.result == 'success' && github.event_name == 'schedule' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: ${{ always() && needs.install.result == 'success' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     needs:
       - install
     runs-on: ubuntu-latest

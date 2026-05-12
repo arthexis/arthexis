@@ -154,12 +154,32 @@ jobs:
                 blockers.push(`Open install failure issue: #${installFailureIssue.number}`);
               }
 
+              const { data: defaultBranchData } = await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: defaultBranch,
+              });
+              const defaultBranchSha = defaultBranchData?.commit?.sha || context.sha;
+
               const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 branch: defaultBranch,
                 per_page: 100,
               });
+
+              const installHealthRunsForHead = ciRuns
+                .filter((run) => run.name === 'Install Health Check' && run.head_sha === defaultBranchSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              const latestInstallHealthRun = installHealthRunsForHead[0];
+
+              if (!latestInstallHealthRun) {
+                blockers.push(`Install Health Check has not run for current ${defaultBranch} commit ${defaultBranchSha}.`);
+              } else if (latestInstallHealthRun.status !== 'completed') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} is ${latestInstallHealthRun.status}: ${latestInstallHealthRun.html_url}`);
+              } else if (latestInstallHealthRun.conclusion !== 'success') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestInstallHealthRun.conclusion}: ${latestInstallHealthRun.html_url}`);
+              }
 
               const latestCiRun = ciRuns
                 .filter((run) => run.name === 'Upgrade Gate')
