@@ -107,6 +107,15 @@ class RFIDAttempt(Entity):
             elif normalized_status == cls.Status.REJECTED:
                 authenticated = False
         label_id = payload.get("label_id")
+        if label_id:
+            try:
+                label_id = int(label_id)
+            except (TypeError, ValueError):
+                label_id = None
+        if label_id:
+            label_model = cls._meta.get_field("label").remote_field.model
+            if not label_model.objects.filter(pk=label_id).exists():
+                label_id = None
         allowed_value = payload.get("allowed") if "allowed" in payload else None
         return cls.objects.create(
             rfid=rfid_value,
