@@ -105,7 +105,7 @@ class Command(BaseCommand):
             try:
                 output_target.parent.mkdir(parents=True, exist_ok=True)
                 output_target.write_text(
-                    # codeql[py/clear-text-storage-sensitive-data]
+                    # lgtm[py/clear-text-storage-sensitive-data]
                     json.dumps(safe_result, indent=2, sort_keys=True),
                     encoding="utf-8",
                 )
