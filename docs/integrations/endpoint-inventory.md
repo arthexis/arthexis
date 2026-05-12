@@ -141,10 +141,11 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 - **Example success**: HTML page (`200`) containing charger state, connector links, and live-session context.
 - **Example errors**:
   - `302` redirect to login for anonymous access to owner-scoped chargers.
-  - `404` HTML error for invalid charger serials, invalid connector slugs, missing aggregate chargers, or authenticated users outside the visibility scope.
+  - `404` HTML error for invalid charger serials, invalid connector slugs, serials with no charger rows, or authenticated users outside the visibility scope.
 - **Idempotency/retry**:
   - Retrying is safe for rendered page content.
   - The view may clear stale cached status before rendering.
+  - Aggregate requests fall back to the first connector row when no aggregate row exists.
   - A valid connector-scoped request may initialize that connector row if it does not already exist.
 - **Business models + migrations**:
   - Models: `Charger`, `Transaction`, owner user/group relations, live-session store metadata.
@@ -216,10 +217,11 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
   - `Content-Disposition: attachment; filename="<type>-<cid-or-log-key>.log"`
 - **Example errors**:
   - `302` redirect to login for anonymous requests.
-  - `404` HTML error for invalid charger serials, invalid connector slugs, missing aggregate chargers, or authenticated users outside charger visibility scope.
+  - `404` HTML error for invalid charger serials, invalid connector slugs, serials with no charger rows, or authenticated users outside charger visibility scope.
 - **Idempotency/retry**:
   - Retrying is safe for rendered page content and log downloads.
   - Log downloads are repeatable snapshots of the current in-memory or persisted log stream.
+  - Aggregate requests fall back to the first connector row when no aggregate row exists.
   - Connector-scoped HTML requests use the connector-aware page helper, so a valid connector-scoped request may initialize that connector row if it does not already exist.
 - **Business models + migrations**:
   - Models: `Charger`, `Transaction`, `MeterValue`, owner user/group relations, OCPP store logs.
