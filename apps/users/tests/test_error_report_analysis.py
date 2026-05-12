@@ -299,6 +299,7 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
         f"-----END {private_key_label}-----\n"
         "password=\"my secret password\"\n"
         "token='visible-token'\n"
+        "{\"token\":\"abc\\\"def\"}\n"
         "api_key=bare-secret"
     )
 
@@ -307,10 +308,13 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
     assert "real-key-material" not in redacted
     assert "my secret password" not in redacted
     assert "visible-token" not in redacted
+    assert "abc" not in redacted
+    assert "def" not in redacted
     assert "bare-secret" not in redacted
     assert "[redacted private key]" in redacted
     assert 'password="[redacted]"' in redacted
     assert "token='[redacted]'" in redacted
+    assert '{"token":"[redacted]"}' in redacted
     assert "api_key=[redacted]" in redacted
 
 

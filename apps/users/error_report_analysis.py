@@ -20,7 +20,7 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"\b(?:aws_secret_access_key|api[_-]?key|password|secret|token|private[_-]?key)\b"
     r"[\"']?\s*[:=]\s*"
     r")"
-    r"(?:(?P<quote>[\"'])(?P<quoted_value>.*?)(?P=quote)|"
+    r"(?:(?P<quote>[\"'])(?P<quoted_value>(?:\\.|(?!(?P=quote)).)*)(?P=quote)|"
     r"(?P<unquoted_value>[A-Za-z0-9._~+/=:@%!-]+))",
     re.IGNORECASE,
 )
