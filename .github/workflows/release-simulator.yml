@@ -2,7 +2,7 @@ name: Release Simulator
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '15 * * * *'
   workflow_dispatch:
   push: {}
 
@@ -104,6 +104,7 @@ jobs:
             const fullDayMillis = 24 * 60 * 60 * 1000;
             const releaseCutoffMillis = 3 * fullDayMillis;
             const securityScanQuietMillis = 2 * 60 * 60 * 1000;
+            const blockingIssueLabel = "enhancement";
             let shouldRun = true;
             let skipReason = '';
 
@@ -153,6 +154,39 @@ jobs:
               const installFailureIssue = openIssues.find((issue) => issue.title === installIssueTitle && issue.body?.includes(installMarker));
               if (installFailureIssue) {
                 blockers.push(`Open install failure issue: #${installFailureIssue.number}`);
+              }
+
+              const openBlockingIssues = openIssues.filter((issue) => {
+                if (issue.pull_request) {
+                  return false;
+                }
+                const labels = Array.isArray(issue.labels) ? issue.labels : [];
+                return !labels.some((label) => (label?.name || '').toLowerCase() === blockingIssueLabel);
+              });
+              if (openBlockingIssues.length) {
+                const issueList = openBlockingIssues
+                  .slice(0, 10)
+                  .map((issue) => `#${issue.number}`)
+                  .join(', ');
+                const moreCount = openBlockingIssues.length - 10;
+                const moreSuffix = moreCount > 0 ? `, and ${moreCount} more` : '';
+                blockers.push(`Open non-enhancement issues: ${issueList}${moreSuffix}.`);
+              }
+
+              const openPullRequests = await github.paginate(github.rest.pulls.list, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+              });
+              if (openPullRequests.length) {
+                const pullList = openPullRequests
+                  .slice(0, 10)
+                  .map((pull) => `#${pull.number}`)
+                  .join(', ');
+                const moreCount = openPullRequests.length - 10;
+                const moreSuffix = moreCount > 0 ? `, and ${moreCount} more` : '';
+                blockers.push(`Open pull requests: ${pullList}${moreSuffix}.`);
               }
 
               const { data: defaultBranchData } = await github.rest.repos.getBranch({
@@ -571,7 +605,7 @@ jobs:
             const body = [
               marker,
               '',
-              'Automated release readiness report. Scheduled every 6 hours for 4 release windows per day.',
+              'Automated release readiness report. Runs hourly and only proceeds after the default branch has remained unchanged for at least two hours.',
               '',
               `- Workflow run: ${runUrl}`,
               `- Ref: ${context.ref}`,
