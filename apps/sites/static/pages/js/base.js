@@ -493,19 +493,57 @@ const setupControllerButtonMappings = () => {
     nodes[nextIndex].focus();
   };
 
+  const getActiveGamepad = () => Array.from(navigator.getGamepads() || []).find(gamepad => gamepad && gamepad.buttons);
+
+  const clearPressedState = () => {
+    if (pressedButtons.has(L2_BUTTON_INDEX)) {
+      releaseZoom();
+    }
+    pressedButtons.clear();
+  };
+
+  const startPolling = () => {
+    if (!animationFrameId) {
+      animationFrameId = window.requestAnimationFrame(pollGamepad);
+    }
+  };
+
+  const stopPolling = () => {
+    if (animationFrameId) {
+      window.cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+  };
+
+  const getFocusableTarget = target => {
+    if (!target) {
+      return null;
+    }
+    if (target.closest) {
+      return target.closest(focusSelector);
+    }
+    if (target.matches && target.matches(focusSelector)) {
+      return target;
+    }
+    return null;
+  };
+
   const dispatchFeedbackToggle = () => {
     document.dispatchEvent(new Event('pages:feedback-toggle'));
   };
 
   const applyZoomAroundCursor = () => {
     document.documentElement.classList.add('controller-zoom-active');
-    document.documentElement.style.setProperty('--controller-zoom-origin-x', `${lastPointerX}px`);
-    document.documentElement.style.setProperty('--controller-zoom-origin-y', `${lastPointerY}px`);
+    const originX = lastPointerX + (window.scrollX || window.pageXOffset || 0);
+    const originY = lastPointerY + (window.scrollY || window.pageYOffset || 0);
+    document.documentElement.style.setProperty('--controller-zoom-origin-x', `${originX}px`);
+    document.documentElement.style.setProperty('--controller-zoom-origin-y', `${originY}px`);
     const target = document.elementFromPoint(lastPointerX, lastPointerY);
     if (target) {
       target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: lastPointerX, clientY: lastPointerY }));
-      if (target.focus && target.matches && target.matches(focusSelector)) {
-        target.focus();
+      const focusable = getFocusableTarget(target);
+      if (focusable && focusable.focus) {
+        focusable.focus();
       }
     }
   };
@@ -538,33 +576,44 @@ const setupControllerButtonMappings = () => {
   };
 
   const pollGamepad = () => {
-    const gamepads = navigator.getGamepads();
-    const gamepad = gamepads && gamepads[0];
-    if (gamepad && gamepad.buttons) {
-      gamepad.buttons.forEach((button, index) => {
-        if (button.pressed) {
-          if (!pressedButtons.has(index)) {
-            pressedButtons.add(index);
-            handleButtonPress(index);
-          }
-          return;
-        }
-        if (pressedButtons.has(index)) {
-          pressedButtons.delete(index);
-          if (index === L2_BUTTON_INDEX) {
-            releaseZoom();
-          }
-        }
-      });
+    const gamepad = getActiveGamepad();
+    const buttons = gamepad && gamepad.buttons ? Array.from(gamepad.buttons) : [];
+    if (!buttons.length) {
+      clearPressedState();
+      animationFrameId = null;
+      return;
     }
+
+    buttons.forEach((button, index) => {
+      if (button.pressed) {
+        if (!pressedButtons.has(index)) {
+          pressedButtons.add(index);
+          handleButtonPress(index);
+        }
+        return;
+      }
+      if (pressedButtons.has(index)) {
+        pressedButtons.delete(index);
+        if (index === L2_BUTTON_INDEX) {
+          releaseZoom();
+        }
+      }
+    });
     animationFrameId = window.requestAnimationFrame(pollGamepad);
   };
 
-  pollGamepad();
-  window.addEventListener('beforeunload', () => {
-    if (animationFrameId) {
-      window.cancelAnimationFrame(animationFrameId);
+  if (getActiveGamepad()) {
+    startPolling();
+  }
+  window.addEventListener('gamepadconnected', startPolling);
+  window.addEventListener('gamepaddisconnected', () => {
+    if (!getActiveGamepad()) {
+      clearPressedState();
+      stopPolling();
     }
+  });
+  window.addEventListener('beforeunload', () => {
+    stopPolling();
     releaseZoom();
   });
 };

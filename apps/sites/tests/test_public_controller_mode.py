@@ -29,6 +29,32 @@ def test_controller_mode_adds_large_targets_and_legacy_focus_fallbacks():
     assert ":focus-visible" in css
 
 
+def test_controller_gamepad_polling_handles_connected_slots_and_disconnects():
+    script = BASE_JS.read_text(encoding="utf-8")
+
+    assert "getActiveGamepad" in script
+    assert "Array.from(navigator.getGamepads() || []).find(gamepad => gamepad && gamepad.buttons)" in script
+    assert "Array.from(gamepad.buttons)" in script
+    assert "clearPressedState();" in script
+    assert "pressedButtons.clear();" in script
+    assert "gamepadconnected" in script
+    assert "gamepaddisconnected" in script
+
+
+def test_controller_zoom_uses_document_origin_focus_closest_and_tokens():
+    css = BASE_CSS.read_text(encoding="utf-8")
+    script = BASE_JS.read_text(encoding="utf-8")
+
+    assert "lastPointerX + (window.scrollX || window.pageXOffset || 0)" in script
+    assert "lastPointerY + (window.scrollY || window.pageYOffset || 0)" in script
+    assert "target.closest(focusSelector)" in script
+    assert "--controller-zoom-scale" in css
+    assert "--controller-zoom-origin-default-x" in css
+    assert "--controller-zoom-transition" in css
+    assert "transform: scale(var(--controller-zoom-scale));" in css
+    assert ".controller-mode body" in css
+
+
 def test_docs_reader_has_controller_safe_full_document_and_reload_paths():
     template = DOCS_README_TEMPLATE.read_text(encoding="utf-8")
 
