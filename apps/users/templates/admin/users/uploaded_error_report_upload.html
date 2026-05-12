@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <fieldset class="module aligned">
+      <div class="form-row">
+        <label for="id_source_label">{% trans "Source label" %}</label>
+        <input type="text" name="source_label" id="id_source_label" />
+      </div>
+      <div class="form-row">
+        <label for="id_package">{% trans "Error report zip" %}</label>
+        <input type="file" name="package" id="id_package" accept=".zip,application/zip" required />
+      </div>
+    </fieldset>
+    <div class="submit-row">
+      <button type="submit" class="default">{% trans "Upload and analyze" %}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

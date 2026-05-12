@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import zipfile
+import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -659,7 +660,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--upload-timeout", type=positive_int, default=60)
     parser.add_argument("--allow-insecure-upload", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--send-upstream")
+    parser.add_argument("--upstream-queue-dir", type=Path, default=None)
     return parser
+
+
+def _queue_upstream(path: Path, queue_dir: Path) -> Path:
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    queued = queue_dir / path.name
+    if queued.exists():
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        queued = queue_dir / f"{path.stem}-{stamp}{path.suffix}"
+    shutil.copy2(path, queued)
+    return queued
+
+
+def _flush_upstream_queue(queue_dir: Path, upload_url: str, *, method: str, timeout: int, allow_insecure: bool) -> list[Path]:
+    sent = []
+    if not queue_dir.exists():
+        return sent
+    for candidate in sorted(queue_dir.glob("*.zip")):
+        upload_report(candidate, upload_url, method=method, timeout=timeout, allow_insecure=allow_insecure)
+        candidate.unlink(missing_ok=True)
+        sent.append(candidate)
+    return sent
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -671,6 +695,9 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = base_dir / DEFAULT_OUTPUT_DIR
     elif not output_dir.is_absolute():
         output_dir = base_dir / output_dir
+
+    upstream_queue_dir = args.upstream_queue_dir or (base_dir / "work" / "error-reports" / "upstream-queue")
+    upstream_url = (args.send_upstream or "").strip()
 
     config = ReportConfig(
         base_dir=base_dir,
@@ -703,6 +730,15 @@ def main(argv: list[str] | None = None) -> int:
     print(_("Created error report: {path}").format(path=result.path))
     if result.warnings:
         print(_("Warnings: {count}").format(count=len(result.warnings)))
+
+    if upstream_url:
+        try:
+            flushed = _flush_upstream_queue(upstream_queue_dir, upstream_url, method=config.upload_method, timeout=config.upload_timeout, allow_insecure=config.allow_insecure_upload)
+            if flushed:
+                print(_("Flushed queued upstream uploads: {count}").format(count=len(flushed)))
+        except (HTTPError, URLError, OSError, ValueError):
+            pass
+
     if config.upload_url:
         try:
             status = upload_report(
@@ -713,15 +749,18 @@ def main(argv: list[str] | None = None) -> int:
                 allow_insecure=config.allow_insecure_upload,
             )
         except (HTTPError, URLError, OSError, ValueError) as exc:
-            print(
-                _("Upload failed; local zip remains at {path}: {error}").format(
-                    path=result.path,
-                    error=exc,
-                ),
-                file=sys.stderr,
-            )
+            print(_("Upload failed; local zip remains at {path}: {error}").format(path=result.path, error=exc), file=sys.stderr)
             return 2
         print(_("Uploaded error report: HTTP {status}").format(status=status))
+
+    if upstream_url:
+        try:
+            status = upload_report(result.path, upstream_url, method=config.upload_method, timeout=config.upload_timeout, allow_insecure=config.allow_insecure_upload)
+            print(_("Sent upstream error report: HTTP {status}").format(status=status))
+        except (HTTPError, URLError, OSError, ValueError):
+            queued = _queue_upstream(result.path, upstream_queue_dir)
+            print(_("Upstream upload unavailable; queued report at {path}").format(path=queued), file=sys.stderr)
+
     return 0
 
 

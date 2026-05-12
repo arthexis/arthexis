@@ -168,3 +168,36 @@ class UserDiagnosticBundle(Entity):
 
     def __str__(self) -> str:
         return self.title
+
+
+class UploadedErrorReport(Entity):
+    """Persist uploaded error-report packages and analysis results."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        PROCESSING = "processing", _("Processing")
+        COMPLETE = "complete", _("Complete")
+        FAILED = "failed", _("Failed")
+
+    source_label = models.CharField(max_length=200, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_error_reports",
+    )
+    package = models.FileField(upload_to="error-reports/%Y/%m/%d")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    analysis = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = _("Uploaded Error Report")
+        verbose_name_plural = _("Uploaded Error Reports")
+
+    def __str__(self) -> str:
+        return self.source_label or self.package.name

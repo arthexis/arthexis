@@ -1,0 +1,7 @@
+{% extends "admin/change_form.html" %}
+{% if original and original.status == "processing" %}
+  {% block extrahead %}
+    {{ block.super }}
+    <meta http-equiv="refresh" content="3">
+  {% endblock %}
+{% endif %}

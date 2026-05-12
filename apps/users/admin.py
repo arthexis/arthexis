@@ -26,10 +26,14 @@ from .models import (
     User,
     UserDiagnosticBundle,
     UserDiagnosticEvent,
+    UploadedErrorReport,
     UserDiagnosticsProfile,
     UserFlag,
 )
 from .passkeys import build_registration_options, verify_registration_response
+from apps.celery.utils import enqueue_task
+
+from .tasks import analyze_uploaded_error_report
 
 PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
 
@@ -274,6 +278,46 @@ class UserDiagnosticBundleAdmin(admin.ModelAdmin):
     search_fields = ("title", "user__username", "report")
     filter_horizontal = ("events",)
     readonly_fields = ("created_at",)
+
+
+@admin.register(UploadedErrorReport)
+class UploadedErrorReportAdmin(admin.ModelAdmin):
+    list_display = ("id", "source_label", "uploaded_by", "status", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("source_label", "package")
+    readonly_fields = ("analysis", "error", "status", "created_at", "updated_at")
+
+    change_list_template = "admin/users/uploaded_error_report_changelist.html"
+    change_form_template = "admin/users/uploaded_error_report_change_form.html"
+
+    def get_urls(self):
+        custom = [
+            path("upload/", self.admin_site.admin_view(self.upload_view), name="users_uploadederrorreport_upload"),
+        ]
+        return custom + super().get_urls()
+
+    def upload_view(self, request: HttpRequest) -> HttpResponse:
+        if request.method == "POST":
+            uploaded = request.FILES.get("package")
+            if not uploaded:
+                messages.error(request, _("Choose a .zip package to upload."))
+                return redirect("admin:users_uploadederrorreport_upload")
+            report = UploadedErrorReport.objects.create(
+                source_label=(request.POST.get("source_label") or "").strip(),
+                uploaded_by=request.user if request.user.is_authenticated else None,
+                package=uploaded,
+            )
+            if not enqueue_task(analyze_uploaded_error_report, report.pk, require_enabled=False):
+                analyze_uploaded_error_report(report.pk)
+            return redirect(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Upload error report"),
+            "refresh_ms": 3000,
+        }
+        return TemplateResponse(request, "admin/users/uploaded_error_report_upload.html", context)
 
 
 __all__ = ["admin"]
