@@ -83,7 +83,7 @@ def _iter_log_text(zf: ZipFile):
         if not _is_log_entry(name):
             continue
         if scanned_entries >= MAX_LOG_ENTRIES_SCANNED:
-            raise ValueError("too many log-like entries in package")
+            break
         remaining_bytes = MAX_TOTAL_LOG_BYTES - scanned_bytes
         if remaining_bytes <= 0:
             raise ValueError("log-like entries exceed total scan budget")

@@ -146,13 +146,20 @@ def test_analyze_error_report_package_rejects_large_summary(tmp_path):
         analyze_error_report_package(package_path)
 
 
-def test_analyze_error_report_package_rejects_too_many_log_entries(tmp_path):
+def test_analyze_error_report_package_limits_log_entries_without_rejecting(monkeypatch, tmp_path):
+    monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRIES_SCANNED", 2)
     package_path = tmp_path / "error-report.zip"
-    logs = {f"logs/log-{idx}.txt": "ok" for idx in range(201)}
+    logs = {
+        "logs/log-0.txt": "ok",
+        "logs/log-1.txt": "ok",
+        "logs/log-2.txt": "Traceback (most recent call last):",
+    }
     _write_report(package_path, logs=logs)
 
-    with pytest.raises(ValueError, match="Malformed error-report package"):
-        analyze_error_report_package(package_path)
+    result = analyze_error_report_package(package_path)
+
+    assert result["findings"] == []
+    assert result["max_severity"] == "none"
 
 
 def test_analyze_error_report_package_rejects_large_log_entry(monkeypatch, tmp_path):
