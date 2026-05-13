@@ -670,7 +670,11 @@ def _queue_upstream(path: Path, queue_dir: Path) -> Path:
     queued = queue_dir / path.name
     if queued.exists():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        queued = queue_dir / f"{path.stem}-{stamp}{path.suffix}"
+        counter = 0
+        while queued.exists():
+            suffix = stamp if counter == 0 else f"{stamp}-{counter}"
+            queued = queue_dir / f"{path.stem}-{suffix}{path.suffix}"
+            counter += 1
     shutil.copy2(path, queued)
     return queued
 
@@ -680,6 +684,12 @@ def _flush_upstream_queue(queue_dir: Path, upload_url: str, *, method: str, time
     if not queue_dir.exists():
         return sent
     for candidate in sorted(queue_dir.glob("*.zip")):
+        if candidate.is_symlink() or not candidate.is_file():
+            print(
+                _("Warning: skipped non-regular queued file {path}").format(path=candidate),
+                file=sys.stderr,
+            )
+            continue
         upload_report(candidate, upload_url, method=method, timeout=timeout, allow_insecure=allow_insecure)
         try:
             candidate.unlink(missing_ok=True)
