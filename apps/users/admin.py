@@ -326,7 +326,12 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
     list_display = ("id", "source_label", "uploaded_by", "status", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("source_label", "package")
-    readonly_fields = ("package", "analysis", "error", "status", "created_at", "updated_at")
+    readonly_fields = ("package_name", "analysis", "error", "status", "created_at", "updated_at")
+
+
+    @admin.display(description=_("Package"))
+    def package_name(self, obj: UploadedErrorReport) -> str:
+        return obj.package.name
 
     change_list_template = "admin/users/uploaded_error_report_changelist.html"
     change_form_template = "admin/users/uploaded_error_report_change_form.html"
