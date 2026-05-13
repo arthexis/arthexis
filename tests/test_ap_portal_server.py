@@ -30,6 +30,7 @@ def make_config(module, tmp_path):
         assets_dir=tmp_path,
         state_dir=state_dir,
         authorized_macs_path=state_dir / "authorized_macs.txt",
+        trusted_macs_path=state_dir / "trusted_macs.txt",
         consents_path=state_dir / "consents.jsonl",
         activity_path=state_dir / "activity.jsonl",
         source_url="https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py",
@@ -60,7 +61,7 @@ def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
 
     assert result["authorized"] is True
     assert result["mac_address"] == "aa:bb:cc:dd:ee:ff"
-    assert result["redirect_url"] == "http://10.42.0.1:8888/gallery/ap/"
+    assert result["redirect_url"] == "http://arthexis.net:8888/gallery/ap/"
     assert "ARE being monitored" in result["monitoring_notice"]
     assert (
         state.config.authorized_macs_path.read_text(encoding="utf-8")
@@ -146,6 +147,7 @@ def test_subscribe_does_not_persist_authorization_when_firewall_sync_fails(tmp_p
         assets_dir=config.assets_dir,
         state_dir=config.state_dir,
         authorized_macs_path=config.authorized_macs_path,
+        trusted_macs_path=config.trusted_macs_path,
         consents_path=config.consents_path,
         activity_path=config.activity_path,
         source_url=config.source_url,
@@ -183,6 +185,7 @@ def test_subscribe_rolls_back_new_authorization_when_consent_log_fails(tmp_path)
         assets_dir=config.assets_dir,
         state_dir=config.state_dir,
         authorized_macs_path=config.authorized_macs_path,
+        trusted_macs_path=config.trusted_macs_path,
         consents_path=config.consents_path,
         activity_path=config.activity_path,
         source_url=config.source_url,
@@ -222,6 +225,7 @@ def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path
         assets_dir=config.assets_dir,
         state_dir=config.state_dir,
         authorized_macs_path=config.authorized_macs_path,
+        trusted_macs_path=config.trusted_macs_path,
         consents_path=config.consents_path,
         activity_path=config.activity_path,
         source_url=config.source_url,
@@ -260,6 +264,7 @@ def test_subscribe_resyncs_firewall_when_file_rollback_fails(tmp_path):
         assets_dir=config.assets_dir,
         state_dir=config.state_dir,
         authorized_macs_path=config.authorized_macs_path,
+        trusted_macs_path=config.trusted_macs_path,
         consents_path=config.consents_path,
         activity_path=config.activity_path,
         source_url=config.source_url,
@@ -299,6 +304,7 @@ def test_subscribe_rolls_back_new_authorization_when_authorized_write_fails(tmp_
         assets_dir=config.assets_dir,
         state_dir=config.state_dir,
         authorized_macs_path=config.authorized_macs_path,
+        trusted_macs_path=config.trusted_macs_path,
         consents_path=config.consents_path,
         activity_path=config.activity_path,
         source_url=config.source_url,
@@ -427,8 +433,55 @@ def test_status_redirects_authorized_client_to_gallery_port(tmp_path):
     )
 
     assert payload["authorized"] is True
-    assert payload["authorized_redirect_url"] == "http://10.42.0.1:8888/gallery/ap/"
+    assert payload["authorized_redirect_url"] == "http://arthexis.net:8888/gallery/ap/"
     assert payload["redirect_delay_ms"] == module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS
+
+
+def test_trusted_mac_skips_registration_and_redirects_to_suite(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    config.trusted_macs_path.parent.mkdir(parents=True, exist_ok=True)
+    config.trusted_macs_path.write_text(
+        "# Living room console\nAA:BB:CC:DD:EE:FF ps4\n",
+        encoding="utf-8",
+    )
+    state = module.PortalState(config)
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+
+    payload = state.status_for_request(
+        ip_address="192.168.129.143",
+        user_agent="PlayStation",
+        path="/api/status",
+        host="arthexis.net",
+    )
+
+    assert payload["authorized"] is True
+    assert payload["trusted_device"] is True
+    assert payload["authorized_redirect_url"] == "http://arthexis.net:8888/gallery/ap/"
+    assert not config.authorized_macs_path.exists()
+
+
+def test_trusted_mac_consent_does_not_modify_consent_authorization(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    config.trusted_macs_path.parent.mkdir(parents=True, exist_ok=True)
+    config.trusted_macs_path.write_text("aa:bb:cc:dd:ee:ff ps4\n", encoding="utf-8")
+    state = module.PortalState(config)
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+
+    result = state.subscribe(
+        email="guest@example.com",
+        accept_terms=True,
+        ip_address="192.168.129.143",
+        user_agent="PlayStation",
+        host="arthexis.net",
+    )
+
+    assert result["authorized"] is True
+    assert result["already_authorized"] is True
+    assert result["trusted_device"] is True
+    assert not config.authorized_macs_path.exists()
+    assert "guest@example.com" in config.consents_path.read_text(encoding="utf-8")
 
 
 def test_status_preserves_zero_redirect_delay(tmp_path):
@@ -454,7 +507,7 @@ def test_status_preserves_zero_redirect_delay(tmp_path):
     assert payload["redirect_delay_ms"] == 0
 
 
-def test_suite_login_redirect_defaults_to_gateway_host():
+def test_suite_login_redirect_defaults_to_local_hostname():
     module = load_portal_module()
 
     assert (
@@ -465,7 +518,7 @@ def test_suite_login_redirect_defaults_to_gateway_host():
             port=8888,
             path=module.DEFAULT_SUITE_LOGIN_PATH,
         )
-        == "http://10.42.0.1:8888/gallery/ap/"
+        == "http://arthexis.net:8888/gallery/ap/"
     )
 
 
@@ -726,6 +779,7 @@ def test_skip_firewall_sync_defaults_loopback_to_development_mac(tmp_path):
         suite_login_port=module.DEFAULT_SUITE_LOGIN_PORT,
         suite_login_path=module.DEFAULT_SUITE_LOGIN_PATH,
         authorized_redirect_delay_ms=module.DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS,
+        trusted_macs_path="",
         skip_firewall_sync=True,
         local_development_mac="",
     )
@@ -735,6 +789,7 @@ def test_skip_firewall_sync_defaults_loopback_to_development_mac(tmp_path):
 
     assert config.sync_firewall is False
     assert config.local_development_mac == module.LOCAL_DEVELOPMENT_MAC
+    assert config.trusted_macs_path == tmp_path / "state" / "trusted_macs.txt"
     assert state.resolve_mac("127.0.0.1") == module.LOCAL_DEVELOPMENT_MAC
 
 
@@ -772,6 +827,34 @@ def _exercise_get(handler_class, path: str, *, asset_exists: bool = True):
     handler.do_GET()
 
     return SimpleNamespace(recorded=recorded, served=served, errors=errors)
+
+
+def test_get_authorized_client_redirects_before_portal_page(tmp_path):
+    module = load_portal_module()
+    app = module.PortalApplication(make_config(module, tmp_path))
+    app.state.authorized_redirect_for_request = (
+        lambda **_kwargs: "http://arthexis.net:8888/gallery/ap/"
+    )
+    handler_class = app.handler_class()
+    handler = object.__new__(handler_class)
+    handler.path = "/"
+    handler.command = "GET"
+    handler.headers = {}
+    handler.client_address = ("192.168.129.143", 12345)
+    responses = []
+    headers = []
+    handler._record_request = lambda path: responses.append(("record", path))
+    handler._serve_asset = lambda _name: responses.append(("asset", _name)) or True
+    handler.send_response = lambda status: responses.append(("status", status))
+    handler.send_header = lambda key, value: headers.append((key, value))
+    handler.end_headers = lambda: responses.append(("end", None))
+
+    handler.do_GET()
+
+    assert ("record", "/") in responses
+    assert ("status", module.HTTPStatus.FOUND) in responses
+    assert ("Location", "http://arthexis.net:8888/gallery/ap/") in headers
+    assert not any(item[0] == "asset" for item in responses)
 
 
 def test_get_probe_path_returns_portal_page(tmp_path):

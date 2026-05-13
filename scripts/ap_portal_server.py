@@ -26,11 +26,12 @@ DEFAULT_SOURCE_URL = (
     "https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py"
 )
 DEFAULT_SUITE_LOGIN_SCHEME = "http"
-DEFAULT_SUITE_LOGIN_HOST = "10.42.0.1"
+DEFAULT_SUITE_LOGIN_HOST = "arthexis.net"
 DEFAULT_SUITE_LOGIN_PORT = 8888
 DEFAULT_SUITE_LOGIN_PATH = "/gallery/ap/"
 DEFAULT_AUTHORIZED_REDIRECT_DELAY_MS = 3000
 AUTHORIZED_MACS_PATH = DEFAULT_STATE_DIR / "authorized_macs.txt"
+TRUSTED_MACS_PATH = DEFAULT_STATE_DIR / "trusted_macs.txt"
 CONSENTS_PATH = DEFAULT_STATE_DIR / "consents.jsonl"
 ACTIVITY_PATH = DEFAULT_STATE_DIR / "activity.jsonl"
 NFT_TABLE_NAME = "arthexis_ap_portal"
@@ -86,6 +87,7 @@ class PortalConfig:
     assets_dir: Path
     state_dir: Path
     authorized_macs_path: Path
+    trusted_macs_path: Path
     consents_path: Path
     activity_path: Path
     source_url: str
@@ -316,13 +318,16 @@ class ActivityRecorder:
     def client_summary(self, limit: int = 100) -> list[dict[str, Any]]:
         clients: dict[str, dict[str, Any]] = {}
         authorized = _read_authorized_macs(self.config.authorized_macs_path)
+        trusted = _read_trusted_macs(self.config.trusted_macs_path)
+        effective_authorized = authorized | trusted
 
-        for mac in authorized:
+        for mac in effective_authorized:
             clients.setdefault(
                 mac,
                 {
                     "mac_address": mac,
                     "authorized": True,
+                    "trusted_device": mac in trusted,
                     "event_count": 0,
                 },
             )
@@ -332,7 +337,8 @@ class ActivityRecorder:
             if not mac:
                 continue
             entry = clients.setdefault(mac, {"mac_address": mac, "event_count": 0})
-            entry["authorized"] = mac in authorized
+            entry["authorized"] = mac in effective_authorized
+            entry["trusted_device"] = mac in trusted
             entry["email"] = consent.get("email")
             entry["accepted_at"] = consent.get("accepted_at")
             entry["last_ip_address"] = consent.get("ip_address")
@@ -348,7 +354,9 @@ class ActivityRecorder:
             entry["last_event_at"] = event.get("observed_at")
             entry["last_event_type"] = event.get("event_type")
             entry["event_count"] = int(entry.get("event_count") or 0) + 1
-            entry.setdefault("authorized", key in authorized)
+            entry.setdefault("authorized", key in effective_authorized)
+            if mac:
+                entry.setdefault("trusted_device", mac in trusted)
 
         return sorted(
             clients.values(),
@@ -360,13 +368,25 @@ class ActivityRecorder:
 
 
 def _read_authorized_macs(path: Path) -> set[str]:
+    return _read_mac_allowlist(path)
+
+
+def _read_trusted_macs(path: Path) -> set[str]:
+    return _read_mac_allowlist(path)
+
+
+def _read_mac_allowlist(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    return {
-        _normalize_mac(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
+    macs = set()
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", maxsplit=1)[0].strip()
+        if not line:
+            continue
+        token = line.split(maxsplit=1)[0]
+        if MAC_RE.fullmatch(token):
+            macs.add(_normalize_mac(token))
+    return macs
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -403,8 +423,18 @@ class PortalState:
         self._firewall = FirewallManager()
         self.activity = ActivityRecorder(config)
         self._authorized = _read_authorized_macs(self.config.authorized_macs_path)
+        self._trusted = _read_trusted_macs(self.config.trusted_macs_path)
         if self.config.sync_firewall:
-            self._firewall.sync(self._authorized)
+            self._firewall.sync(self._effective_authorized_macs())
+
+    def _effective_authorized_macs(self) -> set[str]:
+        return self._authorized | self._trusted
+
+    def _authorization_for_mac(self, mac_address: str | None) -> tuple[bool, bool]:
+        if not mac_address:
+            return False, False
+        trusted = mac_address in self._trusted
+        return mac_address in self._authorized or trusted, trusted
 
     def status_for_request(
         self,
@@ -416,19 +446,21 @@ class PortalState:
     ) -> dict[str, Any]:
         mac_address = self.resolve_mac(ip_address)
         with self._lock:
-            authorized = bool(mac_address and mac_address in self._authorized)
+            authorized, trusted = self._authorization_for_mac(mac_address)
         authorized_redirect_url = self.suite_login_url(host) if authorized else ""
         self.activity.record(
             "status_check",
             ip_address=ip_address,
             mac_address=mac_address,
             authorized=authorized,
+            trusted_device=trusted,
             user_agent=user_agent,
             path=path,
             host=host,
         )
         return {
             "authorized": authorized,
+            "trusted_device": trusted,
             "mac_address": mac_address,
             "authorized_redirect_url": authorized_redirect_url,
             "redirect_delay_ms": self.config.authorized_redirect_delay_ms,
@@ -440,6 +472,7 @@ class PortalState:
                 "activity_log": str(self.config.activity_path),
                 "consent_log": str(self.config.consents_path),
                 "authorized_macs": str(self.config.authorized_macs_path),
+                "trusted_macs": str(self.config.trusted_macs_path),
             },
         }
 
@@ -454,18 +487,30 @@ class PortalState:
         referer: str,
     ) -> None:
         mac_address = self.resolve_mac(ip_address)
-        authorized = bool(mac_address and mac_address in self._authorized)
+        with self._lock:
+            authorized, trusted = self._authorization_for_mac(mac_address)
         self.activity.record(
             "request",
             ip_address=ip_address,
             mac_address=mac_address,
             authorized=authorized,
+            trusted_device=trusted,
             user_agent=user_agent,
             method=method,
             path=path,
             host=host,
             referer=referer,
         )
+
+    def authorized_redirect_for_request(
+        self, *, ip_address: str | None, host: str
+    ) -> str:
+        mac_address = self.resolve_mac(ip_address)
+        with self._lock:
+            authorized, _trusted = self._authorization_for_mac(mac_address)
+        if not authorized:
+            return ""
+        return self.suite_login_url(host)
 
     def suite_login_url(self, host: str) -> str:
         return _suite_login_url(
@@ -514,14 +559,14 @@ class PortalState:
         }
 
         with self._lock:
-            already_authorized = mac_address in self._authorized
+            already_authorized, trusted = self._authorization_for_mac(mac_address)
             if not already_authorized:
                 previous_authorized = set(self._authorized)
                 authorized_file_existed = self.config.authorized_macs_path.exists()
                 next_authorized = set(self._authorized)
                 next_authorized.add(mac_address)
                 if self.config.sync_firewall:
-                    self._firewall.sync(next_authorized)
+                    self._firewall.sync(next_authorized | self._trusted)
                 consent_rollback_position = self._consent_log_position()
                 try:
                     self._write_authorized_macs(next_authorized)
@@ -532,6 +577,7 @@ class PortalState:
                         mac_address=mac_address,
                         email=normalized_email,
                         already_authorized=already_authorized,
+                        trusted_device=trusted,
                         user_agent=user_agent,
                         host=host,
                     )
@@ -552,7 +598,7 @@ class PortalState:
                             rollback_error = exc
                     try:
                         if self.config.sync_firewall:
-                            self._firewall.sync(previous_authorized)
+                            self._firewall.sync(previous_authorized | self._trusted)
                     except FirewallSyncError as exc:
                         if rollback_error is not None:
                             exc.add_note(f"file rollback failed: {rollback_error}")
@@ -571,6 +617,7 @@ class PortalState:
                         mac_address=mac_address,
                         email=normalized_email,
                         already_authorized=already_authorized,
+                        trusted_device=trusted,
                         user_agent=user_agent,
                         host=host,
                     )
@@ -581,6 +628,7 @@ class PortalState:
         return {
             "authorized": True,
             "already_authorized": already_authorized,
+            "trusted_device": trusted,
             "mac_address": mac_address,
             "monitoring_notice": MONITORING_NOTICE,
             "source_code_url": self.config.source_url,
@@ -697,6 +745,8 @@ class PortalApplication:
                     return
 
                 if request_path in {"", "/"}:
+                    if self._redirect_authorized_request(request_path):
+                        return
                     self._serve_portal_page(request_path or "/")
                     return
                 if request_path.startswith("/api/"):
@@ -704,6 +754,8 @@ class PortalApplication:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
                 if request_path in CAPTIVE_PORTAL_PROBE_PATHS:
+                    if self._redirect_authorized_request(request_path):
+                        return
                     self._serve_portal_page(request_path)
                     return
                 asset_name = request_path.lstrip("/")
@@ -715,6 +767,8 @@ class PortalApplication:
                         self._record_request(request_path)
                         if not self._serve_asset(asset_name):
                             self.send_error(HTTPStatus.NOT_FOUND)
+                        return
+                    if self._redirect_authorized_request(request_path):
                         return
                     self._serve_portal_page(request_path)
                     return
@@ -784,6 +838,20 @@ class PortalApplication:
                     referer=self.headers.get("Referer", ""),
                 )
 
+            def _redirect_authorized_request(self, path: str) -> bool:
+                redirect_url = app.state.authorized_redirect_for_request(
+                    ip_address=self._client_ip(),
+                    host=self.headers.get("Host", ""),
+                )
+                if not redirect_url:
+                    return False
+                self._record_request(path)
+                self.send_response(HTTPStatus.FOUND)
+                self.send_header("Location", redirect_url)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return True
+
             def _serve_portal_page(self, path: str) -> None:
                 self._record_request(path)
                 if not self._serve_asset("index.html"):
@@ -840,6 +908,11 @@ class PortalApplication:
 def build_config(args: argparse.Namespace) -> PortalConfig:
     state_dir = Path(args.state_dir).expanduser().resolve()
     assets_dir = Path(args.assets_dir).expanduser().resolve()
+    trusted_macs_path = (
+        Path(args.trusted_macs_path).expanduser().resolve()
+        if args.trusted_macs_path
+        else state_dir / "trusted_macs.txt"
+    )
     source_url = (
         args.source_url
         or os.environ.get("ARTHEXIS_AP_SOURCE_URL")
@@ -860,6 +933,7 @@ def build_config(args: argparse.Namespace) -> PortalConfig:
         assets_dir=assets_dir,
         state_dir=state_dir,
         authorized_macs_path=state_dir / "authorized_macs.txt",
+        trusted_macs_path=trusted_macs_path,
         consents_path=state_dir / "consents.jsonl",
         activity_path=state_dir / "activity.jsonl",
         source_url=source_url,
@@ -881,6 +955,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=9080)
     parser.add_argument("--assets-dir", default=str(ASSETS_DIR))
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+    parser.add_argument("--trusted-macs-path", default="")
     parser.add_argument("--source-url", default="")
     parser.add_argument("--suite-login-scheme", default=DEFAULT_SUITE_LOGIN_SCHEME)
     parser.add_argument("--suite-login-host", default=DEFAULT_SUITE_LOGIN_HOST)

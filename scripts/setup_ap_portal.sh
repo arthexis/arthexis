@@ -6,13 +6,15 @@ PORTAL_PORT="${PORTAL_PORT:-9080}"
 CURRENT_AP_NAME="${CURRENT_AP_NAME:-arthexis-ap}"
 TARGET_AP_NAME="${TARGET_AP_NAME:-arthexis-1}"
 STATE_DIR="${STATE_DIR:-$BASE_DIR/.state/ap_portal}"
+TRUSTED_MACS_PATH="${TRUSTED_MACS_PATH:-$STATE_DIR/trusted_macs.txt}"
 SOURCE_URL="${SOURCE_URL:-https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py}"
 SERVICE_FILE="/etc/systemd/system/arthexis-ap-portal.service"
 NGINX_SITE="/etc/nginx/sites-enabled/arthexis.conf"
 NGINX_BACKUP_DIR="/etc/nginx/sites-available"
 NGINX_BACKUP_RETENTION="${NGINX_BACKUP_RETENTION:-10}"
-DEFAULT_CERT_PATH="/etc/letsencrypt/live/arthexis.com/fullchain.pem"
-DEFAULT_KEY_PATH="/etc/letsencrypt/live/arthexis.com/privkey.pem"
+DEFAULT_CERT_DOMAIN="${DEFAULT_CERT_DOMAIN:-arthexis.net}"
+DEFAULT_CERT_PATH="${DEFAULT_CERT_PATH:-/etc/letsencrypt/live/$DEFAULT_CERT_DOMAIN/fullchain.pem}"
+DEFAULT_KEY_PATH="${DEFAULT_KEY_PATH:-/etc/letsencrypt/live/$DEFAULT_CERT_DOMAIN/privkey.pem}"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "Run as root: sudo $0" >&2
@@ -57,7 +59,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python $BASE_DIR/scripts/ap_portal_server.py --bind 127.0.0.1 --port $PORTAL_PORT --state-dir $STATE_DIR --source-url $SOURCE_URL
+ExecStart=$BASE_DIR/.venv/bin/python $BASE_DIR/scripts/ap_portal_server.py --bind 127.0.0.1 --port $PORTAL_PORT --state-dir $STATE_DIR --trusted-macs-path $TRUSTED_MACS_PATH --source-url $SOURCE_URL --suite-login-host arthexis.net
 Restart=always
 RestartSec=2
 
