@@ -60,7 +60,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python $BASE_DIR/scripts/ap_portal_server.py --bind 127.0.0.1 --port $PORTAL_PORT --state-dir $STATE_DIR --trusted-macs-path $TRUSTED_MACS_PATH --source-url $SOURCE_URL --suite-login-host arthexis.net
+ExecStart=$BASE_DIR/.venv/bin/python $BASE_DIR/scripts/ap_portal_server.py --bind 127.0.0.1 --port $PORTAL_PORT --state-dir $STATE_DIR --trusted-macs-path $TRUSTED_MACS_PATH --source-url $SOURCE_URL --suite-login-host $DEFAULT_CERT_DOMAIN
 Restart=always
 RestartSec=2
 

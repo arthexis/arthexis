@@ -46,6 +46,13 @@ def test_monitoring_notice_is_explicit_and_points_to_source():
     assert module.DEFAULT_SOURCE_URL.endswith("/scripts/ap_portal_server.py")
 
 
+def test_setup_script_uses_configured_cert_domain_for_suite_login_host():
+    script = (SCRIPT_PATH.parent / "setup_ap_portal.sh").read_text(encoding="utf-8")
+
+    assert "--suite-login-host $DEFAULT_CERT_DOMAIN" in script
+    assert "--suite-login-host arthexis.net" not in script
+
+
 def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
@@ -843,7 +850,10 @@ def test_get_authorized_client_redirects_before_portal_page(tmp_path):
     handler.client_address = ("192.168.129.143", 12345)
     responses = []
     headers = []
-    handler._record_request = lambda path: responses.append(("record", path))
+    app.state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    handler._record_request = lambda path, **_kwargs: responses.append(
+        ("record", path)
+    )
     handler._serve_asset = lambda _name: responses.append(("asset", _name)) or True
     handler.send_response = lambda status: responses.append(("status", status))
     handler.send_header = lambda key, value: headers.append((key, value))
@@ -855,6 +865,41 @@ def test_get_authorized_client_redirects_before_portal_page(tmp_path):
     assert ("status", module.HTTPStatus.FOUND) in responses
     assert ("Location", "http://arthexis.net:8888/gallery/ap/") in headers
     assert not any(item[0] == "asset" for item in responses)
+
+
+def test_get_authorized_client_reuses_resolved_mac_for_redirect_logging(tmp_path):
+    module = load_portal_module()
+    app = module.PortalApplication(make_config(module, tmp_path))
+    app.state._authorized = {"aa:bb:cc:dd:ee:ff"}
+    resolved_ips = []
+
+    def resolve_once(ip_address):
+        resolved_ips.append(ip_address)
+        return "aa:bb:cc:dd:ee:ff"
+
+    app.state.resolve_mac = resolve_once
+    handler_class = app.handler_class()
+    handler = object.__new__(handler_class)
+    handler.path = "/"
+    handler.command = "GET"
+    handler.headers = {}
+    handler.client_address = ("192.168.129.143", 12345)
+    responses = []
+    headers = []
+    handler.send_response = lambda status: responses.append(("status", status))
+    handler.send_header = lambda key, value: headers.append((key, value))
+    handler.end_headers = lambda: responses.append(("end", None))
+
+    handler.do_GET()
+
+    assert resolved_ips == ["192.168.129.143"]
+    assert ("status", module.HTTPStatus.FOUND) in responses
+    assert ("Location", "http://arthexis.net:8888/gallery/ap/") in headers
+    activity = [
+        json.loads(line)
+        for line in app.config.activity_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert activity[-1]["mac_address"] == "aa:bb:cc:dd:ee:ff"
 
 
 def test_get_probe_path_returns_portal_page(tmp_path):

@@ -379,13 +379,14 @@ def _read_mac_allowlist(path: Path) -> set[str]:
     if not path.exists():
         return set()
     macs = set()
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", maxsplit=1)[0].strip()
-        if not line:
-            continue
-        token = line.split(maxsplit=1)[0]
-        if MAC_RE.fullmatch(token):
-            macs.add(_normalize_mac(token))
+    with open(path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.split("#", maxsplit=1)[0].strip()
+            if not line:
+                continue
+            token = line.split(maxsplit=1)[0]
+            if MAC_RE.fullmatch(token):
+                macs.add(_normalize_mac(token))
     return macs
 
 
@@ -485,8 +486,10 @@ class PortalState:
         path: str,
         host: str,
         referer: str,
+        mac_address: str | None = None,
     ) -> None:
-        mac_address = self.resolve_mac(ip_address)
+        if mac_address is None:
+            mac_address = self.resolve_mac(ip_address)
         with self._lock:
             authorized, trusted = self._authorization_for_mac(mac_address)
         self.activity.record(
@@ -503,9 +506,10 @@ class PortalState:
         )
 
     def authorized_redirect_for_request(
-        self, *, ip_address: str | None, host: str
+        self, *, ip_address: str | None, host: str, mac_address: str | None = None
     ) -> str:
-        mac_address = self.resolve_mac(ip_address)
+        if mac_address is None:
+            mac_address = self.resolve_mac(ip_address)
         with self._lock:
             authorized, _trusted = self._authorization_for_mac(mac_address)
         if not authorized:
@@ -828,24 +832,40 @@ class PortalApplication:
                     "X-Forwarded-For"
                 )
 
-            def _record_request(self, path: str) -> None:
+            def _record_request(
+                self,
+                path: str,
+                *,
+                ip_address: str | None = None,
+                mac_address: str | None = None,
+            ) -> None:
+                if ip_address is None:
+                    ip_address = self._client_ip()
                 app.state.record_request(
-                    ip_address=self._client_ip(),
+                    ip_address=ip_address,
                     user_agent=self.headers.get("User-Agent", ""),
                     method=self.command,
                     path=path,
                     host=self.headers.get("Host", ""),
                     referer=self.headers.get("Referer", ""),
+                    mac_address=mac_address,
                 )
 
             def _redirect_authorized_request(self, path: str) -> bool:
+                ip_address = self._client_ip()
+                mac_address = app.state.resolve_mac(ip_address)
                 redirect_url = app.state.authorized_redirect_for_request(
-                    ip_address=self._client_ip(),
+                    ip_address=ip_address,
                     host=self.headers.get("Host", ""),
+                    mac_address=mac_address,
                 )
                 if not redirect_url:
                     return False
-                self._record_request(path)
+                self._record_request(
+                    path,
+                    ip_address=ip_address,
+                    mac_address=mac_address,
+                )
                 self.send_response(HTTPStatus.FOUND)
                 self.send_header("Location", redirect_url)
                 self.send_header("Cache-Control", "no-store")
