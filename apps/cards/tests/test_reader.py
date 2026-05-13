@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -222,6 +224,61 @@ def test_read_rfid_adds_transport_lcd_label(monkeypatch):
     assert result["lcd_label"] == "Door Ready\nTap"
 
 
+def test_read_rfid_clears_blank_transport_metadata(monkeypatch):
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): [0] * 16,
+            reader.sector_block(0, 2): [0] * 16,
+            reader.sector_block(1, 1): [0] * 16,
+            reader.sector_block(1, 2): [0] * 16,
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(reader, "_finalize_reader_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (
+            tag,
+            False,
+            {
+                "rfid": "DEADBEEF",
+                "label_id": 10,
+                "lcd_label": "Old label",
+                "writer": {"id": "OLD-WRITER"},
+            },
+        ),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["lcd_label"] == ""
+    assert "writer" not in result
+    assert tag.lcd_label == ""
+    assert tag.writer_id == ""
+    assert tag.writer_written_at is None
+    assert saved_fields == [["lcd_label", "writer_id", "writer_written_at"]]
+
+
 def test_read_rfid_returns_error_and_notifies_on_processing_failure(monkeypatch):
     fake_reader = _FakeReader(uid=[0xAA, 0xBB, 0xCC, 0xDD])
     strategy = reader.ReaderStrategy(
@@ -298,6 +355,89 @@ def test_read_deep_classic_tag_data_logs_and_skips_block_errors(monkeypatch):
     assert debug_messages == [
         ("Failed to read block %d for classic tag: %s", 0, "read failed")
     ]
+
+
+def test_initialize_detected_card_requires_all_managed_sectors(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        sector_keys={},
+        initialized_on=None,
+        traits={"door": {"value": "open", "sector": 3, "sectors": [3, 4]}},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    monkeypatch.setattr(reader, "_write_writer_metadata", lambda *args, **kwargs: ({}, set()))
+    monkeypatch.setattr(reader, "managed_sector_numbers", lambda: [3, 4])
+    monkeypatch.setattr(reader, "sector_data_blocks", lambda sector: [sector * 4])
+    monkeypatch.setattr(reader, "sector_trailer_block", lambda sector: (sector * 4) + 3)
+    monkeypatch.setattr(reader, "build_sector_trailer", lambda _a, _b: [0] * 16)
+
+    def _write_block(_mfrc, _tag, _uid, block, _data):
+        return block != 19, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader._initialize_detected_card(object(), [1, 2, 3, 4], "01020304", tag=tag)
+
+    assert result["initialized"] is False
+    assert result["initialized_sectors"] == [3]
+    assert result["errors"] == [{"sector": 4, "errors": ["trailer 19"]}]
+    assert tag.initialized_on is None
+    assert tag.traits == {}
+    assert "initialized_on" not in saved_fields[0]
+    assert saved_fields == [["sector_keys", "traits"]]
+
+
+def test_set_current_card_trait_aborts_when_auto_initialization_fails(monkeypatch):
+    tag = SimpleNamespace(initialized_on=None, traits={})
+    refreshed = []
+
+    def _refresh_from_db():
+        refreshed.append(True)
+
+    tag.refresh_from_db = _refresh_from_db
+    monkeypatch.setattr(reader.RFID, "register_scan", lambda rfid, kind: (tag, False))
+    monkeypatch.setattr(
+        reader,
+        "_initialize_detected_card",
+        lambda *args, **kwargs: {
+            "initialized": False,
+            "errors": [{"sector": 4, "errors": ["trailer 19"]}],
+        },
+    )
+    monkeypatch.setattr(
+        reader,
+        "_with_detected_rfid_card",
+        lambda timeout, callback: callback(object(), [1, 2, 3, 4], "01020304"),
+    )
+    monkeypatch.setattr(
+        reader,
+        "_write_writer_metadata",
+        lambda *args, **kwargs: pytest.fail("trait write should not continue"),
+    )
+
+    result = reader.set_current_card_trait(key="door", value="open")
+
+    assert result["error"] == "Unable to initialize RFID card before writing trait"
+    assert result["initialization"]["errors"] == [
+        {"sector": 4, "errors": ["trailer 19"]}
+    ]
+    assert refreshed == []
+
+
+def test_save_tag_traits_from_dump_clears_stale_traits_when_none_decoded():
+    tag = SimpleNamespace(traits={"door": {"value": "open"}})
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    result = {"traits": {"door": "open"}, "trait_sigils": {"SIGIL_DOOR": "open"}}
+
+    reader._save_tag_traits_from_dump(tag, [], result)
+
+    assert tag.traits == {}
+    assert saved_fields == [["traits"]]
+    assert "traits" not in result
+    assert "trait_sigils" not in result
 
 
 def test_deep_classic_read_reuses_and_promotes_sector_key_candidates(monkeypatch):

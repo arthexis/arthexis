@@ -15,6 +15,8 @@ from apps.cards.actions import dispatch_rfid_action
 from apps.cards.classic_layout import (
     CardLayoutError,
     FACTORY_KEY,
+    FIRST_TRAIT_SECTOR,
+    LAST_TRAIT_SECTOR,
     build_sector_trailer,
     build_trait_block_payloads,
     decode_transport_metadata,
@@ -27,6 +29,7 @@ from apps.cards.classic_layout import (
     first_empty_trait_sector,
     managed_sector_numbers,
     normalize_lcd_label,
+    normalize_sector_keys,
     normalize_trait_key,
     normalize_trait_records,
     normalize_trait_value,
@@ -420,8 +423,9 @@ def _initialize_detected_card(
     errors: list[dict[str, Any]] = []
     initialized_sectors: list[int] = []
     persisted_records = dict(existing_records)
+    expected_sectors = list(managed_sector_numbers())
 
-    for sector in managed_sector_numbers():
+    for sector in expected_sectors:
         record = records.get(str(sector))
         if not record:
             continue
@@ -456,15 +460,24 @@ def _initialize_detected_card(
     updates = set(writer_updates)
     if initialized_sectors:
         tag.sector_keys = normalize_sector_keys(persisted_records)
+        updates.add("sector_keys")
+        if any(
+            FIRST_TRAIT_SECTOR <= sector <= LAST_TRAIT_SECTOR
+            for sector in initialized_sectors
+        ):
+            tag.traits = {}
+            updates.add("traits")
+    fully_initialized = bool(expected_sectors) and initialized_sectors == expected_sectors
+    if fully_initialized and not errors:
         tag.initialized_on = now
-        updates.update({"sector_keys", "initialized_on"})
+        updates.add("initialized_on")
     if updates:
         tag.save(update_fields=sorted(updates))
 
     return {
         "rfid": rfid,
         "label_id": tag.pk,
-        "initialized": bool(initialized_sectors),
+        "initialized": fully_initialized and not errors,
         "initialized_sectors": initialized_sectors,
         "writer": writer_result,
         "errors": errors,
@@ -562,13 +575,19 @@ def set_current_card_trait(
     def _write(mfrc, uid, rfid):
         tag, _created = RFID.register_scan(rfid, kind=RFID.CLASSIC)
         if initialize and not getattr(tag, "initialized_on", None):
-            _initialize_detected_card(
+            init_result = _initialize_detected_card(
                 mfrc,
                 uid,
                 rfid,
                 tag=tag,
                 writer_id=writer_id,
             )
+            if init_result.get("errors") or not init_result.get("initialized"):
+                return {
+                    "error": "Unable to initialize RFID card before writing trait",
+                    "rfid": rfid,
+                    "initialization": init_result,
+                }
             tag.refresh_from_db()
 
         records = normalize_trait_records(getattr(tag, "traits", {}))
@@ -941,21 +960,22 @@ def _read_basic_tag_data(decoded_card: dict) -> tuple[RFID, bool, dict]:
 
 def _save_tag_layout_metadata(tag, metadata: dict[str, Any]) -> None:
     updates: set[str] = set()
-    lcd_label = normalize_lcd_label(metadata.get("lcd_label", ""))
-    if lcd_label and getattr(tag, "lcd_label", "") != lcd_label:
-        tag.lcd_label = lcd_label
-        updates.add("lcd_label")
+    if "lcd_label" in metadata:
+        lcd_label = normalize_lcd_label(metadata.get("lcd_label", ""))
+        if getattr(tag, "lcd_label", "") != lcd_label:
+            tag.lcd_label = lcd_label
+            updates.add("lcd_label")
 
-    writer = metadata.get("writer") if isinstance(metadata.get("writer"), dict) else {}
-    writer_id = str(writer.get("id") or "").strip()
-    if writer_id and getattr(tag, "writer_id", "") != writer_id:
-        tag.writer_id = writer_id[:16]
-        updates.add("writer_id")
+    if "writer" in metadata:
+        writer = metadata.get("writer") if isinstance(metadata.get("writer"), dict) else {}
+        writer_id = str(writer.get("id") or "").strip()[:16]
+        if getattr(tag, "writer_id", "") != writer_id:
+            tag.writer_id = writer_id
+            updates.add("writer_id")
 
-    writer_date = str(writer.get("written_at") or "").strip()
-    if writer_date:
-        parsed = _parse_writer_timestamp(writer_date)
-        if parsed and getattr(tag, "writer_written_at", None) != parsed:
+        writer_date = str(writer.get("written_at") or "").strip()
+        parsed = _parse_writer_timestamp(writer_date) if writer_date else None
+        if getattr(tag, "writer_written_at", None) != parsed:
             tag.writer_written_at = parsed
             updates.add("writer_written_at")
 
@@ -970,6 +990,18 @@ def _parse_writer_timestamp(value: str):
         )
     except ValueError:
         return None
+
+
+def _apply_transport_metadata_to_result(metadata: dict[str, Any], result: dict) -> None:
+    if "lcd_label" in metadata:
+        result["lcd_label"] = normalize_lcd_label(metadata.get("lcd_label", ""))
+    if "writer" not in metadata:
+        return
+    writer = metadata.get("writer")
+    if isinstance(writer, dict) and (writer.get("id") or writer.get("written_at")):
+        result["writer"] = writer
+    else:
+        result.pop("writer", None)
 
 
 def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
@@ -995,6 +1027,8 @@ def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
             data = None
         if data is not None:
             dump.append({"block": block, "data": data, "key": "A"})
+    if not dump:
+        return {}
     return decode_transport_metadata(dump)
 
 
@@ -1002,24 +1036,21 @@ def _enrich_transport_layout(mfrc, tag, uid: list[int], result: dict) -> dict:
     metadata = _read_transport_layout(mfrc, uid)
     if not metadata:
         return result
-    lcd_label = metadata.get("lcd_label")
-    if lcd_label:
-        result["lcd_label"] = lcd_label
-    writer = metadata.get("writer")
-    if writer and (writer.get("id") or writer.get("written_at")):
-        result["writer"] = writer
+    _apply_transport_metadata_to_result(metadata, result)
     _save_tag_layout_metadata(tag, metadata)
     return result
 
 
 def _save_tag_traits_from_dump(tag, dump: list[dict[str, Any]], result: dict) -> None:
     traits = decode_traits_from_dump(dump)
-    if not traits:
-        return
     normalized = normalize_trait_records(traits)
     if normalized != getattr(tag, "traits", {}):
         tag.traits = normalized
         tag.save(update_fields=["traits"])
+    if not normalized:
+        result.pop("traits", None)
+        result.pop("trait_sigils", None)
+        return
     result["traits"] = {
         key: str(record.get("value", "")) for key, record in normalized.items()
     }
@@ -1125,11 +1156,7 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
             continue
 
     metadata = decode_transport_metadata(dump)
-    if metadata.get("lcd_label"):
-        result["lcd_label"] = metadata["lcd_label"]
-    writer = metadata.get("writer")
-    if isinstance(writer, dict) and (writer.get("id") or writer.get("written_at")):
-        result["writer"] = writer
+    _apply_transport_metadata_to_result(metadata, result)
     _save_tag_layout_metadata(tag, metadata)
     _save_tag_traits_from_dump(tag, dump, result)
 
