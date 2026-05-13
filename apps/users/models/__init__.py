@@ -1,7 +1,7 @@
 """Model exports for the users app."""
 
 from .chat_profile import ChatProfile
-from .diagnostics import UserDiagnosticBundle, UserDiagnosticEvent, UserDiagnosticsProfile
+from .diagnostics import UploadedErrorReport, UserDiagnosticBundle, UserDiagnosticEvent, UserDiagnosticsProfile
 from .passkey_credential import PasskeyCredential
 from .profile import Profile
 from .user import User
@@ -13,6 +13,7 @@ __all__ = [
     "PasskeyCredential",
     "Profile",
     "User",
+    "UploadedErrorReport",
     "UserDiagnosticBundle",
     "UserDiagnosticEvent",
     "UserDiagnosticsProfile",
