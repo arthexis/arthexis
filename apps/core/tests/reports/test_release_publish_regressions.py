@@ -212,6 +212,46 @@ def test_ensure_release_tag_uses_git_adapter_for_tag_creation(
     ) in adapter.calls
 
 
+def test_ensure_release_tag_falls_back_to_lightweight_without_git_identity(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeGitAdapter:
+        def __init__(self) -> None:
+            self.calls: list[tuple[list[str], bool]] = []
+
+        def run(self, args, *, check=True, input_text=None, timeout=None):
+            self.calls.append((list(args), check))
+            if args[:5] == ["git", "tag", "-a", "v1.2.3", "-m"]:
+                raise subprocess.CalledProcessError(
+                    returncode=128,
+                    cmd=args,
+                    stderr="Committer identity unknown",
+                )
+            stdout = ""
+            returncode = 0
+            if args[:2] == ["git", "show"]:
+                stdout = "1.2.3\n"
+            elif args[:4] == ["git", "rev-parse", "--verify", "-q"]:
+                returncode = 1
+            return subprocess.CompletedProcess(
+                args,
+                returncode,
+                stdout=stdout,
+                stderr="",
+            )
+
+    adapter = FakeGitAdapter()
+    monkeypatch.setattr(pipeline, "GIT_ADAPTER", adapter)
+    monkeypatch.setattr(pipeline.release_uploader, "_push_tag", lambda _tag: None)
+
+    tag_name = pipeline._ensure_release_tag(
+        SimpleNamespace(version="1.2.3"), tmp_path / "publish.log"
+    )
+
+    assert tag_name == "v1.2.3"
+    assert (["git", "tag", "v1.2.3"], True) in adapter.calls
+
+
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
     class DummyRelease:
         pk = 1

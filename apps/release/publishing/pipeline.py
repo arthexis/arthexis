@@ -975,10 +975,20 @@ def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
         check=False,
     )
     if exists.returncode != 0:
-        GIT_ADAPTER.run(
-            ["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"],
-            check=True,
-        )
+        try:
+            GIT_ADAPTER.run(
+                ["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            detail = (getattr(exc, "stderr", "") or getattr(exc, "stdout", "")).lower()
+            if "committer identity unknown" not in detail:
+                raise
+            GIT_ADAPTER.run(["git", "tag", tag_name], check=True)
+            _append_log(
+                log_path,
+                f"Created lightweight git tag {tag_name} because git tagger identity is unavailable",
+            )
         _append_log(log_path, f"Created git tag {tag_name}")
     else:
         _append_log(log_path, f"Git tag {tag_name} already exists")
