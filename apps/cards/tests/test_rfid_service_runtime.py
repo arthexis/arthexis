@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import json
+import queue
 from types import SimpleNamespace
 
-from apps.cards import rfid_service
-from apps.cards import reader
-from apps.cards import scanner
+from apps.cards import background_reader, reader, rfid_service, scanner
+
+
+class _RecordingLock:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+        self.held = False
+
+    def __enter__(self):
+        self.events.append("enter")
+        self.held = True
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.held = False
+        self.events.append("exit")
+        return False
 
 
 def test_rfid_service_module_main_invokes_runner(monkeypatch):
@@ -114,18 +129,14 @@ def test_emit_scan_artifacts_uses_shared_payload_timestamp(settings, tmp_path, m
     settings.BASE_DIR = tmp_path
     appended: list[dict[str, object]] = []
     timestamp = "2026-04-24T22:00:00+00:00"
-    original_build_scan_state_payload = rfid_service.build_scan_state_payload
 
-    def build_with_timestamp(payload):
-        state = original_build_scan_state_payload(payload)
-        state["scanned_at"] = timestamp
-        return state
-
-    monkeypatch.setattr(rfid_service, "build_scan_state_payload", build_with_timestamp)
+    monkeypatch.setattr(rfid_service, "utc_now_iso", lambda: timestamp)
     monkeypatch.setattr(
         rfid_service,
         "append_scan_log",
-        lambda payload: appended.append(dict(payload)),
+        lambda payload: appended.append(
+            rfid_service.normalize_scan_log_payload(payload)
+        ),
     )
 
     state = rfid_service.RFIDServiceState()
@@ -330,3 +341,342 @@ def test_scan_sources_no_irq_returns_direct_empty_result(monkeypatch):
     result = scanner.scan_sources(timeout=0.5, no_irq=True)
 
     assert result == {"rfid": None, "label_id": None}
+
+
+def _read_latest_scan_lock(base_dir):
+    lock_path = base_dir / ".locks" / "rfid-scan.json"
+    return json.loads(lock_path.read_text(encoding="utf-8"))
+
+
+def _read_scan_log_entries(base_dir):
+    log_path = base_dir / "logs" / "rfid-scans.ndjson"
+    return [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_rfid_service_auto_deep_scans_held_card_and_preserves_enrichment(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    """Holding the same card should enrich the latest-scan lockfile once."""
+
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+    deep_calls: list[float] = []
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+
+    def fake_read_deep_tag(timeout):
+        deep_calls.append(timeout)
+        return {
+            "rfid": "abcd1234",
+            "label_id": "alpha",
+            "deep_read": True,
+            "keys": {"a": "FFFFFFFFFFFF", "a_verified": True},
+            "dump": [{"block": 0, "data": [1, 2, 3]}],
+        }
+
+    monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "abcd1234", "label_id": "alpha"})
+    first_payload = _read_latest_scan_lock(tmp_path)
+
+    assert first_payload["schema"] == rfid_service.SCAN_LOCK_SCHEMA
+    assert first_payload["rfid"] == "ABCD1234"
+    assert first_payload["presence_duration_seconds"] == 0.0
+    assert "dump" not in first_payload
+    assert deep_calls == []
+
+    clock["now"] = 101.5
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    assert deep_calls == []
+
+    clock["now"] = 102.1
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    enriched_payload = _read_latest_scan_lock(tmp_path)
+
+    assert deep_calls == [0.1]
+    assert enriched_payload["deep_read"] is True
+    assert enriched_payload["keys"] == {"a": "FFFFFFFFFFFF", "a_verified": True}
+    assert enriched_payload["dump"] == [{"block": 0, "data": [1, 2, 3]}]
+    assert enriched_payload["deep_scan"]["automatic"] is True
+    assert enriched_payload["deep_scan"]["status"] == "ok"
+    assert enriched_payload["presence_duration_seconds"] == 2.1
+    assert enriched_payload["last_presence_at"]
+    enriched_log_payload = _read_scan_log_entries(tmp_path)[-1]
+    assert enriched_log_payload["deep_scan"]["status"] == "ok"
+    assert "keys" not in enriched_log_payload
+    assert "dump" not in enriched_log_payload
+
+    clock["now"] = 103.5
+    state._emit_scan_artifacts(
+        {"rfid": "ABCD1234", "label_id": "alpha", "allowed": True}
+    )
+    retained_payload = _read_latest_scan_lock(tmp_path)
+
+    assert deep_calls == [0.1]
+    assert retained_payload["dump"] == [{"block": 0, "data": [1, 2, 3]}]
+    assert retained_payload["allowed"] is True
+    assert retained_payload["presence_duration_seconds"] == 3.5
+
+    clock["now"] = 104.6
+    state._emit_scan_artifacts({"rfid": "BEEF0001", "label_id": "beta"})
+    different_card_payload = _read_latest_scan_lock(tmp_path)
+
+    assert different_card_payload["rfid"] == "BEEF0001"
+    assert different_card_payload["presence_duration_seconds"] == 0.0
+    assert "dump" not in different_card_payload
+
+
+def test_rfid_service_resets_presence_when_same_card_returns_after_gap(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+    deep_calls: list[float] = []
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+    monkeypatch.setattr(rfid_service, "default_presence_gap_seconds", lambda: 2.0)
+
+    def fake_read_deep_tag(timeout):
+        deep_calls.append(timeout)
+        return {
+            "rfid": "abcd1234",
+            "deep_read": True,
+            "dump": [{"block": 0, "data": [1, 2, 3]}],
+        }
+
+    monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "abcd1234", "label_id": "alpha"})
+
+    clock["now"] = 101.0
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 104.5
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    returned_payload = _read_latest_scan_lock(tmp_path)
+
+    assert returned_payload["presence_duration_seconds"] == 0.0
+    assert "dump" not in returned_payload
+    assert deep_calls == []
+
+    clock["now"] = 105.5
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    held_again_payload = _read_latest_scan_lock(tmp_path)
+
+    assert held_again_payload["presence_duration_seconds"] == 1.0
+    assert "dump" not in held_again_payload
+
+    clock["now"] = 106.6
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    enriched_payload = _read_latest_scan_lock(tmp_path)
+
+    assert deep_calls == [0.1]
+    assert enriched_payload["presence_duration_seconds"] == 2.1
+    assert enriched_payload["deep_scan"]["status"] == "ok"
+
+
+def test_rfid_service_dedupes_repeated_deep_read_payloads(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+    deep_payload = {
+        "rfid": "abcd1234",
+        "label_id": "alpha",
+        "deep_read": True,
+        "dump": [{"block": 0, "data": [1, 2, 3]}],
+    }
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 1.0)
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "abcd1234", "label_id": "alpha"})
+    assert len(_read_scan_log_entries(tmp_path)) == 1
+
+    clock["now"] = 100.1
+    state._emit_scan_artifacts(deep_payload)
+    assert len(_read_scan_log_entries(tmp_path)) == 2
+
+    clock["now"] = 100.2
+    state._emit_scan_artifacts(deep_payload)
+    assert len(_read_scan_log_entries(tmp_path)) == 2
+
+    clock["now"] = 101.2
+    state._emit_scan_artifacts(deep_payload)
+    assert len(_read_scan_log_entries(tmp_path)) == 3
+
+
+def test_background_reader_deep_read_uses_direct_reader_and_restores_state(
+    monkeypatch,
+):
+    """Automatic deep reads should not drain a stale fast-read queue entry."""
+
+    sentinel_reader = object()
+    reader_lock = _RecordingLock()
+    deep_state = {"enabled": False}
+    read_calls = []
+    usage_marks = []
+
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_reader", sentinel_reader)
+    monkeypatch.setattr(background_reader, "_reader_lock", reader_lock)
+    monkeypatch.setattr(reader, "deep_read_enabled", lambda: deep_state["enabled"])
+
+    def fake_enable_deep_read():
+        deep_state["enabled"] = True
+        return True
+
+    def fake_disable_deep_read():
+        deep_state["enabled"] = False
+        return False
+
+    def fake_read_rfid(*, mfrc=None, cleanup=True, timeout=1.0, **kwargs):
+        read_calls.append(
+            {
+                "mfrc": mfrc,
+                "cleanup": cleanup,
+                "timeout": timeout,
+                "deep_enabled": deep_state["enabled"],
+                "lock_held": reader_lock.held,
+            }
+        )
+        return {"rfid": "ABCD1234"}
+
+    monkeypatch.setattr(reader, "enable_deep_read", fake_enable_deep_read)
+    monkeypatch.setattr(reader, "disable_deep_read", fake_disable_deep_read)
+    monkeypatch.setattr(reader, "read_rfid", fake_read_rfid)
+    monkeypatch.setattr(
+        background_reader,
+        "_mark_scanner_used",
+        lambda: usage_marks.append("used"),
+    )
+
+    result = background_reader.read_current_tag_deep(timeout=0.25)
+
+    assert result == {"rfid": "ABCD1234"}
+    assert read_calls == [
+        {
+            "mfrc": sentinel_reader,
+            "cleanup": False,
+            "timeout": 0.25,
+            "deep_enabled": True,
+            "lock_held": True,
+        }
+    ]
+    assert deep_state["enabled"] is False
+    assert usage_marks == ["used"]
+    assert reader_lock.events == ["enter", "exit"]
+
+
+def test_background_reader_polling_read_uses_reader_lock(monkeypatch):
+    sentinel_reader = object()
+    reader_lock = _RecordingLock()
+    read_calls = []
+    usage_marks = []
+
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_reader", sentinel_reader)
+    monkeypatch.setattr(background_reader, "_reader_lock", reader_lock)
+    monkeypatch.setattr(background_reader, "_tag_queue", queue.Queue())
+    monkeypatch.setattr(
+        background_reader,
+        "_mark_scanner_used",
+        lambda: usage_marks.append("used"),
+    )
+
+    def fake_read_rfid(*, mfrc=None, cleanup=True, timeout=1.0, **kwargs):
+        read_calls.append(
+            {
+                "mfrc": mfrc,
+                "cleanup": cleanup,
+                "timeout": timeout,
+                "lock_held": reader_lock.held,
+            }
+        )
+        return {"rfid": "ABCD1234"}
+
+    monkeypatch.setattr(reader, "read_rfid", fake_read_rfid)
+
+    result = background_reader.get_next_tag(timeout=0.0)
+
+    assert result == {"rfid": "ABCD1234"}
+    assert read_calls == [
+        {
+            "mfrc": sentinel_reader,
+            "cleanup": False,
+            "timeout": 0.0,
+            "lock_held": True,
+        }
+    ]
+    assert usage_marks == ["used"]
+    assert reader_lock.events == ["enter", "exit"]
+
+
+def test_background_reader_irq_callback_uses_reader_lock(monkeypatch):
+    reader_lock = _RecordingLock()
+    read_calls = []
+
+    class DummyReader:
+        ComIrqReg = 0x04
+
+        def __init__(self) -> None:
+            self.writes: list[tuple[int, int, bool]] = []
+
+        def dev_write(self, register, value):
+            self.writes.append((register, value, reader_lock.held))
+
+    dummy_reader = DummyReader()
+    tag_queue = queue.Queue()
+
+    monkeypatch.setattr(background_reader, "_reader", dummy_reader)
+    monkeypatch.setattr(background_reader, "_reader_lock", reader_lock)
+    monkeypatch.setattr(background_reader, "_tag_queue", tag_queue)
+
+    def fake_read_rfid(*, mfrc=None, cleanup=True, use_irq=False, **kwargs):
+        read_calls.append(
+            {
+                "mfrc": mfrc,
+                "cleanup": cleanup,
+                "use_irq": use_irq,
+                "lock_held": reader_lock.held,
+            }
+        )
+        return {"rfid": "ABCD1234"}
+
+    monkeypatch.setattr(reader, "read_rfid", fake_read_rfid)
+
+    background_reader._irq_callback(22)
+
+    assert tag_queue.get_nowait() == {"rfid": "ABCD1234"}
+    assert read_calls == [
+        {
+            "mfrc": dummy_reader,
+            "cleanup": False,
+            "use_irq": True,
+            "lock_held": True,
+        }
+    ]
+    assert dummy_reader.writes == [(dummy_reader.ComIrqReg, 0x7F, True)]
+    assert reader_lock.events == ["enter", "exit"]

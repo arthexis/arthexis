@@ -699,6 +699,20 @@ def enable_deep_read(duration: float | None = None) -> bool:
     return _deep_read_enabled
 
 
+def disable_deep_read() -> bool:
+    """Disable deep read mode and return the new state."""
+
+    global _deep_read_enabled
+    _deep_read_enabled = False
+    return _deep_read_enabled
+
+
+def deep_read_enabled() -> bool:
+    """Return whether deep read mode is currently enabled."""
+
+    return _deep_read_enabled
+
+
 def toggle_deep_read() -> bool:
     """Toggle deep read mode and return the new state."""
 

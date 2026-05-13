@@ -7,11 +7,11 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 from django.conf import settings
 
 from apps.core.optional_hardware import is_expected_optional_hardware_absence
+
 from .constants import DEFAULT_IRQ_PIN, DEFAULT_RST_PIN, GPIO_PIN_MODE_BCM
 from .reader import resolve_spi_bus_device, resolve_spi_device_path
 
@@ -24,9 +24,10 @@ except Exception:  # pragma: no cover - hardware dependent
 
 IRQ_PIN = int(os.environ.get("RFID_IRQ_PIN", str(DEFAULT_IRQ_PIN)))
 _tag_queue: "queue.Queue[dict]" = queue.Queue()
-_thread: Optional[threading.Thread] = None
+_thread: threading.Thread | None = None
 _stop_event = threading.Event()
 _reader = None
+_reader_lock = threading.Lock()
 _auto_detect_logged = False
 _last_setup_failure: float | None = None
 _last_auto_detect_failure: float | None = None
@@ -123,10 +124,7 @@ def _log_fd_snapshot(label: str) -> None:
         except Exception as exc:  # pragma: no cover - defensive guard
             samples.append(f"{fd_path.name}:<error:{exc}>")
 
-    message = (
-        "RFID fd snapshot (%s): count=%s limits=%s sample=%s"
-        % (label, count, limits, samples)
-    )
+    message = f"RFID fd snapshot ({label}): count={count} limits={limits} sample={samples}"
     if count >= _FD_SNAPSHOT_THRESHOLD:
         logger.warning(message)
     else:
@@ -316,15 +314,17 @@ def _irq_callback(channel):  # pragma: no cover - hardware dependent
     logger.debug("IRQ callback triggered on channel %s", channel)
     from .reader import read_rfid
 
-    result = read_rfid(mfrc=_reader, cleanup=False, use_irq=True)
+    with _reader_lock:
+        result = read_rfid(mfrc=_reader, cleanup=False, use_irq=True)
+        if result.get("rfid"):
+            try:
+                _reader.dev_write(_reader.ComIrqReg, 0x7F)
+            except Exception:  # pragma: no cover - hardware dependent
+                pass
     if result.get("error"):
         logger.warning("RFID read error via IRQ: %s", result["error"])
     elif result.get("rfid"):
         logger.info("RFID tag detected via IRQ: %s", result.get("rfid"))
-        try:
-            _reader.dev_write(_reader.ComIrqReg, 0x7F)
-        except Exception:  # pragma: no cover - hardware dependent
-            pass
     _tag_queue.put(result)
 
 
@@ -469,7 +469,7 @@ def stop():
     _thread = None
 
 
-def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
+def get_next_tag(timeout: float | None = 0) -> dict | None:
     """Retrieve the next tag read from the queue.
 
     Falls back to direct polling if no IRQ events are queued.
@@ -500,7 +500,8 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
         try:
             from .reader import read_rfid
 
-            res = read_rfid(mfrc=_reader, cleanup=False, timeout=timeout)
+            with _reader_lock:
+                res = read_rfid(mfrc=_reader, cleanup=False, timeout=timeout)
             if res.get("rfid") or res.get("error"):
                 _irq_empty_tracker.log_summary("polling read")
                 logger.debug("Polling read result: %s", res)
@@ -509,4 +510,36 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
                 return res
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.debug("Polling read failed: %s", exc)
+        return None
+
+
+def read_current_tag_deep(timeout: float | None = 0.5) -> dict | None:
+    """Read the currently presented tag with deep-read mode enabled."""
+
+    if not is_configured():
+        return None
+    if timeout is None:
+        timeout = 0.0
+    timeout = max(0.0, timeout)
+    try:
+        from .reader import (
+            deep_read_enabled,
+            disable_deep_read,
+            enable_deep_read,
+            read_rfid,
+        )
+
+        with _reader_lock:
+            was_enabled = deep_read_enabled()
+            enable_deep_read()
+            try:
+                result = read_rfid(mfrc=_reader, cleanup=False, timeout=timeout)
+            finally:
+                if not was_enabled:
+                    disable_deep_read()
+        if result and result.get("rfid"):
+            _mark_scanner_used()
+        return result
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        logger.debug("Deep polling read failed: %s", exc)
         return None
