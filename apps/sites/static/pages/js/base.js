@@ -458,7 +458,7 @@ const setupFundingBannerDismissal = () => {
 
 
 const setupControllerButtonMappings = () => {
-  if (!document.documentElement.classList.contains('controller-mode') || !navigator.getGamepads) {
+  if (!document.documentElement.classList.contains('controller-mode') || (!navigator.getGamepads && !navigator.webkitGetGamepads)) {
     return;
   }
 
@@ -474,6 +474,13 @@ const setupControllerButtonMappings = () => {
   const focusSelector = '.navbar-nav .nav-link, .toolbar .btn, .toolbar a.btn';
   const modulePillSelector = '.navbar-nav .nav-link';
   const toolbarSelector = '#theme-toggle, .user-info-trigger';
+
+  const getGamepads = () => {
+    if (navigator.getGamepads) {
+      return navigator.getGamepads();
+    }
+    return navigator.webkitGetGamepads();
+  };
 
   const getVisibleElements = selector => Array.from(document.querySelectorAll(selector)).filter(node => {
     if (!node || node.disabled) {
@@ -493,7 +500,7 @@ const setupControllerButtonMappings = () => {
     nodes[nextIndex].focus();
   };
 
-  const getActiveGamepad = () => Array.from(navigator.getGamepads() || []).find(gamepad => gamepad && gamepad.buttons);
+  const getActiveGamepad = () => Array.from(getGamepads() || []).find(gamepad => gamepad && gamepad.buttons);
 
   const clearPressedState = () => {
     if (pressedButtons.has(L2_BUTTON_INDEX)) {
@@ -537,6 +544,31 @@ const setupControllerButtonMappings = () => {
     return event;
   };
 
+  const createMouseMoveEvent = (clientX, clientY) => {
+    if (typeof MouseEvent === 'function') {
+      return new MouseEvent('mousemove', { bubbles: true, clientX, clientY });
+    }
+    const event = document.createEvent('MouseEvent');
+    event.initMouseEvent(
+      'mousemove',
+      true,
+      false,
+      window,
+      0,
+      clientX,
+      clientY,
+      clientX,
+      clientY,
+      false,
+      false,
+      false,
+      false,
+      0,
+      null
+    );
+    return event;
+  };
+
   const dispatchFeedbackToggle = () => {
     document.dispatchEvent(createBubblingEvent('pages:feedback-toggle'));
   };
@@ -549,7 +581,7 @@ const setupControllerButtonMappings = () => {
     document.documentElement.style.setProperty('--controller-zoom-origin-y', `${originY}px`);
     const target = document.elementFromPoint(lastPointerX, lastPointerY);
     if (target) {
-      target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: lastPointerX, clientY: lastPointerY }));
+      target.dispatchEvent(createMouseMoveEvent(lastPointerX, lastPointerY));
       const focusable = getFocusableTarget(target);
       if (focusable && focusable.focus) {
         focusable.focus();
@@ -584,6 +616,17 @@ const setupControllerButtonMappings = () => {
     }
   };
 
+  const isButtonPressed = button => {
+    if (typeof button === 'number') {
+      return button >= 0.5;
+    }
+    if (!button) {
+      return false;
+    }
+    const value = typeof button.value === 'number' ? button.value : 0;
+    return button.pressed === true || value >= 0.5;
+  };
+
   const pollGamepad = () => {
     const gamepad = getActiveGamepad();
     const buttons = gamepad && gamepad.buttons ? Array.from(gamepad.buttons) : [];
@@ -594,7 +637,7 @@ const setupControllerButtonMappings = () => {
     }
 
     buttons.forEach((button, index) => {
-      if (button.pressed) {
+      if (isButtonPressed(button)) {
         if (!pressedButtons.has(index)) {
           pressedButtons.add(index);
           handleButtonPress(index);

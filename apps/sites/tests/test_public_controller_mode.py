@@ -33,8 +33,13 @@ def test_controller_gamepad_polling_handles_connected_slots_and_disconnects():
     script = BASE_JS.read_text(encoding="utf-8")
 
     assert "getActiveGamepad" in script
-    assert "Array.from(navigator.getGamepads() || []).find(gamepad => gamepad && gamepad.buttons)" in script
+    assert "!navigator.getGamepads && !navigator.webkitGetGamepads" in script
+    assert "return navigator.webkitGetGamepads();" in script
+    assert "Array.from(getGamepads() || []).find(gamepad => gamepad && gamepad.buttons)" in script
     assert "Array.from(gamepad.buttons)" in script
+    assert "isButtonPressed(button)" in script
+    assert "typeof button === 'number'" in script
+    assert "typeof button.value === 'number'" in script
     assert "clearPressedState();" in script
     assert "pressedButtons.clear();" in script
     assert "gamepadconnected" in script
@@ -57,6 +62,9 @@ def test_controller_zoom_uses_document_origin_focus_closest_and_tokens():
     assert "transition: none;" in css
     assert "createBubblingEvent('pages:feedback-toggle')" in script
     assert "document.createEvent('Event')" in script
+    assert "createMouseMoveEvent(lastPointerX, lastPointerY)" in script
+    assert "document.createEvent('MouseEvent')" in script
+    assert ".initMouseEvent(" in script
 
 
 def test_docs_reader_has_controller_safe_full_document_and_reload_paths():
