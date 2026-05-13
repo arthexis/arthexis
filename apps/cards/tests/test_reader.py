@@ -562,6 +562,42 @@ def test_initialize_detected_card_requires_all_managed_sectors(monkeypatch):
     assert saved_fields == [["sector_keys", "traits"]]
 
 
+def test_initialize_detected_card_skips_trailer_after_data_failure(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        sector_keys={},
+        initialized_on=None,
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    monkeypatch.setattr(reader, "_write_writer_metadata", lambda *args, **kwargs: ({}, set()))
+    monkeypatch.setattr(reader, "managed_sector_numbers", lambda: [4])
+    monkeypatch.setattr(reader, "sector_data_blocks", lambda sector: [16, 17])
+    monkeypatch.setattr(reader, "sector_trailer_block", lambda sector: 19)
+    monkeypatch.setattr(
+        reader,
+        "build_sector_trailer",
+        lambda _a, _b: pytest.fail("trailer should not be built after data failure"),
+    )
+    attempted_blocks = []
+
+    def _write_block(_mfrc, _tag, _uid, block, _data):
+        attempted_blocks.append(block)
+        return block != 16, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader._initialize_detected_card(object(), [1, 2, 3, 4], "01020304", tag=tag)
+
+    assert result["initialized"] is False
+    assert result["initialized_sectors"] == []
+    assert result["errors"] == [{"sector": 4, "errors": ["block 16"]}]
+    assert attempted_blocks == [16, 17]
+    assert saved_fields == []
+
+
 def test_set_current_card_trait_aborts_when_auto_initialization_fails(monkeypatch):
     tag = SimpleNamespace(initialized_on=None, traits={})
     refreshed = []

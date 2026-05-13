@@ -464,6 +464,9 @@ def _initialize_detected_card(
             )
             if not success:
                 sector_errors.append(f"block {block}")
+        if sector_errors:
+            errors.append({"sector": sector, "errors": sector_errors})
+            continue
         trailer = build_sector_trailer(record["key_a"], record["key_b"])
         trailer_block = sector_trailer_block(sector)
         success, _used_key = _write_block_with_candidates(

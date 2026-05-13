@@ -616,6 +616,23 @@ def test_should_auto_initialize_unknown_requires_complete_managed_dump(monkeypat
     assert rfid_service.should_auto_initialize_unknown(complete_payload) is True
 
 
+def test_normalize_initialization_payload_reports_partial_failure():
+    payload = {
+        "rfid": "ABCD1234",
+        "initialized": False,
+        "errors": [{"sector": 4, "errors": ["block 16"]}],
+    }
+
+    result = rfid_service.normalize_initialization_payload(
+        payload,
+        attempted_at="2026-05-13T23:00:00+00:00",
+    )
+
+    assert result["status"] == "failed"
+    assert result["automatic"] is True
+    assert result["errors"] == [{"sector": 4, "errors": ["block 16"]}]
+
+
 def test_rfid_service_rejects_auto_initialization_rfid_mismatch(
     monkeypatch,
     settings,

@@ -771,7 +771,12 @@ def normalize_initialization_payload(
     normalized = dict(payload)
     normalized["automatic"] = True
     normalized["attempted_at"] = attempted_at
-    normalized["status"] = "error" if normalized.get("error") else "ok"
+    if normalized.get("error"):
+        normalized["status"] = "error"
+    elif normalized.get("errors") or normalized.get("initialized") is False:
+        normalized["status"] = "failed"
+    else:
+        normalized["status"] = "ok"
     return normalized
 
 
