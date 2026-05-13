@@ -26,12 +26,17 @@ class _FakeReader:
         uid=None,
         select_result=True,
         read_blocks=None,
+        read_returns_tuple=True,
+        write_status=0,
     ):
         self.request_status = request_status
         self.anticoll_status = anticoll_status
         self.uid = uid or []
         self.select_result = select_result
         self.read_blocks = read_blocks or {}
+        self.read_returns_tuple = read_returns_tuple
+        self.write_status = write_status
+        self.writes = []
         self.stop_calls = 0
 
     def MFRC522_Request(self, _mode):
@@ -51,7 +56,15 @@ class _FakeReader:
         data = self.read_blocks.get(block)
         if data is None:
             return self.MI_ERR, None
+        if not self.read_returns_tuple:
+            return list(data)
         return self.MI_OK, list(data)
+
+    def MFRC522_Write(self, block, data):
+        self.writes.append((block, list(data)))
+        if self.write_status in (self.MI_OK, None):
+            self.read_blocks[block] = list(data)
+        return self.write_status
 
     def MFRC522_StopCrypto1(self):
         self.stop_calls += 1
@@ -135,6 +148,50 @@ def test_read_rfid_returns_initialization_failure(monkeypatch):
     result = reader.read_rfid()
 
     assert result == {"error": "reader unavailable"}
+
+
+def test_read_block_accepts_direct_data_list():
+    fake_reader = _FakeReader(read_blocks={1: [3] * 16}, read_returns_tuple=False)
+
+    result = reader._read_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+    )
+
+    assert result == [3] * 16
+
+
+def test_write_block_accepts_status_ok():
+    fake_reader = _FakeReader(read_blocks={1: [0] * 16}, write_status=_FakeReader.MI_OK)
+    data = [1] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(1, data)]
+
+
+def test_write_block_accepts_none_when_readback_matches():
+    fake_reader = _FakeReader(read_blocks={1: [0] * 16}, write_status=None)
+    data = [2] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(1, data)]
 
 
 def test_read_rfid_returns_empty_payload_when_polling_times_out(monkeypatch):

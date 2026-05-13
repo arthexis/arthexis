@@ -162,6 +162,7 @@ def _read_block(
         read_status, data = read_status
     else:
         data = read_status
+        read_status = mfrc.MI_OK
     if read_status != mfrc.MI_OK or data is None:
         return None
     return list(data)
@@ -186,10 +187,22 @@ def _write_block(
     write_fn = getattr(mfrc, "MFRC522_Write", None)
     if not callable(write_fn):
         return False
-    write_status = write_fn(block, data)
+    expected_data = list(data)[:16]
+    write_status = write_fn(block, expected_data)
     if isinstance(write_status, tuple):
         write_status = write_status[0]
-    return write_status == mfrc.MI_OK
+    if write_status == mfrc.MI_OK:
+        return True
+    if write_status is None:
+        readback = _read_block(
+            mfrc,
+            block=block,
+            key_type=key_type,
+            key_bytes=key_bytes,
+            uid=uid,
+        )
+        return readback is not None and readback[:16] == expected_data
+    return False
 
 
 def _with_detected_rfid_card(timeout: float, handler) -> dict:
