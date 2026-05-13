@@ -3,6 +3,8 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +12,33 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.cards.actions import dispatch_rfid_action
+from apps.cards.classic_layout import (
+    CardLayoutError,
+    FACTORY_KEY,
+    build_sector_trailer,
+    build_trait_block_payloads,
+    decode_transport_metadata,
+    decode_traits_from_dump,
+    default_writer_id,
+    encode_lcd_label,
+    encode_writer_date,
+    encode_writer_id,
+    ensure_sector_key_records,
+    first_empty_trait_sector,
+    managed_sector_numbers,
+    normalize_lcd_label,
+    normalize_trait_key,
+    normalize_trait_records,
+    normalize_trait_value,
+    normalize_writer_id,
+    scan_block_count,
+    sector_block,
+    sector_data_blocks,
+    sector_key_record,
+    sector_trailer_block,
+    trait_sigils,
+    zero_block,
+)
 from apps.cards.models import RFID
 from apps.core.notifications import notify_async
 from apps.video.rfid import queue_camera_snapshot
@@ -77,7 +106,7 @@ def _normalize_command_text(value: object) -> str:
 
 
 COMMON_MIFARE_CLASSIC_KEYS = (
-    "FFFFFFFFFFFF",
+    FACTORY_KEY,
     "A0A1A2A3A4A5",
     "B0B1B2B3B4B5",
     "000000000000",
@@ -290,6 +319,312 @@ def write_rfid_cell_value(
     return _with_detected_rfid_card(timeout, _write)
 
 
+def _sector_for_block(block: int) -> int:
+    return block // 4 if block < 128 else 32 + ((block - 128) // 16)
+
+
+def _write_candidates_for_sector(tag, sector: int) -> list[tuple[str, str, list[int]]]:
+    candidates: list[tuple[str, str, list[int]]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(key_type: str, value: str | None) -> None:
+        normalized = _normalize_key(value or "")
+        if not normalized:
+            return
+        identity = (key_type, normalized)
+        if identity in seen:
+            return
+        key_bytes = _key_to_bytes(normalized)
+        if key_bytes is None:
+            return
+        seen.add(identity)
+        candidates.append((key_type, normalized, key_bytes))
+
+    if sector in (0, 1):
+        add("A", FACTORY_KEY)
+        return candidates
+
+    record = sector_key_record(getattr(tag, "sector_keys", {}), sector)
+    if record:
+        add("A", record.get("key_a"))
+        add("B", record.get("key_b"))
+    add("A", getattr(tag, "key_a", ""))
+    add("B", getattr(tag, "key_b", ""))
+    add("A", FACTORY_KEY)
+    add("B", FACTORY_KEY)
+    return candidates
+
+
+def _write_block_with_candidates(mfrc, tag, uid: list[int], block: int, data: list[int]) -> tuple[bool, str | None]:
+    sector = _sector_for_block(block)
+    for key_type, key_value, key_bytes in _write_candidates_for_sector(tag, sector):
+        if _write_block(
+            mfrc,
+            block=block,
+            key_type=key_type,
+            key_bytes=key_bytes,
+            uid=uid,
+            data=list(data)[:16],
+        ):
+            return True, key_value
+    return False, None
+
+
+def _write_writer_metadata(
+    mfrc,
+    tag,
+    uid: list[int],
+    *,
+    writer_id: str | None = None,
+    written_at=None,
+) -> tuple[dict[str, Any], set[str]]:
+    normalized_writer = normalize_writer_id(writer_id or default_writer_id())
+    timestamp = written_at or timezone.now()
+    payloads = {
+        sector_block(1, 1): encode_writer_id(normalized_writer),
+        sector_block(1, 2): encode_writer_date(timestamp),
+    }
+    errors: list[str] = []
+    for block, data in payloads.items():
+        success, _used_key = _write_block_with_candidates(mfrc, tag, uid, block, data)
+        if not success:
+            errors.append(f"block {block}")
+    updates: set[str] = set()
+    if not errors:
+        tag.writer_id = normalized_writer
+        tag.writer_written_at = timestamp
+        updates.update({"writer_id", "writer_written_at"})
+    return {"writer_id": normalized_writer, "errors": errors}, updates
+
+
+def _initialize_detected_card(
+    mfrc,
+    uid: list[int],
+    rfid: str,
+    *,
+    tag=None,
+    writer_id: str | None = None,
+) -> dict[str, Any]:
+    if tag is None:
+        tag, _created = RFID.register_scan(rfid, kind=RFID.CLASSIC)
+    existing_records = dict(getattr(tag, "sector_keys", {}) or {})
+    records = ensure_sector_key_records(existing_records)
+    now = timezone.now()
+    writer_result, writer_updates = _write_writer_metadata(
+        mfrc,
+        tag,
+        uid,
+        writer_id=writer_id,
+        written_at=now,
+    )
+    errors: list[dict[str, Any]] = []
+    initialized_sectors: list[int] = []
+    persisted_records = dict(existing_records)
+
+    for sector in managed_sector_numbers():
+        record = records.get(str(sector))
+        if not record:
+            continue
+        sector_errors: list[str] = []
+        for block in sector_data_blocks(sector):
+            success, _used_key = _write_block_with_candidates(
+                mfrc,
+                tag,
+                uid,
+                block,
+                zero_block(),
+            )
+            if not success:
+                sector_errors.append(f"block {block}")
+        trailer = build_sector_trailer(record["key_a"], record["key_b"])
+        trailer_block = sector_trailer_block(sector)
+        success, _used_key = _write_block_with_candidates(
+            mfrc,
+            tag,
+            uid,
+            trailer_block,
+            trailer,
+        )
+        if not success:
+            sector_errors.append(f"trailer {trailer_block}")
+        if sector_errors:
+            errors.append({"sector": sector, "errors": sector_errors})
+            continue
+        initialized_sectors.append(sector)
+        persisted_records[str(sector)] = record
+
+    updates = set(writer_updates)
+    if initialized_sectors:
+        tag.sector_keys = normalize_sector_keys(persisted_records)
+        tag.initialized_on = now
+        updates.update({"sector_keys", "initialized_on"})
+    if updates:
+        tag.save(update_fields=sorted(updates))
+
+    return {
+        "rfid": rfid,
+        "label_id": tag.pk,
+        "initialized": bool(initialized_sectors),
+        "initialized_sectors": initialized_sectors,
+        "writer": writer_result,
+        "errors": errors,
+    }
+
+
+def initialize_current_card(
+    *,
+    timeout: float = 2.0,
+    writer_id: str | None = None,
+) -> dict[str, Any]:
+    """Initialize managed sectors on the presented MIFARE Classic card."""
+
+    def _initialize(mfrc, uid, rfid):
+        tag, _created = RFID.register_scan(rfid, kind=RFID.CLASSIC)
+        return _initialize_detected_card(
+            mfrc,
+            uid,
+            rfid,
+            tag=tag,
+            writer_id=writer_id,
+        )
+
+    return _with_detected_rfid_card(timeout, _initialize)
+
+
+def write_current_card_lcd_label(
+    *,
+    label: str,
+    timeout: float = 2.0,
+    writer_id: str | None = None,
+) -> dict[str, Any]:
+    """Write the sector-0 LCD label to the presented card."""
+
+    try:
+        normalized_label = normalize_lcd_label(label)
+    except CardLayoutError as exc:
+        return {"error": str(exc)}
+    encoded = encode_lcd_label(normalized_label)
+    payloads = {
+        sector_block(0, 1): encoded[:16],
+        sector_block(0, 2): encoded[16:32],
+    }
+
+    def _write(mfrc, uid, rfid):
+        tag, _created = RFID.register_scan(rfid, kind=RFID.CLASSIC)
+        errors: list[str] = []
+        for block, data in payloads.items():
+            success, _used_key = _write_block_with_candidates(
+                mfrc,
+                tag,
+                uid,
+                block,
+                data,
+            )
+            if not success:
+                errors.append(f"block {block}")
+        writer_result, writer_updates = _write_writer_metadata(
+            mfrc,
+            tag,
+            uid,
+            writer_id=writer_id,
+        )
+        if errors:
+            return {"error": "Unable to write LCD label", "rfid": rfid, "errors": errors}
+        tag.lcd_label = normalized_label
+        update_fields = {"lcd_label", *writer_updates}
+        tag.save(update_fields=sorted(update_fields))
+        return {
+            "rfid": rfid,
+            "label_id": tag.pk,
+            "lcd_label": normalized_label,
+            "writer": writer_result,
+        }
+
+    return _with_detected_rfid_card(timeout, _write)
+
+
+def set_current_card_trait(
+    *,
+    key: str,
+    value: str,
+    timeout: float = 2.0,
+    writer_id: str | None = None,
+    initialize: bool = True,
+) -> dict[str, Any]:
+    """Add or update a trait on the presented card."""
+
+    try:
+        normalized_key = normalize_trait_key(key)
+        normalized_value = normalize_trait_value(value)
+    except CardLayoutError as exc:
+        return {"error": str(exc)}
+
+    def _write(mfrc, uid, rfid):
+        tag, _created = RFID.register_scan(rfid, kind=RFID.CLASSIC)
+        if initialize and not getattr(tag, "initialized_on", None):
+            _initialize_detected_card(
+                mfrc,
+                uid,
+                rfid,
+                tag=tag,
+                writer_id=writer_id,
+            )
+            tag.refresh_from_db()
+
+        records = normalize_trait_records(getattr(tag, "traits", {}))
+        record = records.get(normalized_key)
+        start_sector = record.get("sector") if isinstance(record, dict) else None
+        if start_sector is None:
+            start_sector = first_empty_trait_sector(records)
+        if start_sector is None:
+            return {"error": "No empty RFID trait sector pair available", "rfid": rfid}
+
+        writer_result, writer_updates = _write_writer_metadata(
+            mfrc,
+            tag,
+            uid,
+            writer_id=writer_id,
+        )
+        block_payloads = build_trait_block_payloads(
+            int(start_sector),
+            normalized_key,
+            normalized_value,
+        )
+        errors: list[str] = []
+        for block, block_data in block_payloads.items():
+            success, _used_key = _write_block_with_candidates(
+                mfrc,
+                tag,
+                uid,
+                block,
+                block_data,
+            )
+            if not success:
+                errors.append(f"block {block}")
+        if errors:
+            return {"error": "Unable to write RFID trait", "rfid": rfid, "errors": errors}
+
+        records[normalized_key] = {
+            "value": normalized_value,
+            "sector": int(start_sector),
+            "sectors": [int(start_sector), int(start_sector) + 1],
+            "updated_at": timezone.now().isoformat(),
+        }
+        tag.traits = normalize_trait_records(records)
+        update_fields = {"traits", *writer_updates}
+        tag.save(update_fields=sorted(update_fields))
+        return {
+            "rfid": rfid,
+            "label_id": tag.pk,
+            "trait": normalized_key,
+            "value": normalized_value,
+            "sector": int(start_sector),
+            "writer": writer_result,
+        }
+
+    return _with_detected_rfid_card(timeout, _write)
+
+
 def _build_key_candidates(
     tag, key_attr: str, verified_attr: str
 ) -> list[tuple[str, list[int]]]:
@@ -318,6 +653,47 @@ def _build_key_candidates(
         bytes_key = _key_to_bytes(fallback)
         if bytes_key is not None:
             candidates.append((fallback, bytes_key))
+
+    return candidates
+
+
+def _build_sector_key_candidates(
+    tag,
+    sector: int,
+    key_type: str,
+) -> list[tuple[str, list[int]]]:
+    candidates: list[tuple[str, list[int]]] = []
+    seen: set[str] = set()
+    key_name = "key_a" if key_type == "A" else "key_b"
+
+    if sector in (0, 1):
+        factory_bytes = _key_to_bytes(FACTORY_KEY)
+        if factory_bytes is not None:
+            candidates.append((FACTORY_KEY, factory_bytes))
+            seen.add(FACTORY_KEY)
+
+    sector_record = sector_key_record(getattr(tag, "sector_keys", {}), sector)
+    if sector_record:
+        sector_key = sector_record.get(key_name)
+        key_bytes = _key_to_bytes(sector_key or "")
+        if sector_key and key_bytes is not None and sector_key not in seen:
+            candidates.append((sector_key, key_bytes))
+            seen.add(sector_key)
+
+    fallback_attr = "key_a" if key_type == "A" else "key_b"
+    fallback_verified = "key_a_verified" if key_type == "A" else "key_b_verified"
+    for key_value, key_bytes in _build_key_candidates(
+        tag, fallback_attr, fallback_verified
+    ):
+        if key_value in seen:
+            continue
+        candidates.append((key_value, key_bytes))
+        seen.add(key_value)
+
+    if FACTORY_KEY not in seen:
+        factory_bytes = _key_to_bytes(FACTORY_KEY)
+        if factory_bytes is not None:
+            candidates.append((FACTORY_KEY, factory_bytes))
 
     return candidates
 
@@ -404,6 +780,7 @@ def _build_tag_response(
         "rfid": rfid,
         "label_id": tag.pk,
         "custom_label": getattr(tag, "custom_label", ""),
+        "lcd_label": getattr(tag, "lcd_label", ""),
         "created": created,
         "color": tag.color,
         "allowed": allowed,
@@ -411,7 +788,14 @@ def _build_tag_response(
         "reference": tag.reference.value if tag.reference else None,
         "kind": tag.kind,
         "endianness": tag.endianness,
+        "initialized": bool(getattr(tag, "initialized_on", None)),
+        "initialized_on": tag.initialized_on.isoformat()
+        if getattr(tag, "initialized_on", None)
+        else None,
     }
+    if getattr(tag, "traits", None):
+        result["traits"] = tag.trait_values()
+        result["trait_sigils"] = tag.trait_sigils()
     if action_details is not None:
         result["action_output"] = action_details
     status_text = "OK" if allowed else "BAD"
@@ -555,6 +939,93 @@ def _read_basic_tag_data(decoded_card: dict) -> tuple[RFID, bool, dict]:
     return tag, created, result
 
 
+def _save_tag_layout_metadata(tag, metadata: dict[str, Any]) -> None:
+    updates: set[str] = set()
+    lcd_label = normalize_lcd_label(metadata.get("lcd_label", ""))
+    if lcd_label and getattr(tag, "lcd_label", "") != lcd_label:
+        tag.lcd_label = lcd_label
+        updates.add("lcd_label")
+
+    writer = metadata.get("writer") if isinstance(metadata.get("writer"), dict) else {}
+    writer_id = str(writer.get("id") or "").strip()
+    if writer_id and getattr(tag, "writer_id", "") != writer_id:
+        tag.writer_id = writer_id[:16]
+        updates.add("writer_id")
+
+    writer_date = str(writer.get("written_at") or "").strip()
+    if writer_date:
+        parsed = _parse_writer_timestamp(writer_date)
+        if parsed and getattr(tag, "writer_written_at", None) != parsed:
+            tag.writer_written_at = parsed
+            updates.add("writer_written_at")
+
+    if updates:
+        tag.save(update_fields=sorted(updates))
+
+
+def _parse_writer_timestamp(value: str):
+    try:
+        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=datetime_timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
+    factory = _key_to_bytes(FACTORY_KEY)
+    if factory is None:
+        return {}
+    dump: list[dict[str, Any]] = []
+    for block in (
+        sector_block(0, 1),
+        sector_block(0, 2),
+        sector_block(1, 1),
+        sector_block(1, 2),
+    ):
+        try:
+            data = _read_block(
+                mfrc,
+                block=block,
+                key_type="A",
+                key_bytes=factory,
+                uid=uid,
+            )
+        except Exception:
+            data = None
+        if data is not None:
+            dump.append({"block": block, "data": data, "key": "A"})
+    return decode_transport_metadata(dump)
+
+
+def _enrich_transport_layout(mfrc, tag, uid: list[int], result: dict) -> dict:
+    metadata = _read_transport_layout(mfrc, uid)
+    if not metadata:
+        return result
+    lcd_label = metadata.get("lcd_label")
+    if lcd_label:
+        result["lcd_label"] = lcd_label
+    writer = metadata.get("writer")
+    if writer and (writer.get("id") or writer.get("written_at")):
+        result["writer"] = writer
+    _save_tag_layout_metadata(tag, metadata)
+    return result
+
+
+def _save_tag_traits_from_dump(tag, dump: list[dict[str, Any]], result: dict) -> None:
+    traits = decode_traits_from_dump(dump)
+    if not traits:
+        return
+    normalized = normalize_trait_records(traits)
+    if normalized != getattr(tag, "traits", {}):
+        tag.traits = normalized
+        tag.save(update_fields=["traits"])
+    result["traits"] = {
+        key: str(record.get("value", "")) for key, record in normalized.items()
+    }
+    result["trait_sigils"] = trait_sigils(normalized)
+
+
 def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict:
     """Enrich a classic-tag response with authenticated block dump data."""
 
@@ -573,16 +1044,15 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
 
     dump = []
     pending_updates: set[str] = set()
-    key_candidates = {
-        "A": _build_key_candidates(tag, "key_a", "key_a_verified"),
-        "B": _build_key_candidates(tag, "key_b", "key_b_verified"),
-    }
-
-    for block in range(64):
+    for block in range(scan_block_count()):
+        sector = block // 4 if block < 128 else 32 + ((block - 128) // 16)
+        key_candidates = {
+            "A": _build_sector_key_candidates(tag, sector, "A"),
+            "B": _build_sector_key_candidates(tag, sector, "B"),
+        }
         try:
             used_key = None
             used_value = None
-            used_bytes: list[int] | None = None
             status = mfrc.MI_ERR
 
             for key_value, key_bytes in key_candidates["A"]:
@@ -590,7 +1060,6 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                 if status == mfrc.MI_OK:
                     used_key = "A"
                     used_value = key_value
-                    used_bytes = key_bytes
                     break
 
             if status != mfrc.MI_OK:
@@ -604,7 +1073,6 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                     if status == mfrc.MI_OK:
                         used_key = "B"
                         used_value = key_value
-                        used_bytes = key_bytes
                         break
 
             if status == mfrc.MI_OK:
@@ -631,8 +1099,6 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                             setattr(tag, "key_a", used_value)
                             setattr(tag, "key_a_verified", True)
                             pending_updates.update({"key_a", "key_a_verified"})
-                        if used_bytes is not None:
-                            key_candidates["A"] = [(used_value, used_bytes)]
 
                     if used_key == "B" and used_value:
                         if used_value != keys.get("b"):
@@ -646,11 +1112,18 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                             setattr(tag, "key_b", used_value)
                             setattr(tag, "key_b_verified", True)
                             pending_updates.update({"key_b", "key_b_verified"})
-                        if used_bytes is not None:
-                            key_candidates["B"] = [(used_value, used_bytes)]
         except Exception as exc:
             logger.debug("Failed to read block %d for classic tag: %s", block, exc)
             continue
+
+    metadata = decode_transport_metadata(dump)
+    if metadata.get("lcd_label"):
+        result["lcd_label"] = metadata["lcd_label"]
+    writer = metadata.get("writer")
+    if isinstance(writer, dict) and (writer.get("id") or writer.get("written_at")):
+        result["writer"] = writer
+    _save_tag_layout_metadata(tag, metadata)
+    _save_tag_traits_from_dump(tag, dump, result)
 
     if pending_updates:
         tag.save(update_fields=sorted(pending_updates))
@@ -765,8 +1238,10 @@ def read_rfid(
         rfid = decoded_card["rfid"]
         tag, _created, result = _read_basic_tag_data(decoded_card)
 
-        if tag.kind == RFID.CLASSIC and _deep_read_enabled:
-            return _read_deep_classic_tag_data(strategy.mfrc, tag, uid_bytes, result)
+        if tag.kind == RFID.CLASSIC:
+            result = _enrich_transport_layout(strategy.mfrc, tag, uid_bytes, result)
+            if _deep_read_enabled:
+                return _read_deep_classic_tag_data(strategy.mfrc, tag, uid_bytes, result)
         return result
     except Exception as exc:  # pragma: no cover - hardware dependent
         if rfid:

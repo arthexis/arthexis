@@ -32,6 +32,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.cards.models import RFID, RFIDAttempt
+from apps.cards.reader import write_current_card_lcd_label
 from apps.cards.rfid_import_export import (
     account_column_for_field,
     parse_accounts,
@@ -183,6 +184,9 @@ class RFIDForm(forms.ModelForm):
             can_view_related=True,
         )
         self.fields["data"].widget = RFIDDataWidget()
+        self.fields["lcd_label"].widget = forms.Textarea(
+            attrs={"rows": 2, "cols": 18, "maxlength": 33}
+        )
 
 
 class CopyRFIDForm(forms.Form):
@@ -234,6 +238,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "print_card_labels",
         "print_release_form",
         "copy_rfids",
+        "write_lcd_label_to_present_card",
         "merge_rfids",
         "toggle_selected_released",
         "toggle_selected_allowed",
@@ -435,10 +440,16 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     "label_id": label_id,
                     "rfid": new_rfid,
                     "custom_label": source.custom_label,
+                    "lcd_label": source.lcd_label,
+                    "writer_id": source.writer_id,
+                    "writer_written_at": source.writer_written_at,
                     "key_a": source.key_a,
                     "key_b": source.key_b,
                     "key_a_verified": source.key_a_verified,
                     "key_b_verified": source.key_b_verified,
+                    "sector_keys": source.sector_keys,
+                    "traits": source.traits,
+                    "initialized_on": source.initialized_on,
                     "allowed": source.allowed,
                     "validation_action": source.validation_action,
                     "post_auth_action": source.post_auth_action,
@@ -486,6 +497,28 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         )
         context["media"] = self.media + form.media
         return TemplateResponse(request, "admin/cards/rfid/copy.html", context)
+
+    @admin.action(description=_("Write LCD label to presented card"))
+    def write_lcd_label_to_present_card(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request,
+                _("Select exactly one RFID to write its LCD label."),
+                level=messages.ERROR,
+            )
+            return None
+        tag = queryset.first()
+        result = write_current_card_lcd_label(label=tag.lcd_label)
+        if result.get("error"):
+            self.message_user(request, result["error"], level=messages.ERROR)
+            return None
+        self.message_user(
+            request,
+            _("Wrote LCD label for RFID %(label)s to the presented card.")
+            % {"label": tag.label_id},
+            level=messages.SUCCESS,
+        )
+        return None
 
     @admin.action(description=_("Merge RFID cards"))
     def merge_rfids(self, request, queryset):

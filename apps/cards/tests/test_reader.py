@@ -23,11 +23,13 @@ class _FakeReader:
         anticoll_status=0,
         uid=None,
         select_result=True,
+        read_blocks=None,
     ):
         self.request_status = request_status
         self.anticoll_status = anticoll_status
         self.uid = uid or []
         self.select_result = select_result
+        self.read_blocks = read_blocks or {}
         self.stop_calls = 0
 
     def MFRC522_Request(self, _mode):
@@ -39,6 +41,15 @@ class _FakeReader:
     def MFRC522_SelectTag(self, uid):
         self.selected_uid = list(uid)
         return self.select_result
+
+    def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+        return self.MI_OK if block in self.read_blocks else self.MI_ERR
+
+    def MFRC522_Read(self, block):
+        data = self.read_blocks.get(block)
+        if data is None:
+            return self.MI_ERR, None
+        return self.MI_OK, list(data)
 
     def MFRC522_StopCrypto1(self):
         self.stop_calls += 1
@@ -176,6 +187,39 @@ def test_read_rfid_uses_decoded_uid_payload(monkeypatch):
         "kind": RFID.CLASSIC,
     }
     assert result == basic_result
+
+
+def test_read_rfid_adds_transport_lcd_label(monkeypatch):
+    encoded = reader.encode_lcd_label("Door Ready\nTap")
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): encoded[:16],
+            reader.sector_block(0, 2): encoded[16:],
+        },
+    )
+    tag = SimpleNamespace(kind=RFID.CLASSIC, lcd_label="", traits={})
+    tag.save = lambda *, update_fields: None
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(reader, "_finalize_reader_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (tag, False, {"rfid": "DEADBEEF", "label_id": 10}),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["lcd_label"] == "Door Ready\nTap"
 
 
 def test_read_rfid_returns_error_and_notifies_on_processing_failure(monkeypatch):

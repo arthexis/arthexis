@@ -158,6 +158,19 @@ def test_format_lcd_scan_event_prefers_card_label():
     assert result == ("Label Front Desk", "ID ABCD1234")
 
 
+def test_format_lcd_scan_event_prefers_card_lcd_label():
+    result = rfid_service.format_lcd_scan_event(
+        {
+            "label_id": 42,
+            "custom_label": "Front Desk",
+            "lcd_label": "Door Online\nTap card",
+            "rfid": "abcd1234",
+        }
+    )
+
+    assert result == ("Door Online", "Tap card")
+
+
 def test_rfid_service_scan_notifies_lcd_for_ten_seconds(settings, tmp_path, monkeypatch):
     settings.BASE_DIR = tmp_path
     sent: list[dict[str, object]] = []
@@ -373,6 +386,7 @@ def test_rfid_service_auto_deep_scans_held_card_and_preserves_enrichment(
     monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
     monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
     monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: False)
 
     def fake_read_deep_tag(timeout):
         deep_calls.append(timeout)
@@ -452,6 +466,7 @@ def test_rfid_service_resets_presence_when_same_card_returns_after_gap(
     monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
     monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
     monkeypatch.setattr(rfid_service, "default_presence_gap_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: False)
 
     def fake_read_deep_tag(timeout):
         deep_calls.append(timeout)
@@ -526,6 +541,57 @@ def test_rfid_service_dedupes_repeated_deep_read_payloads(
     clock["now"] = 101.2
     state._emit_scan_artifacts(deep_payload)
     assert len(_read_scan_log_entries(tmp_path)) == 3
+
+
+def test_rfid_service_auto_initializes_unformatted_held_classic_card(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+    init_calls: list[float] = []
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: True)
+
+    def fake_read_deep_tag(timeout):
+        return {
+            "rfid": "abcd1234",
+            "kind": "CLASSIC",
+            "initialized": False,
+            "deep_read": True,
+            "dump": [
+                {"block": 12, "data": [0] * 16},
+                {"block": 13, "data": [0] * 16},
+                {"block": 14, "data": [0] * 16},
+            ],
+        }
+
+    def fake_initialize_current_tag(timeout):
+        init_calls.append(timeout)
+        return {"rfid": "ABCD1234", "initialized": True}
+
+    monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
+    monkeypatch.setattr(rfid_service, "initialize_current_tag", fake_initialize_current_tag)
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "abcd1234", "label_id": "alpha"})
+
+    clock["now"] = 101.0
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 102.1
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    enriched_payload = _read_latest_scan_lock(tmp_path)
+
+    assert init_calls == [0.1]
+    assert enriched_payload["initialization"]["status"] == "ok"
+    assert enriched_payload["initialization"]["automatic"] is True
 
 
 def test_background_reader_deep_read_uses_direct_reader_and_restores_state(

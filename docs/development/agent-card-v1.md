@@ -1,5 +1,9 @@
 # Agent Card v1 RFID layout
 
+This document describes the older compact Agent Card v1 proposal. For the
+current local reader/writer transport, LCD label, writer metadata, and trait
+layout, see [Arthexis RFID card layout](rfid-card-layout.md).
+
 Agent Card v1 is a compact MIFARE Classic 1K layout for carrying enough
 identity and capability references to start a simple agent when the suite
 already has the rest of the ruleset. The card is not a script bundle, credential
