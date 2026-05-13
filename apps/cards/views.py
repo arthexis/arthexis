@@ -59,7 +59,11 @@ def scan_next(request):
     role_name = getattr(getattr(node, "role", None), "name", None)
     user = request.user
     wants_json = _request_wants_json(request) or request.method == "POST"
-    allow_anonymous_get = role_name == "Control" and request.method == "GET"
+    allow_anonymous_get = (
+        role_name == "Control"
+        and request.method == "GET"
+        and not _request_wants_json(request)
+    )
     if not user.is_authenticated and not allow_anonymous_get:
         if wants_json:
             return JsonResponse({"error": "Authentication required"}, status=401)
