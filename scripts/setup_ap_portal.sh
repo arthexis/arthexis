@@ -15,6 +15,7 @@ NGINX_BACKUP_RETENTION="${NGINX_BACKUP_RETENTION:-10}"
 DEFAULT_CERT_DOMAIN="${DEFAULT_CERT_DOMAIN:-arthexis.net}"
 DEFAULT_CERT_PATH="${DEFAULT_CERT_PATH:-/etc/letsencrypt/live/$DEFAULT_CERT_DOMAIN/fullchain.pem}"
 DEFAULT_KEY_PATH="${DEFAULT_KEY_PATH:-/etc/letsencrypt/live/$DEFAULT_CERT_DOMAIN/privkey.pem}"
+SERVER_NAMES="${SERVER_NAMES:-arthexis.net _}"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "Run as root: sudo $0" >&2
@@ -109,7 +110,7 @@ install_nginx_site() {
         https_block="$(cat <<EOF
 server {
     listen 443 ssl;
-    server_name _;
+    server_name $SERVER_NAMES;
     ssl_certificate $DEFAULT_CERT_PATH;
     ssl_certificate_key $DEFAULT_KEY_PATH;
     include $BASE_DIR/apps/nginx/options-ssl-nginx.conf;
@@ -129,7 +130,7 @@ EOF
     cat > "$NGINX_SITE" <<EOF
 server {
     listen 80 default_server;
-    server_name _;
+    server_name $SERVER_NAMES;
     add_header Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'" always;
     location / {
         proxy_pass http://127.0.0.1:$PORTAL_PORT;

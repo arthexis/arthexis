@@ -55,6 +55,24 @@ script looks for `/etc/letsencrypt/live/arthexis.net/fullchain.pem` and
 port 443 nginx server block; override `DEFAULT_CERT_PATH` and `DEFAULT_KEY_PATH`
 only when a gateway uses a different certificate location.
 
+Certbot can install that certificate, but ACME validation must be able to prove
+control of the public `arthexis.net` name. HTTP-01 validation only works when
+public DNS for `arthexis.net` resolves to this gateway and inbound port 80
+reaches nginx here. Split local DNS is not enough; clients may resolve
+`arthexis.net` locally, but Let's Encrypt still follows public DNS. When public
+DNS points elsewhere, use DNS-01 with configured DNS provider credentials instead
+of the nginx authenticator. A safe HTTP-01 readiness check is:
+
+```bash
+sudo certbot certonly --nginx --dry-run --non-interactive \
+  --agree-tos --register-unsafely-without-email -d arthexis.net
+```
+
+The AP setup writes `server_name arthexis.net _;` by default so certbot's nginx
+plugin can match the local server block once the public validation path is
+correct. Override `SERVER_NAMES` only when the gateway serves a different local
+hostname set.
+
 ## Gateway Recovery
 
 On the gateway device:
