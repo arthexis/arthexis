@@ -53,6 +53,10 @@ def test_controller_zoom_uses_document_origin_focus_closest_and_tokens():
     assert "--controller-zoom-transition" in css
     assert "transform: scale(var(--controller-zoom-scale));" in css
     assert ".controller-mode body" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    assert "transition: none;" in css
+    assert "createBubblingEvent('pages:feedback-toggle')" in script
+    assert "document.createEvent('Event')" in script
 
 
 def test_docs_reader_has_controller_safe_full_document_and_reload_paths():

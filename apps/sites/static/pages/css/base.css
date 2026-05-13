@@ -1016,6 +1016,12 @@ html[data-bs-theme='dark'] .funding-banner {
   transition: var(--controller-zoom-transition);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .controller-mode body {
+    transition: none;
+  }
+}
+
 @media (max-width: 575.98px) {
   .funding-banner {
     align-items: flex-start;

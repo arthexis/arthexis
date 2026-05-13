@@ -528,8 +528,17 @@ const setupControllerButtonMappings = () => {
     return null;
   };
 
+  const createBubblingEvent = eventName => {
+    if (typeof Event === 'function') {
+      return new Event(eventName, { bubbles: true });
+    }
+    const event = document.createEvent('Event');
+    event.initEvent(eventName, true, false);
+    return event;
+  };
+
   const dispatchFeedbackToggle = () => {
-    document.dispatchEvent(new Event('pages:feedback-toggle'));
+    document.dispatchEvent(createBubblingEvent('pages:feedback-toggle'));
   };
 
   const applyZoomAroundCursor = () => {
