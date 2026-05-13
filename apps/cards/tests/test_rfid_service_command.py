@@ -128,6 +128,25 @@ def test_rfid_scan_requires_feature(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_rfid_init_partial_failure_raises_command_error(monkeypatch):
+    """`rfid init` should fail when card initialization only partially succeeds."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    monkeypatch.setattr(
+        rfid_command,
+        "initialize_current_card",
+        lambda **_kwargs: {
+            "rfid": "ABCD1234",
+            "initialized": False,
+            "errors": [{"sector": 4, "errors": ["trailer 19"]}],
+        },
+    )
+
+    with pytest.raises(rfid_command.CommandError, match="RFID initialization failed"):
+        call_command("rfid", "init")
+
+
+@pytest.mark.django_db
 def test_rfid_scan_no_irq_bypasses_attempt_polling(monkeypatch):
     """`rfid check --scan --no-irq` should use the direct scanner path."""
 

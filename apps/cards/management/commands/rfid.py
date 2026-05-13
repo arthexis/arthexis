@@ -350,6 +350,10 @@ class Command(BaseCommand):
     def _write_json_result(self, result: dict, *, pretty: bool = False) -> None:
         if result.get("error"):
             raise CommandError(result["error"])
+        if result.get("errors"):
+            if result.get("initialized") is False:
+                raise CommandError("RFID initialization failed")
+            raise CommandError("RFID operation failed")
         dump_kwargs = {"indent": 2, "sort_keys": True} if pretty else {}
         self.stdout.write(json.dumps(result, **dump_kwargs))
 
