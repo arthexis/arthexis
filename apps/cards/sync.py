@@ -43,9 +43,19 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
     payload = {
         "rfid": tag.rfid,
         "custom_label": tag.custom_label,
+        "lcd_label": tag.lcd_label,
+        "writer_id": tag.writer_id,
+        "writer_written_at": tag.writer_written_at.isoformat()
+        if tag.writer_written_at
+        else None,
         "key_a": tag.key_a,
         "key_b": tag.key_b,
         "data": tag.data,
+        "sector_keys": tag.sector_keys,
+        "traits": tag.traits,
+        "initialized_on": tag.initialized_on.isoformat()
+        if tag.initialized_on
+        else None,
         "key_a_verified": tag.key_a_verified,
         "key_b_verified": tag.key_b_verified,
         "allowed": tag.allowed,
@@ -77,9 +87,13 @@ def apply_rfid_payload(
 
     defaults: dict[str, Any] = {
         "custom_label": entry.get("custom_label", ""),
+        "lcd_label": entry.get("lcd_label", ""),
+        "writer_id": entry.get("writer_id", ""),
         "key_a": entry.get("key_a", RFID._meta.get_field("key_a").default),
         "key_b": entry.get("key_b", RFID._meta.get_field("key_b").default),
         "data": entry.get("data", []) or [],
+        "sector_keys": entry.get("sector_keys", {}) or {},
+        "traits": entry.get("traits", {}) or {},
         "key_a_verified": bool(entry.get("key_a_verified", False)),
         "key_b_verified": bool(entry.get("key_b_verified", False)),
         "allowed": bool(entry.get("allowed", True)),
@@ -110,6 +124,18 @@ def apply_rfid_payload(
     if "last_seen_on" in entry:
         last_seen = entry.get("last_seen_on")
         defaults["last_seen_on"] = parse_datetime(last_seen) if last_seen else None
+
+    if "writer_written_at" in entry:
+        writer_written_at = entry.get("writer_written_at")
+        defaults["writer_written_at"] = (
+            parse_datetime(writer_written_at) if writer_written_at else None
+        )
+
+    if "initialized_on" in entry:
+        initialized_on = entry.get("initialized_on")
+        defaults["initialized_on"] = (
+            parse_datetime(initialized_on) if initialized_on else None
+        )
 
     obj, created = RFID.update_or_create_from_code(rfid_value, defaults=defaults)
 

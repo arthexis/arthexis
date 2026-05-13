@@ -5,6 +5,13 @@ from io import BytesIO
 from typing import Any
 
 from apps.cards.actions import get_rfid_action_choices
+from apps.cards.classic_layout import (
+    normalize_lcd_label,
+    normalize_sector_keys,
+    normalize_trait_records,
+    trait_sigils,
+    trait_values,
+)
 
 from django.apps import apps
 from django.core.management.color import no_style
@@ -62,6 +69,24 @@ class RFID(Entity):
         verbose_name="Custom Label",
         help_text="Optional custom label for this RFID.",
     )
+    lcd_label = models.CharField(
+        max_length=33,
+        blank=True,
+        verbose_name="LCD Label",
+        help_text="Optional 16x2 ASCII label written to sector 0 blocks 1 and 2.",
+    )
+    writer_id = models.CharField(
+        max_length=16,
+        blank=True,
+        verbose_name="Writer ID",
+        help_text="Last writer model or node id stored in sector 1 block 1.",
+    )
+    writer_written_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Writer timestamp",
+        help_text="Timestamp stored in sector 1 block 2 for the last card write.",
+    )
     key_a = models.CharField(
         max_length=12,
         default="FFFFFFFFFFFF",
@@ -88,6 +113,21 @@ class RFID(Entity):
         default=list,
         blank=True,
         help_text="Sector and block data",
+    )
+    sector_keys = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Per-sector MIFARE Classic keys for managed sectors.",
+    )
+    traits = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Trait key/value records stored in managed card sectors.",
+    )
+    initialized_on = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When Arthexis initialized this card's managed sectors.",
     )
     key_a_verified = models.BooleanField(default=False)
     key_b_verified = models.BooleanField(default=False)
@@ -238,6 +278,12 @@ class RFID(Entity):
             self.key_a = self.key_a.upper()
         if self.key_b:
             self.key_b = self.key_b.upper()
+        if self.lcd_label:
+            self.lcd_label = normalize_lcd_label(self.lcd_label)
+        if self.sector_keys:
+            self.sector_keys = normalize_sector_keys(self.sector_keys)
+        if self.traits:
+            self.traits = normalize_trait_records(self.traits)
         if self.kind:
             self.kind = self.kind.upper()
         if self.endianness:
@@ -273,6 +319,16 @@ class RFID(Entity):
         )
 
     qr_test_link.short_description = _("QR test link")
+
+    def trait_values(self) -> dict[str, str]:
+        """Return this card's trait key/value pairs."""
+
+        return trait_values(self.traits)
+
+    def trait_sigils(self) -> dict[str, str]:
+        """Return this card's trait values as SIGIL environment names."""
+
+        return trait_sigils(self.traits)
 
     @classmethod
     def normalize_code(cls, value: str) -> str:

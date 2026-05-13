@@ -30,6 +30,7 @@ from typing import Any
 import django
 from django.conf import settings
 
+from apps.cards.classic_layout import managed_sector_numbers, sector_data_blocks
 from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
 from config.loadenv import loadenv
@@ -94,6 +95,14 @@ def default_deep_scan_timeout() -> float:
     return float(os.environ.get("RFID_SERVICE_DEEP_SCAN_TIMEOUT", "1.0"))
 
 
+def default_auto_initialize_unknown() -> bool:
+    return os.environ.get("RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN", "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+
+
 def default_presence_gap_seconds() -> float:
     return float(
         os.environ.get(
@@ -113,6 +122,7 @@ DEFAULT_WORKER_SCAN_TIMEOUT = default_worker_scan_timeout()
 DEFAULT_LCD_SCAN_EVENT_REFRESH_SECONDS = default_lcd_scan_event_refresh_seconds()
 DEFAULT_DEEP_SCAN_HOLD_SECONDS = default_deep_scan_hold_seconds()
 DEFAULT_DEEP_SCAN_TIMEOUT = default_deep_scan_timeout()
+DEFAULT_AUTO_INITIALIZE_UNKNOWN = default_auto_initialize_unknown()
 DEFAULT_PRESENCE_GAP_SECONDS = default_presence_gap_seconds()
 
 
@@ -152,6 +162,16 @@ def read_deep_tag(timeout: float | None = None) -> dict[str, Any] | None:
     from .background_reader import read_current_tag_deep
 
     return read_current_tag_deep(
+        timeout=default_deep_scan_timeout() if timeout is None else timeout
+    )
+
+
+def initialize_current_tag(timeout: float | None = None) -> dict[str, Any] | None:
+    """Initialize the currently presented tag through the reader layer."""
+
+    from .reader import initialize_current_card
+
+    return initialize_current_card(
         timeout=default_deep_scan_timeout() if timeout is None else timeout
     )
 
@@ -491,6 +511,21 @@ class RFIDServiceState:
             "attempted_at": observed_at,
             "status": "ok" if has_deep_scan_data(payload) else "no-deep-data",
         }
+        if should_auto_initialize_unknown(payload):
+            init_payload = initialize_current_tag(timeout=default_deep_scan_timeout())
+            init_rfid = str((init_payload or {}).get("rfid") or "").strip().upper()
+            if init_payload and init_rfid and init_rfid != rfid_value:
+                payload["initialization"] = {
+                    "automatic": True,
+                    "attempted_at": observed_at,
+                    "status": "rfid-mismatch",
+                    "rfid": init_rfid or None,
+                }
+            else:
+                payload["initialization"] = normalize_initialization_payload(
+                    init_payload,
+                    attempted_at=observed_at,
+                )
         self._stamp_presence(
             payload,
             observed_at=observed_at,
@@ -660,6 +695,16 @@ def mask_rfid(value: Any) -> str | None:
 def format_lcd_scan_event(result: dict[str, Any]) -> tuple[str, str]:
     """Return the two-line LCD event shown for an RFID scan."""
 
+    lcd_label = str(result.get("lcd_label") or "").replace("\r\n", "\n").replace("\r", "\n")
+    if lcd_label.strip():
+        parts = lcd_label.split("\n", 1)
+        subject = (parts[0] or "RFID")[:16]
+        body = (parts[1] if len(parts) > 1 else "")[:16]
+        if not body:
+            rfid_value = str(result.get("rfid") or "").strip().upper()
+            body = f"ID {rfid_value}"[:16] if rfid_value else "ID unknown"
+        return subject, body
+
     label = str(result.get("custom_label") or result.get("label_id") or "").strip()
     subject = f"Label {label}" if label else "Label unknown"
     rfid_value = str(result.get("rfid") or "").strip().upper()
@@ -675,6 +720,64 @@ def has_deep_scan_data(payload: dict[str, Any]) -> bool:
     """Return whether a scanner payload contains enriched tag data."""
 
     return bool(payload.get("deep_read") or payload.get("dump") or payload.get("keys"))
+
+
+def should_auto_initialize_unknown(payload: dict[str, Any]) -> bool:
+    """Return whether an automatic held-card scan should initialize the card."""
+
+    if not default_auto_initialize_unknown():
+        return False
+    if payload.get("initialized") or payload.get("initialized_on"):
+        return False
+    if str(payload.get("kind") or "").upper() != "CLASSIC":
+        return False
+    dump = payload.get("dump")
+    if not isinstance(dump, list):
+        return False
+    expected_blocks = {
+        block
+        for sector in managed_sector_numbers()
+        for block in sector_data_blocks(sector)
+    }
+    seen_blocks: set[int] = set()
+    for entry in dump:
+        if not isinstance(entry, dict):
+            continue
+        block = entry.get("block")
+        data = entry.get("data")
+        if not isinstance(block, int) or not isinstance(data, list):
+            continue
+        if len(data) < 16:
+            return False
+        if block not in expected_blocks:
+            continue
+        seen_blocks.add(block)
+        try:
+            has_nonzero_byte = any(int(value or 0) != 0 for value in data[:16])
+        except (TypeError, ValueError):
+            return False
+        if has_nonzero_byte:
+            return False
+    return bool(expected_blocks) and expected_blocks.issubset(seen_blocks)
+
+
+def normalize_initialization_payload(
+    payload: dict[str, Any] | None,
+    *,
+    attempted_at: str,
+) -> dict[str, Any]:
+    if not payload:
+        return {"automatic": True, "attempted_at": attempted_at, "status": "no-card"}
+    normalized = dict(payload)
+    normalized["automatic"] = True
+    normalized["attempted_at"] = attempted_at
+    if normalized.get("error"):
+        normalized["status"] = "error"
+    elif normalized.get("errors") or normalized.get("initialized") is False:
+        normalized["status"] = "failed"
+    else:
+        normalized["status"] = "ok"
+    return normalized
 
 
 def merge_deep_scan_payload(

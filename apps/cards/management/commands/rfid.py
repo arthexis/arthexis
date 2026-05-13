@@ -16,7 +16,12 @@ from django.db.models import Q
 from apps.cards import rfid_service
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
-from apps.cards.reader import validate_rfid_value
+from apps.cards.reader import (
+    initialize_current_card,
+    set_current_card_trait,
+    validate_rfid_value,
+    write_current_card_lcd_label,
+)
 from apps.cards.rfid_import_export import account_column_for_field, parse_accounts, serialize_accounts
 from apps.cards.node_features import RFID_SCANNER_SLUG
 from apps.cards.rfid_service import rfid_scan_lock_path, rfid_service_enabled, run_service, service_available, service_endpoint
@@ -30,7 +35,7 @@ from utils.loggers.handlers import RFIDFileHandler
 class Command(BaseCommand):
     """Canonical command group for RFID operations."""
 
-    help = "RFID command group. Use `rfid <check|watch|service|doctor|import|export>`."
+    help = "RFID command group. Use `rfid <check|watch|service|doctor|init|label|trait|import|export>`."
     DEFAULT_SCAN_TIMEOUT = max(30.0, rfid_service.DEFAULT_SCAN_TIMEOUT)
     DEFAULT_ACTION = "status"
 
@@ -49,6 +54,15 @@ class Command(BaseCommand):
 
         doctor_parser = subparsers.add_parser("doctor", help="Run RFID diagnostics.")
         self._add_doctor_arguments(doctor_parser)
+
+        init_parser = subparsers.add_parser("init", help="Initialize managed sectors on a presented card.")
+        self._add_write_arguments(init_parser)
+
+        label_parser = subparsers.add_parser("label", help="Write a sector-0 LCD label to a presented card.")
+        self._add_label_arguments(label_parser)
+
+        trait_parser = subparsers.add_parser("trait", help="Add or update a trait on a presented card.")
+        self._add_trait_arguments(trait_parser)
 
         import_parser = subparsers.add_parser("import", help="Import RFIDs from CSV.")
         self._add_import_arguments(import_parser)
@@ -314,6 +328,62 @@ class Command(BaseCommand):
         parser.add_argument("--deep-read", action="store_true", help="Toggle deep-read mode via the RFID service.")
         parser.add_argument("--no-input", action="store_true", help="Skip interactive prompts.")
         parser.add_argument("--show-raw", action="store_true", help="Show raw RFID values in output (default is masked).")
+
+    def _add_write_arguments(self, parser):
+        parser.add_argument("--timeout", type=float, default=2.0, help="How long to wait for the presented card.")
+        parser.add_argument("--writer-id", help="Optional writer model or node id stored on the card.")
+        parser.add_argument("--pretty", action="store_true", help="Pretty-print the JSON response.")
+
+    def _add_label_arguments(self, parser):
+        self._add_write_arguments(parser)
+        text = parser.add_mutually_exclusive_group(required=True)
+        text.add_argument("--text", help="LCD label text. Use a newline to split the two LCD lines.")
+        text.add_argument("--line1", help="First LCD line; combine with --line2 for the second line.")
+        parser.add_argument("--line2", default="", help="Second LCD line when --line1 is used.")
+
+    def _add_trait_arguments(self, parser):
+        self._add_write_arguments(parser)
+        parser.add_argument("--key", required=True, help="Trait key, up to 16 ASCII bytes.")
+        parser.add_argument("--value", required=True, help="Trait value, up to 80 ASCII bytes.")
+        parser.add_argument("--no-init", action="store_true", help="Do not initialize the card before writing the trait.")
+
+    def _write_json_result(self, result: dict, *, pretty: bool = False) -> None:
+        if result.get("error"):
+            raise CommandError(result["error"])
+        if result.get("errors"):
+            if result.get("initialized") is False:
+                raise CommandError("RFID initialization failed")
+            raise CommandError("RFID operation failed")
+        dump_kwargs = {"indent": 2, "sort_keys": True} if pretty else {}
+        self.stdout.write(json.dumps(result, **dump_kwargs))
+
+    def _handle_init(self, options):
+        result = initialize_current_card(
+            timeout=options["timeout"],
+            writer_id=options.get("writer_id"),
+        )
+        self._write_json_result(result, pretty=options.get("pretty", False))
+
+    def _handle_label(self, options):
+        label = options.get("text")
+        if label is None:
+            label = "\n".join((options.get("line1") or "", options.get("line2") or ""))
+        result = write_current_card_lcd_label(
+            label=label,
+            timeout=options["timeout"],
+            writer_id=options.get("writer_id"),
+        )
+        self._write_json_result(result, pretty=options.get("pretty", False))
+
+    def _handle_trait(self, options):
+        result = set_current_card_trait(
+            key=options["key"],
+            value=options["value"],
+            timeout=options["timeout"],
+            writer_id=options.get("writer_id"),
+            initialize=not options.get("no_init", False),
+        )
+        self._write_json_result(result, pretty=options.get("pretty", False))
 
     def _handle_doctor(self, options):
         timeout = options["timeout"]

@@ -8,6 +8,8 @@ The RFID scanner service runs a lightweight background reader for local hardware
 - Writes non-repeated scans to `.locks/rfid-scan.json` and `logs/rfid-scans.ndjson`.
 - Adds `last_presence_at` and presence duration fields to the latest-scan lock file so local consumers can ignore cards that have not been physically observed recently.
 - Attempts one automatic deep read when the same card remains on the reader for more than two seconds, then keeps the enriched lock-file payload until a different card is scanned.
+- Reads sector-0 LCD labels during fast scans and includes decoded traits after deep reads.
+- Initializes unformatted held MIFARE Classic cards when managed data sectors are still zeroed.
 - Lets Django ingest those artifacts into RFID Attempts for web/API consumers.
 - Exposes health checks (ping) and deep-read toggles for diagnostics.
 
@@ -20,6 +22,11 @@ Automatic deep-read timing can be tuned with:
 - `RFID_SERVICE_DEEP_SCAN_HOLD_SECONDS` (default `2.0`)
 - `RFID_SERVICE_DEEP_SCAN_TIMEOUT` (default `1.0`)
 - `RFID_SERVICE_PRESENCE_GAP_SECONDS` (default: same as the hold threshold)
+- `RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN` (default `1`; set `0` to disable formatting held uninitialized cards)
+
+Decoded traits are emitted as a `traits` object and `trait_sigils` object. Local
+mode runners can pass those values to transition scripts as `SIGIL_*`
+environment variables.
 
 ## Enable
 1. Enable the RFID service lock (installer or configurator):
