@@ -6,8 +6,20 @@ The RFID scanner service runs a lightweight background reader for local hardware
 ## What it does
 - Reads RFID tags from attached hardware in a background worker.
 - Writes non-repeated scans to `.locks/rfid-scan.json` and `logs/rfid-scans.ndjson`.
+- Adds `last_presence_at` and presence duration fields to the latest-scan lock file so local consumers can ignore cards that have not been physically observed recently.
+- Attempts one automatic deep read when the same card remains on the reader for more than two seconds, then keeps the enriched lock-file payload until a different card is scanned.
 - Lets Django ingest those artifacts into RFID Attempts for web/API consumers.
 - Exposes health checks (ping) and deep-read toggles for diagnostics.
+
+## Latest-scan lock file
+The service writes `.locks/rfid-scan.json` with schema `arthexis.rfid.scan.v1`. A normal fast scan includes the RFID, scan time, first and last physical presence timestamps, and presence duration.
+
+When automatic deep-read succeeds, the lock file keeps the returned `keys`, `dump`, and `deep_read` fields for that same card even if later fast reads only refresh its presence. Scanning a different card replaces the enriched payload.
+
+Automatic deep-read timing can be tuned with:
+- `RFID_SERVICE_DEEP_SCAN_HOLD_SECONDS` (default `2.0`)
+- `RFID_SERVICE_DEEP_SCAN_TIMEOUT` (default `1.0`)
+- `RFID_SERVICE_PRESENCE_GAP_SECONDS` (default: same as the hold threshold)
 
 ## Enable
 1. Enable the RFID service lock (installer or configurator):

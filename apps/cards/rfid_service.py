@@ -22,7 +22,8 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 SENSITIVE_RFID_KEYS = {"keys", "dump"}
 
+SCAN_LOCK_SCHEMA = "arthexis.rfid.scan.v1"
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
 SCAN_STATE_SCHEMA = "arthexis.rfid.scan.v1"
@@ -84,6 +86,23 @@ def default_lcd_scan_event_refresh_seconds() -> float:
     )
 
 
+def default_deep_scan_hold_seconds() -> float:
+    return float(os.environ.get("RFID_SERVICE_DEEP_SCAN_HOLD_SECONDS", "2.0"))
+
+
+def default_deep_scan_timeout() -> float:
+    return float(os.environ.get("RFID_SERVICE_DEEP_SCAN_TIMEOUT", "1.0"))
+
+
+def default_presence_gap_seconds() -> float:
+    return float(
+        os.environ.get(
+            "RFID_SERVICE_PRESENCE_GAP_SECONDS",
+            str(default_deep_scan_hold_seconds()),
+        )
+    )
+
+
 DEFAULT_SERVICE_HOST = default_service_host()
 DEFAULT_SERVICE_PORT = default_service_port()
 DEFAULT_SCAN_TIMEOUT = default_scan_timeout()
@@ -92,6 +111,9 @@ DEFAULT_EVENT_DURATION = default_event_duration()
 DEFAULT_SCAN_DEDUPE_SECONDS = default_scan_dedupe_seconds()
 DEFAULT_WORKER_SCAN_TIMEOUT = default_worker_scan_timeout()
 DEFAULT_LCD_SCAN_EVENT_REFRESH_SECONDS = default_lcd_scan_event_refresh_seconds()
+DEFAULT_DEEP_SCAN_HOLD_SECONDS = default_deep_scan_hold_seconds()
+DEFAULT_DEEP_SCAN_TIMEOUT = default_deep_scan_timeout()
+DEFAULT_PRESENCE_GAP_SECONDS = default_presence_gap_seconds()
 
 
 def get_next_tag(timeout: float = 0.2) -> dict[str, Any] | None:
@@ -122,6 +144,16 @@ def toggle_deep_read() -> bool:
     from .reader import toggle_deep_read as reader_toggle_deep_read
 
     return reader_toggle_deep_read()
+
+
+def read_deep_tag(timeout: float | None = None) -> dict[str, Any] | None:
+    """Directly deep-read the currently presented tag."""
+
+    from .background_reader import read_current_tag_deep
+
+    return read_current_tag_deep(
+        timeout=default_deep_scan_timeout() if timeout is None else timeout
+    )
 
 
 @dataclass(frozen=True)
@@ -177,6 +209,12 @@ class RFIDServiceState:
         self._last_emitted_at: float | None = None
         self._last_lcd_rfid: str | None = None
         self._last_lcd_refresh_at: float | None = None
+        self._current_rfid: str | None = None
+        self._current_presence_started_at: float | None = None
+        self._current_presence_started_iso: str | None = None
+        self._current_presence_last_at: float | None = None
+        self._current_enriched_payload: dict[str, Any] | None = None
+        self._deep_scan_attempted_rfid: str | None = None
 
     def start_worker(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
@@ -245,15 +283,20 @@ class RFIDServiceState:
         if not rfid_value:
             return
         now = time.monotonic()
+        observed_at = utc_now_iso()
+        payload, force_emit = self._build_scan_artifact_payload(
+            result,
+            rfid_value=rfid_value,
+            observed_at=observed_at,
+            observed_monotonic=now,
+        )
         if (
             self._last_emitted_rfid == rfid_value
             and self._last_emitted_at is not None
             and now - self._last_emitted_at < default_scan_dedupe_seconds()
+            and not force_emit
         ):
             return
-        payload = dict(result)
-        payload.setdefault("service_mode", "service")
-        payload = build_scan_state_payload(payload)
         try:
             write_rfid_scan_lock(payload)
             append_scan_log(payload)
@@ -266,6 +309,194 @@ class RFIDServiceState:
             return
         self._last_emitted_rfid = rfid_value
         self._last_emitted_at = now
+
+    def _build_scan_artifact_payload(
+        self,
+        result: dict[str, Any],
+        *,
+        rfid_value: str,
+        observed_at: str,
+        observed_monotonic: float,
+    ) -> tuple[dict[str, Any], bool]:
+        """Return the lock/log payload for this scan plus whether to bypass dedupe."""
+
+        if self._should_start_presence(
+            rfid_value=rfid_value,
+            observed_monotonic=observed_monotonic,
+        ):
+            self._start_presence(
+                rfid_value=rfid_value,
+                observed_at=observed_at,
+                observed_monotonic=observed_monotonic,
+            )
+
+        base_payload = dict(result)
+        base_payload["rfid"] = rfid_value
+        base_payload.setdefault("service_mode", "service")
+        base_payload["scanned_at"] = observed_at
+        self._stamp_presence(
+            base_payload,
+            observed_at=observed_at,
+            observed_monotonic=observed_monotonic,
+        )
+
+        if has_deep_scan_data(base_payload):
+            force_emit = self._current_enriched_payload is None or not has_deep_scan_data(
+                self._current_enriched_payload
+            )
+            self._current_enriched_payload = dict(base_payload)
+            return base_payload, force_emit
+
+        force_emit = False
+        if self._current_enriched_payload is None and self._should_deep_scan(
+            rfid_value=rfid_value,
+            observed_monotonic=observed_monotonic,
+        ):
+            deep_payload = self._attempt_deep_scan(
+                rfid_value=rfid_value,
+                observed_at=observed_at,
+                observed_monotonic=observed_monotonic,
+            )
+            if deep_payload:
+                base_payload = merge_deep_scan_payload(base_payload, deep_payload)
+                self._stamp_presence(
+                    base_payload,
+                    observed_at=observed_at,
+                    observed_monotonic=observed_monotonic,
+                )
+                if has_deep_scan_data(base_payload):
+                    self._current_enriched_payload = dict(base_payload)
+            force_emit = True
+
+        if self._current_enriched_payload is None:
+            return base_payload, force_emit
+
+        enriched_payload = dict(self._current_enriched_payload)
+        for key, value in base_payload.items():
+            if key in SENSITIVE_RFID_KEYS or key == "deep_read":
+                continue
+            enriched_payload[key] = value
+        self._stamp_presence(
+            enriched_payload,
+            observed_at=observed_at,
+            observed_monotonic=observed_monotonic,
+        )
+        self._current_enriched_payload = dict(enriched_payload)
+        return enriched_payload, force_emit
+
+    def _should_start_presence(
+        self,
+        *,
+        rfid_value: str,
+        observed_monotonic: float,
+    ) -> bool:
+        """Return whether this observation starts a new physical presence."""
+
+        if self._current_rfid != rfid_value:
+            return True
+        last_seen = self._current_presence_last_at
+        if last_seen is None:
+            return self._current_presence_started_at is None
+        return observed_monotonic - last_seen > default_presence_gap_seconds()
+
+    def _start_presence(
+        self,
+        *,
+        rfid_value: str,
+        observed_at: str,
+        observed_monotonic: float,
+    ) -> None:
+        self._current_rfid = rfid_value
+        self._current_presence_started_at = observed_monotonic
+        self._current_presence_started_iso = observed_at
+        self._current_presence_last_at = None
+        self._current_enriched_payload = None
+        self._deep_scan_attempted_rfid = None
+
+    def _stamp_presence(
+        self,
+        payload: dict[str, Any],
+        *,
+        observed_at: str,
+        observed_monotonic: float,
+    ) -> None:
+        """Add held-card presence timestamps to an emitted scan payload."""
+
+        started_at = self._current_presence_started_at
+        if started_at is None:
+            started_at = observed_monotonic
+            self._current_presence_started_at = started_at
+        started_iso = self._current_presence_started_iso or observed_at
+        self._current_presence_started_iso = started_iso
+        payload["first_presence_at"] = started_iso
+        payload["last_presence_at"] = observed_at
+        payload["presence_duration_seconds"] = round(
+            max(0.0, observed_monotonic - started_at),
+            3,
+        )
+        self._current_presence_last_at = observed_monotonic
+
+    def _should_deep_scan(
+        self,
+        *,
+        rfid_value: str,
+        observed_monotonic: float,
+    ) -> bool:
+        """Return whether this card has been held long enough for auto deep-read."""
+
+        if self._deep_scan_attempted_rfid == rfid_value:
+            return False
+        started_at = self._current_presence_started_at
+        if started_at is None:
+            return False
+        return observed_monotonic - started_at >= default_deep_scan_hold_seconds()
+
+    def _attempt_deep_scan(
+        self,
+        *,
+        rfid_value: str,
+        observed_at: str,
+        observed_monotonic: float,
+    ) -> dict[str, Any] | None:
+        """Try one automatic deep read for a held card."""
+
+        self._deep_scan_attempted_rfid = rfid_value
+        deep_payload = read_deep_tag(timeout=default_deep_scan_timeout())
+        if not deep_payload:
+            return {
+                "deep_scan": {
+                    "automatic": True,
+                    "attempted_at": observed_at,
+                    "status": "no-card",
+                }
+            }
+
+        deep_rfid = str(deep_payload.get("rfid", "") or "").strip().upper()
+        if deep_rfid != rfid_value:
+            return {
+                "deep_scan": {
+                    "automatic": True,
+                    "attempted_at": observed_at,
+                    "status": "rfid-mismatch",
+                    "rfid": deep_rfid or None,
+                }
+            }
+
+        payload = dict(deep_payload)
+        payload["rfid"] = rfid_value
+        payload.setdefault("service_mode", "service")
+        payload["scanned_at"] = observed_at
+        payload["deep_scan"] = {
+            "automatic": True,
+            "attempted_at": observed_at,
+            "status": "ok" if has_deep_scan_data(payload) else "no-deep-data",
+        }
+        self._stamp_presence(
+            payload,
+            observed_at=observed_at,
+            observed_monotonic=observed_monotonic,
+        )
+        return payload
 
     def status(self) -> ServiceStatus:
         queue_depth, _last_scan, last_scan_at = self.queue.status()
@@ -436,6 +667,57 @@ def format_lcd_scan_event(result: dict[str, Any]) -> tuple[str, str]:
     return subject, body
 
 
+def utc_now_iso() -> str:
+    return datetime.now(datetime_timezone.utc).isoformat()
+
+
+def has_deep_scan_data(payload: dict[str, Any]) -> bool:
+    """Return whether a scanner payload contains enriched tag data."""
+
+    return bool(payload.get("deep_read") or payload.get("dump") or payload.get("keys"))
+
+
+def merge_deep_scan_payload(
+    base_payload: dict[str, Any],
+    deep_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge automatic deep-read fields into a normal scan payload."""
+
+    merged = dict(base_payload)
+    for key, value in deep_payload.items():
+        if key in {"rfid", "service_mode"}:
+            continue
+        merged[key] = value
+    return merged
+
+
+def normalize_scan_lock_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a stable latest-scan lockfile payload."""
+
+    normalized = dict(payload)
+    now = utc_now_iso()
+    normalized.setdefault("schema", SCAN_LOCK_SCHEMA)
+    normalized.setdefault("written_at", now)
+    normalized.setdefault("scanned_at", now)
+    rfid_value = str(normalized.get("rfid", "") or "").strip().upper()
+    if rfid_value:
+        normalized["rfid"] = rfid_value
+        normalized.setdefault(
+            "last_presence_at",
+            normalized.get("scanned_at") or now,
+        )
+    return normalized
+
+
+def normalize_scan_log_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the append-only ingest payload without lockfile-only deep data."""
+
+    normalized = normalize_scan_lock_payload(payload)
+    for key in SENSITIVE_RFID_KEYS:
+        normalized.pop(key, None)
+    return normalized
+
+
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
     return get_lock_dir(base_dir) / "rfid-service.lck"
 
@@ -455,13 +737,7 @@ def rfid_scan_log_path(base_dir: Path | None = None) -> Path:
 def build_scan_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Return normalized latest-scan state for local lockfile consumers."""
 
-    state = dict(payload)
-    state["schema"] = SCAN_STATE_SCHEMA
-    rfid_value = str(state.get("rfid") or "").strip().upper()
-    if rfid_value:
-        state["rfid"] = rfid_value
-    state.setdefault("scanned_at", datetime.now(datetime_timezone.utc).isoformat())
-    return state
+    return normalize_scan_lock_payload(payload)
 
 
 def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
@@ -488,8 +764,9 @@ def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = Non
 def append_scan_log(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
     log_path = rfid_scan_log_path(base_dir)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    normalized_payload = normalize_scan_log_payload(payload)
     with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(json.dumps(payload, sort_keys=True))
+        log_file.write(json.dumps(normalized_payload, sort_keys=True))
         log_file.write("\n")
 
 
@@ -520,7 +797,7 @@ def request_service(
             sock.sendto(message, (endpoint.host, endpoint.port))
             resp_bytes, _addr = sock.recvfrom(65535)
             response = json.loads(resp_bytes.decode("utf-8"))
-        except (socket.timeout, OSError, json.JSONDecodeError, UnicodeDecodeError):
+        except (TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError):
             return None
     if not isinstance(response, dict):
         return None
