@@ -65,11 +65,11 @@ class DispatchMixin:
 
         if len(background_tasks) >= MAX_BACKGROUND_FORWARD_REPLY_TASKS:
             logger.warning(
-                "Skipping reply forwarding for message %s because %s background "
-                "forwarding tasks are still active.",
+                "Background forwarding task limit reached for message %s; "
+                "dispatching reply without task tracking.",
                 message_id,
-                len(background_tasks),
             )
+            create_task(forward_reply(message_id, raw))
             return
 
         task = create_task(forward_reply(message_id, raw))
