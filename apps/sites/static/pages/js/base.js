@@ -456,6 +456,220 @@ const setupFundingBannerDismissal = () => {
   });
 };
 
+
+const setupControllerButtonMappings = () => {
+  if (!document.documentElement.classList.contains('controller-mode') || (!navigator.getGamepads && !navigator.webkitGetGamepads)) {
+    return;
+  }
+
+  const L2_BUTTON_INDEX = 6;
+  const L1_BUTTON_INDEX = 4;
+  const R1_BUTTON_INDEX = 5;
+  const R2_BUTTON_INDEX = 7;
+  const pressedButtons = new Set();
+  let animationFrameId = null;
+  let lastPointerX = Math.round(window.innerWidth / 2);
+  let lastPointerY = Math.round(window.innerHeight / 2);
+
+  const focusSelector = '.navbar-nav .nav-link, .toolbar .btn, .toolbar a.btn';
+  const modulePillSelector = '.navbar-nav .nav-link';
+  const toolbarSelector = '#theme-toggle, .user-info-trigger';
+
+  const getGamepads = () => {
+    if (navigator.getGamepads) {
+      return navigator.getGamepads();
+    }
+    return navigator.webkitGetGamepads();
+  };
+
+  const getVisibleElements = selector => Array.from(document.querySelectorAll(selector)).filter(node => {
+    if (!node || node.disabled) {
+      return false;
+    }
+    const style = window.getComputedStyle(node);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  });
+
+  const cycleFocus = (selector, direction) => {
+    const nodes = getVisibleElements(selector);
+    if (!nodes.length) {
+      return;
+    }
+    const currentIndex = nodes.indexOf(document.activeElement);
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + nodes.length) % nodes.length;
+    nodes[nextIndex].focus();
+  };
+
+  const getActiveGamepad = () => Array.from(getGamepads() || []).find(gamepad => gamepad && gamepad.buttons);
+
+  const clearPressedState = () => {
+    if (pressedButtons.has(L2_BUTTON_INDEX)) {
+      releaseZoom();
+    }
+    pressedButtons.clear();
+  };
+
+  const startPolling = () => {
+    if (!animationFrameId) {
+      animationFrameId = window.requestAnimationFrame(pollGamepad);
+    }
+  };
+
+  const stopPolling = () => {
+    if (animationFrameId) {
+      window.cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+  };
+
+  const getFocusableTarget = target => {
+    if (!target) {
+      return null;
+    }
+    if (target.closest) {
+      return target.closest(focusSelector);
+    }
+    if (target.matches && target.matches(focusSelector)) {
+      return target;
+    }
+    return null;
+  };
+
+  const createBubblingEvent = eventName => {
+    if (typeof Event === 'function') {
+      return new Event(eventName, { bubbles: true });
+    }
+    const event = document.createEvent('Event');
+    event.initEvent(eventName, true, false);
+    return event;
+  };
+
+  const createMouseMoveEvent = (clientX, clientY) => {
+    if (typeof MouseEvent === 'function') {
+      return new MouseEvent('mousemove', { bubbles: true, clientX, clientY });
+    }
+    const event = document.createEvent('MouseEvent');
+    event.initMouseEvent(
+      'mousemove',
+      true,
+      false,
+      window,
+      0,
+      clientX,
+      clientY,
+      clientX,
+      clientY,
+      false,
+      false,
+      false,
+      false,
+      0,
+      null
+    );
+    return event;
+  };
+
+  const dispatchFeedbackToggle = () => {
+    document.dispatchEvent(createBubblingEvent('pages:feedback-toggle'));
+  };
+
+  const applyZoomAroundCursor = () => {
+    document.documentElement.classList.add('controller-zoom-active');
+    const originX = lastPointerX + (window.scrollX || window.pageXOffset || 0);
+    const originY = lastPointerY + (window.scrollY || window.pageYOffset || 0);
+    document.documentElement.style.setProperty('--controller-zoom-origin-x', `${originX}px`);
+    document.documentElement.style.setProperty('--controller-zoom-origin-y', `${originY}px`);
+    const target = document.elementFromPoint(lastPointerX, lastPointerY);
+    if (target) {
+      target.dispatchEvent(createMouseMoveEvent(lastPointerX, lastPointerY));
+      const focusable = getFocusableTarget(target);
+      if (focusable && focusable.focus) {
+        focusable.focus();
+      }
+    }
+  };
+
+  const releaseZoom = () => {
+    document.documentElement.classList.remove('controller-zoom-active');
+  };
+
+  document.addEventListener('mousemove', event => {
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
+  });
+
+  const handleButtonPress = buttonIndex => {
+    if (buttonIndex === R2_BUTTON_INDEX) {
+      dispatchFeedbackToggle();
+      return;
+    }
+    if (buttonIndex === R1_BUTTON_INDEX) {
+      cycleFocus(toolbarSelector, 1);
+      return;
+    }
+    if (buttonIndex === L1_BUTTON_INDEX) {
+      cycleFocus(modulePillSelector, 1);
+      return;
+    }
+    if (buttonIndex === L2_BUTTON_INDEX) {
+      applyZoomAroundCursor();
+    }
+  };
+
+  const isButtonPressed = button => {
+    if (typeof button === 'number') {
+      return button >= 0.5;
+    }
+    if (!button) {
+      return false;
+    }
+    const value = typeof button.value === 'number' ? button.value : 0;
+    return button.pressed === true || value >= 0.5;
+  };
+
+  const pollGamepad = () => {
+    const gamepad = getActiveGamepad();
+    const buttons = gamepad && gamepad.buttons ? Array.from(gamepad.buttons) : [];
+    if (!buttons.length) {
+      clearPressedState();
+      animationFrameId = null;
+      return;
+    }
+
+    buttons.forEach((button, index) => {
+      if (isButtonPressed(button)) {
+        if (!pressedButtons.has(index)) {
+          pressedButtons.add(index);
+          handleButtonPress(index);
+        }
+        return;
+      }
+      if (pressedButtons.has(index)) {
+        pressedButtons.delete(index);
+        if (index === L2_BUTTON_INDEX) {
+          releaseZoom();
+        }
+      }
+    });
+    animationFrameId = window.requestAnimationFrame(pollGamepad);
+  };
+
+  if (getActiveGamepad()) {
+    startPolling();
+  }
+  window.addEventListener('gamepadconnected', startPolling);
+  window.addEventListener('gamepaddisconnected', () => {
+    if (!getActiveGamepad()) {
+      clearPressedState();
+      stopPolling();
+    }
+  });
+  window.addEventListener('beforeunload', () => {
+    stopPolling();
+    releaseZoom();
+  });
+};
+
 setupControllerMode();
 applySiteThemeVariables();
 setupThemeToggle();
@@ -466,4 +680,5 @@ setupLanguageSelect();
 setupShareModal();
 setupSiteHighlightDismissal();
 setupFundingBannerDismissal();
+setupControllerButtonMappings();
 window.addEventListener('load', syncDebugToolbarTheme);

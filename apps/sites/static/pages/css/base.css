@@ -1005,10 +1005,35 @@ html[data-bs-theme='dark'] .funding-banner {
   --funding-banner-mark: rgba(var(--bs-emphasis-color-rgb), 0.75);
 }
 
+:root {
+  --controller-zoom-origin-default-x: var(--bs-controller-zoom-origin-x, 50%);
+  --controller-zoom-origin-default-y: var(--bs-controller-zoom-origin-y, 50%);
+  --controller-zoom-scale: var(--bs-controller-zoom-scale, 1.08);
+  --controller-zoom-transition: var(--bs-controller-zoom-transition, transform 0.15s ease-out);
+}
+
+.controller-mode body {
+  transition: var(--controller-zoom-transition);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .controller-mode body {
+    transition: none;
+  }
+}
+
 @media (max-width: 575.98px) {
   .funding-banner {
     align-items: flex-start;
     flex-direction: column;
   }
 
+}
+
+
+.controller-zoom-active body {
+  transform: scale(var(--controller-zoom-scale));
+  transform-origin:
+    var(--controller-zoom-origin-x, var(--controller-zoom-origin-default-x))
+    var(--controller-zoom-origin-y, var(--controller-zoom-origin-default-y));
 }
