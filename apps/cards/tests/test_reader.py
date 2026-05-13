@@ -7,7 +7,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from apps.cards import reader
+from apps.cards import classic_layout, reader
 from apps.cards.models import RFID
 
 
@@ -37,6 +37,7 @@ class _FakeReader:
         self.read_returns_tuple = read_returns_tuple
         self.write_status = write_status
         self.writes = []
+        self.read_calls = []
         self.stop_calls = 0
 
     def MFRC522_Request(self, _mode):
@@ -53,6 +54,7 @@ class _FakeReader:
         return self.MI_OK if block in self.read_blocks else self.MI_ERR
 
     def MFRC522_Read(self, block):
+        self.read_calls.append(block)
         data = self.read_blocks.get(block)
         if data is None:
             return self.MI_ERR, None
@@ -192,6 +194,23 @@ def test_write_block_accepts_none_when_readback_matches():
         data=data,
     )
     assert fake_reader.writes == [(1, data)]
+    assert fake_reader.read_calls == [1]
+
+
+def test_write_block_accepts_none_for_sector_trailer_without_readback():
+    fake_reader = _FakeReader(read_blocks={15: [0] * 16}, write_status=None)
+    data = [3] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=15,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(15, data)]
+    assert fake_reader.read_calls == []
 
 
 def test_read_rfid_returns_empty_payload_when_polling_times_out(monkeypatch):
@@ -531,18 +550,50 @@ def test_set_current_card_trait_aborts_when_auto_initialization_fails(monkeypatc
     assert refreshed == []
 
 
+def _full_trait_dump(blocks=None):
+    blocks = blocks or {}
+    dump = []
+    for start_sector, continuation_sector in classic_layout.trait_sector_pairs():
+        for sector in (start_sector, continuation_sector):
+            for block in classic_layout.sector_data_blocks(sector):
+                dump.append({"block": block, "data": blocks.get(block, [0] * 16)})
+    return dump
+
+
 def test_save_tag_traits_from_dump_clears_stale_traits_when_none_decoded():
     tag = SimpleNamespace(traits={"door": {"value": "open"}})
     saved_fields = []
     tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
     result = {"traits": {"door": "open"}, "trait_sigils": {"SIGIL_DOOR": "open"}}
 
-    reader._save_tag_traits_from_dump(tag, [], result)
+    reader._save_tag_traits_from_dump(tag, _full_trait_dump(), result)
 
     assert tag.traits == {}
     assert saved_fields == [["traits"]]
     assert "traits" not in result
     assert "trait_sigils" not in result
+
+
+def test_save_tag_traits_from_dump_skips_partial_trait_dump():
+    tag = SimpleNamespace(traits={"door": {"value": "open"}})
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    result = {"traits": {"door": "open"}, "trait_sigils": {"SIGIL_DOOR": "open"}}
+    partial_dump = [
+        {
+            "block": classic_layout.sector_block(3, 0),
+            "data": classic_layout.encode_trait_key("badge"),
+        }
+    ]
+
+    reader._save_tag_traits_from_dump(tag, partial_dump, result)
+
+    assert tag.traits == {"door": {"value": "open"}}
+    assert saved_fields == []
+    assert result == {
+        "traits": {"door": "open"},
+        "trait_sigils": {"SIGIL_DOOR": "open"},
+    }
 
 
 def test_deep_classic_read_reuses_and_promotes_sector_key_candidates(monkeypatch):

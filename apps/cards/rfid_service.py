@@ -30,6 +30,7 @@ from typing import Any
 import django
 from django.conf import settings
 
+from apps.cards.classic_layout import managed_sector_numbers, sector_data_blocks
 from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
 from config.loadenv import loadenv
@@ -513,7 +514,7 @@ class RFIDServiceState:
         if should_auto_initialize_unknown(payload):
             init_payload = initialize_current_tag(timeout=default_deep_scan_timeout())
             init_rfid = str((init_payload or {}).get("rfid") or "").strip().upper()
-            if init_payload and init_rfid != rfid_value:
+            if init_payload and init_rfid and init_rfid != rfid_value:
                 payload["initialization"] = {
                     "automatic": True,
                     "attempted_at": observed_at,
@@ -733,7 +734,12 @@ def should_auto_initialize_unknown(payload: dict[str, Any]) -> bool:
     dump = payload.get("dump")
     if not isinstance(dump, list):
         return False
-    saw_managed_data = False
+    expected_blocks = {
+        block
+        for sector in managed_sector_numbers()
+        for block in sector_data_blocks(sector)
+    }
+    seen_blocks: set[int] = set()
     for entry in dump:
         if not isinstance(entry, dict):
             continue
@@ -741,18 +747,18 @@ def should_auto_initialize_unknown(payload: dict[str, Any]) -> bool:
         data = entry.get("data")
         if not isinstance(block, int) or not isinstance(data, list):
             continue
-        if block < 12:
+        if len(data) < 16:
+            return False
+        if block not in expected_blocks:
             continue
-        if block % 4 == 3:
-            continue
-        saw_managed_data = True
+        seen_blocks.add(block)
         try:
             has_nonzero_byte = any(int(value or 0) != 0 for value in data[:16])
         except (TypeError, ValueError):
             return False
         if has_nonzero_byte:
             return False
-    return saw_managed_data
+    return bool(expected_blocks) and expected_blocks.issubset(seen_blocks)
 
 
 def normalize_initialization_payload(

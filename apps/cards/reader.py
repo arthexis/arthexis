@@ -39,6 +39,7 @@ from apps.cards.classic_layout import (
     sector_data_blocks,
     sector_key_record,
     sector_trailer_block,
+    trait_sector_pairs,
     trait_sigils,
     zero_block,
 )
@@ -168,6 +169,14 @@ def _read_block(
     return list(data)
 
 
+def _is_sector_trailer_block(block: int) -> bool:
+    if block < 0:
+        return False
+    if block < 128:
+        return block % 4 == 3
+    return (block - 128) % 16 == 15
+
+
 def _write_block(
     mfrc,
     *,
@@ -194,6 +203,8 @@ def _write_block(
     if write_status == mfrc.MI_OK:
         return True
     if write_status is None:
+        if _is_sector_trailer_block(block):
+            return True
         readback = _read_block(
             mfrc,
             block=block,
@@ -1055,7 +1066,29 @@ def _enrich_transport_layout(mfrc, tag, uid: list[int], result: dict) -> dict:
     return result
 
 
+def _dump_block_numbers(dump: list[dict[str, Any]]) -> set[int]:
+    blocks: set[int] = set()
+    for entry in dump:
+        if not isinstance(entry, dict):
+            continue
+        block = entry.get("block")
+        data = entry.get("data")
+        if isinstance(block, int) and isinstance(data, (list, tuple)) and len(data) >= 16:
+            blocks.add(block)
+    return blocks
+
+
+def _trait_dump_is_complete(dump: list[dict[str, Any]]) -> bool:
+    expected_blocks: set[int] = set()
+    for start_sector, continuation_sector in trait_sector_pairs():
+        expected_blocks.update(sector_data_blocks(start_sector))
+        expected_blocks.update(sector_data_blocks(continuation_sector))
+    return expected_blocks.issubset(_dump_block_numbers(dump))
+
+
 def _save_tag_traits_from_dump(tag, dump: list[dict[str, Any]], result: dict) -> None:
+    if not _trait_dump_is_complete(dump):
+        return
     traits = decode_traits_from_dump(dump)
     normalized = normalize_trait_records(traits)
     if normalized != getattr(tag, "traits", {}):

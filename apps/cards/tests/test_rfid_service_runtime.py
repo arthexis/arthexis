@@ -370,6 +370,14 @@ def _read_scan_log_entries(base_dir):
     ]
 
 
+def _zero_managed_dump():
+    return [
+        {"block": block, "data": [0] * 16}
+        for sector in rfid_service.managed_sector_numbers()
+        for block in rfid_service.sector_data_blocks(sector)
+    ]
+
+
 def test_rfid_service_auto_deep_scans_held_card_and_preserves_enrichment(
     monkeypatch,
     settings,
@@ -565,11 +573,7 @@ def test_rfid_service_auto_initializes_unformatted_held_classic_card(
             "kind": "CLASSIC",
             "initialized": False,
             "deep_read": True,
-            "dump": [
-                {"block": 12, "data": [0] * 16},
-                {"block": 13, "data": [0] * 16},
-                {"block": 14, "data": [0] * 16},
-            ],
+            "dump": _zero_managed_dump(),
         }
 
     def fake_initialize_current_tag(timeout):
@@ -594,6 +598,24 @@ def test_rfid_service_auto_initializes_unformatted_held_classic_card(
     assert enriched_payload["initialization"]["automatic"] is True
 
 
+def test_should_auto_initialize_unknown_requires_complete_managed_dump(monkeypatch):
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: True)
+
+    partial_payload = {
+        "kind": "CLASSIC",
+        "initialized": False,
+        "dump": [{"block": 12, "data": [0] * 16}],
+    }
+    complete_payload = {
+        "kind": "CLASSIC",
+        "initialized": False,
+        "dump": _zero_managed_dump(),
+    }
+
+    assert rfid_service.should_auto_initialize_unknown(partial_payload) is False
+    assert rfid_service.should_auto_initialize_unknown(complete_payload) is True
+
+
 def test_rfid_service_rejects_auto_initialization_rfid_mismatch(
     monkeypatch,
     settings,
@@ -615,11 +637,7 @@ def test_rfid_service_rejects_auto_initialization_rfid_mismatch(
             "kind": "CLASSIC",
             "initialized": False,
             "deep_read": True,
-            "dump": [
-                {"block": 12, "data": [0] * 16},
-                {"block": 13, "data": [0] * 16},
-                {"block": 14, "data": [0] * 16},
-            ],
+            "dump": _zero_managed_dump(),
         }
 
     monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
@@ -644,6 +662,56 @@ def test_rfid_service_rejects_auto_initialization_rfid_mismatch(
         "attempted_at": enriched_payload["scanned_at"],
         "status": "rfid-mismatch",
         "rfid": "DEADBEEF",
+    }
+
+
+def test_rfid_service_preserves_initialization_error_without_rfid(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: True)
+
+    def fake_read_deep_tag(timeout):
+        return {
+            "rfid": "ABCD1234",
+            "kind": "CLASSIC",
+            "initialized": False,
+            "deep_read": True,
+            "dump": _zero_managed_dump(),
+        }
+
+    monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
+    monkeypatch.setattr(
+        rfid_service,
+        "initialize_current_tag",
+        lambda timeout: {"error": "reader unavailable", "errno": 5},
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 101.0
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 102.1
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    enriched_payload = _read_latest_scan_lock(tmp_path)
+
+    assert enriched_payload["initialization"] == {
+        "automatic": True,
+        "attempted_at": enriched_payload["scanned_at"],
+        "error": "reader unavailable",
+        "errno": 5,
+        "status": "error",
     }
 
 
