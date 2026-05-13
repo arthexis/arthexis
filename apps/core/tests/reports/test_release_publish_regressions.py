@@ -719,6 +719,11 @@ def test_release_simulator_requires_security_scan_settling_and_clear_alerts() ->
     assert "github.rest.codeScanning.listAlertsForRepo" in script
     assert "state: 'open'" in script
     assert "Open GitHub code scanning security findings" in script
+    assert "alert.rule?.security_severity_level" not in script
+    assert "alert.rule?.severity" not in script
+    assert "alert.rule?.id" not in script
+    assert "alert.rule?.name" not in script
+    assert "alert.html_url" not in script
     assert "Unable to verify GitHub code scanning alerts" in script
 
 
