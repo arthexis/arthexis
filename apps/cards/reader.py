@@ -1009,12 +1009,13 @@ def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
     if factory is None:
         return {}
     dump: list[dict[str, Any]] = []
-    for block in (
+    transport_blocks = (
         sector_block(0, 1),
         sector_block(0, 2),
         sector_block(1, 1),
         sector_block(1, 2),
-    ):
+    )
+    for block in transport_blocks:
         try:
             data = _read_block(
                 mfrc,
@@ -1027,7 +1028,7 @@ def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
             data = None
         if data is not None:
             dump.append({"block": block, "data": data, "key": "A"})
-    if not dump:
+    if len(dump) != len(transport_blocks):
         return {}
     return decode_transport_metadata(dump)
 

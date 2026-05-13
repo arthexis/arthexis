@@ -512,10 +512,19 @@ class RFIDServiceState:
         }
         if should_auto_initialize_unknown(payload):
             init_payload = initialize_current_tag(timeout=default_deep_scan_timeout())
-            payload["initialization"] = normalize_initialization_payload(
-                init_payload,
-                attempted_at=observed_at,
-            )
+            init_rfid = str((init_payload or {}).get("rfid") or "").strip().upper()
+            if init_payload and init_rfid != rfid_value:
+                payload["initialization"] = {
+                    "automatic": True,
+                    "attempted_at": observed_at,
+                    "status": "rfid-mismatch",
+                    "rfid": init_rfid or None,
+                }
+            else:
+                payload["initialization"] = normalize_initialization_payload(
+                    init_payload,
+                    attempted_at=observed_at,
+                )
         self._stamp_presence(
             payload,
             observed_at=observed_at,

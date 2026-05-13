@@ -594,6 +594,59 @@ def test_rfid_service_auto_initializes_unformatted_held_classic_card(
     assert enriched_payload["initialization"]["automatic"] is True
 
 
+def test_rfid_service_rejects_auto_initialization_rfid_mismatch(
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.BASE_DIR = str(tmp_path)
+    monkeypatch.setattr(settings, "LOG_DIR", str(tmp_path / "logs"), raising=False)
+    clock = {"now": 100.0}
+
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(rfid_service, "default_scan_dedupe_seconds", lambda: 0.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_hold_seconds", lambda: 2.0)
+    monkeypatch.setattr(rfid_service, "default_deep_scan_timeout", lambda: 0.1)
+    monkeypatch.setattr(rfid_service, "default_auto_initialize_unknown", lambda: True)
+
+    def fake_read_deep_tag(timeout):
+        return {
+            "rfid": "ABCD1234",
+            "kind": "CLASSIC",
+            "initialized": False,
+            "deep_read": True,
+            "dump": [
+                {"block": 12, "data": [0] * 16},
+                {"block": 13, "data": [0] * 16},
+                {"block": 14, "data": [0] * 16},
+            ],
+        }
+
+    monkeypatch.setattr(rfid_service, "read_deep_tag", fake_read_deep_tag)
+    monkeypatch.setattr(
+        rfid_service,
+        "initialize_current_tag",
+        lambda timeout: {"rfid": "DEADBEEF", "initialized": True},
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 101.0
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+
+    clock["now"] = 102.1
+    state._emit_scan_artifacts({"rfid": "ABCD1234", "label_id": "alpha"})
+    enriched_payload = _read_latest_scan_lock(tmp_path)
+
+    assert enriched_payload["initialization"] == {
+        "automatic": True,
+        "attempted_at": enriched_payload["scanned_at"],
+        "status": "rfid-mismatch",
+        "rfid": "DEADBEEF",
+    }
+
+
 def test_background_reader_deep_read_uses_direct_reader_and_restores_state(
     monkeypatch,
 ):

@@ -198,6 +198,8 @@ def test_read_rfid_adds_transport_lcd_label(monkeypatch):
         read_blocks={
             reader.sector_block(0, 1): encoded[:16],
             reader.sector_block(0, 2): encoded[16:],
+            reader.sector_block(1, 1): [0] * 16,
+            reader.sector_block(1, 2): [0] * 16,
         },
     )
     tag = SimpleNamespace(kind=RFID.CLASSIC, lcd_label="", traits={})
@@ -277,6 +279,52 @@ def test_read_rfid_clears_blank_transport_metadata(monkeypatch):
     assert tag.writer_id == ""
     assert tag.writer_written_at is None
     assert saved_fields == [["lcd_label", "writer_id", "writer_written_at"]]
+
+
+def test_read_rfid_ignores_partial_blank_transport_metadata(monkeypatch):
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): [0] * 16,
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(reader, "_finalize_reader_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (
+            tag,
+            False,
+            {"rfid": "DEADBEEF", "label_id": 10, "lcd_label": "Old label"},
+        ),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["lcd_label"] == "Old label"
+    assert tag.lcd_label == "Old label"
+    assert tag.writer_id == "OLD-WRITER"
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert saved_fields == []
 
 
 def test_read_rfid_returns_error_and_notifies_on_processing_failure(monkeypatch):
