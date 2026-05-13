@@ -738,6 +738,20 @@ def test_release_simulator_pr_and_issue_blockers_have_required_permissions() -> 
     assert "issue.body?.includes(releaseReadinessReportMarker)" in script
 
 
+def test_release_simulator_suppresses_unchanged_passed_report_comments() -> None:
+    workflow = _workflow_data("release-simulator.yml")
+    report_job = workflow["jobs"]["report"]
+    report_step = _workflow_step(report_job, "Create or update release readiness report issue")
+    script = report_step["with"]["script"]
+
+    assert "const crypto = require('crypto')" in script
+    assert "const reportFingerprint = crypto" in script
+    assert "<!-- release-readiness-fingerprint:" in script
+    assert "const stableReportPassed = blockers.length === 0 && simulatedOk" in script
+    assert "stableReportPassed && existing.body?.includes(fingerprintMarker)" in script
+    assert "skipping refresh comment" in script
+
+
 @pytest.mark.django_db
 def test_step_record_publish_metadata_records_github_release_url(
     monkeypatch, tmp_path: Path

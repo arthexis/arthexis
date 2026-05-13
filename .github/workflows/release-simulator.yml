@@ -588,6 +588,7 @@ jobs:
           script: |
             const title = 'Release Readiness Report';
             const marker = '<!-- release-readiness-report -->';
+            const crypto = require('crypto');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const blockers = JSON.parse(process.env.BLOCKERS_JSON || '[]');
             const canSimulate = process.env.CAN_SIMULATE === 'true';
@@ -608,8 +609,24 @@ jobs:
                 ? '✅ Recommendation: release can proceed once maintainers approve authorization.'
                 : '⚠️ No release readiness blockers were found, but release simulation did not complete.';
 
+            const reportFingerprint = crypto
+              .createHash('sha256')
+              .update(JSON.stringify({
+                blockers,
+                canSimulate,
+                commit: context.sha,
+                recommendation,
+                ref: context.ref,
+                simulatedOk,
+                simulationSummary,
+              }))
+              .digest('hex');
+            const fingerprintMarker = `<!-- release-readiness-fingerprint:${reportFingerprint} -->`;
+            const stableReportPassed = blockers.length === 0 && simulatedOk;
+
             const body = [
               marker,
+              fingerprintMarker,
               '',
               'Automated release readiness report. Runs hourly and only proceeds after the default branch has remained unchanged for at least two hours.',
               '',
@@ -637,6 +654,10 @@ jobs:
 
             const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
             if (existing) {
+              if (stableReportPassed && existing.body?.includes(fingerprintMarker)) {
+                core.info(`Release readiness report #${existing.number} already passed with unchanged content; skipping refresh comment.`);
+                return;
+              }
               await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
