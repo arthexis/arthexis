@@ -679,11 +679,29 @@ def _queue_upstream(path: Path, queue_dir: Path) -> Path:
     return queued
 
 
-def _flush_upstream_queue(queue_dir: Path, upload_url: str, *, method: str, timeout: int, allow_insecure: bool) -> list[Path]:
+def _path_key(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path.absolute()
+
+
+def _flush_upstream_queue(
+    queue_dir: Path,
+    upload_url: str,
+    *,
+    method: str,
+    timeout: int,
+    allow_insecure: bool,
+    exclude_paths: Iterable[Path] = (),
+) -> list[Path]:
+    excluded = {_path_key(path) for path in exclude_paths}
     sent = []
     if not queue_dir.exists():
         return sent
     for candidate in sorted(queue_dir.glob("*.zip")):
+        if _path_key(candidate) in excluded:
+            continue
         if candidate.is_symlink() or not candidate.is_file():
             print(
                 _("Warning: skipped non-regular queued file {path}").format(path=candidate),
@@ -764,7 +782,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if upstream_url:
         try:
-            flushed = _flush_upstream_queue(upstream_queue_dir, upstream_url, method=config.upload_method, timeout=config.upload_timeout, allow_insecure=config.allow_insecure_upload)
+            flushed = _flush_upstream_queue(
+                upstream_queue_dir,
+                upstream_url,
+                method=config.upload_method,
+                timeout=config.upload_timeout,
+                allow_insecure=config.allow_insecure_upload,
+                exclude_paths=[result.path],
+            )
             if flushed:
                 print(_("Flushed queued upstream uploads: {count}").format(count=len(flushed)))
         except (HTTPError, URLError, OSError, ValueError):

@@ -279,6 +279,39 @@ def test_flush_upstream_queue_skips_non_regular_candidates(
     assert "skipped non-regular queued file" in capsys.readouterr().err
 
 
+def test_flush_upstream_queue_excludes_current_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    current_report = queue_dir / "current.zip"
+    current_report.write_bytes(b"current")
+    queued = queue_dir / "queued.zip"
+    queued.write_bytes(b"queued")
+    uploaded: list[Path] = []
+
+    def fake_upload(path: Path, *args, **kwargs) -> int:
+        uploaded.append(path)
+        return 201
+
+    monkeypatch.setattr(error_report, "upload_report", fake_upload)
+
+    sent = error_report._flush_upstream_queue(
+        queue_dir,
+        "https://example.test/upload",
+        method="PUT",
+        timeout=10,
+        allow_insecure=False,
+        exclude_paths=[current_report],
+    )
+
+    assert uploaded == [queued]
+    assert sent == [queued]
+    assert current_report.exists()
+    assert not queued.exists()
+
+
 def test_send_upstream_rejects_invalid_url_before_build(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -300,6 +333,50 @@ def test_send_upstream_rejects_invalid_url_before_build(
 
     assert status == 2
     assert "Invalid upstream upload URL" in capsys.readouterr().err
+
+
+def test_send_upstream_excludes_current_report_from_queue_flush(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "report.zip"
+    report_path.write_bytes(b"zip")
+    captured: dict[str, list[Path]] = {}
+
+    monkeypatch.setattr(
+        error_report,
+        "build_report",
+        lambda config: error_report.ReportResult(path=report_path, entries=[]),
+    )
+    monkeypatch.setattr(error_report, "upload_report", lambda *args, **kwargs: 201)
+
+    def fake_flush(
+        queue_dir: Path,
+        upload_url: str,
+        *,
+        method: str,
+        timeout: int,
+        allow_insecure: bool,
+        exclude_paths=(),
+    ) -> list[Path]:
+        captured["exclude_paths"] = list(exclude_paths)
+        return []
+
+    monkeypatch.setattr(error_report, "_flush_upstream_queue", fake_flush)
+
+    status = error_report.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--send-upstream",
+            "https://example.test/upload",
+            "--upstream-queue-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert status == 0
+    assert captured["exclude_paths"] == [report_path]
 
 
 def test_send_upstream_relative_queue_dir_resolves_against_base_dir(

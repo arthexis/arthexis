@@ -24,6 +24,7 @@ from webauthn.helpers.exceptions import (
 
 from apps.celery.utils import enqueue_task
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
+from apps.locals.user_data import EntityModelAdmin
 
 from .diagnostics import build_diagnostic_bundle, create_manual_feedback
 from .models import (
@@ -41,6 +42,8 @@ from .tasks import analyze_uploaded_error_report
 
 PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
 logger = logging.getLogger(__name__)
+
+MAX_ERROR_REPORT_PACKAGE_SIZE_BYTES = 25 * 1024 * 1024
 
 
 class ChatProfileAdminForm(OwnableAdminForm):
@@ -86,6 +89,9 @@ class UploadedErrorReportUploadForm(forms.Form):
 
     def clean_package(self):
         uploaded = self.cleaned_data["package"]
+        if uploaded.size > MAX_ERROR_REPORT_PACKAGE_SIZE_BYTES:
+            raise ValidationError(_("Package exceeds the 25 MB upload limit."))
+
         if not uploaded.name.lower().endswith(".zip"):
             raise ValidationError(_("Choose a .zip package to upload."))
 
@@ -316,14 +322,24 @@ class UserDiagnosticBundleAdmin(admin.ModelAdmin):
 
 
 @admin.register(UploadedErrorReport)
-class UploadedErrorReportAdmin(admin.ModelAdmin):
+class UploadedErrorReportAdmin(EntityModelAdmin):
     list_display = ("id", "source_label", "uploaded_by", "status", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("source_label", "package")
-    readonly_fields = ("analysis", "error", "status", "created_at", "updated_at")
+    readonly_fields = ("package", "analysis", "error", "status", "created_at", "updated_at")
 
     change_list_template = "admin/users/uploaded_error_report_changelist.html"
     change_form_template = "admin/users/uploaded_error_report_change_form.html"
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_upload_permission(self, request: HttpRequest) -> bool:
+        return super().has_add_permission(request)
+
+    def changelist_view(self, request: HttpRequest, extra_context=None):
+        context = {**(extra_context or {}), "has_upload_permission": self.has_upload_permission(request)}
+        return super().changelist_view(request, extra_context=context)
 
     def get_urls(self):
         custom = [
@@ -332,7 +348,7 @@ class UploadedErrorReportAdmin(admin.ModelAdmin):
         return custom + super().get_urls()
 
     def upload_view(self, request: HttpRequest) -> HttpResponse:
-        if not self.has_add_permission(request):
+        if not self.has_upload_permission(request):
             messages.error(request, _("You do not have permission to upload error reports."))
             return redirect(reverse("admin:index"))
 
