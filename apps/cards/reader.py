@@ -1028,17 +1028,21 @@ def _apply_transport_metadata_to_result(metadata: dict[str, Any], result: dict) 
         result.pop("writer", None)
 
 
-def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
-    factory = _key_to_bytes(FACTORY_KEY)
-    if factory is None:
-        return {}
-    dump: list[dict[str, Any]] = []
-    transport_blocks = (
+def _transport_block_numbers() -> tuple[int, int, int, int]:
+    return (
         sector_block(0, 1),
         sector_block(0, 2),
         sector_block(1, 1),
         sector_block(1, 2),
     )
+
+
+def _read_transport_layout(mfrc, uid: list[int]) -> dict[str, Any]:
+    factory = _key_to_bytes(FACTORY_KEY)
+    if factory is None:
+        return {}
+    dump: list[dict[str, Any]] = []
+    transport_blocks = _transport_block_numbers()
     for block in transport_blocks:
         try:
             data = _read_block(
@@ -1084,6 +1088,10 @@ def _trait_dump_is_complete(dump: list[dict[str, Any]]) -> bool:
         expected_blocks.update(sector_data_blocks(start_sector))
         expected_blocks.update(sector_data_blocks(continuation_sector))
     return expected_blocks.issubset(_dump_block_numbers(dump))
+
+
+def _transport_dump_is_complete(dump: list[dict[str, Any]]) -> bool:
+    return set(_transport_block_numbers()).issubset(_dump_block_numbers(dump))
 
 
 def _save_tag_traits_from_dump(tag, dump: list[dict[str, Any]], result: dict) -> None:
@@ -1202,9 +1210,10 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
             logger.debug("Failed to read block %d for classic tag: %s", block, exc)
             continue
 
-    metadata = decode_transport_metadata(dump)
-    _apply_transport_metadata_to_result(metadata, result)
-    _save_tag_layout_metadata(tag, metadata)
+    if _transport_dump_is_complete(dump):
+        metadata = decode_transport_metadata(dump)
+        _apply_transport_metadata_to_result(metadata, result)
+        _save_tag_layout_metadata(tag, metadata)
     _save_tag_traits_from_dump(tag, dump, result)
 
     if pending_updates:

@@ -481,6 +481,55 @@ def test_read_deep_classic_tag_data_logs_and_skips_block_errors(monkeypatch):
     ]
 
 
+def test_deep_classic_read_ignores_partial_blank_transport_metadata():
+    transport_block = reader.sector_block(0, 1)
+
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+            return self.MI_OK if block == transport_block else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            return self.MI_OK, [0] * 16
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=True,
+        key_b="",
+        key_b_verified=False,
+        data=[],
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        sector_keys={},
+        traits={},
+    )
+    saved_fields: list[list[str]] = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    result = reader._read_deep_classic_tag_data(
+        _DeepReadReader(),
+        tag,
+        [1, 2, 3, 4],
+        {
+            "rfid": "DEADBEEF",
+            "lcd_label": "Old label",
+            "writer": {"id": "OLD-WRITER"},
+        },
+    )
+
+    assert result["lcd_label"] == "Old label"
+    assert result["writer"] == {"id": "OLD-WRITER"}
+    assert tag.lcd_label == "Old label"
+    assert tag.writer_id == "OLD-WRITER"
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert saved_fields == [["data"]]
+
+
 def test_initialize_detected_card_requires_all_managed_sectors(monkeypatch):
     tag = SimpleNamespace(
         pk=17,
