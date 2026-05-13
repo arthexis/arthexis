@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import zipfile
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 
@@ -219,3 +220,104 @@ def test_flush_upstream_queue_warns_when_uploaded_file_cleanup_fails(
     assert sent == [queued]
     assert queued.exists()
     assert "could not delete queued file" in capsys.readouterr().err
+
+
+def test_send_upstream_rejects_invalid_url_before_build(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail_build(config: error_report.ReportConfig) -> error_report.ReportResult:
+        raise AssertionError("build_report should not run for an invalid upstream URL")
+
+    monkeypatch.setattr(error_report, "build_report", fail_build)
+
+    status = error_report.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--send-upstream",
+            "not-a-url",
+        ]
+    )
+
+    assert status == 2
+    assert "Invalid upstream upload URL" in capsys.readouterr().err
+
+
+def test_send_upstream_relative_queue_dir_resolves_against_base_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    base_dir = tmp_path / "suite"
+    base_dir.mkdir()
+    report_path = base_dir / "report.zip"
+    report_path.write_bytes(b"zip")
+    captured: dict[str, Path] = {}
+
+    monkeypatch.setattr(
+        error_report,
+        "build_report",
+        lambda config: error_report.ReportResult(path=report_path, entries=[]),
+    )
+    monkeypatch.setattr(
+        error_report,
+        "upload_report",
+        lambda *args, **kwargs: (_ for _ in ()).throw(URLError("offline")),
+    )
+
+    def fake_queue(path: Path, queue_dir: Path) -> Path:
+        captured["queue_dir"] = queue_dir
+        return queue_dir / path.name
+
+    monkeypatch.setattr(error_report, "_queue_upstream", fake_queue)
+
+    status = error_report.main(
+        [
+            "--base-dir",
+            str(base_dir),
+            "--send-upstream",
+            "https://example.test/upload",
+            "--upstream-queue-dir",
+            "relative-queue",
+        ]
+    )
+
+    assert status == 0
+    assert captured["queue_dir"] == base_dir / "relative-queue"
+
+
+def test_send_upstream_queue_failure_returns_controlled_error(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "report.zip"
+    report_path.write_bytes(b"zip")
+    monkeypatch.setattr(
+        error_report,
+        "build_report",
+        lambda config: error_report.ReportResult(path=report_path, entries=[]),
+    )
+    monkeypatch.setattr(
+        error_report,
+        "upload_report",
+        lambda *args, **kwargs: (_ for _ in ()).throw(URLError("offline")),
+    )
+    monkeypatch.setattr(
+        error_report,
+        "_queue_upstream",
+        lambda path, queue_dir: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    status = error_report.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--send-upstream",
+            "https://example.test/upload",
+        ]
+    )
+
+    assert status == 2
+    assert "queueing also failed" in capsys.readouterr().err

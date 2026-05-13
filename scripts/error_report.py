@@ -705,8 +705,20 @@ def main(argv: list[str] | None = None) -> int:
     elif not output_dir.is_absolute():
         output_dir = base_dir / output_dir
 
-    upstream_queue_dir = args.upstream_queue_dir or (base_dir / "work" / "error-reports" / "upstream-queue")
+    upstream_queue_dir = (
+        args.upstream_queue_dir.expanduser()
+        if args.upstream_queue_dir
+        else base_dir / "work" / "error-reports" / "upstream-queue"
+    )
+    if not upstream_queue_dir.is_absolute():
+        upstream_queue_dir = base_dir / upstream_queue_dir
     upstream_url = (args.send_upstream or "").strip()
+    if upstream_url:
+        try:
+            validate_upload_url(upstream_url, args.allow_insecure_upload)
+        except ValueError as exc:
+            print(_("Invalid upstream upload URL: {error}").format(error=exc), file=sys.stderr)
+            return 2
 
     config = ReportConfig(
         base_dir=base_dir,
@@ -767,7 +779,17 @@ def main(argv: list[str] | None = None) -> int:
             status = upload_report(result.path, upstream_url, method=config.upload_method, timeout=config.upload_timeout, allow_insecure=config.allow_insecure_upload)
             print(_("Sent upstream error report: HTTP {status}").format(status=status))
         except (HTTPError, URLError, OSError, ValueError):
-            queued = _queue_upstream(result.path, upstream_queue_dir)
+            try:
+                queued = _queue_upstream(result.path, upstream_queue_dir)
+            except OSError as exc:
+                print(
+                    _("Upstream upload failed and queueing also failed for {path}: {error}").format(
+                        path=result.path,
+                        error=exc,
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
             print(_("Upstream upload unavailable; queued report at {path}").format(path=queued), file=sys.stderr)
 
     return 0

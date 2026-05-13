@@ -74,6 +74,32 @@ def test_uploaded_error_report_admin_creates_report_for_valid_zip(admin_client, 
     assert report.package.name.endswith(".zip")
 
 
+def test_uploaded_error_report_admin_marks_failed_when_sync_fallback_raises(
+    admin_client,
+    monkeypatch,
+    settings,
+    tmp_path,
+):
+    settings.MEDIA_ROOT = tmp_path
+    monkeypatch.setattr("apps.users.admin.enqueue_task", lambda *args, **kwargs: False)
+
+    def fail_analysis(report_id: int) -> None:
+        raise RuntimeError("analysis unavailable")
+
+    monkeypatch.setattr("apps.users.admin.analyze_uploaded_error_report", fail_analysis)
+
+    response = admin_client.post(
+        reverse("admin:users_uploadederrorreport_upload"),
+        data={"source_label": "ops", "package": _zip_upload()},
+    )
+
+    report = UploadedErrorReport.objects.get()
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+    assert report.status == UploadedErrorReport.Status.FAILED
+    assert report.error == "analysis unavailable"
+
+
 def test_uploaded_error_report_change_page_refreshes_only_while_processing(admin_client, settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path
     report = UploadedErrorReport.objects.create(

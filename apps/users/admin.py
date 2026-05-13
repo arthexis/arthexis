@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import zipfile
 
 from django import forms
@@ -39,6 +40,7 @@ from .passkeys import build_registration_options, verify_registration_response
 from .tasks import analyze_uploaded_error_report
 
 PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
+logger = logging.getLogger(__name__)
 
 
 class ChatProfileAdminForm(OwnableAdminForm):
@@ -343,7 +345,14 @@ class UploadedErrorReportAdmin(admin.ModelAdmin):
                     package=form.cleaned_data["package"],
                 )
                 if not enqueue_task(analyze_uploaded_error_report, report.pk, require_enabled=False):
-                    analyze_uploaded_error_report(report.pk)
+                    try:
+                        analyze_uploaded_error_report(report.pk)
+                    except Exception as exc:
+                        logger.exception("Failed to analyze uploaded error report synchronously.")
+                        report.status = UploadedErrorReport.Status.FAILED
+                        report.error = str(exc)
+                        report.save(update_fields=["status", "error", "updated_at"])
+                        messages.error(request, _("Error report analysis failed to start."))
                 return redirect(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
 
         context = {
