@@ -80,3 +80,10 @@ def test_transport_metadata_decodes_lcd_label_and_writer_blocks():
         "id": "MODEL-1",
         "written_at": "20260513T123456Z",
     }
+
+
+def test_classic_1k_layout_stays_inside_standard_sector_range():
+    assert classic_layout.LAST_MANAGED_SECTOR == 15
+    assert list(classic_layout.sector_numbers()) == list(range(16))
+    assert classic_layout.scan_block_count() == 64
+    assert classic_layout.trait_sector_pairs()[-1] == (13, 14)

@@ -19,7 +19,7 @@ scan path so the LCD can show it before database-backed deep reads complete.
 ## Managed sectors
 
 Managed sectors start at sector 3. When Arthexis initializes a card it generates
-random per-sector Key A and Key B values for sectors 3 through 16, stores those
+random per-sector Key A and Key B values for sectors 3 through 15, stores those
 keys on the RFID database record, clears data blocks to zero, and writes the new
 trailers. The suite uses Key A for write flows and Key B for read-only flows by
 policy while preserving the physical card access bits that keep managed data
@@ -27,7 +27,7 @@ readable by the suite.
 
 ## Traits
 
-Traits are unordered key/value records over sectors 3 through 16. A trait key is
+Traits are unordered key/value records over sector pairs from 3 through 14. A trait key is
 up to 16 ASCII bytes and a trait value is up to 80 ASCII bytes. Because MIFARE
 Classic data blocks are 16 bytes and each small sector only has three data
 blocks, one 80 byte trait value spans a sector pair:

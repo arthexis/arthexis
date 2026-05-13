@@ -298,3 +298,63 @@ def test_read_deep_classic_tag_data_logs_and_skips_block_errors(monkeypatch):
     assert debug_messages == [
         ("Failed to read block %d for classic tag: %s", 0, "read failed")
     ]
+
+
+def test_deep_classic_read_reuses_and_promotes_sector_key_candidates(monkeypatch):
+    good_key = [1, 2, 3, 4, 5, 6]
+    bad_key = [6, 5, 4, 3, 2, 1]
+
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def __init__(self):
+            self.attempts = []
+
+        def MFRC522_Auth(self, auth_mode, block, key_bytes, _uid):
+            self.attempts.append((auth_mode, block, list(key_bytes)))
+            return self.MI_OK if list(key_bytes) == good_key else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            return self.MI_OK, [block] * 16
+
+    build_calls = []
+
+    def _build_candidates(_tag, sector, key_type):
+        build_calls.append((sector, key_type))
+        if key_type == "A":
+            return [("BADBADBADBAD", bad_key), ("010203040506", good_key)]
+        return []
+
+    monkeypatch.setattr(reader, "scan_block_count", lambda: 2)
+    monkeypatch.setattr(reader, "_build_sector_key_candidates", _build_candidates)
+
+    tag = SimpleNamespace(
+        key_a="",
+        key_a_verified=False,
+        key_b="",
+        key_b_verified=False,
+        data=None,
+        sector_keys={},
+        traits={},
+    )
+    saves: list[list[str]] = []
+    tag.save = lambda *, update_fields: saves.append(list(update_fields))
+    deep_reader = _DeepReadReader()
+
+    result = reader._read_deep_classic_tag_data(
+        deep_reader,
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "01020304"},
+    )
+
+    assert build_calls == [(0, "A"), (0, "B")]
+    assert deep_reader.attempts == [
+        (_DeepReadReader.PICC_AUTHENT1A, 0, bad_key),
+        (_DeepReadReader.PICC_AUTHENT1A, 0, good_key),
+        (_DeepReadReader.PICC_AUTHENT1A, 1, good_key),
+    ]
+    assert [entry["block"] for entry in result["dump"]] == [0, 1]

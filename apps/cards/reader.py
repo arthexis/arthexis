@@ -1044,26 +1044,32 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
 
     dump = []
     pending_updates: set[str] = set()
+    last_sector = -1
+    key_candidates: dict[str, list[tuple[str, list[int]]]] = {"A": [], "B": []}
     for block in range(scan_block_count()):
-        sector = block // 4 if block < 128 else 32 + ((block - 128) // 16)
-        key_candidates = {
-            "A": _build_sector_key_candidates(tag, sector, "A"),
-            "B": _build_sector_key_candidates(tag, sector, "B"),
-        }
+        sector = _sector_for_block(block)
+        if sector != last_sector:
+            key_candidates = {
+                "A": _build_sector_key_candidates(tag, sector, "A"),
+                "B": _build_sector_key_candidates(tag, sector, "B"),
+            }
+            last_sector = sector
         try:
             used_key = None
             used_value = None
             status = mfrc.MI_ERR
 
-            for key_value, key_bytes in key_candidates["A"]:
+            for index, (key_value, key_bytes) in enumerate(key_candidates["A"]):
                 status = mfrc.MFRC522_Auth(mfrc.PICC_AUTHENT1A, block, key_bytes, uid)
                 if status == mfrc.MI_OK:
                     used_key = "A"
                     used_value = key_value
+                    if index > 0:
+                        key_candidates["A"].insert(0, key_candidates["A"].pop(index))
                     break
 
             if status != mfrc.MI_OK:
-                for key_value, key_bytes in key_candidates["B"]:
+                for index, (key_value, key_bytes) in enumerate(key_candidates["B"]):
                     status = mfrc.MFRC522_Auth(
                         mfrc.PICC_AUTHENT1B,
                         block,
@@ -1073,6 +1079,8 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                     if status == mfrc.MI_OK:
                         used_key = "B"
                         used_value = key_value
+                        if index > 0:
+                            key_candidates["B"].insert(0, key_candidates["B"].pop(index))
                         break
 
             if status == mfrc.MI_OK:
