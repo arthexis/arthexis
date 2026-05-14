@@ -30,4 +30,6 @@ def request_has_rfid_login_poll_token(request) -> bool:
         or request.headers.get(RFID_LOGIN_POLL_HEADER)
         or ""
     )
-    return secrets.compare_digest(expected, str(supplied))
+    expected_bytes = expected.encode("utf-8")
+    supplied_bytes = str(supplied).encode("utf-8")
+    return secrets.compare_digest(expected_bytes, supplied_bytes)
