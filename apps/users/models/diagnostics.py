@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -18,7 +19,7 @@ from .profile import Profile
 def uploaded_error_report_storage() -> FileSystemStorage:
     """Store raw uploaded error reports outside publicly served media paths."""
 
-    return FileSystemStorage(location=settings.BASE_DIR / "var" / "private" / "error-reports")
+    return FileSystemStorage(location=Path(settings.BASE_DIR) / "var" / "private" / "error-reports")
 
 
 class UserDiagnosticsProfile(Profile):

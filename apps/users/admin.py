@@ -326,6 +326,7 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
     list_display = ("id", "source_label", "uploaded_by", "status", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("source_label", "package")
+    exclude = ("package",)
     readonly_fields = ("package_name", "analysis", "error", "status", "created_at", "updated_at")
 
 
