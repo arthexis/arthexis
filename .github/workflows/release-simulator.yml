@@ -233,13 +233,7 @@ jobs:
                 });
 
                 if (codeScanningAlerts.length) {
-                  const preview = codeScanningAlerts.slice(0, 5).map((alert) => {
-                    const severity = alert.rule?.security_severity_level || alert.rule?.severity || 'unknown';
-                    const rule = alert.rule?.id || alert.rule?.name || `alert ${alert.number}`;
-                    return `${severity}:${rule}${alert.html_url ? ` (${alert.html_url})` : ''}`;
-                  }).join('; ');
-                  const suffix = codeScanningAlerts.length > 5 ? `; and ${codeScanningAlerts.length - 5} more` : '';
-                  blockers.push(`Open GitHub code scanning security findings: ${codeScanningAlerts.length}. ${preview}${suffix}`);
+                  blockers.push(`Open GitHub code scanning security findings: ${codeScanningAlerts.length}.`);
                 }
               } catch (error) {
                 blockers.push(`Unable to verify GitHub code scanning alerts before release readiness: ${error.message}`);
