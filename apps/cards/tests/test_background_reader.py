@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import sys
 from types import SimpleNamespace
 
 from apps.cards import background_reader
@@ -69,6 +70,44 @@ def test_record_setup_failure_logs_warning_for_unexpected_failures(caplog, monke
         background_reader._record_setup_failure("initialization")
 
     assert "RFID hardware setup failed" in caplog.text
+
+
+def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatch):
+    class DummyGPIO:
+        BCM = "BCM"
+        IN = "IN"
+        PUD_UP = "PUD_UP"
+
+        @staticmethod
+        def setwarnings(_enabled):
+            return None
+
+        @staticmethod
+        def setmode(_mode):
+            return None
+
+        @staticmethod
+        def setup(_pin, _direction, pull_up_down=None):
+            return None
+
+        @staticmethod
+        def cleanup():
+            return None
+
+    monkeypatch.setattr(background_reader, "GPIO", DummyGPIO)
+    monkeypatch.setattr(background_reader, "resolve_spi_bus_device", lambda: (0, 0))
+    monkeypatch.setattr(background_reader, "_reader", None)
+
+    with caplog.at_level(logging.INFO):
+        with monkeypatch.context() as patch_ctx:
+            patch_ctx.setitem(sys.modules, "mfrc522", SimpleNamespace())
+            def _mfrc_ctor(**_kwargs):
+                raise FileNotFoundError("[Errno 2] No such file or directory: '/dev/spidev0.0'")
+            sys.modules["mfrc522"].MFRC522 = _mfrc_ctor
+            assert background_reader._setup_hardware() is False
+
+    assert "RFID hardware disabled for this process after setup failure" in caplog.text
+    assert "WARNING" not in caplog.text
 
 
 def test_start_skips_when_hardware_is_disabled(monkeypatch):
