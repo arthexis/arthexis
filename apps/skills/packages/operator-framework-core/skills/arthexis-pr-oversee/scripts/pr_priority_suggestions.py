@@ -208,7 +208,7 @@ def command_for(repo: str, pr: dict[str, Any], action: str) -> str:
             f"--repo {repo} --json ci --logs --pr {number}"
         )
     if action == "checkout":
-        return f".venv\\Scripts\\python.exe manage.py pr_oversee checkout --pr {number}"
+        return f".venv\\Scripts\\python.exe manage.py pr_oversee --repo {repo} checkout --pr {number}"
     return (
         ".venv\\Scripts\\python.exe manage.py pr_oversee "
         f"--repo {repo} --json monitor --pr {number} --max-iterations 1 --interval 0"

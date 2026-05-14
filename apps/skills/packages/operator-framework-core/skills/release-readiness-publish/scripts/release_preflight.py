@@ -174,13 +174,31 @@ def evidence_error(value: Any, *, allow_not_found: bool = False) -> str:
     return error
 
 
+def probe_failed(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "missing probe result"
+    if int(value.get("returncode") or 0) == 0:
+        return ""
+    return str(value.get("stderr") or value.get("stdout") or f"returncode {value.get('returncode')}")
+
+
 def decide(result: dict[str, Any]) -> dict[str, Any]:
     blockers: list[str] = []
     actions: list[str] = []
+    git_evidence_failed = False
 
-    if result["git"]["status"].get("stdout"):
+    for key in ("status", "head", "originMain", "remoteTag"):
+        error = probe_failed(result["git"].get(key))
+        if error:
+            blockers.append(f"git {key} probe failed: {error}")
+            git_evidence_failed = True
+
+    if not git_evidence_failed and result["git"]["status"].get("stdout"):
         blockers.append("checkout is dirty")
-    if result["git"]["head"].get("stdout") != result["git"]["originMain"].get("stdout"):
+    if (
+        not git_evidence_failed
+        and result["git"]["head"].get("stdout") != result["git"]["originMain"].get("stdout")
+    ):
         blockers.append("local main is not at origin/main")
 
     for key in ("latestRelease", "openPullRequests", "readinessIssue"):
@@ -208,7 +226,7 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
     if pypi.get("exists") is None:
         blockers.append(f"PyPI lookup failed: {pypi.get('error', 'unknown error')}")
 
-    if pypi_missing:
+    if git_evidence_failed or pypi_missing:
         pass
     elif release_exists and pypi_exists:
         candidate = result.get("nextPatchVersion")

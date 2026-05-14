@@ -46,6 +46,14 @@ def test_priority_suggestions_treats_has_hooks_as_mergeable_state():
     assert "UNSTABLE" in script.BAD_MERGE_STATES
 
 
+def test_priority_checkout_command_includes_repo():
+    script = load_script("arthexis-pr-oversee/scripts/pr_priority_suggestions.py")
+
+    command = script.command_for("example/project", {"number": 17}, "checkout")
+
+    assert "--repo example/project checkout --pr 17" in command
+
+
 def test_release_preflight_blocks_missing_evidence_without_release_advice():
     script = load_script("release-readiness-publish/scripts/release_preflight.py")
     result = {
@@ -71,4 +79,30 @@ def test_release_preflight_blocks_missing_evidence_without_release_advice():
     assert any("openPullRequests lookup failed" in item for item in decision["blockers"])
     assert any("readinessIssue lookup failed" in item for item in decision["blockers"])
     assert any("PyPI lookup failed" in item for item in decision["blockers"])
+    assert not decision["actions"]
+
+
+def test_release_preflight_blocks_failed_git_probes_without_release_advice():
+    script = load_script("release-readiness-publish/scripts/release_preflight.py")
+    result = {
+        "git": {
+            "status": {"returncode": 0, "stdout": ""},
+            "head": {"returncode": 128, "stdout": "", "stderr": "not a git repository"},
+            "originMain": {"returncode": 128, "stdout": "", "stderr": "unknown revision"},
+            "remoteTag": {"returncode": 0, "stdout": ""},
+        },
+        "latestRelease": [],
+        "openPullRequests": [],
+        "readinessIssue": [],
+        "releaseForVersion": {"error": "release not found"},
+        "pypi": {"exists": False},
+        "version": "1.2.3",
+        "nextPatchVersion": "1.2.4",
+    }
+
+    decision = script.decide(result)
+
+    assert decision["blocked"] is True
+    assert any("git head probe failed" in item for item in decision["blockers"])
+    assert any("git originMain probe failed" in item for item in decision["blockers"])
     assert not decision["actions"]
