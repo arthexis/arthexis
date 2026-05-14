@@ -150,6 +150,26 @@ def test_scan_next_blocks_login_poll_with_mismatched_session_token(monkeypatch):
     assert json.loads(get_response.content) == {"error": "Authentication required"}
 
 
+def test_scan_next_blocks_login_poll_with_non_ascii_token(monkeypatch):
+    node = _make_node("Control")
+    monkeypatch.setattr(views.Node, "get_local", lambda: node)
+
+    factory = RequestFactory()
+    get_request = factory.get(
+        reverse("rfid-scan-next"),
+        {RFID_LOGIN_POLL_QUERY_PARAM: "é"},
+        HTTP_ACCEPT="application/json",
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+    get_request.user = AnonymousUser()
+    get_request.session = {RFID_LOGIN_POLL_SESSION_KEY: "session-token"}
+
+    get_response = views.scan_next(get_request)
+
+    assert get_response.status_code == 401
+    assert json.loads(get_response.content) == {"error": "Authentication required"}
+
+
 def test_scan_next_blocks_anonymous_post_for_control_role(monkeypatch):
     node = _make_node("Control")
     monkeypatch.setattr(views.Node, "get_local", lambda: node)
