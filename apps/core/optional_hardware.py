@@ -54,7 +54,6 @@ def is_expected_gpio_absence(detail: object | None) -> bool:
     return any(
         marker in normalized
         for marker in (
-            "failed to initialize rfid hardware",
             "spidev",
             "/dev/spi",
         )

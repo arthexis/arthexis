@@ -106,7 +106,7 @@ def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatc
             sys.modules["mfrc522"].MFRC522 = _mfrc_ctor
             assert background_reader._setup_hardware() is False
 
-    assert "Failed to initialize RFID hardware" in caplog.text
+    assert "RFID hardware disabled for this process after setup failure" in caplog.text
     assert "WARNING" not in caplog.text
 
 

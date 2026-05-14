@@ -372,12 +372,10 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
         else:
             logger.info("RFID IRQ listener active on pin %s", IRQ_PIN)
     except Exception as exc:
-        log = (
-            logger.info
-            if is_expected_optional_hardware_absence(exc)
-            else logger.warning
-        )
-        log("Failed to initialize RFID hardware: %s", exc)
+        if is_expected_optional_hardware_absence(exc):
+            _disable_hardware(str(exc))
+        else:
+            logger.warning("Failed to initialize RFID hardware: %s", exc)
         try:
             GPIO.cleanup()
         except Exception:
