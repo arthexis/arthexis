@@ -72,6 +72,23 @@ def test_install_usage_keeps_core_lifecycle_flags() -> None:
         )
 
 
+def test_install_debian_default_requires_redis_for_terminal_celery() -> None:
+    install_script = _read_shell_contract("install.sh")
+    default_match = re.search(
+        r"if \[ \$\{#ORIGINAL_ARGS\[@\]\} -eq 0 \] && is_debian_host; then\n"
+        r"(?P<body>.*?)\nfi",
+        install_script,
+        re.DOTALL,
+    )
+    assert default_match, "install.sh is missing Debian no-args default branch"
+
+    body = default_match.group("body")
+    assert 'SERVICE="arthexis"' in body
+    assert "ENABLE_CELERY=true" in body
+    assert 'NODE_ROLE="Terminal"' not in body
+    assert "REQUIRES_REDIS=true" in body
+
+
 def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
     scripts_and_tokens = {
         "start.sh": ("--clear-logs", "--show LEVEL", "--reload", "--silent"),
