@@ -24,8 +24,9 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
     r")\b"
     r"[\"']?\s*[:=]\s*"
     r")"
-    r"(?:(?P<quote>[\"'])(?P<quoted_value>(?:\\.|(?!(?P=quote)(?=$|[\s,;}\]])).)*)"
-    r"(?P=quote)|(?P<unquoted_value>(?:[A-Za-z0-9._~+/=:@%!-]|\\+[\"']|\\+)+))",
+    r"(?:\"(?P<double_quoted_value>[^\r\n]*)\""
+    r"|\'(?P<single_quoted_value>[^\r\n]*)\'"
+    r"|(?P<unquoted_value>[^\s;,]+))",
     re.IGNORECASE,
 )
 SECRET_EXPOSURE_PATTERN = re.compile(
@@ -159,7 +160,12 @@ def redact_sensitive_text(text: str) -> str:
     """Return ``text`` with obvious credential material replaced for reports."""
 
     def _replace_assignment(match: re.Match[str]) -> str:
-        quote = match.group("quote") or ""
+        if match.group("double_quoted_value") is not None:
+            quote = '"'
+        elif match.group("single_quoted_value") is not None:
+            quote = "'"
+        else:
+            quote = ""
         return f"{match.group('prefix')}{quote}[redacted]{quote}"
 
     redacted = PRIVATE_KEY_BLOCK_PATTERN.sub("[redacted private key]", text)
