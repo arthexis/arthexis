@@ -27,8 +27,9 @@ PR_FIELDS = ",".join(
 )
 
 GOOD_CHECKS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
-BAD_CHECKS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
-BAD_MERGE_STATES = {"DIRTY", "BLOCKED", "BEHIND"}
+BAD_CHECKS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+PENDING_CHECKS = {"PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"}
+BAD_MERGE_STATES = {"DIRTY", "BLOCKED", "BEHIND", "UNSTABLE"}
 
 
 def require_gh() -> None:
@@ -76,12 +77,14 @@ def check_rollup_state(pr: dict[str, Any]) -> tuple[list[str], list[str]]:
     pending: list[str] = []
     for check in pr.get("statusCheckRollup") or []:
         name = str(check.get("name") or check.get("workflowName") or check.get("context") or "check")
-        conclusion = str(check.get("conclusion") or "").upper()
+        conclusion = str(check.get("conclusion") or check.get("state") or "").upper()
         status = str(check.get("status") or "").upper()
         if conclusion in BAD_CHECKS:
             failing.append(f"{name}:{conclusion}")
+        elif conclusion in PENDING_CHECKS:
+            pending.append(f"{name}:{conclusion}")
         elif conclusion and conclusion not in GOOD_CHECKS:
-            failing.append(f"{name}:{conclusion}")
+            pending.append(f"{name}:{conclusion}")
         elif status and status not in {"COMPLETED", "SUCCESS"}:
             pending.append(f"{name}:{status}")
         elif not conclusion and not status:

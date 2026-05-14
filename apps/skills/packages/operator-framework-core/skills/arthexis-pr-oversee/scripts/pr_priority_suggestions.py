@@ -32,8 +32,9 @@ PR_FIELDS = ",".join(
 )
 
 GOOD_CHECKS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
-BAD_CHECKS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
-BAD_MERGE_STATES = {"DIRTY", "BLOCKED", "BEHIND", "HAS_HOOKS"}
+BAD_CHECKS = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
+PENDING_CHECKS = {"PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"}
+BAD_MERGE_STATES = {"DIRTY", "BLOCKED", "BEHIND", "UNSTABLE"}
 
 
 def require_gh() -> None:
@@ -147,7 +148,10 @@ query($owner:String!, $repo:String!, $number:Int!) {
         return {"unresolved": 0, "currentUnresolved": 0, "threadLookupFailed": 1}
     if not proc.stdout.strip():
         return {"unresolved": 0, "currentUnresolved": 0, "threadLookupFailed": 1}
-    payload = json.loads(proc.stdout)
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"unresolved": 0, "currentUnresolved": 0, "threadLookupFailed": 1}
     threads = (
         payload.get("data", {})
         .get("repository", {})
@@ -173,6 +177,8 @@ def check_rollup_state(pr: dict[str, Any]) -> tuple[list[str], list[str]]:
         status = str(check.get("status") or "").upper()
         if conclusion in BAD_CHECKS:
             failing.append(f"{name}:{conclusion}")
+        elif conclusion in PENDING_CHECKS:
+            pending.append(f"{name}:{conclusion}")
         elif conclusion and conclusion not in GOOD_CHECKS:
             pending.append(f"{name}:{conclusion}")
         elif status and status not in {"COMPLETED", "SUCCESS"}:

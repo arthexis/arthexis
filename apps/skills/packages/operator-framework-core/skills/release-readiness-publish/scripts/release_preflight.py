@@ -164,11 +164,12 @@ def readiness_issue(repo: str) -> Any:
     )
 
 
-def evidence_error(value: Any) -> str:
+def evidence_error(value: Any, *, allow_not_found: bool = False) -> str:
     if not isinstance(value, dict) or not value.get("error"):
         return ""
     error = str(value["error"])
-    if "not found" in error.lower():
+    lower_error = error.lower()
+    if allow_not_found and ("release not found" in lower_error or "could not resolve to a release" in lower_error):
         return ""
     return error
 
@@ -186,7 +187,9 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
         error = evidence_error(result.get(key))
         if error:
             blockers.append(f"{key} lookup failed: {error}")
-    release_error = evidence_error(result.get("releaseForVersion"))
+        elif not isinstance(result.get(key), list):
+            blockers.append(f"{key} lookup did not return expected list evidence")
+    release_error = evidence_error(result.get("releaseForVersion"), allow_not_found=True)
     if release_error:
         blockers.append(f"releaseForVersion lookup failed: {release_error}")
 
@@ -201,17 +204,20 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
     tag_exists = bool(result["git"]["remoteTag"].get("stdout"))
     release_exists = isinstance(release, dict) and not release.get("error")
     pypi_exists = pypi.get("exists") is True
+    pypi_missing = pypi.get("exists") is None
     if pypi.get("exists") is None:
         blockers.append(f"PyPI lookup failed: {pypi.get('error', 'unknown error')}")
 
-    if release_exists and pypi_exists:
+    if pypi_missing:
+        pass
+    elif release_exists and pypi_exists:
         candidate = result.get("nextPatchVersion")
         actions.append(
             f"{tag} is already published; bump VERSION to {candidate} before the next release."
         )
     elif tag_exists and not release_exists:
         actions.append(f"Dispatch publish.yml for existing tag {tag}.")
-    elif not tag_exists and not pypi_exists:
+    elif not tag_exists and not pypi_exists and not pypi_missing:
         actions.append(
             f"Push a reviewed VERSION={version} commit to main; tag-from-version.yml will create {tag} and dispatch publish.yml."
         )
