@@ -796,7 +796,6 @@ def test_release_simulator_suppresses_unchanged_report_comments() -> None:
     assert "if (reportUnchanged)" in script
     assert "stableReportPassed" not in script
     assert "already has unchanged content; skipping refresh comment" in script
-    assert "skipping refresh comment" in script
 
 
 @pytest.mark.django_db
