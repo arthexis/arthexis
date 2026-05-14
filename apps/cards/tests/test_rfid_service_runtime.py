@@ -125,6 +125,14 @@ def test_write_rfid_scan_lock_uses_uuid_temp_name(settings, tmp_path, monkeypatc
     ]
 
 
+def test_default_auto_initialize_unknown_is_opt_in(monkeypatch):
+    monkeypatch.delenv("RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN", raising=False)
+    assert rfid_service.default_auto_initialize_unknown() is False
+
+    monkeypatch.setenv("RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN", "true")
+    assert rfid_service.default_auto_initialize_unknown() is True
+
+
 def test_emit_scan_artifacts_uses_shared_payload_timestamp(settings, tmp_path, monkeypatch):
     settings.BASE_DIR = tmp_path
     appended: list[dict[str, object]] = []
