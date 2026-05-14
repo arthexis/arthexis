@@ -96,7 +96,7 @@ def default_deep_scan_timeout() -> float:
 
 
 def default_auto_initialize_unknown() -> bool:
-    return os.environ.get("RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN", "1").lower() not in {
+    return os.environ.get("RFID_SERVICE_AUTO_INITIALIZE_UNKNOWN", "0").lower() not in {
         "0",
         "false",
         "no",
