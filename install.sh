@@ -57,6 +57,7 @@ CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
+WRITE_REDIS_ENV=false
 START_SERVICES=false
 REPAIR=false
 
@@ -409,7 +410,7 @@ done
 if [ ${#ORIGINAL_ARGS[@]} -eq 0 ] && is_debian_host; then
     SERVICE="arthexis"
     ENABLE_CELERY=true
-    write_redis_env "$NODE_ROLE"
+    WRITE_REDIS_ENV=true
 fi
 
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
@@ -541,6 +542,8 @@ fi
 # Record role-specific prerequisites and capture supporting state for service management.
 if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
+elif [ "$WRITE_REDIS_ENV" = true ] && [ "$ENABLE_CELERY" = true ]; then
+    write_redis_env "$NODE_ROLE"
 fi
 
 if [ "$ENABLE_CELERY" = true ]; then
