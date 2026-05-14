@@ -138,12 +138,20 @@ To preserve raw SIGILS for inspection instead of resolving them:
 python manage.py codex_skill_packages materialize --target ~/.codex/skills --no-resolve-sigils
 ```
 
-To export/import the portable framework package:
+To export/import a portable framework package:
 
 ```bash
 python manage.py codex_skill_packages export --output operator-framework.zip
 python manage.py codex_skill_packages import --package operator-framework.zip --dry-run
 python manage.py codex_skill_packages import --package operator-framework.zip
+```
+
+The suite also carries a reviewable source package for the first operator skill
+bundle:
+
+```bash
+python manage.py codex_skill_packages import --package apps/skills/packages/operator-framework-core --dry-run
+python manage.py codex_skill_packages import --package apps/skills/packages/operator-framework-core
 ```
 
 Admin import is available from **Admin > Skills > Import** for staff with Skill

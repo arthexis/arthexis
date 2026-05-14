@@ -22,7 +22,9 @@ class Command(BaseCommand):
         )
         parser.add_argument("--source", help="Portable skills root for scan.")
         parser.add_argument("--output", help="ZIP package path for export.")
-        parser.add_argument("--package", help="ZIP package path for import.")
+        parser.add_argument(
+            "--package", help="ZIP package or package directory path for import."
+        )
         parser.add_argument("--target", help="Local skills root for materialize.")
         parser.add_argument(
             "--slug",

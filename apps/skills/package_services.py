@@ -6,6 +6,7 @@ import re
 from dataclasses import asdict, dataclass
 from os import PathLike
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from tempfile import TemporaryFile
 from typing import BinaryIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -672,6 +673,28 @@ def _read_package_text(
         ) from error
 
 
+def _write_package_directory(package_dir: Path, package: ZipFile) -> None:
+    resolved_package_dir = package_dir.resolve(strict=True)
+    for path in sorted(package_dir.rglob("*")):
+        if path.is_symlink():
+            raise CodexSkillPackageImportError(
+                f"Package directory contains symlink: {path}"
+            )
+        if not path.is_file():
+            continue
+        resolved_path = path.resolve(strict=True)
+        try:
+            resolved_path.relative_to(resolved_package_dir)
+        except ValueError as error:
+            raise CodexSkillPackageImportError(
+                f"Unsafe package directory path: {path}"
+            ) from error
+        archive_path = validate_package_relative_path(
+            normalize_package_path(path.relative_to(package_dir))
+        )
+        package.write(path, archive_path)
+
+
 def _validate_manifest_skill_entries(package: ZipFile, manifest: dict) -> list[dict]:
     if not isinstance(manifest, dict):
         raise CodexSkillPackageImportError("Package manifest must be an object")
@@ -1051,6 +1074,30 @@ def import_codex_skill_package(
         package_source = package_path
         package_label = str(getattr(package_path, "name", "<uploaded package>"))
 
+    if isinstance(package_source, Path) and package_source.is_dir():
+        with TemporaryFile() as buffer:
+            with ZipFile(buffer, "w", ZIP_DEFLATED) as package:
+                _write_package_directory(package_source, package)
+            buffer.seek(0)
+            return _import_codex_skill_package_archive(
+                buffer,
+                package_label,
+                dry_run=dry_run,
+            )
+
+    return _import_codex_skill_package_archive(
+        package_source,
+        package_label,
+        dry_run=dry_run,
+    )
+
+
+def _import_codex_skill_package_archive(
+    package_source,
+    package_label: str,
+    *,
+    dry_run: bool,
+) -> dict:
     with ZipFile(package_source) as package:
         try:
             manifest_info = _package_entry_info(package, "manifest.json")
