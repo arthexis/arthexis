@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
@@ -16,13 +17,13 @@ from apps.meta import models as meta_models
 from apps.meta.management.commands import whatsapp as whatsapp_command
 from apps.meta.models import WhatsAppSecretaryAuthorizedPhone
 from apps.meta.services import (
+    WhatsAppSecretaryAuthorizationUnavailable,
     WhatsAppSecretaryListenResult,
     WhatsAppWebLoginResult,
     WhatsAppWebLoginStatus,
     WhatsAppWebMessage,
     WhatsAppWebReadResult,
     WhatsAppWebSendResult,
-    WhatsAppSecretaryAuthorizationUnavailable,
     _is_whatsapp_web_url,
     _read_cursor,
     _systemd_quote,
@@ -42,6 +43,7 @@ from apps.meta.services import (
     registered_whatsapp_secretary_phones,
     secretary_request_text_from_messages,
 )
+from apps.skills.models import Hook
 
 
 class FakeLocator:
@@ -599,6 +601,7 @@ def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
     assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == ""
 
 
+@pytest.mark.django_db
 def test_secretary_launcher_preserves_windows_codex_path(monkeypatch, tmp_path):
     captured = {}
 
@@ -626,6 +629,44 @@ def test_secretary_launcher_preserves_windows_codex_path(monkeypatch, tmp_path):
     ]
     assert captured["kwargs"]["state_key"] == "whatsapp-secretary"
     assert "terminal.pid" in detail
+
+
+@pytest.mark.django_db
+def test_secretary_launcher_applies_before_prompt_rewrite(monkeypatch, tmp_path):
+    captured = {}
+    Hook.objects.create(
+        slug="rewrite-prompt",
+        title="Rewrite prompt",
+        event=Hook.Event.BEFORE_PROMPT,
+        command="rewrite-hook",
+    )
+
+    def fake_run(command, **kwargs):
+        del command, kwargs
+        return subprocess.CompletedProcess(
+            ["rewrite-hook"],
+            0,
+            stdout=json.dumps(
+                {"decision": "rewrite", "prompt": "rewritten secretary prompt"}
+            ),
+            stderr="",
+        )
+
+    def fake_launch_command_in_terminal(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return tmp_path / "terminal.pid"
+
+    monkeypatch.setattr("apps.meta.services.sys.platform", "win32")
+    monkeypatch.setattr("apps.skills.prompt_hooks.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "apps.terminals.tasks.launch_command_in_terminal",
+        fake_launch_command_in_terminal,
+    )
+
+    launch_codex_secretary_terminal("secretary prompt")
+
+    assert captured["command"] == ["codex", "rewritten secretary prompt"]
 
 
 def test_whatsapp_login_command_outputs_json(monkeypatch, tmp_path):

@@ -69,6 +69,41 @@ python manage.py codex_hooks list --event session_start
 python manage.py codex_hooks list --event before_command --platform windows
 ```
 
+`before_prompt` hooks can also be enforced through the suite-owned Codex wrapper:
+
+```bash
+python manage.py propose --prompt "List open PRs"
+python manage.py propose --prompt-file request.txt --dry-run --json
+```
+
+`propose` reads the raw prompt, runs enabled `before_prompt` hooks in priority
+order, and only launches Codex when the final hook decision allows it. Hook
+failures are fail-closed by default; `--fail-open` is available for local
+debugging only.
+
+Each `before_prompt` hook receives JSON on stdin:
+
+```json
+{
+  "event": "before_prompt",
+  "prompt": "raw or rewritten prompt",
+  "source": "cli",
+  "metadata": {
+    "base_dir": "/path/to/arthexis",
+    "cwd": "/current/working/directory",
+    "platform": "linux"
+  },
+  "hook": {
+    "slug": "prompt-guard",
+    "title": "Prompt Guard"
+  }
+}
+```
+
+The hook must print one JSON object with a `decision` of `allow`, `rewrite`, or
+`refuse`. A rewrite must include a string `prompt`; a refusal should include a
+human-readable `reason`.
+
 ## SIGILS In Portable Documents
 
 Use **SIGILS** when a suite-owned skill or document needs local customization on

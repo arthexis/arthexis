@@ -868,10 +868,6 @@ def _merge_message_batches(
     return merged, changed
 
 
-def _split_windows_command_line(value: str) -> list[str]:
-    return [part.strip("\"") for part in shlex.split(value, posix=False)]
-
-
 def launch_codex_secretary_terminal(
     prompt: str,
     *,
@@ -880,13 +876,15 @@ def launch_codex_secretary_terminal(
 ) -> str:
     from django.conf import settings
 
+    from apps.skills.codex_wrapper import build_codex_command, prepare_codex_prompt
     from apps.terminals.tasks import launch_command_in_terminal
 
-    if sys.platform == "win32":
-        command = _split_windows_command_line(codex_command.strip() or "codex")
-        command.append(prompt)
-    else:
-        command = [*shlex.split(codex_command or "codex"), prompt]
+    guarded_prompt = prepare_codex_prompt(
+        prompt,
+        source="whatsapp",
+        metadata={"terminal_title": terminal_title},
+    )
+    command = build_codex_command(guarded_prompt, codex_command=codex_command)
     launch_path = launch_command_in_terminal(
         command,
         title=terminal_title,
