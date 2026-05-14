@@ -187,6 +187,11 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
     actions: list[str] = []
     git_evidence_failed = False
 
+    fetch_error = probe_failed(result.get("fetch", {"returncode": 0}))
+    if fetch_error:
+        blockers.append(f"git fetch probe failed: {fetch_error}")
+        git_evidence_failed = True
+
     for key in ("status", "head", "originMain", "remoteTag"):
         error = probe_failed(result["git"].get(key))
         if error:

@@ -47,7 +47,12 @@ def collect_checks(checkout: Path, version: str, args: argparse.Namespace) -> di
     remote_tag = run(["git", "ls-remote", "--tags", args.remote, version], checkout)
     output["localTag"] = local_tag
     output["remoteTag"] = remote_tag
-    add_check(output, "tag-absent", not (local_tag["returncode"] == 0 or remote_tag["stdout"]), "tag already exists")
+    add_check(
+        output,
+        "tag-absent",
+        remote_tag["returncode"] == 0 and not (local_tag["returncode"] == 0 or remote_tag["stdout"]),
+        "remote tag probe failed" if remote_tag["returncode"] != 0 else "tag already exists",
+    )
     return output
 
 
