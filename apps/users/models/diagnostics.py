@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -12,6 +14,12 @@ from django.utils.translation import gettext_lazy as _
 from apps.base.models import Entity
 
 from .profile import Profile
+
+
+def uploaded_error_report_storage() -> FileSystemStorage:
+    """Store raw uploaded error reports outside publicly served media paths."""
+
+    return FileSystemStorage(location=Path(settings.BASE_DIR) / "var" / "private" / "error-reports")
 
 
 class UserDiagnosticsProfile(Profile):
@@ -187,7 +195,10 @@ class UploadedErrorReport(Entity):
         blank=True,
         related_name="uploaded_error_reports",
     )
-    package = models.FileField(upload_to="error-reports/%Y/%m/%d")
+    package = models.FileField(
+        storage=uploaded_error_report_storage,
+        upload_to="error-reports/%Y/%m/%d",
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     analysis = models.JSONField(default=dict, blank=True)
     error = models.TextField(blank=True)
