@@ -39,11 +39,24 @@ def is_expected_gpio_absence(detail: object | None) -> bool:
     """Return whether ``detail`` describes an expected missing GPIO/RFID runtime."""
 
     normalized = _normalize_detail(detail)
-    return any(
+    if any(
         marker in normalized
         for marker in (
             "gpio library not available",
             "mfrc522 library not available",
+        )
+    ):
+        return True
+
+    if "no such file or directory" not in normalized:
+        return False
+
+    return any(
+        marker in normalized
+        for marker in (
+            "failed to initialize rfid hardware",
+            "spidev",
+            "/dev/spi",
         )
     )
 
