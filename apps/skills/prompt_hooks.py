@@ -22,7 +22,7 @@ REWRITE_DECISION = "rewrite"
 ERROR_DECISION = "error"
 
 ALLOWED_PROMPT_DECISIONS = frozenset(
-    {ALLOW_DECISION, REFUSE_DECISION, REWRITE_DECISION}
+    {ALLOW_DECISION, REFUSE_DECISION, REWRITE_DECISION, ERROR_DECISION}
 )
 
 
@@ -122,7 +122,7 @@ def run_before_prompt_hooks(
                 refused_by=str(hook["slug"]),
                 errors=errors,
             )
-        decision = str(hook_output["decision"]).strip().lower()
+        decision = step.decision
         if decision == ALLOW_DECISION:
             continue
         if decision == REWRITE_DECISION:
@@ -213,15 +213,27 @@ def _run_prompt_hook(
     hook_slug = str(hook["slug"])
     hook_title = str(hook["title"])
     try:
+        serialized_payload = json.dumps(payload)
         completed = runner(
             split_command_line(_resolve_runtime_text(str(hook["command"]))),
-            input=json.dumps(payload),
+            input=serialized_payload,
             text=True,
             capture_output=True,
             timeout=int(hook["timeout_seconds"]),
             cwd=_hook_cwd(hook),
             env=_hook_env(hook),
             check=False,
+        )
+    except (TypeError, ValueError) as exc:
+        return (
+            PromptHookStep(
+                slug=hook_slug,
+                title=hook_title,
+                decision=ERROR_DECISION,
+                reason=f"before_prompt hook {hook_slug} payload serialization failed: {exc}",
+                elapsed_seconds=time.monotonic() - started,
+            ),
+            {},
         )
     except subprocess.TimeoutExpired as exc:
         return (

@@ -78,7 +78,11 @@ class Command(BaseCommand):
         if options["prompt"] is not None:
             return options["prompt"]
         if options["prompt_file"] is not None:
-            return Path(options["prompt_file"]).read_text(encoding="utf-8")
+            prompt_file = options["prompt_file"]
+            try:
+                return Path(prompt_file).read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise CommandError(f"Unable to read prompt file: {prompt_file}: {exc}") from exc
         return sys.stdin.read()
 
     def _write_text_result(self, result) -> None:

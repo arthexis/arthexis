@@ -555,7 +555,7 @@ def test_secretary_listener_ignores_and_advances_untriggered_batch(tmp_path):
     assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "a"
 
 
-def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
+def test_secretary_listener_advances_cursor_when_launch_is_blocked(tmp_path):
     profile_dir = tmp_path / "profile-a"
     message = WhatsAppWebMessage(
         fingerprint="a",
@@ -582,23 +582,25 @@ def test_secretary_listener_keeps_cursor_when_launch_fails(tmp_path):
     def fail_launch(prompt):
         raise RuntimeError(f"launch failed for {prompt[:10]}")
 
-    with pytest.raises(RuntimeError, match="launch failed"):
-        listen_for_whatsapp_secretary_requests(
-            phone="5551234567",
-            idle_after_seconds=0,
-            daemon_poll_seconds=60,
-            quiet_window_seconds=60,
-            max_batches=1,
-            read_messages=fake_read_messages,
-            launch_callback=fail_launch,
-            monotonic=lambda: now["value"],
-            sleep=lambda seconds: now.update(value=now["value"] + seconds),
-            idle_seconds=lambda: 999,
-            authorized_phones={"525551234567"},
-        )
+    results = listen_for_whatsapp_secretary_requests(
+        phone="5551234567",
+        idle_after_seconds=0,
+        daemon_poll_seconds=60,
+        quiet_window_seconds=60,
+        max_batches=1,
+        read_messages=fake_read_messages,
+        launch_callback=fail_launch,
+        monotonic=lambda: now["value"],
+        sleep=lambda seconds: now.update(value=now["value"] + seconds),
+        idle_seconds=lambda: 999,
+        authorized_phones={"525551234567"},
+    )
 
     cursor_key = cursor_key_for_profile("525551234567", profile_dir)
-    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == ""
+    assert results[-1].status == "blocked"
+    assert results[-1].launched is False
+    assert "blocked" in results[-1].detail.lower()
+    assert _read_cursor(cursor_file_for_profile(profile_dir), cursor_key) == "a"
 
 
 @pytest.mark.django_db

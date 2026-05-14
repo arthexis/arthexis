@@ -1501,9 +1501,13 @@ def listen_for_whatsapp_secretary_requests(
                             terminal_title=terminal_title,
                         )
                     )
-                    detail = launcher(prompt)
-                    launched = True
-                    status = "launched"
+                    try:
+                        detail = launcher(prompt)
+                        launched = True
+                        status = "launched"
+                    except Exception as exc:  # noqa: BLE001
+                        status = "blocked"
+                        detail = f"Secretary launch blocked: {exc}"
             _write_cursor(cursor_file, cursor_key, pending[-1].fingerprint)
             result = WhatsAppSecretaryListenResult(
                 status=status,
