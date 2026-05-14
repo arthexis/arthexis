@@ -26,7 +26,7 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
     r")"
     r"(?:\"(?P<double_quoted_value>(?:[^\"\\\r\n]|\\.)*)\""
     r"|\'(?P<single_quoted_value>(?:[^'\\\r\n]|\\.)*)\'"
-    r"|(?P<unquoted_value>[A-Za-z0-9._~+/=:@%!\-\\\"]+|[\"'][^\s;,]*))",
+    r"|(?P<unquoted_value>[^\s;,]+))",
     re.IGNORECASE,
 )
 SECRET_EXPOSURE_PATTERN = re.compile(
