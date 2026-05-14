@@ -109,7 +109,7 @@ def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatc
             assert background_reader._setup_hardware() is False
 
     assert "RFID hardware disabled for this process after setup failure" in caplog.text
-    assert all(record.levelno < logging.WARNING for record in caplog.records)
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 def test_start_skips_when_hardware_is_disabled(monkeypatch):
