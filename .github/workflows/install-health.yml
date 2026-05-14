@@ -242,6 +242,24 @@ jobs:
             let failedSteps = '';
             let failedTargets = '';
             let failedJobCount = 0;
+            let failedLogSamples = '';
+
+            const buildFailureSample = (logText) => {
+              const lines = (logText || '').split('\n').map((line) => line.trimEnd());
+              const lowerLines = lines.map((line) => line.toLowerCase());
+              const signalIndex = lowerLines.findIndex((line) =>
+                line.includes('short test summary info')
+                || line.includes('= fail')
+                || line.includes('error:')
+                || line.includes('traceback')
+              );
+              const from = signalIndex >= 0 ? Math.max(0, signalIndex - 8) : Math.max(0, lines.length - 20);
+              const snippet = lines.slice(from, from + 20).join('\n').trim();
+              if (!snippet) {
+                return '';
+              }
+              return snippet.length > 2000 ? `${snippet.slice(0, 2000)}\n...` : snippet;
+            };
 
             try {
               const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
@@ -281,6 +299,29 @@ jobs:
                   return `- ${job.name}: ${failedStep.name}${jobUrl}${timing}`;
                 })
                 .join('\n');
+              const sampleSections = [];
+              for (const job of failedJobs.slice(0, 2)) {
+                try {
+                  const response = await github.request(
+                    'GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs',
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      job_id: job.id,
+                    }
+                  );
+                  const sample = buildFailureSample(String(response.data || ''));
+                  if (!sample) {
+                    continue;
+                  }
+                  sampleSections.push(
+                    `#### ${job.name}\n\`\`\`text\n${sample}\n\`\`\``
+                  );
+                } catch (logError) {
+                  core.warning(`Failed to fetch log sample for job ${job.id}: ${logError.message}`);
+                }
+              }
+              failedLogSamples = sampleSections.join('\n\n');
             } catch (error) {
               core.warning(`Failed to fetch install health metadata: ${error.message}`);
             }
@@ -304,6 +345,10 @@ jobs:
               failedJobCount ? `- Failed jobs: ${failedJobCount}` : '- Failed jobs: Unable to determine failed jobs from workflow metadata.',
               '',
               failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
+              '',
+              '## Failed log sample',
+              '',
+              failedLogSamples || '_Unable to retrieve failed log sample from workflow logs._',
             ].join('\n');
 
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {
@@ -329,7 +374,10 @@ jobs:
                   failedTargets ? `### Failed matrix targets\n- ${failedTargets}` : '### Failed matrix targets\n- Unable to determine failed matrix targets from workflow metadata.',
                   failedJobCount ? `### Failed jobs\n- ${failedJobCount}` : '### Failed jobs\n- Unable to determine failed jobs from workflow metadata.',
                   '',
-                  failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.'
+                  failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.',
+                  '',
+                  '### Failed log sample',
+                  failedLogSamples || '_Unable to retrieve failed log sample from workflow logs._'
                 ].join('\n')
               });
               core.info(`Updated existing issue #${existing.number}.`);

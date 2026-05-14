@@ -409,8 +409,7 @@ done
 if [ ${#ORIGINAL_ARGS[@]} -eq 0 ] && is_debian_host; then
     SERVICE="arthexis"
     ENABLE_CELERY=true
-    NODE_ROLE="Satellite"
-    REQUIRES_REDIS=true
+    NODE_ROLE="Terminal"
 fi
 
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
