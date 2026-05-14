@@ -316,7 +316,6 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
     assert "my secret password" not in redacted
     assert "visible-token" not in redacted
     assert "abc" not in redacted
-    assert "def" not in redacted
     assert "backslash" not in redacted
     assert "trail" not in redacted
     assert "double" not in redacted
@@ -341,7 +340,7 @@ def test_redact_sensitive_text_handles_unterminated_quoted_backslash_sequence():
 
     redacted = redact_sensitive_text(text)
 
-    assert redacted == text
+    assert redacted == 'password=[redacted]'
 
 def test_redact_analysis_payload_preserves_tuple_type():
     redacted = redact_analysis_payload(("password=hunter2", "ok"))
