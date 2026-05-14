@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+
+import pytest
 
 PACKAGE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -52,6 +55,48 @@ def test_priority_checkout_command_includes_repo():
     command = script.command_for("example/project", {"number": 17}, "checkout")
 
     assert "--repo example/project checkout --pr 17" in command
+
+
+def test_priority_thread_lookup_failure_suppresses_merge(monkeypatch):
+    script = load_script("arthexis-pr-oversee/scripts/pr_priority_suggestions.py")
+    monkeypatch.setattr(
+        script,
+        "review_thread_counts",
+        lambda repo, number: {
+            "unresolved": 0,
+            "currentUnresolved": 0,
+            "threadLookupFailed": 1,
+        },
+    )
+    pr = {
+        "number": 17,
+        "title": "Ready PR",
+        "author": {"login": "dev"},
+        "mergeStateStatus": "CLEAN",
+        "statusCheckRollup": [],
+    }
+
+    summary = script.summarize_pr("example/project", pr, include_threads=True)
+
+    assert summary["suggestedAction"] == "review"
+    assert summary["threadLookupFailed"] is True
+    assert summary["priorityReason"] == "review thread lookup failed"
+
+
+def test_review_thread_list_handles_missing_pull_request(monkeypatch, capsys):
+    script = load_script("arthexis-review-attend/scripts/review_thread.py")
+    monkeypatch.setattr(
+        script,
+        "_run_gh_graphql",
+        lambda query, variables: {"data": {"repository": {"pullRequest": None}}},
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        script.list_threads(SimpleNamespace(repo="example/project", pr=999, unresolved=False))
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"threads": [], "error": "pull request not found"}
 
 
 def test_release_preflight_blocks_missing_evidence_without_release_advice():

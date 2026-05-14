@@ -239,6 +239,10 @@ def summarize_pr(repo: str, pr: dict[str, Any], include_threads: bool) -> dict[s
         action = "review"
         score = 82.0 + min(thread_counts["unresolved"] * 3.0, 12.0) + stale_bonus
         reason = f"{thread_counts['unresolved']} unresolved review thread(s)"
+    elif thread_counts["threadLookupFailed"]:
+        action = "review"
+        score = 78.0 + stale_bonus
+        reason = "review thread lookup failed"
     elif merge_state in BAD_MERGE_STATES:
         action = "checkout"
         score = 80.0 + stale_bonus

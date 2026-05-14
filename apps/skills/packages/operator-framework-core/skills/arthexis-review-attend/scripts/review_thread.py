@@ -73,7 +73,15 @@ query($owner:String!, $repo:String!, $number:Int!) {
         query,
         {"owner": owner, "repo": repo, "number": args.pr},
     )
-    threads = payload["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+    pull_request = (
+        payload.get("data", {})
+        .get("repository", {})
+        .get("pullRequest")
+    )
+    if not pull_request:
+        print(json.dumps({"threads": [], "error": "pull request not found"}, indent=2))
+        raise SystemExit(1)
+    threads = pull_request.get("reviewThreads", {}).get("nodes", [])
     if args.unresolved:
         threads = [thread for thread in threads if not thread["isResolved"]]
     print(json.dumps({"threads": threads}, indent=2))
