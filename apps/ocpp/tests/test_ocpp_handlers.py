@@ -3001,10 +3001,11 @@ async def test_forward_reply_dispatch_limits_background_task_fanout(monkeypatch,
 
     await asyncio.wait_for(all_started.wait(), timeout=0.5)
     assert calls == 2
-    assert len(consumer._background_forward_reply_tasks) == 2
-    assert "dispatching reply with continued tracking" in caplog.text
+    assert len(consumer._background_forward_reply_tasks) == 1
+    assert len(consumer._overflow_forward_reply_tasks) == 1
+    assert "dispatching reply with overflow tracking" in caplog.text
 
-    tasks = list(consumer._background_forward_reply_tasks)
+    tasks = list(consumer._background_forward_reply_tasks | consumer._overflow_forward_reply_tasks)
     release.set()
     await asyncio.gather(*tasks)
 
