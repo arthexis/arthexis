@@ -2,25 +2,31 @@ import json
 import logging
 from collections.abc import Mapping
 
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.views import redirect_to_login
-from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.http import require_POST
+
+from apps.cards.login_poll import request_has_rfid_login_poll_token
+from apps.cards.models import RFID, RFIDAttempt
+from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.utils import ensure_feature_enabled
-from apps.sites.utils import landing, require_site_operator_or_staff, user_in_site_operator_group
-from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
-
-from .scanner import enable_deep_read_mode, poll_scan_attempt, record_scan_attempt
-from .reader import validate_rfid_value
-from apps.cards.models import RFID, RFIDAttempt
-from .utils import build_mode_toggle
+from apps.sites.utils import (
+    landing,
+    require_site_operator_or_staff,
+    user_in_site_operator_group,
+)
 from apps.video.rfid import scan_camera_qr
+
+from .reader import validate_rfid_value
+from .scanner import enable_deep_read_mode, poll_scan_attempt, record_scan_attempt
+from .utils import build_mode_toggle
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +65,12 @@ def scan_next(request):
     role_name = getattr(getattr(node, "role", None), "name", None)
     user = request.user
     wants_json = _request_wants_json(request) or request.method == "POST"
-    allow_anonymous_get = role_name == "Control" and request.method == "GET"
+    allow_anonymous_get = (
+        role_name == "Control"
+        and request.method == "GET"
+        and not prefer_camera
+        and request_has_rfid_login_poll_token(request)
+    )
     if not user.is_authenticated and not allow_anonymous_get:
         if wants_json:
             return JsonResponse({"error": "Authentication required"}, status=401)

@@ -5,7 +5,7 @@ import shutil
 from html import escape
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from django import forms
 from django.apps import apps as django_apps
@@ -15,8 +15,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
-from django.contrib.staticfiles.storage import staticfiles_storage
 from django.contrib.sites.models import Site
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import (
@@ -29,7 +29,8 @@ from django.http import (
 from django.shortcuts import redirect, render
 from django.template import loader
 from django.template.response import TemplateResponse
-from django.test import RequestFactory, signals as test_signals
+from django.test import RequestFactory
+from django.test import signals as test_signals
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
@@ -41,18 +42,22 @@ from django.utils.http import (
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.http import require_GET, require_POST
 from webauthn.helpers.exceptions import (
     InvalidAuthenticationResponse,
     InvalidJSONStructure,
 )
 
+from apps.cards.login_poll import (
+    RFID_LOGIN_POLL_QUERY_PARAM,
+    ensure_rfid_login_poll_token,
+)
 from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
 from apps.features.utils import is_suite_feature_enabled
-from apps.meta.models import Attention, WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
+from apps.meta.models import WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, Attention
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
 from apps.users.models import PasskeyCredential
@@ -61,11 +66,11 @@ from apps.users.passkeys import (
     verify_authentication_response,
 )
 from config.request_utils import is_https_request
+from utils.sites import get_site
 
 from ..forms import AuthenticatorLoginForm
 from ..session_keys import REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 from ..utils import get_original_referer
-from utils.sites import get_site
 
 logger = logging.getLogger(__name__)
 
@@ -642,9 +647,16 @@ def rfid_login_page(request):
         require_https=is_https_request(request),
     ):
         redirect_target = ""
+    scan_api_url = ""
+    if has_rfid_feature:
+        token = ensure_rfid_login_poll_token(request)
+        scan_api_url = (
+            f"{reverse('rfid-scan-next')}?"
+            f"{urlencode({RFID_LOGIN_POLL_QUERY_PARAM: token})}"
+        )
     context = {
         "login_api_url": reverse("rfid-login"),
-        "scan_api_url": reverse("rfid-scan-next") if has_rfid_feature else "",
+        "scan_api_url": scan_api_url,
         "redirect_field_name": redirect_field_name,
         "redirect_target": redirect_target,
         "back_url": reverse("pages:login"),
