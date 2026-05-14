@@ -63,30 +63,20 @@ class DispatchMixin:
             if done_task.done():
                 background_tasks.discard(done_task)
 
-        track_task = len(background_tasks) < MAX_BACKGROUND_FORWARD_REPLY_TASKS
-        if not track_task:
+        if len(background_tasks) >= MAX_BACKGROUND_FORWARD_REPLY_TASKS:
             logger.warning(
                 "Background forwarding task limit reached for message %s (%d active); "
-                "dispatching reply with overflow tracking.",
+                "skipping reply dispatch.",
                 message_id,
                 len(background_tasks),
             )
+            return
 
         task = create_task(forward_reply(message_id, raw))
-        if track_task:
-            background_tasks.add(task)
-        else:
-            overflow_tasks = getattr(self, "_overflow_forward_reply_tasks", None)
-            if overflow_tasks is None:
-                overflow_tasks = set()
-                self._overflow_forward_reply_tasks = overflow_tasks
-            overflow_tasks.add(task)
+        background_tasks.add(task)
 
         def _drop_completed(done_task):
             background_tasks.discard(done_task)
-            overflow_tasks = getattr(self, "_overflow_forward_reply_tasks", None)
-            if overflow_tasks is not None:
-                overflow_tasks.discard(done_task)
             try:
                 done_task.result()
             except CancelledError:
