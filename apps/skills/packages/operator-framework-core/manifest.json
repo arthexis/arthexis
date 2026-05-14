@@ -1,0 +1,76 @@
+{
+  "format": "arthexis.operator_framework_package.v1",
+  "skills": [
+    {
+      "slug": "arthexis-node-upgrade-doctor",
+      "title": "Arthexis Node Upgrade Doctor",
+      "description": "Run and diagnose repo-native Arthexis install, upgrade, env refresh, migrations, local node role setup, and health checks across Windows and Linux. Use when the operator asks to upgrade the suite, install a node, start a local Terminal role, repair bootstrap state, or explain failed install-health output.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"},
+        {"path": "scripts/check_bootstrap_state.py"},
+        {"path": "scripts/node_upgrade_doctor.py"}
+      ]
+    },
+    {
+      "slug": "arthexis-pr-oversee",
+      "title": "Arthexis PR Oversee",
+      "description": "Refresh Arthexis GitHub PR state, list all open PRs with top priority suggestions, identify merge-ready work, inspect reviews/checks/conflicts, handle substantive review comments, merge safe PRs, and find superseded dependency bumps. Use when the operator asks to oversee PRs, suggest the next PRs to work, check readiness, merge green PRs, work review comments, or clean up dependency PRs.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"},
+        {"path": "scripts/pr_dependency_pair.py"},
+        {"path": "scripts/pr_oversee.py"},
+        {"path": "scripts/pr_priority_suggestions.py"},
+        {"path": "scripts/remove_patchwork_residue.py"}
+      ]
+    },
+    {
+      "slug": "arthexis-pr-oversee-monitor",
+      "title": "Arthexis PR Oversee Monitor",
+      "description": "Run the Arthexis manage.py pr_oversee monitor loop for GitHub pull requests until the PR merges, waits on checks, or stops for a manual decision. Use when the operator asks to oversee a specific PR continuously, run the full PR oversight toolchain, merge after deterministic gates pass, or diagnose why the monitor stopped.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"}
+      ]
+    },
+    {
+      "slug": "arthexis-review-attend",
+      "title": "Arthexis Review Attend",
+      "description": "Attend one Arthexis GitHub pull request review loop end to end. Use when the operator asks Codex to work a numbered issue or PR, work a PR review blocker, attend comments, fix requested changes, pick another PR to work meanwhile, resolve review threads, push a PR update, hand a PR back to pr_oversee monitor, merge after deterministic gates pass, or clean up patchwork after a merged PR.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"},
+        {"path": "scripts/review_thread.py"}
+      ]
+    },
+    {
+      "slug": "operator-framework-align",
+      "title": "Operator Framework Align",
+      "description": "Audit and align a node with the Arthexis SKILLS, AGENTS, and HOOKS model by checking local skill metadata, generated AGENTS context, hook inventory, retired operator-manual/workgroup references, and stale agent-role/personality language. Use when updating framework rules or local environment.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"},
+        {"path": "scripts/framework_audit.py"},
+        {"path": "scripts/hooks_audit.py"},
+        {"path": "scripts/local_agents_sync.py"},
+        {"path": "scripts/skill_catalog_lint.py"}
+      ]
+    },
+    {
+      "slug": "release-readiness-publish",
+      "title": "Release Readiness Publish",
+      "description": "Refresh Arthexis release readiness from live GitHub and repo state, verify human approval, checks, conflicts, publish workflow, tag target, and release assets before preparing or performing a gated tag-triggered release. Use for readiness reports, publish planning, GitHub releases, PyPI, or version tags.",
+      "files": [
+        {"path": "SKILL.md"},
+        {"path": "agents/openai.yaml"},
+        {"path": "scripts/publish_workflow_check.py"},
+        {"path": "scripts/release_preflight.py"},
+        {"path": "scripts/release_readiness.py"},
+        {"path": "scripts/release_tag.py"}
+      ]
+    }
+  ],
+  "agents": [],
+  "hooks": []
+}

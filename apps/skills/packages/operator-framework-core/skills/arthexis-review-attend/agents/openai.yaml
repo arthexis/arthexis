@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arthexis Review Attend"
+  short_description: "Patch one Arthexis PR review blocker"
+  default_prompt: "Use $arthexis-review-attend to address one substantive Arthexis PR review blocker and hand it to the monitor."

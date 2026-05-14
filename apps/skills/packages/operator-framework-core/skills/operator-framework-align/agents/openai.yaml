@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operator Framework Align"
+  short_description: "Align local SKILLS AGENTS HOOKS state"
+  default_prompt: "Use operator-framework-align to audit local Arthexis SKILLS, AGENTS, and HOOKS framework state."

@@ -165,6 +165,62 @@ def test_export_import_round_trip_includes_only_portable_files(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_accepts_package_directory(tmp_path):
+    package_dir = tmp_path / "operator-framework-package"
+    manifest = {
+        "format": PACKAGE_FORMAT,
+        "skills": [
+            {
+                "slug": "portable-directory-skill",
+                "title": "Portable Directory Skill",
+                "description": "Importable from a checked-in package directory.",
+                "files": [
+                    {"path": "SKILL.md"},
+                    {"path": "scripts/check.py"},
+                ],
+            }
+        ],
+    }
+    _write(package_dir / "manifest.json", json.dumps(manifest))
+    _write(
+        package_dir / "skills" / "portable-directory-skill" / "SKILL.md",
+        "---\nname: portable-directory-skill\n---\n",
+    )
+    _write(
+        package_dir / "skills" / "portable-directory-skill" / "scripts" / "check.py",
+        "print('ok')\n",
+    )
+
+    summary = import_codex_skill_package(package_dir, dry_run=False)
+
+    assert summary["skills"] == [{"slug": "portable-directory-skill", "files": 2}]
+    skill = Skill.objects.get(slug="portable-directory-skill")
+    assert skill.package_files.count() == 2
+    assert skill.package_files.filter(relative_path="scripts/check.py").exists()
+
+
+def test_bundled_operator_framework_core_package_imports_from_directory():
+    package_dir = (
+        Path(__file__).resolve().parents[3]
+        / "apps"
+        / "skills"
+        / "packages"
+        / "operator-framework-core"
+    )
+
+    summary = import_codex_skill_package(package_dir, dry_run=True)
+
+    assert summary["skills"] == [
+        {"slug": "arthexis-node-upgrade-doctor", "files": 4},
+        {"slug": "arthexis-pr-oversee", "files": 6},
+        {"slug": "arthexis-pr-oversee-monitor", "files": 2},
+        {"slug": "arthexis-review-attend", "files": 3},
+        {"slug": "operator-framework-align", "files": 6},
+        {"slug": "release-readiness-publish", "files": 6},
+    ]
+
+
+@pytest.mark.django_db
 def test_export_import_round_trip_includes_agents_and_hooks(tmp_path):
     role = NodeRole.objects.create(name="Operator Context")
     node_feature = NodeFeature.objects.create(

@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Oversee Monitor"
+  short_description: "Run PR oversight to completion"
+  default_prompt: "Use $arthexis-pr-oversee-monitor to monitor an Arthexis pull request until it merges or needs a manual decision."

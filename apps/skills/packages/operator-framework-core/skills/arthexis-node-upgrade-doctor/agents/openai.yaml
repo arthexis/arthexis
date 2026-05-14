@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arthexis Node Upgrade Doctor"
+  short_description: "Install, upgrade, and diagnose nodes"
+  default_prompt: "Use arthexis-node-upgrade-doctor to run Arthexis install, upgrade, env refresh, and health checks."

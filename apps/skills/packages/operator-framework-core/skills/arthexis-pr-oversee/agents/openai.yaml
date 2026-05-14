@@ -1,0 +1,4 @@
+interface:
+  display_name: "Oversee Arthexis PRs"
+  short_description: "Rank, review, and merge safe Arthexis PRs"
+  default_prompt: "Use $arthexis-pr-oversee to list open PRs, suggest the top priorities, refresh PR status, and handle safe merge work."
