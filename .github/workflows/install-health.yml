@@ -244,6 +244,8 @@ jobs:
             let failedJobCount = 0;
             let failedLogSamples = '';
 
+            const escapeForCodeFence = (text) => text.replace(/```/g, '``\u200b`');
+
             const buildFailureSample = (logText) => {
               const lines = (logText || '').split('\n').map((line) => line.trimEnd());
               const lowerLines = lines.map((line) => line.toLowerCase());
@@ -310,7 +312,9 @@ jobs:
                       job_id: job.id,
                     }
                   );
-                  const sample = buildFailureSample(String(response.data || ''));
+                  const sample = escapeForCodeFence(
+                    buildFailureSample(String(response.data || ''))
+                  );
                   if (!sample) {
                     continue;
                   }

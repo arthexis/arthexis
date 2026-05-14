@@ -542,7 +542,7 @@ fi
 # Record role-specific prerequisites and capture supporting state for service management.
 if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
-elif [ "$WRITE_REDIS_ENV" = true ] && [ "$ENABLE_CELERY" = true ]; then
+elif [[ "$WRITE_REDIS_ENV" == "true" && "$ENABLE_CELERY" == "true" ]]; then
     write_redis_env "$NODE_ROLE"
 fi
 
