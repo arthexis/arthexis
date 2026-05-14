@@ -2983,14 +2983,11 @@ async def test_forward_reply_dispatch_limits_background_task_fanout(monkeypatch,
     started = asyncio.Event()
     release = asyncio.Event()
     calls = 0
-    all_started = asyncio.Event()
 
     async def _slow_forward_reply(*_args):
         nonlocal calls
         calls += 1
         started.set()
-        if calls >= 2:
-            all_started.set()
         await release.wait()
 
     consumer._dispatch_forward_reply(_slow_forward_reply, "msg-one", "[3]")
@@ -2999,13 +2996,13 @@ async def test_forward_reply_dispatch_limits_background_task_fanout(monkeypatch,
     with caplog.at_level("WARNING", logger=dispatch_module.logger.name):
         consumer._dispatch_forward_reply(_slow_forward_reply, "msg-two", "[3]")
 
-    await asyncio.wait_for(all_started.wait(), timeout=0.5)
-    assert calls == 2
+    await asyncio.sleep(0)
+    assert calls == 1
     assert len(consumer._background_forward_reply_tasks) == 1
-    assert len(consumer._overflow_forward_reply_tasks) == 1
-    assert "dispatching reply with overflow tracking" in caplog.text
+    assert not hasattr(consumer, "_overflow_forward_reply_tasks")
+    assert "skipping reply dispatch" in caplog.text
 
-    tasks = list(consumer._background_forward_reply_tasks | consumer._overflow_forward_reply_tasks)
+    tasks = list(consumer._background_forward_reply_tasks)
     release.set()
     await asyncio.gather(*tasks)
 
