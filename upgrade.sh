@@ -1877,15 +1877,39 @@ else
       REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
     fi
   else
-    echo "Error: Unable to reach the repository to check for updates." >&2
-    if [[ $FORCE_UPGRADE -eq 1 ]]; then
-      echo "Warning: Continuing upgrade with local sources because --force was provided." >&2
-      REMOTE_REVISION="$LOCAL_REVISION"
-      REMOTE_VERSION="$LOCAL_VERSION"
-      LOCAL_ONLY=1
-    else
-      echo "Info: Re-run upgrade.sh with --local or --force to proceed without remote updates." >&2
-      exit 1
+    switched_to_default_branch=0
+    if [[ $FORCE_UPGRADE -eq 1 && $LOCAL_ONLY -eq 0 && "$BRANCH" != "main" ]]; then
+      echo "Unable to fetch origin/$BRANCH while --force was provided; attempting fallback to origin/main before using local sources." >&2
+      if fetch_branch_with_ref_repair origin main; then
+        if git show-ref --verify --quiet "refs/heads/main"; then
+          git switch main >/dev/null
+        else
+          git switch -c main origin/main >/dev/null
+        fi
+
+        BRANCH="main"
+        switched_to_default_branch=1
+        LOCAL_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "$LOCAL_REVISION")"
+        REMOTE_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$LOCAL_REVISION")"
+        if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
+          REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
+        else
+          REMOTE_VERSION="$LOCAL_VERSION"
+        fi
+      fi
+    fi
+
+    if [[ $switched_to_default_branch -eq 0 ]]; then
+      echo "Error: Unable to reach the repository to check for updates." >&2
+      if [[ $FORCE_UPGRADE -eq 1 ]]; then
+        echo "Warning: Continuing upgrade with local sources because --force was provided." >&2
+        REMOTE_REVISION="$LOCAL_REVISION"
+        REMOTE_VERSION="$LOCAL_VERSION"
+        LOCAL_ONLY=1
+      else
+        echo "Info: Re-run upgrade.sh with --local or --force to proceed without remote updates." >&2
+        exit 1
+      fi
     fi
   fi
 fi
