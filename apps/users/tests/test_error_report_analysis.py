@@ -335,12 +335,38 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
     assert "db_password=[redacted]" in redacted
     assert "api_key=[redacted]" in redacted
 
+
+def test_redact_sensitive_text_redacts_unquoted_values_with_symbol_suffixes():
+    text = "password=abc$def&ghi?jkl"
+
+    redacted = redact_sensitive_text(text)
+
+    assert redacted == "password=[redacted]"
+
+
+def test_redact_sensitive_text_redacts_malformed_double_quoted_symbol_values():
+    text = 'password="$ecret'
+
+    redacted = redact_sensitive_text(text)
+
+    assert redacted == "password=[redacted]"
+
+
+def test_redact_sensitive_text_preserves_structural_delimiters_after_unquoted_value():
+    text = '{"password":hunter2}'
+
+    redacted = redact_sensitive_text(text)
+
+    assert redacted == '{"password":[redacted]}'
+
+
 def test_redact_sensitive_text_handles_unterminated_quoted_backslash_sequence():
     text = 'password="' + ('\\' * 64)
 
     redacted = redact_sensitive_text(text)
 
     assert redacted == 'password=[redacted]'
+
 
 def test_redact_analysis_payload_preserves_tuple_type():
     redacted = redact_analysis_payload(("password=hunter2", "ok"))
