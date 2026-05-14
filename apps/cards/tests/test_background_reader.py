@@ -101,13 +101,15 @@ def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatc
     with caplog.at_level(logging.INFO):
         with monkeypatch.context() as patch_ctx:
             patch_ctx.setitem(sys.modules, "mfrc522", SimpleNamespace())
+
             def _mfrc_ctor(**_kwargs):
                 raise FileNotFoundError("[Errno 2] No such file or directory: '/dev/spidev0.0'")
+
             sys.modules["mfrc522"].MFRC522 = _mfrc_ctor
             assert background_reader._setup_hardware() is False
 
     assert "RFID hardware disabled for this process after setup failure" in caplog.text
-    assert "WARNING" not in caplog.text
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 def test_start_skips_when_hardware_is_disabled(monkeypatch):
