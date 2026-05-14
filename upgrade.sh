@@ -1878,11 +1878,12 @@ else
     fi
   else
     switched_to_default_branch=0
-    if [[ $FORCE_UPGRADE -eq 1 && $LOCAL_ONLY -eq 0 && "$BRANCH" != "main" ]]; then
+    if [[ $FORCE_UPGRADE -eq 1 && "$BRANCH" != "main" ]]; then
       echo "Unable to fetch origin/$BRANCH while --force was provided; attempting fallback to origin/main before using local sources." >&2
       if fetch_branch_with_ref_repair origin main; then
         if git show-ref --verify --quiet "refs/heads/main"; then
           git switch main >/dev/null
+          git branch --set-upstream-to=origin/main main >/dev/null 2>&1 || true
         else
           git switch -c main origin/main >/dev/null
         fi
@@ -1890,6 +1891,9 @@ else
         BRANCH="main"
         switched_to_default_branch=1
         LOCAL_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "$LOCAL_REVISION")"
+        if [ -f VERSION ]; then
+          LOCAL_VERSION="$(tr -d '\r\n' < VERSION)"
+        fi
         REMOTE_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$LOCAL_REVISION")"
         if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
           REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
