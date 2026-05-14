@@ -62,15 +62,9 @@ def test_scan_next_anonymous_json_requests_unauthorized_for_non_control_role(mon
     assert json.loads(post_response.content) == {"error": "Authentication required"}
 
 
-def test_scan_next_allows_anonymous_get_for_control_role(monkeypatch):
+def test_scan_next_blocks_anonymous_get_for_control_role(monkeypatch):
     node = _make_node("Control")
     monkeypatch.setattr(views.Node, "get_local", lambda: node)
-    RFIDAttempt.objects.create(
-        rfid="SCAN_NEXT",
-        status=RFIDAttempt.Status.SCANNED,
-        source=RFIDAttempt.Source.SERVICE,
-        payload={"rfid": "SCAN_NEXT"},
-    )
 
     factory = RequestFactory()
     get_request = factory.get(reverse("rfid-scan-next"))
@@ -78,8 +72,7 @@ def test_scan_next_allows_anonymous_get_for_control_role(monkeypatch):
 
     get_response = views.scan_next(get_request)
 
-    assert get_response.status_code == 200
-    assert json.loads(get_response.content)["rfid"] == "SCAN_NEXT"
+    assert get_response.status_code == 302
 
 
 def test_scan_next_blocks_anonymous_json_get_for_control_role(monkeypatch):

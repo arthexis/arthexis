@@ -56,14 +56,9 @@ def scan_next(request):
     camera_feature_enabled = _feature_enabled("video-cam")
     prefer_camera = request.GET.get("source") == "camera"
     camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
-    role_name = getattr(getattr(node, "role", None), "name", None)
     user = request.user
     wants_json = _request_wants_json(request) or request.method == "POST"
-    allow_anonymous_get = (
-        role_name == "Control"
-        and request.method == "GET"
-        and not _request_wants_json(request)
-    )
+    allow_anonymous_get = False
     if not user.is_authenticated and not allow_anonymous_get:
         if wants_json:
             return JsonResponse({"error": "Authentication required"}, status=401)
