@@ -980,7 +980,6 @@ def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
                 ["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"],
                 check=True,
             )
-            _append_log(log_path, f"Created git tag {tag_name}")
         except subprocess.CalledProcessError as exc:
             detail = _format_subprocess_error(exc).lower()
             if "committer identity unknown" not in detail:
