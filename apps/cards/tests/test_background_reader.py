@@ -5,8 +5,7 @@ import queue
 import sys
 from types import SimpleNamespace
 
-from apps.cards import background_reader
-from apps.cards import reader
+from apps.cards import background_reader, reader
 
 
 def test_setup_hardware_gpio_missing_disables_reader(caplog, monkeypatch):
@@ -97,6 +96,7 @@ def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatc
     monkeypatch.setattr(background_reader, "GPIO", DummyGPIO)
     monkeypatch.setattr(background_reader, "resolve_spi_bus_device", lambda: (0, 0))
     monkeypatch.setattr(background_reader, "_reader", None)
+    monkeypatch.setattr(background_reader, "_hardware_disabled_reason", None)
 
     with caplog.at_level(logging.INFO):
         with monkeypatch.context() as patch_ctx:
