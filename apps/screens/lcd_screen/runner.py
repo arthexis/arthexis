@@ -413,12 +413,16 @@ class LCDRunner:
                 return True
             return False
 
-        def _append_summary(normal_order: tuple[str, ...]) -> tuple[str, ...]:
+        def _interleave_summary(normal_order: tuple[str, ...]) -> tuple[str, ...]:
             if not normal_order:
                 return ("summary",)
-            return (*normal_order, "summary")
+            interleaved: list[str] = []
+            for label in normal_order:
+                interleaved.extend((label, "summary"))
+            return tuple(interleaved)
 
         previous_order = self.rotation.order
+        previous_index = self.rotation.index
         if configured_order:
             self.rotation.order = tuple(
                 label for label in configured_order if _channel_available(label)
@@ -444,13 +448,29 @@ class LCDRunner:
                     ("low", *utility_order) if low_available else utility_order
                 )
             self.rotation.order = (
-                _append_summary(normal_order) if summary_available else normal_order
+                _interleave_summary(normal_order)
+                if summary_available
+                else normal_order
             )
 
-        if previous_order and 0 <= self.rotation.index < len(previous_order):
-            current_label = previous_order[self.rotation.index]
+        if (
+            previous_order == self.rotation.order
+            and 0 <= previous_index < len(self.rotation.order)
+        ):
+            self.rotation.index = previous_index
+            return
+        if previous_order and 0 <= previous_index < len(previous_order):
+            current_label = previous_order[previous_index]
             if current_label in self.rotation.order:
-                self.rotation.index = self.rotation.order.index(current_label)
+                matching_indexes = [
+                    index
+                    for index, label in enumerate(self.rotation.order)
+                    if label == current_label
+                ]
+                self.rotation.index = min(
+                    matching_indexes,
+                    key=lambda index: (abs(index - previous_index), index),
+                )
             else:
                 self.rotation.index = 0
         else:

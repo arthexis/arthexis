@@ -484,7 +484,7 @@ def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeyp
     assert coordinator.high_repeat_count == 0
 
 
-def test_rotation_order_appends_summary_channel_once_when_active(monkeypatch):
+def test_rotation_order_interleaves_summary_channel_when_active(monkeypatch):
     coordinator = runner.LCDRunner()
 
     monkeypatch.setattr(runner.locks, "_load_channel_order", lambda lock_dir: None)
@@ -513,11 +513,60 @@ def test_rotation_order_appends_summary_channel_once_when_active(monkeypatch):
 
     assert coordinator.rotation.order == (
         "high",
+        "summary",
         "low",
+        "summary",
         "stats",
+        "summary",
         "clock",
         "summary",
     )
+    assert all(
+        label == "summary"
+        for index, label in enumerate(coordinator.rotation.order)
+        if index % 2 == 1
+    )
+
+
+def test_interleaved_summary_order_preserves_duplicate_summary_index(monkeypatch):
+    coordinator = runner.LCDRunner()
+    coordinator.rotation.order = (
+        "high",
+        "summary",
+        "low",
+        "summary",
+        "stats",
+        "summary",
+        "clock",
+        "summary",
+    )
+    coordinator.rotation.index = 3
+
+    monkeypatch.setattr(runner.locks, "_load_channel_order", lambda lock_dir: None)
+
+    payload_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("x", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {
+        "high": payload_cycle,
+        "low": payload_cycle,
+        "summary": payload_cycle,
+        "clock": payload_cycle,
+        "stats": payload_cycle,
+    }
+    channel_text = {
+        "high": True,
+        "low": True,
+        "summary": True,
+        "clock": False,
+        "stats": False,
+    }
+
+    coordinator.configure_rotation_order(channel_info, channel_text)
+
+    assert coordinator.rotation.index == 3
 
 
 def test_low_channel_keeps_generated_base_with_lock_payloads(monkeypatch, tmp_path):
