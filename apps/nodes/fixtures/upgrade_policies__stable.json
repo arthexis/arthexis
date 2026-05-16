@@ -5,9 +5,12 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Stable",
-      "description": "Stable/LTS upgrades: patch weekly, minor monthly, no major upgrades.",
+      "description": "Stable/LTS upgrades: patch weekly, no minor or major upgrades.",
       "channel": "stable",
       "interval_minutes": 10080,
+      "allow_patch_upgrades": true,
+      "allow_minor_upgrades": false,
+      "allow_major_upgrades": false,
       "requires_pypi_packages": true
     }
   }
