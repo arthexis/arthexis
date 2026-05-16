@@ -1018,6 +1018,17 @@ def run_database_tasks(
             model_counts: dict[str, int] = defaultdict(int)
             site_fixture_defaults: dict[str, dict] = {}
             pending_user_m2m: dict[int, list[tuple[str, Any]]] = defaultdict(list)
+            pending_role_names: set[str] = set()
+            for name in fixtures:
+                source = Path(settings.BASE_DIR, name)
+                with source.open() as f:
+                    data = json.load(f)
+                for obj in data:
+                    if obj.get("model") != "nodes.noderole":
+                        continue
+                    role_name = obj.get("fields", {}).get("name")
+                    if isinstance(role_name, str) and role_name:
+                        pending_role_names.add(role_name)
             for name in fixtures:
                 priority, _ = _fixture_sort_key(name)
                 source = Path(settings.BASE_DIR, name)
@@ -1067,15 +1078,16 @@ def run_database_tasks(
                         roles_field = fields.get("roles")
                         if isinstance(roles_field, list):
                             NodeRole = apps.get_model("nodes", "NodeRole")
-                            available_role_names = set(
+                            referenced_role_names = [
+                                role[0]
+                                for role in roles_field
+                                if isinstance(role, (list, tuple))
+                                and role
+                                and isinstance(role[0], str)
+                            ]
+                            available_role_names = pending_role_names | set(
                                 NodeRole.objects.filter(
-                                    name__in=[
-                                        role[0]
-                                        for role in roles_field
-                                        if isinstance(role, (list, tuple))
-                                        and role
-                                        and isinstance(role[0], str)
-                                    ]
+                                    name__in=referenced_role_names
                                 ).values_list("name", flat=True)
                             )
                             filtered_roles = [
