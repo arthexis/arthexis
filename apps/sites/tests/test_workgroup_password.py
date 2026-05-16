@@ -41,19 +41,24 @@ def test_current_workgroup_password_uses_configured_timezone():
 
 @pytest.mark.django_db
 @override_settings(
-    ALLOWED_HOSTS=["play.example.test"],
+    ALLOWED_HOSTS=["arthexis.com", "play.example.test"],
+    WORKGROUP_PUBLIC_HOST="arthexis.com",
+    WORKGROUP_SSH_HOST="ssh.arthexis.com",
     WORKGROUP_DAILY_PASSWORD_SEED="view-seed",
     WORKGROUP_DAILY_PASSWORD_TIMEZONE="America/Monterrey",
 )
 def test_workgroup_page_shows_daily_password_and_usage(client):
     expected = current_password().password
 
-    response = client.get(reverse("pages:workgroup"), HTTP_HOST="play.example.test")
+    blocked = client.get(reverse("pages:workgroup"), HTTP_HOST="play.example.test")
+    assert blocked.status_code == 404
+
+    response = client.get(reverse("pages:workgroup"), HTTP_HOST="arthexis.com")
 
     assert response.status_code == 200
     assert "The Workgroup" in response.content.decode()
     assert expected in response.content.decode()
-    assert "ssh -p 2222 play@play.example.test" in response.content.decode()
+    assert "ssh -p 2222 play@ssh.arthexis.com" in response.content.decode()
     assert "connect &lt;account&gt; &lt;account-password&gt;" in response.content.decode()
 
 

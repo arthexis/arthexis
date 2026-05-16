@@ -131,16 +131,32 @@ def _format_workgroup_ssh_host(request) -> str:
     return parsed.hostname or raw_host
 
 
+def _workgroup_public_host() -> str:
+    return str(getattr(settings, "WORKGROUP_PUBLIC_HOST", "")).strip().lower()
+
+
+def _workgroup_ssh_host() -> str:
+    configured = str(getattr(settings, "WORKGROUP_SSH_HOST", "")).strip()
+    if configured:
+        return configured
+    return _workgroup_public_host() or ""
+
+
 @require_GET
 @never_cache
 def workgroup(request):
+    request_host = _format_workgroup_ssh_host(request).strip().lower()
+    public_host = _workgroup_public_host()
+    if public_host and request_host != public_host:
+        raise Http404
     password = current_password()
+    play_ssh_host = _workgroup_ssh_host() or request_host
     return TemplateResponse(
         request,
         "pages/workgroup.html",
         {
             "password": password,
-            "play_ssh_host": _format_workgroup_ssh_host(request),
+            "play_ssh_host": play_ssh_host,
             "title": "The Workgroup",
             "force_footer": True,
         },
