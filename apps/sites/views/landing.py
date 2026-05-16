@@ -125,6 +125,12 @@ def operator_interface_notice(request):
     )
 
 
+def _format_workgroup_ssh_host(request) -> str:
+    raw_host = request.get_host()
+    parsed = urlsplit(f"//{raw_host}")
+    return parsed.hostname or raw_host
+
+
 @require_GET
 @never_cache
 def workgroup(request):
@@ -134,6 +140,7 @@ def workgroup(request):
         "pages/workgroup.html",
         {
             "password": password,
+            "play_ssh_host": _format_workgroup_ssh_host(request),
             "title": "The Workgroup",
             "force_footer": True,
         },

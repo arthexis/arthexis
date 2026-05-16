@@ -106,6 +106,7 @@ Description=Daily Arthexis Workgroup play SSH password rotation
 
 [Timer]
 OnCalendar=*-*-* 00:00:00 $TIMER_TIMEZONE
+AccuracySec=1s
 Persistent=true
 
 [Install]

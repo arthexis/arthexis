@@ -27,7 +27,7 @@
       <p>
         {% trans "From a terminal, connect to the play account and enter the password above when SSH asks for it." %}
       </p>
-      <pre class="bg-dark text-light border rounded-2 p-3"><code>ssh -p 2222 play@arthexis.com</code></pre>
+      <pre class="bg-dark text-light border rounded-2 p-3"><code>ssh -p 2222 play@{{ play_ssh_host }}</code></pre>
       <p>
         {% trans "After the game prompt appears, sign in with your Evennia account:" %}
       </p>
