@@ -328,7 +328,7 @@ jobs:
 
       - name: Upload dashboard screenshot
         id: upload-admin-dashboard
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: admin-dashboard
           path: artifacts/admin-desktop.png
@@ -336,7 +336,7 @@ jobs:
       - name: Upload OCPP dashboard screenshot for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         id: upload-ocpp-dashboard
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
@@ -344,7 +344,7 @@ jobs:
       - name: Upload developer library screenshot for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         id: upload-developer-library
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: developer-library
           path: artifacts/docs-library-desktop.png
@@ -352,7 +352,7 @@ jobs:
       - name: Upload gallery screenshot for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         id: upload-gallery
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: image-gallery
           path: artifacts/gallery-desktop.png
@@ -360,7 +360,7 @@ jobs:
       - name: Upload OCPP charger detail screenshot for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         id: upload-ocpp-charger-detail
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ocpp-charger-detail
           path: artifacts/ocpp-c-SIM-CP-1-desktop.png
@@ -424,7 +424,7 @@ jobs:
       - name: Upload screenshot metadata
         if: ${{ always() && github.event_name == 'pull_request' }}
         id: upload-pr-screenshot-metadata
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: screenshot-metadata
           path: |
@@ -616,28 +616,28 @@ jobs:
 
       - name: Upload public screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: public-site
           path: artifacts/root-desktop.png
 
       - name: Upload OCPP dashboard screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
 
       - name: Upload developer library screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: developer-library
           path: artifacts/docs-library-desktop.png
 
       - name: Upload EVCS public screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: evcs-public
           path: artifacts/ocpp-c-sim-cp-1-desktop.png
