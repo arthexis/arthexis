@@ -87,7 +87,7 @@ def test_build_upgrade_decision_blocks_stable_major_upgrade(monkeypatch):
     assert decision.reason == "major-upgrade-disallowed"
 
 
-def test_build_upgrade_decision_throttles_stable_minor_upgrade(monkeypatch):
+def test_build_upgrade_decision_blocks_stable_minor_upgrade(monkeypatch):
     checked_intervals: list[int] = []
 
     def _ran_recently(_base_dir, interval_minutes):
@@ -109,8 +109,8 @@ def test_build_upgrade_decision_throttles_stable_minor_upgrade(monkeypatch):
 
     assert decision.skip is True
     assert decision.apply is False
-    assert decision.reason == "minor-upgrade-not-due"
-    assert 43200 in checked_intervals
+    assert decision.reason == "minor-upgrade-disallowed"
+    assert checked_intervals == []
 
 
 def test_build_upgrade_decision_regular_uses_regular_channel_for_minor(monkeypatch):

@@ -186,7 +186,7 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--failover ROLE` | Provide role fallback for repair when role lock cannot be resolved. |
 
 Auto-upgrade channel tiers gate release bumps after the scheduler fires:
-`stable`/`lts` allows patch upgrades weekly and minor upgrades monthly,
+`stable`/`lts` allows patch upgrades weekly and blocks minor/major upgrades by default,
 `regular`/`normal` allows patch and minor upgrades daily and major upgrades
 weekly, `latest`/`unstable` follows live `main` revisions daily, and `custom`
 uses the stored policy interval, branch, live-branch toggle, and explicit
