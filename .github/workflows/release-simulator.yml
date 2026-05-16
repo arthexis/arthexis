@@ -578,6 +578,7 @@ jobs:
           CAN_SIMULATE: ${{ needs.evaluate.outputs.can_simulate }}
           SIMULATED_OK: ${{ needs.simulate_release.outputs.simulated_ok }}
           SIM_SUMMARY: ${{ needs.simulate_release.outputs.summary_markdown }}
+          DEFAULT_BRANCH: ${{ needs.evaluate.outputs.default_branch }}
         with:
           script: |
             const title = 'Release Readiness Report';
@@ -592,6 +593,7 @@ jobs:
               '',
               '- ❌ Release simulation failed before producing a summary. Check the workflow run logs.'
             ].join('\n');
+            const defaultBranch = process.env.DEFAULT_BRANCH || context.payload.repository?.default_branch;
 
             async function collectChangeLines() {
               const maxEntries = 25;
@@ -612,28 +614,29 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   base: tagName,
-                  head: context.sha,
+                  head: defaultBranch,
                 });
                 const commits = comparison.data?.commits || [];
+                const totalCommits = comparison.data?.total_commits ?? commits.length;
                 if (!commits.length) {
                   return {
-                    heading: `## Changes since last release (${tagName} → ${context.sha.slice(0, 7)})`,
+                    heading: `## Changes since last release (${tagName} → ${defaultBranch})`,
                     lines: ['- No unreleased commits detected.'],
                   };
                 }
 
-                const lines = commits.slice(0, maxEntries).map((commit) => {
+                const lines = commits.slice(-maxEntries).reverse().map((commit) => {
                   const shortSha = (commit.sha || '').slice(0, 7);
                   const message = String(commit.commit?.message || '').split('\n')[0].trim();
                   const author = commit.commit?.author?.name || commit.author?.login || 'unknown author';
                   const url = commit.html_url || `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${commit.sha}`;
                   return `- [${shortSha}](${url}) ${message} — ${author}`;
                 });
-                if (commits.length > maxEntries) {
-                  lines.push(`- _And ${commits.length - maxEntries} more commit(s)._`);
+                if (totalCommits > lines.length) {
+                  lines.push(`- _And ${totalCommits - lines.length} more commit(s)._`);
                 }
                 return {
-                  heading: `## Changes since last release (${tagName} → ${context.sha.slice(0, 7)})`,
+                  heading: `## Changes since last release (${tagName} → ${defaultBranch})`,
                   lines,
                 };
               } catch (error) {
