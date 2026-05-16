@@ -79,6 +79,7 @@ WORKGROUP_WORDS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class WorkgroupPassword:
+    """Daily password plus local-day validity [valid_from, valid_until) in timezone_name."""
     password: str
     first_word: str
     second_word: str
@@ -129,9 +130,10 @@ def password_for_date(day: dt.date, *, seed: str | None = None) -> str:
 
 
 def password_record_for_date(day: dt.date) -> WorkgroupPassword:
+    """Return the password record for local calendar `day` in configured timezone."""
     zone = _zoneinfo()
     valid_from = dt.datetime.combine(day, dt.time.min, tzinfo=zone)
-    valid_until = valid_from + dt.timedelta(days=1)
+    valid_until = dt.datetime.combine(day + dt.timedelta(days=1), dt.time.min, tzinfo=zone)
     password = password_for_date(day)
     first, second = password.split("-", 1)
     return WorkgroupPassword(
@@ -146,6 +148,7 @@ def password_record_for_date(day: dt.date) -> WorkgroupPassword:
 
 
 def current_password(now: dt.datetime | None = None) -> WorkgroupPassword:
+    """Return the current local-day password record in the configured timezone."""
     zone = _zoneinfo()
     current = now or timezone.now()
     if timezone.is_naive(current):

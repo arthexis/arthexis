@@ -12,14 +12,16 @@ NEW_VALUE = "/workgroup/"
 
 
 def replace_wizards_with_workgroup_footer(apps, schema_editor) -> None:
+    """Canonicalize wizard/workgroup footer references into one public workgroup link."""
     Reference = apps.get_model("links", "Reference")
     manager = getattr(Reference, "all_objects", Reference._base_manager)
+    db_manager = manager.using(schema_editor.connection.alias)
 
     filters = Q(alt_text=NEW_ALT_TEXT, value=NEW_VALUE)
     for alt_text, value in OLD_FOOTER_VARIANTS:
         filters |= Q(alt_text=alt_text, value=value)
 
-    candidates = list(manager.filter(filters).order_by("pk"))
+    candidates = list(db_manager.filter(filters).order_by("pk"))
     if not candidates:
         return
 
@@ -34,9 +36,7 @@ def replace_wizards_with_workgroup_footer(apps, schema_editor) -> None:
 
     duplicate_pks = [row.pk for row in candidates if row.pk != keep.pk]
     if duplicate_pks:
-        manager.using(schema_editor.connection.alias).filter(
-            pk__in=duplicate_pks
-        ).delete()
+        db_manager.filter(pk__in=duplicate_pks).delete()
 
     changed_fields = []
     for field_name, value in (
@@ -58,6 +58,7 @@ def replace_wizards_with_workgroup_footer(apps, schema_editor) -> None:
 
 
 def noop_reverse(apps, schema_editor) -> None:
+    """Leave reverse as a no-op because deleted duplicates cannot be reconstructed."""
     return None
 
 

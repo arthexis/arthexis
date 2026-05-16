@@ -1,12 +1,13 @@
 import datetime as dt
 import io
+import json
 from types import SimpleNamespace
 
-import pytest
 from django.core.management import call_command
 from django.template.loader import render_to_string
 from django.test import override_settings
 from django.urls import reverse
+import pytest
 
 from apps.sites.workgroup_passwords import current_password, password_for_date
 
@@ -77,10 +78,10 @@ def test_workgroup_password_command_prints_json_for_date():
 
     call_command("workgroup_password", "--date", "2026-05-16", "--json", stdout=stdout)
 
-    output = stdout.getvalue()
-    assert '"date": "2026-05-16"' in output
-    assert '"timezone": "America/Monterrey"' in output
-    assert password_for_date(dt.date(2026, 5, 16), seed="command-seed") in output
+    output = json.loads(stdout.getvalue())
+    assert output["date"] == "2026-05-16"
+    assert output["timezone"] == "America/Monterrey"
+    assert output["password"] == password_for_date(dt.date(2026, 5, 16), seed="command-seed")
 
 
 @override_settings(WORKGROUP_DAILY_PASSWORD_SEED="command-seed")

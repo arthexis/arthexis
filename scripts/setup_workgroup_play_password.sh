@@ -82,15 +82,16 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=$BASE_DIR
-ExecStart=/bin/bash -lc 'set -a; . "$ENV_FILE"; set +a; . "$BASE_DIR/.venv/bin/activate"; exec python "$BASE_DIR/manage.py" workgroup_password --apply-user play'
+EnvironmentFile=$ENV_FILE
+ExecStart=$BASE_DIR/.venv/bin/python $BASE_DIR/manage.py workgroup_password --apply-user play
 EOF
 
-cat > "$TIMER_FILE" <<'EOF'
+cat > "$TIMER_FILE" <<EOF
 [Unit]
 Description=Daily Arthexis Workgroup play SSH password rotation
 
 [Timer]
-OnCalendar=*-*-* 00:01:00
+OnCalendar=*-*-* 00:01:00 $TIMEZONE_VALUE
 Persistent=true
 RandomizedDelaySec=300
 

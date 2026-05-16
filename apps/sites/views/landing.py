@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.core import changelog
@@ -125,6 +126,7 @@ def operator_interface_notice(request):
 
 
 @require_GET
+@never_cache
 def workgroup(request):
     password = current_password()
     return TemplateResponse(
