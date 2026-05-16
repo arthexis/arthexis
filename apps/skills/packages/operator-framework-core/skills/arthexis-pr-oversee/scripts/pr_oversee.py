@@ -67,9 +67,7 @@ def author_login(pr: dict[str, Any]) -> str:
 
 
 def is_dependabot(pr: dict[str, Any]) -> bool:
-    login = author_login(pr).lower()
-    title = str(pr.get("title") or "").lower()
-    return "dependabot" in login or title.startswith("build(deps")
+    return author_login(pr).lower() == "dependabot[bot]"
 
 
 def check_rollup_state(pr: dict[str, Any]) -> tuple[list[str], list[str]]:
