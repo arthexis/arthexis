@@ -204,7 +204,7 @@ patch/minor/major gates.
 | `-h`, `--help` | Print usage and exit successfully. |
 | `--wait` | Poll until reachability checks succeed or timeout windows expire. |
 
-## 6. Operational command entrypoint
+## 6. Operational command entrypoint (`command.sh`)
 
 `command.sh` is the allowlisted operational command wrapper. It validates the runtime environment, logs invocation metadata safely, and dispatches to `utils.command_api`.
 
@@ -252,7 +252,9 @@ environment failures where `command.sh` or `manage.py` may not work.
 
 The collector uses Python standard library modules only and passes copied text
 through secret redaction. It excludes environment files, databases, dumps,
-backups, media/static/cache trees, virtual environments, Git internals, and key material. See `docs/operations/error-report.md` for operator usage and package contents.
+backups, media/static/cache trees, virtual environments, Git internals, and key
+material. See `docs/operations/error-report.md` for operator usage and package
+contents.
 
 ## 9. Documentation maintenance check
 
