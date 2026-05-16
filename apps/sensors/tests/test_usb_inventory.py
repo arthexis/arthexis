@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+import json
+from io import StringIO
+
+import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
+
+from apps.nodes.models import Node, NodeRole
+from apps.sensors import node_features, usb_inventory
+
+
+def test_usb_inventory_matches_kindle_claim(settings, monkeypatch, tmp_path):
+    mount = tmp_path / "kindle"
+    (mount / "documents").mkdir(parents=True)
+    (mount / "system").mkdir()
+    settings.USB_INVENTORY_CLAIMS_PATH = tmp_path / "claims.json"
+    settings.USB_INVENTORY_STATE_PATH = tmp_path / "devices.json"
+    settings.USB_INVENTORY_CLAIMS_PATH.write_text(
+        json.dumps({"kindle-postbox": {"match": {"kindle": True, "label": "Kindle"}}}),
+        encoding="utf-8",
+    )
+
+    def fake_run_json(command):
+        if command[0] == "lsblk":
+            return {
+                "blockdevices": [
+                    {
+                        "name": "sda",
+                        "path": "/dev/sda",
+                        "type": "disk",
+                        "tran": "usb",
+                        "children": [
+                            {
+                                "name": "sda1",
+                                "path": "/dev/sda1",
+                                "type": "part",
+                                "label": "Kindle",
+                            }
+                        ],
+                    }
+                ]
+            }
+        return {
+            "filesystems": [
+                {
+                    "source": "/dev/sda1",
+                    "target": str(mount),
+                    "fstype": "vfat",
+                    "options": "rw",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(usb_inventory, "run_json", fake_run_json)
+
+    payload = usb_inventory.refresh_inventory()
+
+    assert payload["devices"][1]["claims"] == ["kindle-postbox"]
+    assert payload["devices"][1]["kindle_shape"] is True
+    assert usb_inventory.claimed_paths("kindle-postbox") == [str(mount)]
+
+
+@pytest.mark.django_db
+def test_usb_inventory_feature_detection_requires_control_role(monkeypatch, tmp_path):
+    control = NodeRole.objects.create(name="Control")
+    terminal = NodeRole.objects.create(name="Terminal")
+    node = Node(hostname="control", public_endpoint="control", role=control)
+    monkeypatch.setattr(usb_inventory, "has_usb_inventory_tools", lambda: True)
+
+    assert (
+        node_features.check_node_feature(
+            "usb-inventory",
+            node=node,
+            base_dir=tmp_path,
+            base_path=tmp_path,
+        )
+        is True
+    )
+
+    node.role = terminal
+
+    assert (
+        node_features.check_node_feature(
+            "usb-inventory",
+            node=node,
+            base_dir=tmp_path,
+            base_path=tmp_path,
+        )
+        is False
+    )
+
+
+@pytest.mark.django_db
+def test_usb_inventory_command_requires_control_role(settings, tmp_path):
+    settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
+    node = Node.objects.create(hostname="terminal", public_endpoint="terminal")
+    Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
+
+    with pytest.raises(CommandError, match="only available on Control nodes"):
+        call_command("sensors", "usb-inventory", "list")
+
+
+@pytest.mark.django_db
+def test_usb_inventory_command_refreshes_for_control_role(
+    settings, monkeypatch, tmp_path
+):
+    settings.BASE_DIR = tmp_path
+    settings.USB_INVENTORY_STATE_PATH = tmp_path / "devices.json"
+    Node._local_cache.clear()
+    role = NodeRole.objects.create(name="Control")
+    node = Node.objects.create(hostname="gway", public_endpoint="gway", role=role)
+    Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
+    monkeypatch.setattr(usb_inventory, "has_usb_inventory_tools", lambda: True)
+    monkeypatch.setattr(
+        usb_inventory,
+        "refresh_inventory",
+        lambda: {"generated_at": "now", "devices": [{"name": "sda"}]},
+    )
+
+    output = StringIO()
+    call_command("sensors", "usb-inventory", "refresh", stdout=output)
+
+    assert "USB inventory refreshed: devices=1" in output.getvalue()

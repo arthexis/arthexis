@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
-from apps.summary import services
+from apps.summary import dense_lcd, services
 from apps.tasks import tasks as task_services
 from apps.tasks.tasks import _write_lcd_frames
 
@@ -146,6 +147,8 @@ def test_no_log_generation_preserves_low_channel_messages(
     (lock_dir / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
 
     class FakeNode:
+        role = SimpleNamespace(name="Control")
+
         def has_feature(self, slug: str) -> bool:
             return slug == "llm-summary"
 
@@ -185,7 +188,11 @@ def test_suite_gate_skip_preserves_low_channel_messages(
     (lock_dir / "lcd-low-1").write_text("old\nsummary\n", encoding="utf-8")
 
     settings.BASE_DIR = tmp_path
-    monkeypatch.setattr(Node, "get_local", staticmethod(lambda: object()))
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        staticmethod(lambda: SimpleNamespace(role=SimpleNamespace(name="Control"))),
+    )
     monkeypatch.setattr(
         services,
         "is_suite_feature_enabled",
@@ -211,6 +218,8 @@ def test_generation_without_lcd_feature_does_not_write_summary_lock(
     (lock_dir / "lcd-summary-2").write_text("stale\nsummary\n", encoding="utf-8")
 
     class FakeNode:
+        role = SimpleNamespace(name="Control")
+
         def has_feature(self, slug: str) -> bool:
             return slug in {"llm-summary"}
 
@@ -256,3 +265,33 @@ def test_generation_without_lcd_feature_does_not_write_summary_lock(
     assert not (lock_dir / "lcd-summary").exists()
     assert not (lock_dir / "lcd-summary-1").exists()
     assert not (lock_dir / "lcd-summary-2").exists()
+
+
+def test_dense_frames_from_prompt_builds_summary_frame() -> None:
+    prompt = "\n".join(
+        [
+            "Instructions",
+            "LOGS:",
+            "[journal.log]",
+            "ERROR worker failed to refresh inventory",
+            "WARNING retry scheduled",
+        ]
+    )
+
+    frames = dense_lcd.dense_frames_from_prompt(prompt)
+
+    assert frames[0] == ("2 ln", "ERR 1")
+    assert frames[1] == ("ERR journal", "ERR worker faile")
+
+
+def test_log_summary_generation_skips_non_control_node(monkeypatch, settings, tmp_path):
+    from apps.nodes.models import Node
+
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        staticmethod(lambda: SimpleNamespace(role=SimpleNamespace(name="Terminal"))),
+    )
+
+    assert services.execute_log_summary_generation() == "skipped:non-control-node"

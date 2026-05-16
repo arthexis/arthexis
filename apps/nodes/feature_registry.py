@@ -16,6 +16,9 @@ from apps.playwright.node_features import (
 from apps.screens.node_features import (
     register_node_feature_detection as register_screens_features,
 )
+from apps.sensors.node_features import (
+    register_node_feature_detection as register_sensors_features,
+)
 from apps.summary.node_features import (
     register_node_feature_detection as register_summary_features,
 )
@@ -27,6 +30,7 @@ APPROVED_NODE_FEATURE_REGISTRARS: Sequence[DetectionRegistrar] = (
     register_cards_features,
     register_playwright_features,
     register_screens_features,
+    register_sensors_features,
     register_summary_features,
 )
 

@@ -111,3 +111,43 @@ def test_reconcile_node_features_services_command_uses_auto_detection(
         (lock_dir / "lifecycle_services.json").read_text(encoding="utf-8")
     )
     assert "camera-suite.service" in payload["systemd_units"]
+
+
+@pytest.mark.django_db
+@override_settings(BASE_DIR="/tmp")
+def test_lifecycle_config_preserves_timer_unit_kind(tmp_path, settings):
+    """Timer lifecycle rows should render as timers, not service defaults."""
+
+    settings.BASE_DIR = tmp_path
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    node = Node.objects.create(
+        hostname="control-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="control-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="usb-inventory", display="USB Inventory")
+    NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    LifecycleService.objects.update_or_create(
+        slug="usb-inventory-timer",
+        defaults={
+            "display": "USB Inventory Timer",
+            "unit_template": "arthexis-usb-inventory",
+            "unit_kind": LifecycleService.UnitKind.TIMER,
+            "activation": LifecycleService.Activation.FEATURE,
+            "feature_slug": "usb-inventory",
+        },
+    )
+
+    payload = write_lifecycle_config(tmp_path)
+
+    assert "arthexis-usb-inventory.timer" in payload.systemd_units
+    timer = next(
+        service
+        for service in payload.services
+        if service["key"] == "usb-inventory-timer"
+    )
+    assert timer["unit_kind"] == LifecycleService.UnitKind.TIMER
+    assert timer["unit_display"] == "arthexis-usb-inventory.timer"

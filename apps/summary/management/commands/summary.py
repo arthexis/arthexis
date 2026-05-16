@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.roles import node_is_control
 from apps.screens.lcd_screen import locks as lcd_locks
 from apps.screens.startup_notifications import (
     LCD_CHANNELS_LOCK_FILE,
@@ -16,6 +17,7 @@ from apps.screens.startup_notifications import (
     read_lcd_lock_file,
 )
 from apps.summary.constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
+from apps.summary.dense_lcd import execute_dense_lcd_summary
 from apps.summary.models import LLMSummaryConfig
 from apps.summary.node_features import get_llm_summary_prereq_state
 from apps.summary.services import (
@@ -55,6 +57,11 @@ class Command(BaseCommand):
                 "feature is disabled."
             ),
         )
+        parser.add_argument(
+            "--dense-lcd",
+            action="store_true",
+            help="Generate dense low-channel LCD frames and exit.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Render status output and apply optional auto-enable actions."""
@@ -69,6 +76,13 @@ class Command(BaseCommand):
 
         if options["enabled"]:
             self._enable_prerequisites(node=node, config=config, base_dir=base_dir)
+
+        if options["dense_lcd"]:
+            status = execute_dense_lcd_summary(
+                ignore_suite_feature_gate=options["allow_disabled_feature"],
+            )
+            self.stdout.write(f"Dense LCD: {status}")
+            return
 
         if options["run_now"]:
             if not is_suite_feature_enabled(
@@ -162,6 +176,9 @@ class Command(BaseCommand):
         self, *, node: Node, config: LLMSummaryConfig, base_dir: Path
     ) -> None:
         """Enable lock files, feature assignments, and model artifacts for summaries."""
+
+        if not node_is_control(node):
+            raise CommandError("LLM summary can only be enabled on Control nodes.")
 
         lock_dir = base_dir / ".locks"
         lock_dir.mkdir(parents=True, exist_ok=True)
