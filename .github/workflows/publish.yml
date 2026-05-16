@@ -86,7 +86,7 @@ jobs:
           python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: release-pytest-log
           path: pytest.log
@@ -309,14 +309,14 @@ jobs:
 
       - name: Upload validation logs on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: arthexis-validation-logs
           path: validation-logs/
           if-no-files-found: warn
 
       - name: Upload dist artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: arthexis-dists
           path: dist/

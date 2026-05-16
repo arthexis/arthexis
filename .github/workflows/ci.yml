@@ -389,7 +389,7 @@ jobs:
 
       - name: Upload pytest log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: upgrade-gate-pytest-log
           path: pytest.log
@@ -397,7 +397,7 @@ jobs:
 
       - name: Upload failure summary
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: upgrade-gate-failure-summary
           path: ci-failure-summary.md
