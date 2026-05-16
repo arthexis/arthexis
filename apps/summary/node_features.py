@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
+from apps.nodes.roles import node_is_control
 from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.summary.models import LLMSummaryConfig
 
@@ -51,6 +52,8 @@ def check_node_feature(
 
     if slug != LLM_SUMMARY_SLUG:
         return None
+    if not node_is_control(node):
+        return False
     return _is_llm_summary_active(base_dir=base_dir, base_path=base_path)
 
 

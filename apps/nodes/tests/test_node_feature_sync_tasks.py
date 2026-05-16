@@ -1,12 +1,14 @@
 import pytest
 from django.contrib import messages
 
-from apps.nodes.models import Node
+from apps.nodes.models import Node, NodeRole
 from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
 
 @pytest.mark.django_db
-def test_sync_feature_tasks_disables_screenshots_when_feature_record_missing(monkeypatch):
+def test_sync_feature_tasks_disables_screenshots_when_feature_record_missing(
+    monkeypatch,
+):
     node = Node.objects.create(hostname="sync-local", public_endpoint="sync-local")
 
     monkeypatch.setattr(Node, "is_local", property(lambda self: True))
@@ -22,11 +24,17 @@ def test_sync_feature_tasks_disables_screenshots_when_feature_record_missing(mon
         lambda self, enabled: screenshot_enabled.append(enabled),
     )
     monkeypatch.setattr(Node, "_sync_landing_lead_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_ocpp_session_report_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_ocpp_session_report_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_upstream_poll_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_net_message_purge_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_net_message_purge_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_node_update_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_connectivity_monitor_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_connectivity_monitor_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_llm_summary_task", lambda self, enabled: None)
 
     node.sync_feature_tasks()
@@ -61,11 +69,17 @@ def test_sync_feature_tasks_scopes_screenshot_task_to_local_node(monkeypatch):
         lambda self, enabled: screenshot_enabled.append(enabled),
     )
     monkeypatch.setattr(Node, "_sync_landing_lead_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_ocpp_session_report_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_ocpp_session_report_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_upstream_poll_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_net_message_purge_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_net_message_purge_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_node_update_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_connectivity_monitor_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_connectivity_monitor_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_llm_summary_task", lambda self, enabled: None)
 
     node.sync_feature_tasks()
@@ -75,7 +89,9 @@ def test_sync_feature_tasks_scopes_screenshot_task_to_local_node(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_sync_feature_tasks_disables_llm_summary_when_suite_gate_is_disabled(monkeypatch):
+def test_sync_feature_tasks_disables_llm_summary_when_suite_gate_is_disabled(
+    monkeypatch,
+):
     """LLM summary periodic task should disable when suite gate is off."""
 
     node = Node.objects.create(hostname="sync-llm", public_endpoint="sync-llm")
@@ -85,17 +101,74 @@ def test_sync_feature_tasks_disables_llm_summary_when_suite_gate_is_disabled(mon
         "apps.features.utils.is_suite_feature_enabled",
         lambda slug, default=True: False if slug == "llm-summary-suite" else True,
     )
-    monkeypatch.setattr(Node, "has_feature", lambda self, slug: slug in {"celery-queue", "llm-summary"})
+    monkeypatch.setattr(
+        Node, "has_feature", lambda self, slug: slug in {"celery-queue", "llm-summary"}
+    )
 
     llm_enabled: list[bool] = []
     monkeypatch.setattr(Node, "_sync_screenshot_task", lambda self, enabled: None)
     monkeypatch.setattr(Node, "_sync_landing_lead_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_ocpp_session_report_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_ocpp_session_report_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_upstream_poll_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_net_message_purge_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_net_message_purge_task", lambda self, enabled: None
+    )
     monkeypatch.setattr(Node, "_sync_node_update_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_connectivity_monitor_task", lambda self, enabled: None)
-    monkeypatch.setattr(Node, "_sync_llm_summary_task", lambda self, enabled: llm_enabled.append(enabled))
+    monkeypatch.setattr(
+        Node, "_sync_connectivity_monitor_task", lambda self, enabled: None
+    )
+    monkeypatch.setattr(
+        Node,
+        "_sync_llm_summary_task",
+        lambda self, enabled: llm_enabled.append(enabled),
+    )
+
+    node.sync_feature_tasks()
+
+    assert llm_enabled == [False]
+
+
+@pytest.mark.django_db
+def test_sync_feature_tasks_disables_llm_summary_on_non_control_node(monkeypatch):
+    """LLM summary scheduling is isolated to Control nodes."""
+
+    role = NodeRole.objects.create(name="Terminal")
+    node = Node.objects.create(
+        hostname="sync-llm-terminal",
+        public_endpoint="sync-llm-terminal",
+        role=role,
+    )
+
+    monkeypatch.setattr(Node, "is_local", property(lambda self: True))
+    monkeypatch.setattr(
+        "apps.features.utils.is_suite_feature_enabled",
+        lambda slug, default=True: True,
+    )
+    monkeypatch.setattr(
+        Node, "has_feature", lambda self, slug: slug in {"celery-queue", "llm-summary"}
+    )
+
+    llm_enabled: list[bool] = []
+    monkeypatch.setattr(Node, "_sync_screenshot_task", lambda self, enabled: None)
+    monkeypatch.setattr(Node, "_sync_landing_lead_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_ocpp_session_report_task", lambda self, enabled: None
+    )
+    monkeypatch.setattr(Node, "_sync_upstream_poll_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_net_message_purge_task", lambda self, enabled: None
+    )
+    monkeypatch.setattr(Node, "_sync_node_update_task", lambda self, enabled: None)
+    monkeypatch.setattr(
+        Node, "_sync_connectivity_monitor_task", lambda self, enabled: None
+    )
+    monkeypatch.setattr(
+        Node,
+        "_sync_llm_summary_task",
+        lambda self, enabled: llm_enabled.append(enabled),
+    )
 
     node.sync_feature_tasks()
 

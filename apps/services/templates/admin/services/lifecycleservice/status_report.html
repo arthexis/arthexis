@@ -18,6 +18,7 @@
       <thead>
         <tr>
           <th>{% trans "Service" %}</th>
+          <th>{% trans "Kind" %}</th>
           <th>{% trans "Unit" %}</th>
           <th>{% trans "Activation" %}</th>
           <th>{% trans "Suite parameter" %}</th>
@@ -28,6 +29,7 @@
         {% for row in rows %}
           <tr>
             <td>{{ row.service.display }}</td>
+            <td>{{ row.unit_kind }}</td>
             <td><code>{{ row.unit_name }}</code></td>
             <td>{{ row.service.get_activation_display }}</td>
             <td>{{ row.suite_parameter|default:"—" }}</td>
@@ -41,7 +43,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="5">{% trans "No services were selected." %}</td>
+            <td colspan="6">{% trans "No services were selected." %}</td>
           </tr>
         {% endfor %}
       </tbody>

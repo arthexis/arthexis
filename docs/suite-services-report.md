@@ -11,6 +11,8 @@ The Suite Services Report (Admin → System → Suite Services Report) summarize
 | [Celery beat](services/celery-beat.md) | `celery-beat-{service-name}.service` | Scheduler that triggers periodic Celery tasks. | [Celery beat](services/celery-beat.md) |
 | [LCD screen](services/lcd-screen.md) | `lcd-{service-name}.service` | 16x2 LCD updater service for Control nodes. | [LCD screen](services/lcd-screen.md) |
 | [RFID scanner service](services/rfid-scanner-service.md) | `rfid-{service-name}.service` | UDP-backed RFID scanner service for local reads. | [RFID scanner service](services/rfid-scanner-service.md) |
+| [LLM LCD summary](services/llm-lcd-summary.md) | `arthexis-llm-lcd-summary.service` / `arthexis-llm-lcd-summary.timer` | Dense low-channel LCD log summaries for Control nodes. | [LLM LCD summary](services/llm-lcd-summary.md) |
+| [USB inventory](services/usb-inventory.md) | `arthexis-usb-inventory.service` / `arthexis-usb-inventory.timer` | Local USB block-device inventory and claim lookup for Control nodes. | [USB inventory](services/usb-inventory.md) |
 
 ## Reading the report
 

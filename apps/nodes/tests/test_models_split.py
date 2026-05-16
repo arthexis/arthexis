@@ -8,7 +8,7 @@ from django.contrib.sites.models import Site
 from apps.features.models import Feature
 from apps.nodes import utils as nodes_utils
 from apps.nodes.feature_detection import node_feature_detection_registry
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment, NodeRole
 from apps.nodes.models import utils as node_utils
 from apps.sites.models import SiteProfile
 
@@ -273,14 +273,16 @@ def test_ensure_feature_enabled_handles_lazy_detection_exception(monkeypatch, tm
 
 
 @pytest.fixture
-def llm_summary_node(tmp_path):
+def llm_summary_node(tmp_path, db):
     """Provide a node for llm-summary detection."""
 
+    role = NodeRole.objects.create(name="Control")
     return (
         Node(
             hostname="summary-node",
             base_path=str(tmp_path),
             public_endpoint="summary-node",
+            role=role,
         ),
         tmp_path,
     )
@@ -322,6 +324,52 @@ def test_detect_auto_feature_skips_llm_summary_when_config_inactive(
     )
 
     assert result is False
+
+
+@pytest.mark.django_db
+def test_detect_auto_feature_skips_llm_summary_on_non_control_node(
+    tmp_path,
+):
+    """llm-summary is local Control-node behavior even when config is active."""
+
+    from apps.summary.models import LLMSummaryConfig
+
+    role = NodeRole.objects.create(name="Terminal")
+    node = Node(
+        hostname="summary-node",
+        base_path=str(tmp_path),
+        public_endpoint="summary-node",
+        role=role,
+    )
+    LLMSummaryConfig.objects.create(is_active=True)
+
+    result = node._detect_auto_feature(
+        "llm-summary", base_dir=tmp_path, base_path=tmp_path
+    )
+
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_control_only_feature_assignment_is_inactive_on_non_control_node(tmp_path):
+    """Stale manual assignments should not bypass Control-only feature boundaries."""
+
+    Node._local_cache.clear()
+    role = NodeRole.objects.create(name="Terminal")
+    node = Node.objects.create(
+        hostname="terminal-summary-node",
+        base_path=str(tmp_path),
+        public_endpoint="terminal-summary-node",
+        current_relation=Node.Relation.SELF,
+        role=role,
+    )
+    feature = NodeFeature.objects.create(slug="llm-summary", display="LLM Summary")
+    NodeFeatureAssignment.objects.bulk_create(
+        [NodeFeatureAssignment(node=node, feature=feature)]
+    )
+
+    assert node.has_feature("llm-summary") is False
+    assert feature.is_enabled is False
 
 
 @pytest.mark.django_db

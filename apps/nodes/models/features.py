@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import dataclass
 import json
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.db import models, transaction
-from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
+from django.db.utils import DatabaseError
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
@@ -20,6 +20,8 @@ from apps.clocks.utils import has_clock_device
 from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.nodes.feature_detection import node_feature_detection_registry
+from apps.nodes.roles import node_feature_allowed_for_node, node_is_control
+
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 logger = logging.getLogger(__name__)
@@ -121,6 +123,8 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
         node = NodeModel.get_local()
         if not node:
             return False
+        if not node_feature_allowed_for_node(self.slug, node):
+            return False
         if node.features.filter(pk=self.pk).exists():
             return True
         base_path = node.get_base_path()
@@ -217,6 +221,7 @@ class NodeFeatureMixin:
         "playwright-browser-chromium",
         "playwright-browser-firefox",
         "playwright-browser-webkit",
+        "usb-inventory",
         "video-cam",
     }
     LAZY_AUTO_DETECTION_FEATURE_SLUGS = {"rfid-scanner"}
@@ -226,6 +231,8 @@ class NodeFeatureMixin:
 
     def has_feature(self, slug: str) -> bool:
         """Return whether the node has the requested feature slug."""
+        if not node_feature_allowed_for_node(slug, self):
+            return False
         return self.features.filter(slug=slug).exists()
 
     def _apply_role_manual_features(self) -> None:
@@ -314,8 +321,6 @@ class NodeFeatureMixin:
         except (DatabaseError, RuntimeError):
             return True
 
-
-
     def refresh_features(self):
         """Refresh auto-managed feature assignments and tasks."""
         if not self.pk:
@@ -323,7 +328,9 @@ class NodeFeatureMixin:
         if not self.is_local:
             self.sync_feature_tasks()
             return
-        managed_slugs = self.AUTO_MANAGED_FEATURES - self.LAZY_AUTO_DETECTION_FEATURE_SLUGS
+        managed_slugs = (
+            self.AUTO_MANAGED_FEATURES - self.LAZY_AUTO_DETECTION_FEATURE_SLUGS
+        )
         reconciliation_slugs = self.AUTO_MANAGED_FEATURES
         detected_slugs = set()
         base_path = self.get_base_path()
@@ -383,17 +390,24 @@ class NodeFeatureMixin:
         if screenshot_enabled:
             from apps.nodes.feature_checks import feature_checks
 
-            screenshot_feature = NodeFeature.objects.filter(slug="screenshot-poll").first()
+            screenshot_feature = NodeFeature.objects.filter(
+                slug="screenshot-poll"
+            ).first()
             if screenshot_feature is not None:
                 screenshot_result = feature_checks.run(screenshot_feature, node=self)
-                screenshot_enabled = bool(screenshot_result and screenshot_result.success)
+                screenshot_enabled = bool(
+                    screenshot_result and screenshot_result.success
+                )
             else:
                 screenshot_enabled = False
-        llm_summary_suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
+        llm_summary_suite_enabled = is_suite_feature_enabled(
+            "llm-summary-suite", default=True
+        )
         celery_enabled = self.is_local and self.has_feature("celery-queue")
         llm_summary_enabled = (
             llm_summary_suite_enabled
             and celery_enabled
+            and node_is_control(self)
             and self.has_feature("llm-summary")
         )
         self._sync_screenshot_task(screenshot_enabled)
@@ -469,8 +483,8 @@ class NodeFeatureMixin:
 
     def _sync_ocpp_session_report_task(self, celery_enabled: bool):
         """Sync the periodic OCPP session report task."""
-        from django_celery_beat.models import CrontabSchedule, PeriodicTask
         from django.db.utils import OperationalError, ProgrammingError
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
         raw_task_name = "ocpp_send_daily_session_report"
         task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)

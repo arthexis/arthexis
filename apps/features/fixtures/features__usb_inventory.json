@@ -1,0 +1,39 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Sensor management command exposes local USB inventory refresh and claim lookup operations.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/sensors/usb_inventory.py",
+        "apps/sensors/management/commands/sensors.py",
+        "apps/sensors/node_features.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "USB Inventory",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "sensors"
+      ],
+      "metadata": {},
+      "node_feature": [
+        "usb-inventory"
+      ],
+      "protocol_coverage": {},
+      "public_requirements": "No public interface; inventory is local to eligible Control nodes.",
+      "public_views": [],
+      "service_requirements": "Requires Linux block-device tooling and a Control node role before inventory state is refreshed.",
+      "service_views": [
+        "apps.sensors.usb_inventory.refresh_inventory"
+      ],
+      "slug": "usb-inventory",
+      "source": "mainstream",
+      "summary": "Controls local USB block-device inventory and role claim lookup for Control nodes.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

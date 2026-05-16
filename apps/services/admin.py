@@ -17,12 +17,13 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
         "display",
         "slug",
         "unit_template",
+        "unit_kind",
         "activation",
         "suite_feature_binding",
         "feature_slug",
         "sort_order",
     )
-    list_filter = ("activation",)
+    list_filter = ("activation", "unit_kind")
     search_fields = ("display", "slug", "unit_template", "feature_slug")
     ordering = ("sort_order", "display")
     actions = ("check_selected_statuses",)
@@ -68,7 +69,9 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
                 continue
 
         services = list(
-            LifecycleService.objects.filter(pk__in=selected_ids).order_by("sort_order", "display")
+            LifecycleService.objects.filter(pk__in=selected_ids).order_by(
+                "sort_order", "display"
+            )
         )
         locks = lock_dir()
         service_name = read_service_name(locks / "service.lck")
@@ -76,8 +79,10 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
 
         report_rows: list[dict[str, object]] = []
         for service in services:
-            unit_name = service.unit_template.format(service=service_name_placeholder)
-            configured = service.is_configured(service_name=service_name, lock_dir=locks)
+            unit_name = service.resolved_unit_name(service_name_placeholder)
+            configured = service.is_configured(
+                service_name=service_name, lock_dir=locks
+            )
             suite_parameter = ""
             if service.slug == "celery-worker":
                 suite_parameter = self.suite_feature_binding(service)
@@ -85,6 +90,7 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
                 {
                     "service": service,
                     "unit_name": unit_name,
+                    "unit_kind": service.get_unit_kind_display(),
                     "configured": configured,
                     "service_name": service_name,
                     "suite_parameter": suite_parameter,

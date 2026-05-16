@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -19,11 +19,23 @@ class LifecycleService(models.Model):
         LOCKFILE = "lockfile", _("Lock file")
         MANUAL = "manual", _("Manual")
 
+    class UnitKind(models.TextChoices):
+        SERVICE = "service", _("Service")
+        TIMER = "timer", _("Timer")
+
     slug = models.SlugField(max_length=64, unique=True)
     display = models.CharField(max_length=80)
     unit_template = models.CharField(
         max_length=120,
-        help_text=_('Systemd unit template, for example "celery-{service}.service".'),
+        help_text=_(
+            'Systemd unit template, for example "celery-{service}" or '
+            '"arthexis-usb-inventory.timer".'
+        ),
+    )
+    unit_kind = models.CharField(
+        max_length=16,
+        choices=UnitKind.choices,
+        default=UnitKind.SERVICE,
     )
     pid_file = models.CharField(max_length=120, blank=True)
     docs_path = models.CharField(max_length=160, blank=True)
@@ -47,6 +59,10 @@ class LifecycleService(models.Model):
     def uses_service_name(self) -> bool:
         """Return True when the unit template uses a service placeholder."""
         return "{service}" in self.unit_template
+
+    def resolved_unit_name(self, service_name: str) -> str:
+        """Return the unit template with the service placeholder expanded."""
+        return self.unit_template.replace("{service}", service_name)
 
     def _safe_lock_names(self) -> list[str]:
         """Return lock file names that are safe to resolve within the lock directory."""

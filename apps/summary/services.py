@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from apps.features.parameters import get_feature_parameter
 from apps.features.utils import is_suite_feature_enabled
+from apps.nodes.roles import node_is_control
 from apps.screens.startup_notifications import render_lcd_lock_file
 
 from .constants import (
@@ -360,6 +361,8 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     node = Node.get_local()
     if not node:
         return "skipped:no-node"
+    if not node_is_control(node):
+        return "skipped:non-control-node"
 
     if not ignore_suite_feature_gate and not is_suite_feature_enabled(
         LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True
