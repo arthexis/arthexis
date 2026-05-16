@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 from django.utils import timezone
 
-from websocket import WebSocketException
+from websocket import WebSocketException, WebSocketTimeoutException
 
 from apps.ocpp.forwarder import Forwarder, ForwardingSession
 from apps.ocpp.services import health_checks
@@ -373,6 +373,33 @@ def test_listener_does_not_drop_reconnected_session(forwarder_instance):
 
     assert forwarder_instance.get_session(42) is new_session
     old_connection.close.assert_called_once()
+
+
+def test_listener_keeps_session_on_recv_timeout(forwarder_instance):
+    connection = SimpleNamespace(close=Mock())
+    session = ForwardingSession(
+        charger_pk=24,
+        node_id=100,
+        url="ws://timeout",
+        connection=connection,
+        connected_at=timezone.now(),
+    )
+    forwarder_instance._sessions[24] = session
+
+    def recv_then_disconnect():
+        if not getattr(recv_then_disconnect, "called", False):
+            recv_then_disconnect.called = True
+            raise WebSocketTimeoutException("Connection timed out")
+        connection.connected = False
+        return ""
+
+    connection.connected = True
+    connection.recv = Mock(side_effect=recv_then_disconnect)
+
+    forwarder_instance._listen_forwarding_session(session)
+
+    assert forwarder_instance.get_session(24) is session
+    connection.close.assert_not_called()
 
 
 @pytest.mark.django_db

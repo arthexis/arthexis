@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import socket
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -12,7 +13,7 @@ from typing import Iterable, Iterator, MutableMapping
 
 from django.db.models import Q
 from django.utils import timezone
-from websocket import WebSocketException, create_connection
+from websocket import WebSocketException, WebSocketTimeoutException, create_connection
 
 from apps.ocpp.forwarding_paths import FORWARDING_WEBSOCKET_PREFIXES
 from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
@@ -307,6 +308,8 @@ class Forwarder:
                 return
             try:
                 raw = session.connection.recv()
+            except (socket.timeout, TimeoutError, WebSocketTimeoutException):
+                continue
             except Exception as exc:  # pragma: no cover - network errors
                 logger.warning(
                     "Forwarding websocket recv failed for charger %s via %s: %s",
