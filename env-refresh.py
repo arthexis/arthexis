@@ -1063,6 +1063,31 @@ def run_database_tasks(
                             modified = True
                             continue
                     fields = obj.setdefault("fields", {})
+                    if model_label == "modules.module":
+                        roles_field = fields.get("roles")
+                        if isinstance(roles_field, list):
+                            NodeRole = apps.get_model("nodes", "NodeRole")
+                            available_role_names = set(
+                                NodeRole.objects.filter(
+                                    name__in=[
+                                        role[0]
+                                        for role in roles_field
+                                        if isinstance(role, (list, tuple))
+                                        and role
+                                        and isinstance(role[0], str)
+                                    ]
+                                ).values_list("name", flat=True)
+                            )
+                            filtered_roles = [
+                                role
+                                for role in roles_field
+                                if isinstance(role, (list, tuple))
+                                and role
+                                and role[0] in available_role_names
+                            ]
+                            if filtered_roles != roles_field:
+                                fields["roles"] = filtered_roles
+                                modified = True
                     if "user" in fields and isinstance(fields["user"], int):
                         original_user = fields["user"]
                         mapped_user = user_pk_map.get(original_user, original_user)
