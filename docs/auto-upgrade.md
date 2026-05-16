@@ -18,8 +18,8 @@ delegated systemd unit is launched, and what to check if something fails.
   checks inside the task, but it does not make the static beat entry fire more
   often than the configured daily cadence.
 - Auto-upgrade channels are grouped into three tiers:
-  - `stable`/`lts`: patch upgrades can proceed weekly, minor upgrades can
-    proceed monthly, and major upgrades are blocked.
+  - `stable`/`lts`: patch upgrades can proceed weekly, and minor/major upgrades
+    are blocked by default policy gates.
   - `regular`/`normal`: patch and minor upgrades can proceed daily, and major
     upgrades can proceed weekly.
   - `latest`/`unstable`: tracks live `main` revisions daily instead of gating on
