@@ -38,6 +38,8 @@ WORKGROUP_DAILY_PASSWORD_SEED = os.environ.get("ARTHEXIS_WORKGROUP_PASSWORD_SEED
 WORKGROUP_DAILY_PASSWORD_TIMEZONE = os.environ.get(
     "ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE", ""
 )
+WORKGROUP_PUBLIC_HOST = os.environ.get("ARTHEXIS_WORKGROUP_PUBLIC_HOST", "arthexis.com")
+WORKGROUP_SSH_HOST = os.environ.get("ARTHEXIS_WORKGROUP_SSH_HOST", "arthexis.com")
 
 # Determine the current node role for role-specific settings while leaving
 # DEBUG control to the environment.
