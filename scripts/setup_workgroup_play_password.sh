@@ -70,6 +70,14 @@ if [ ! -f "$ENV_FILE" ] || ! grep -q '^ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE=' "$
   set_env_value "ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE" "$TIMEZONE_VALUE"
 fi
 
+TIMER_TIMEZONE="$TIMEZONE_VALUE"
+if [ -f "$ENV_FILE" ]; then
+  env_timezone="$(grep -E '^ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE=' "$ENV_FILE" | tail -n 1 | cut -d= -f2-)"
+  if [ -n "${env_timezone:-}" ]; then
+    TIMER_TIMEZONE="$env_timezone"
+  fi
+fi
+
 repo_owner="$(stat -c '%U:%G' "$BASE_DIR")"
 chown "$repo_owner" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
@@ -91,7 +99,7 @@ cat > "$TIMER_FILE" <<EOF
 Description=Daily Arthexis Workgroup play SSH password rotation
 
 [Timer]
-OnCalendar=*-*-* 00:01:00 $TIMEZONE_VALUE
+OnCalendar=*-*-* 00:01:00 $TIMER_TIMEZONE
 Persistent=true
 RandomizedDelaySec=300
 

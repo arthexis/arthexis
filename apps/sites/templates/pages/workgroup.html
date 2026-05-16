@@ -1,5 +1,5 @@
 {% extends "pages/base.html" %}
-{% load i18n %}
+{% load i18n tz %}
 
 {% block title %}{% trans "The Workgroup" %} - {{ badge_site_name|default:"Arthexis" }}{% endblock %}
 {% block extra_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
@@ -17,7 +17,7 @@
       <div class="display-6 font-monospace my-2">{{ password.password }}</div>
       <div class="text-muted">
         {% trans "Valid for" %} {{ password.date|date:"Y-m-d" }}
-        {% trans "until" %} {{ password.valid_until|date:"Y-m-d H:i" }}
+        {% trans "until" %} {{ password.valid_until|timezone:password.timezone_name|date:"Y-m-d H:i" }}
         {{ password.timezone_name }}.
       </div>
     </section>
