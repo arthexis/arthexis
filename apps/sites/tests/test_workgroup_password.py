@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from django.apps import apps as django_apps
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import connection
 from django.template.loader import render_to_string
@@ -46,9 +47,20 @@ def test_current_workgroup_password_uses_configured_timezone():
     WORKGROUP_DAILY_PASSWORD_TIMEZONE="America/Monterrey",
 )
 def test_workgroup_page_shows_daily_password_and_usage(client):
+    user_model = get_user_model()
+    staff_user = user_model.objects.create_user(
+        username="workgroup-staff",
+        email="workgroup-staff@example.com",
+        password="secret",
+        is_staff=True,
+    )
     expected = current_password().password
+    url = reverse("pages:workgroup")
 
-    response = client.get(reverse("pages:workgroup"), HTTP_HOST="play.example.test")
+    assert client.get(url, HTTP_HOST="play.example.test").status_code == 302
+
+    client.force_login(staff_user)
+    response = client.get(url, HTTP_HOST="play.example.test")
 
     assert response.status_code == 200
     assert "The Workgroup" in response.content.decode()

@@ -133,6 +133,7 @@ def _format_workgroup_ssh_host(request) -> str:
 
 @require_GET
 @never_cache
+@staff_required
 def workgroup(request):
     password = current_password()
     return TemplateResponse(
