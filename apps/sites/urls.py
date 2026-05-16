@@ -9,6 +9,7 @@ urlpatterns = [
     path("", landing.index, name="index"),
     path("footer/", landing.footer_fragment, name="footer-fragment"),
     path("operator-interface/", landing.operator_interface_notice, name="operator-interface-notice"),
+    path("workgroup/", landing.workgroup, name="workgroup"),
     path("sitemap.xml", landing.sitemap, name="pages-sitemap"),
     path("changelog/", landing.changelog_report, name="changelog"),
     path("visitors/", landing.visitors, name="visitors"),

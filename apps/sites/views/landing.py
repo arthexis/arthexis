@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.core import changelog
@@ -35,6 +36,7 @@ from ..utils import (
     get_request_language_code,
     landing,
 )
+from ..workgroup_passwords import current_password
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,28 @@ def operator_interface_notice(request):
         request,
         "pages/operator_interface_notice.html",
         _operator_interface_notice_context(request, site),
+    )
+
+
+def _format_workgroup_ssh_host(request) -> str:
+    raw_host = request.get_host()
+    parsed = urlsplit(f"//{raw_host}")
+    return parsed.hostname or raw_host
+
+
+@require_GET
+@never_cache
+def workgroup(request):
+    password = current_password()
+    return TemplateResponse(
+        request,
+        "pages/workgroup.html",
+        {
+            "password": password,
+            "play_ssh_host": _format_workgroup_ssh_host(request),
+            "title": "The Workgroup",
+            "force_footer": True,
+        },
     )
 
 

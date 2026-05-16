@@ -31,6 +31,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
 - OCPP 1.6 coverage artifact: `apps/ocpp/coverage.json`
 - [Ops Command Wrapper](operations/operational-commands.md)
+- [Workgroup Play Password](operations/workgroup-play-password.md)
 - [Imager SD-Card Recovery Workflow](operations/imager-sd-card-recovery.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [Suite Services Report](suite-services-report.md)

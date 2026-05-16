@@ -34,6 +34,10 @@ def _default_field_encryption_key() -> str:
 FIELD_ENCRYPTION_KEY = os.environ.get(
     "FIELD_ENCRYPTION_KEY", _default_field_encryption_key()
 )
+WORKGROUP_DAILY_PASSWORD_SEED = os.environ.get("ARTHEXIS_WORKGROUP_PASSWORD_SEED", "")
+WORKGROUP_DAILY_PASSWORD_TIMEZONE = os.environ.get(
+    "ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE", ""
+)
 
 # Determine the current node role for role-specific settings while leaving
 # DEBUG control to the environment.

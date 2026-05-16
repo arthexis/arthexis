@@ -10,6 +10,7 @@ from .landing import (
     release_checklist,
     sitemap,
     submit_user_story,
+    workgroup,
 )
 from .management import (
     CustomLoginView,
@@ -53,4 +54,5 @@ __all__ = [
     "sitemap",
     "submit_user_story",
     "whatsapp_webhook",
+    "workgroup",
 ]

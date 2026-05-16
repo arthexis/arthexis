@@ -5,7 +5,11 @@
       <div class="row row-cols-2 row-cols-md-6">
         {% for ref in footer_refs %}
           <div class="col mb-2">
-            <a href="{{ ref.value }}" target="_blank" rel="noopener noreferrer">{{ ref.alt_text|default:ref.value }}</a>
+            {% if ref.value|slice:":1" == "/" and ref.value|slice:":2" != "//" %}
+              <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+            {% else %}
+              <a href="{{ ref.value }}" target="_blank" rel="noopener noreferrer">{{ ref.alt_text|default:ref.value }}</a>
+            {% endif %}
           </div>
         {% endfor %}
       </div>

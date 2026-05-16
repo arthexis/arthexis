@@ -8,6 +8,7 @@ nav:
       - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
       - Good Command: operations/good-command.md
       - Operational Commands: operations/operational-commands.md
+      - Workgroup Play Password: operations/workgroup-play-password.md
       - Loki + Promtail Integration: operations/logging-loki-promtail.md
       - Reinstall + Data Import Runbook: operations/reinstall-data-import-runbook.md
   - Integrations:
