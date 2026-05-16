@@ -62,7 +62,7 @@ class LifecycleService(models.Model):
 
     def resolved_unit_name(self, service_name: str) -> str:
         """Return the unit template with the service placeholder expanded."""
-        return self.unit_template.format(service=service_name)
+        return self.unit_template.replace("{service}", service_name)
 
     def _safe_lock_names(self) -> list[str]:
         """Return lock file names that are safe to resolve within the lock directory."""

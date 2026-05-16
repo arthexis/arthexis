@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from apps.summary import dense_lcd, services
 from apps.tasks import tasks as task_services
 from apps.tasks.tasks import _write_lcd_frames
@@ -295,3 +297,36 @@ def test_log_summary_generation_skips_non_control_node(monkeypatch, settings, tm
     )
 
     assert services.execute_log_summary_generation() == "skipped:non-control-node"
+
+
+def test_dense_lcd_summary_does_not_replay_stale_prompt(
+    monkeypatch, settings, tmp_path
+):
+    from apps.nodes.models import Node
+
+    settings.BASE_DIR = tmp_path
+
+    class FakeNode:
+        role = SimpleNamespace(name="Control")
+
+        def has_feature(self, slug: str) -> bool:
+            return slug in {"llm-summary", "lcd-screen"}
+
+    monkeypatch.setattr(Node, "get_local", staticmethod(lambda: FakeNode()))
+    monkeypatch.setattr(
+        dense_lcd,
+        "is_suite_feature_enabled",
+        lambda slug, default=True: True,
+    )
+    monkeypatch.setattr(
+        dense_lcd,
+        "execute_log_summary_generation",
+        lambda *, ignore_suite_feature_gate=False: "skipped:no-logs",
+    )
+    monkeypatch.setattr(
+        dense_lcd,
+        "get_summary_config",
+        lambda: pytest.fail("stale prompt should not be read"),
+    )
+
+    assert dense_lcd.execute_dense_lcd_summary() == "skipped:no-logs"

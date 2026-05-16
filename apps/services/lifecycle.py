@@ -60,18 +60,13 @@ def _normalize_unit(
     """Normalize a unit name for systemd display and lookups."""
     normalized = unit_name.strip()
     unit_display = normalized
-    unit = normalized
     suffixes = (".service", ".timer")
-    if normalized.endswith(suffixes):
-        for suffix in suffixes:
-            if normalized.endswith(suffix):
-                unit = normalized.removesuffix(suffix)
-                break
-    else:
+    if not normalized.endswith(suffixes):
         suffix = (
             ".timer" if unit_kind == LifecycleService.UnitKind.TIMER else ".service"
         )
         unit_display = f"{normalized}{suffix}"
+    unit = unit_display
     return unit, unit_display
 
 

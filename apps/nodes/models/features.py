@@ -20,7 +20,7 @@ from apps.clocks.utils import has_clock_device
 from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.nodes.feature_detection import node_feature_detection_registry
-from apps.nodes.roles import node_feature_allowed_for_node
+from apps.nodes.roles import node_feature_allowed_for_node, node_is_control
 
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
@@ -403,12 +403,11 @@ class NodeFeatureMixin:
         llm_summary_suite_enabled = is_suite_feature_enabled(
             "llm-summary-suite", default=True
         )
-        role_name = getattr(getattr(self, "role", None), "name", None)
         celery_enabled = self.is_local and self.has_feature("celery-queue")
         llm_summary_enabled = (
             llm_summary_suite_enabled
             and celery_enabled
-            and role_name == "Control"
+            and node_is_control(self)
             and self.has_feature("llm-summary")
         )
         self._sync_screenshot_task(screenshot_enabled)

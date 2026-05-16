@@ -35,6 +35,12 @@ Resolve a claimed role to mounted paths:
 python manage.py sensors usb-inventory claimed-path --role kindle-postbox
 ```
 
+Resolve a mounted path to matching claims:
+
+```bash
+python manage.py sensors usb-inventory path-claims /media/kindle
+```
+
 The default local paths are `/etc/arthexis-usb/claims.json` for claims and
 `/run/arthexis-usb/devices.json` for generated state. Override them with
 `USB_INVENTORY_CLAIMS_PATH` and `USB_INVENTORY_STATE_PATH` in Django settings.

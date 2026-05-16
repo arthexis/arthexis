@@ -276,7 +276,13 @@ class Command(BaseCommand):
             devices = payload.get("devices", [])
             self.stdout.write(f"USB inventory devices: {len(devices)}")
             for device in devices:
-                claims = ",".join(device.get("claims") or []) or "-"
+                if not isinstance(device, dict):
+                    self.stderr.write("Skipping malformed USB inventory entry.")
+                    continue
+                claims = (
+                    ",".join(str(claim) for claim in (device.get("claims") or []))
+                    or "-"
+                )
                 path = device.get("mountpoint") or device.get("path") or "-"
                 label = (
                     device.get("label")

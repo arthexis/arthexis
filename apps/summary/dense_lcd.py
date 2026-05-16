@@ -108,6 +108,9 @@ def execute_dense_lcd_summary(*, ignore_suite_feature_gate: bool = False) -> str
     run_status = execute_log_summary_generation(
         ignore_suite_feature_gate=ignore_suite_feature_gate,
     )
+    if not run_status.startswith("wrote:"):
+        return run_status
+
     config = get_summary_config()
     frames = dense_frames_from_prompt(config.last_prompt)
     if not frames:

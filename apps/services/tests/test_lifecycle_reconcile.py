@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.test import override_settings
 
 from apps.nodes.feature_detection import node_feature_detection_registry
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment, NodeRole
 from apps.services.lifecycle import write_lifecycle_config
 from apps.services.models import LifecycleService
 from gate_markers import gate
@@ -115,21 +115,24 @@ def test_reconcile_node_features_services_command_uses_auto_detection(
 
 @pytest.mark.django_db
 @override_settings(BASE_DIR="/tmp")
-def test_lifecycle_config_preserves_timer_unit_kind(tmp_path, settings):
+def test_lifecycle_config_preserves_timer_unit_kind(monkeypatch, tmp_path, settings):
     """Timer lifecycle rows should render as timers, not service defaults."""
 
     settings.BASE_DIR = tmp_path
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
+    role = NodeRole.objects.create(name="Control")
     node = Node.objects.create(
         hostname="control-node",
         mac_address=Node.get_current_mac(),
         current_relation=Node.Relation.SELF,
         public_endpoint="control-node",
         base_path=str(tmp_path),
+        role=role,
     )
     feature = NodeFeature.objects.create(slug="usb-inventory", display="USB Inventory")
     NodeFeatureAssignment.objects.create(node=node, feature=feature)
+    monkeypatch.setattr(Node, "get_local", staticmethod(lambda: node))
     LifecycleService.objects.update_or_create(
         slug="usb-inventory-timer",
         defaults={
@@ -150,4 +153,13 @@ def test_lifecycle_config_preserves_timer_unit_kind(tmp_path, settings):
         if service["key"] == "usb-inventory-timer"
     )
     assert timer["unit_kind"] == LifecycleService.UnitKind.TIMER
+    assert timer["unit"] == "arthexis-usb-inventory.timer"
     assert timer["unit_display"] == "arthexis-usb-inventory.timer"
+
+
+def test_lifecycle_service_name_resolution_only_replaces_service_placeholder():
+    """Unexpected brace tokens should not break lifecycle reconciliation."""
+
+    service = LifecycleService(unit_template="demo-{service}-{unknown}.service")
+
+    assert service.resolved_unit_name("suite") == "demo-suite-{unknown}.service"

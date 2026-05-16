@@ -15,9 +15,14 @@ from django.conf import settings
 from apps.nodes.roles import node_is_control
 
 USB_INVENTORY_NODE_FEATURE_SLUG = "usb-inventory"
+USB_INVENTORY_COMMAND_TIMEOUT_SECONDS = 15
 DEFAULT_CLAIMS_PATH = Path("/etc/arthexis-usb/claims.json")
 DEFAULT_STATE_PATH = Path("/run/arthexis-usb/devices.json")
 DEFAULT_KINDLE_MARKERS = ("documents", "system")
+
+
+class UsbInventoryError(Exception):
+    """Raised when USB inventory command execution or parsing fails."""
 
 
 def claims_path() -> Path:
@@ -56,31 +61,48 @@ def load_json(path: Path, default: Any) -> Any:
 
 def atomic_write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        dir=str(path.parent),
-        delete=False,
-    ) as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-        temp_path = Path(handle.name)
-    temp_path.replace(path)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=str(path.parent),
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        temp_path.replace(path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=USB_INVENTORY_COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise UsbInventoryError(
+            f"{command[0]} timed out after {USB_INVENTORY_COMMAND_TIMEOUT_SECONDS}s"
+        ) from exc
     if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "command failed").strip())
+        raise UsbInventoryError(
+            (result.stderr or result.stdout or "command failed").strip()
+        )
     try:
         return json.loads(result.stdout or "{}")
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"{command[0]} returned invalid JSON") from exc
+        raise UsbInventoryError(f"{command[0]} returned invalid JSON") from exc
 
 
 def _flatten_lsblk(
@@ -370,6 +392,7 @@ def path_claims(path: str | Path, *, refresh: bool = False) -> list[str]:
 
 __all__ = [
     "USB_INVENTORY_NODE_FEATURE_SLUG",
+    "UsbInventoryError",
     "claimed_paths",
     "has_usb_inventory_tools",
     "inventory_devices",

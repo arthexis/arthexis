@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from io import StringIO
 
 import pytest
@@ -60,6 +61,26 @@ def test_usb_inventory_matches_kindle_claim(settings, monkeypatch, tmp_path):
     assert payload["devices"][1]["claims"] == ["kindle-postbox"]
     assert payload["devices"][1]["kindle_shape"] is True
     assert usb_inventory.claimed_paths("kindle-postbox") == [str(mount)]
+
+
+def test_atomic_write_json_cleans_temp_file_on_failure(tmp_path):
+    target = tmp_path / "devices.json"
+
+    with pytest.raises(TypeError):
+        usb_inventory.atomic_write_json(target, {"bad": object()})
+
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_run_json_raises_inventory_error_on_timeout(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(usb_inventory.subprocess, "run", fake_run)
+
+    with pytest.raises(usb_inventory.UsbInventoryError, match="timed out"):
+        usb_inventory.run_json(["lsblk"])
 
 
 @pytest.mark.django_db
@@ -124,3 +145,32 @@ def test_usb_inventory_command_refreshes_for_control_role(
     call_command("sensors", "usb-inventory", "refresh", stdout=output)
 
     assert "USB inventory refreshed: devices=1" in output.getvalue()
+
+
+@pytest.mark.django_db
+def test_usb_inventory_list_skips_malformed_state_entries(
+    settings, monkeypatch, tmp_path
+):
+    settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
+    role = NodeRole.objects.create(name="Control")
+    node = Node.objects.create(hostname="gway", public_endpoint="gway", role=role)
+    Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
+    monkeypatch.setattr(usb_inventory, "has_usb_inventory_tools", lambda: True)
+    monkeypatch.setattr(
+        usb_inventory,
+        "state_or_refresh",
+        lambda *, refresh=False: {
+            "devices": [
+                "bad-entry",
+                {"name": "sda1", "mountpoint": "/media/kindle", "claims": [123]},
+            ]
+        },
+    )
+
+    stdout = StringIO()
+    stderr = StringIO()
+    call_command("sensors", "usb-inventory", "list", stdout=stdout, stderr=stderr)
+
+    assert "sda1 /media/kindle claims=123" in stdout.getvalue()
+    assert "Skipping malformed USB inventory entry." in stderr.getvalue()
