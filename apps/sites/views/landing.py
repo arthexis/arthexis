@@ -35,6 +35,7 @@ from ..utils import (
     get_request_language_code,
     landing,
 )
+from ..workgroup_passwords import current_password
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,20 @@ def operator_interface_notice(request):
         request,
         "pages/operator_interface_notice.html",
         _operator_interface_notice_context(request, site),
+    )
+
+
+@require_GET
+def workgroup(request):
+    password = current_password()
+    return TemplateResponse(
+        request,
+        "pages/workgroup.html",
+        {
+            "password": password,
+            "title": "The Workgroup",
+            "force_footer": True,
+        },
     )
 
 

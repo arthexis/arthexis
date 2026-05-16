@@ -1,0 +1,38 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "The Workgroup" %} - {{ badge_site_name|default:"Arthexis" }}{% endblock %}
+{% block extra_head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
+
+{% block content %}
+<main class="row justify-content-center py-4">
+  <div class="col-12 col-lg-8">
+    <h1 class="h2 mb-3">{% trans "The Workgroup" %}</h1>
+    <p class="lead">
+      {% trans "Use today's workgroup password to enter the Arthexis Evennia play shell." %}
+    </p>
+
+    <section class="border rounded-2 p-4 my-4">
+      <div class="text-muted small text-uppercase">{% trans "Today's password" %}</div>
+      <div class="display-6 font-monospace my-2">{{ password.password }}</div>
+      <div class="text-muted">
+        {% trans "Valid for" %} {{ password.date|date:"Y-m-d" }}
+        {% trans "until" %} {{ password.valid_until|date:"Y-m-d H:i" }}
+        {{ password.timezone_name }}.
+      </div>
+    </section>
+
+    <section class="mt-4">
+      <h2 class="h4">{% trans "Use It" %}</h2>
+      <p>
+        {% trans "From a terminal, connect to the play account and enter the password above when SSH asks for it." %}
+      </p>
+      <pre class="bg-dark text-light border rounded-2 p-3"><code>ssh -p 2222 play@arthexis.com</code></pre>
+      <p>
+        {% trans "After the game prompt appears, sign in with your Evennia account:" %}
+      </p>
+      <pre class="bg-dark text-light border rounded-2 p-3"><code>connect &lt;account&gt; &lt;account-password&gt;</code></pre>
+    </section>
+  </div>
+</main>
+{% endblock %}
