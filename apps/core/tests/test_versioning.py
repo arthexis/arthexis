@@ -1,6 +1,5 @@
 from apps.core.versioning import (
     AUTO_UPGRADE_DAY_MINUTES,
-    AUTO_UPGRADE_MONTH_MINUTES,
     AUTO_UPGRADE_WEEK_MINUTES,
     UPGRADE_CHANNEL_CUSTOM,
     UPGRADE_CHANNEL_REGULAR,
@@ -36,7 +35,7 @@ def test_normalize_upgrade_channel_aliases():
 
 def test_auto_upgrade_bump_rules_match_channel_tiers():
     assert auto_upgrade_bump_allowed("stable", VERSION_BUMP_PATCH) is True
-    assert auto_upgrade_bump_allowed("stable", VERSION_BUMP_MINOR) is True
+    assert auto_upgrade_bump_allowed("stable", VERSION_BUMP_MINOR) is False
     assert auto_upgrade_bump_allowed("stable", VERSION_BUMP_MAJOR) is False
     assert auto_upgrade_bump_allowed("regular", VERSION_BUMP_MAJOR) is True
 
@@ -46,7 +45,7 @@ def test_auto_upgrade_bump_rules_match_channel_tiers():
     )
     assert (
         auto_upgrade_bump_cadence_minutes("stable", VERSION_BUMP_MINOR)
-        == AUTO_UPGRADE_MONTH_MINUTES
+        is None
     )
     assert (
         auto_upgrade_bump_cadence_minutes("regular", VERSION_BUMP_MINOR)
