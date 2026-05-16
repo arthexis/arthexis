@@ -593,6 +593,66 @@ jobs:
               '- ❌ Release simulation failed before producing a summary. Check the workflow run logs.'
             ].join('\n');
 
+            async function collectChangeLines() {
+              const maxEntries = 25;
+              try {
+                const latestRelease = await github.rest.repos.getLatestRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                });
+                const tagName = latestRelease.data?.tag_name;
+                if (!tagName) {
+                  return {
+                    heading: '## Changes since last release',
+                    lines: ['- Unable to determine the latest release tag.'],
+                  };
+                }
+
+                const comparison = await github.rest.repos.compareCommits({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  base: tagName,
+                  head: context.sha,
+                });
+                const commits = comparison.data?.commits || [];
+                if (!commits.length) {
+                  return {
+                    heading: `## Changes since last release (${tagName} → ${context.sha.slice(0, 7)})`,
+                    lines: ['- No unreleased commits detected.'],
+                  };
+                }
+
+                const lines = commits.slice(0, maxEntries).map((commit) => {
+                  const shortSha = (commit.sha || '').slice(0, 7);
+                  const message = String(commit.commit?.message || '').split('\n')[0].trim();
+                  const author = commit.commit?.author?.name || commit.author?.login || 'unknown author';
+                  const url = commit.html_url || `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${commit.sha}`;
+                  return `- [${shortSha}](${url}) ${message} — ${author}`;
+                });
+                if (commits.length > maxEntries) {
+                  lines.push(`- _And ${commits.length - maxEntries} more commit(s)._`);
+                }
+                return {
+                  heading: `## Changes since last release (${tagName} → ${context.sha.slice(0, 7)})`,
+                  lines,
+                };
+              } catch (error) {
+                if (error?.status === 404) {
+                  return {
+                    heading: '## Changes since last release',
+                    lines: ['- No published release found yet.'],
+                  };
+                }
+                core.warning(`Unable to collect changes since last release: ${error?.message || error}`);
+                return {
+                  heading: '## Changes since last release',
+                  lines: ['- Unable to collect change list for this run. Check workflow logs.'],
+                };
+              }
+            }
+
+            const changesSinceRelease = await collectChangeLines();
+
             const blockerSection = blockers.length
               ? blockers.map((blocker) => `- ${blocker}`).join('\n')
               : '- None detected.';
@@ -613,6 +673,7 @@ jobs:
                 ref: context.ref,
                 simulatedOk,
                 simulationSummary,
+                changesSinceRelease,
               }))
               .digest('hex');
             const fingerprintMarker = `<!-- release-readiness-fingerprint:${reportFingerprint} -->`;
@@ -633,6 +694,9 @@ jobs:
               '',
               canSimulate ? '## Release simulation' : '## Release simulation',
               canSimulate ? simulationSummary : '- Skipped because release readiness blockers are currently open.',
+              '',
+              changesSinceRelease.heading,
+              ...changesSinceRelease.lines,
               '',
               '## Recommendation',
               recommendation,
