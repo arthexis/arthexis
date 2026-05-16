@@ -56,6 +56,12 @@ set_env_value() {
   "$BASE_DIR/.venv/bin/python" "$BASE_DIR/manage.py" env --set "$key" "$value" >/dev/null
 }
 
+get_env_value() {
+  local key="$1"
+  "$BASE_DIR/.venv/bin/python" "$BASE_DIR/manage.py" env --get "$key" 2>/dev/null \
+    | awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); value=$0 } END { if (value != "") print value }'
+}
+
 if [ ! -f "$ENV_FILE" ] || ! grep -q '^ARTHEXIS_WORKGROUP_PASSWORD_SEED=' "$ENV_FILE"; then
   seed="$("$BASE_DIR/.venv/bin/python" - <<'PY'
 import secrets
@@ -72,7 +78,7 @@ fi
 
 TIMER_TIMEZONE="$TIMEZONE_VALUE"
 if [ -f "$ENV_FILE" ]; then
-  env_timezone="$(grep -E '^ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE=' "$ENV_FILE" | tail -n 1 | cut -d= -f2-)"
+  env_timezone="$(get_env_value "ARTHEXIS_WORKGROUP_PASSWORD_TIMEZONE" || true)"
   if [ -n "${env_timezone:-}" ]; then
     TIMER_TIMEZONE="$env_timezone"
   fi
@@ -99,9 +105,8 @@ cat > "$TIMER_FILE" <<EOF
 Description=Daily Arthexis Workgroup play SSH password rotation
 
 [Timer]
-OnCalendar=*-*-* 00:01:00 $TIMER_TIMEZONE
+OnCalendar=*-*-* 00:00:00 $TIMER_TIMEZONE
 Persistent=true
-RandomizedDelaySec=300
 
 [Install]
 WantedBy=timers.target

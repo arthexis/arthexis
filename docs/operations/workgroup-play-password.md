@@ -35,9 +35,9 @@ To set the local Unix `play` account password without echoing the password:
 sudo -E python manage.py workgroup_password --apply-user play
 ```
 
-Production nodes should run that command shortly after local midnight with a
-systemd timer. If the seed changes, run the command once immediately so the Unix
-account matches the value published on `/workgroup/`.
+Production nodes should run that command at local midnight with a systemd timer.
+If the seed changes, run the command once immediately so the Unix account
+matches the value published on `/workgroup/`.
 
 To install the production timer from a deployed suite checkout:
 

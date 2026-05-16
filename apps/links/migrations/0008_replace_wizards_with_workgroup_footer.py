@@ -25,18 +25,21 @@ def replace_wizards_with_workgroup_footer(apps, schema_editor) -> None:
     if not candidates:
         return
 
+    active_candidates = [row for row in candidates if not row.is_deleted]
     keep = next(
         (
             row
-            for row in candidates
+            for row in active_candidates
             if row.alt_text == NEW_ALT_TEXT and row.value == NEW_VALUE
         ),
-        candidates[0],
+        active_candidates[0] if active_candidates else candidates[0],
     )
 
     duplicate_pks = [row.pk for row in candidates if row.pk != keep.pk]
     if duplicate_pks:
-        db_manager.filter(pk__in=duplicate_pks).delete()
+        db_manager.filter(pk__in=duplicate_pks)._raw_delete(
+            schema_editor.connection.alias
+        )
 
     changed_fields = []
     for field_name, value in (
@@ -46,6 +49,7 @@ def replace_wizards_with_workgroup_footer(apps, schema_editor) -> None:
         ("include_in_footer", True),
         ("footer_visibility", "public"),
         ("is_seed_data", True),
+        ("is_deleted", False),
     ):
         if getattr(keep, field_name) != value:
             setattr(keep, field_name, value)

@@ -4,11 +4,13 @@ title = "Arthexis Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-  description = "Ignore known placeholder credentials and enum values in tests/admin code"
+  description = "Ignore known placeholder credentials, enum values, and non-secret test timezone literals"
   regexTarget = "line"
   regexes = [
     '''password=\"password\"''',
-    '''DNSProviderCredential\.Provider\.GODADDY,\s+is_enabled=True'''
+    '''DNSProviderCredential\.Provider\.GODADDY,\s+is_enabled=True''',
+    '''WORKGROUP_DAILY_PASSWORD_TIMEZONE="America/Monterrey"''',
+    '''password\.timezone_name == "America/Monterrey"'''
   ]
 
 [[rules]]

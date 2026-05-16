@@ -1,14 +1,18 @@
 import datetime as dt
 import io
 import json
+from importlib import import_module
 from types import SimpleNamespace
 
+import pytest
+from django.apps import apps as django_apps
 from django.core.management import call_command
+from django.db import connection
 from django.template.loader import render_to_string
 from django.test import override_settings
 from django.urls import reverse
-import pytest
 
+from apps.links.models import Reference
 from apps.sites.workgroup_passwords import current_password, password_for_date
 
 
@@ -67,6 +71,65 @@ def test_footer_renders_workgroup_as_same_window_internal_link():
     assert 'href="/workgroup/"' in html
     assert 'target="_blank"' not in html
     assert "The Workgroup" in html
+
+
+def test_footer_renders_protocol_relative_urls_as_external_links():
+    html = render_to_string(
+        "core/footer.html",
+        {
+            "footer_refs": [
+                SimpleNamespace(value="//example.com/workgroup", alt_text="External")
+            ],
+            "show_footer": True,
+            "show_release": False,
+        },
+    )
+
+    assert 'href="//example.com/workgroup"' in html
+    assert 'target="_blank"' in html
+    assert 'rel="noopener noreferrer"' in html
+
+
+@pytest.mark.django_db
+def test_workgroup_footer_migration_prefers_active_reference():
+    migration = import_module(
+        "apps.links.migrations.0008_replace_wizards_with_workgroup_footer"
+    )
+    deleted_canonical = Reference.all_objects.create(
+        alt_text="The Workgroup",
+        value="/workgroup/",
+        method="link",
+        include_in_footer=True,
+        footer_visibility="public",
+        is_seed_data=True,
+    )
+    Reference.all_objects.filter(pk=deleted_canonical.pk).update(is_deleted=True)
+    active_wizard = Reference.objects.create(
+        alt_text="The Wizards",
+        value="https://company.wizards.com/",
+        method="link",
+        include_in_footer=True,
+        footer_visibility="public",
+        is_seed_data=True,
+    )
+
+    migration.replace_wizards_with_workgroup_footer(
+        django_apps,
+        SimpleNamespace(connection=connection),
+    )
+
+    active_wizard.refresh_from_db()
+    assert active_wizard.alt_text == "The Workgroup"
+    assert active_wizard.value == "/workgroup/"
+    assert active_wizard.method == "link"
+    assert active_wizard.include_in_footer is True
+    assert active_wizard.footer_visibility == "public"
+    assert active_wizard.is_seed_data is True
+    assert active_wizard.is_deleted is False
+    assert Reference.objects.filter(
+        alt_text="The Workgroup",
+        value="/workgroup/",
+    ).count() == 1
 
 
 @override_settings(
