@@ -186,7 +186,7 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--failover ROLE` | Provide role fallback for repair when role lock cannot be resolved. |
 
 Auto-upgrade channel tiers gate release bumps after the scheduler fires:
-`stable`/`lts` allows patch upgrades weekly and minor upgrades monthly,
+`stable`/`lts` allows patch upgrades weekly and blocks minor/major upgrades by default,
 `regular`/`normal` allows patch and minor upgrades daily and major upgrades
 weekly, `latest`/`unstable` follows live `main` revisions daily, and `custom`
 uses the stored policy interval, branch, live-branch toggle, and explicit
@@ -204,7 +204,7 @@ patch/minor/major gates.
 | `-h`, `--help` | Print usage and exit successfully. |
 | `--wait` | Poll until reachability checks succeed or timeout windows expire. |
 
-## 6. Operational command entrypoint (`command.sh`)
+## 6. Operational command entrypoint
 
 `command.sh` is the allowlisted operational command wrapper. It validates the runtime environment, logs invocation metadata safely, and dispatches to `utils.command_api`.
 
@@ -252,9 +252,7 @@ environment failures where `command.sh` or `manage.py` may not work.
 
 The collector uses Python standard library modules only and passes copied text
 through secret redaction. It excludes environment files, databases, dumps,
-backups, media/static/cache trees, virtual environments, Git internals, and key
-material. See `docs/operations/error-report.md` for operator usage and package
-contents.
+backups, media/static/cache trees, virtual environments, Git internals, and key material. See `docs/operations/error-report.md` for operator usage and package contents.
 
 ## 9. Documentation maintenance check
 
