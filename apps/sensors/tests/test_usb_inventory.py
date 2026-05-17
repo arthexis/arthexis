@@ -63,6 +63,63 @@ def test_usb_inventory_matches_kindle_claim(settings, monkeypatch, tmp_path):
     assert usb_inventory.claimed_paths("kindle-postbox") == [str(mount)]
 
 
+def test_usb_inventory_matches_live_kindle_shape_claim_alias(settings, monkeypatch, tmp_path):
+    key_mount = tmp_path / "bastion"
+    kindle_mount = tmp_path / "kindle"
+    key_mount.mkdir()
+    (kindle_mount / "documents").mkdir(parents=True)
+    (kindle_mount / "system").mkdir()
+    settings.USB_INVENTORY_CLAIMS_PATH = tmp_path / "claims.json"
+    settings.USB_INVENTORY_STATE_PATH = tmp_path / "devices.json"
+    settings.USB_INVENTORY_CLAIMS_PATH.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "claims": [
+                    {
+                        "id": "kindle-postbox",
+                        "role": "kindle-postbox",
+                        "match": {"kindle_shape": True},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run_json(command):
+        if command[0] == "lsblk":
+            return {
+                "blockdevices": [
+                    {
+                        "name": "sda",
+                        "path": "/dev/sda",
+                        "type": "disk",
+                        "tran": "usb",
+                        "label": "ESD-USB",
+                        "mountpoint": str(key_mount),
+                    },
+                    {
+                        "name": "sdb",
+                        "path": "/dev/sdb",
+                        "type": "disk",
+                        "tran": "usb",
+                        "label": "Kindle",
+                        "mountpoint": str(kindle_mount),
+                    },
+                ]
+            }
+        return {"filesystems": []}
+
+    monkeypatch.setattr(usb_inventory, "run_json", fake_run_json)
+
+    payload = usb_inventory.refresh_inventory()
+
+    assert payload["devices"][0]["claims"] == []
+    assert payload["devices"][1]["claims"] == ["kindle-postbox"]
+    assert usb_inventory.claimed_paths("kindle-postbox") == [str(kindle_mount)]
+
+
 def test_atomic_write_json_cleans_temp_file_on_failure(tmp_path):
     target = tmp_path / "devices.json"
 

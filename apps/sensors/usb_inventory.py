@@ -241,7 +241,8 @@ def match_claim(device: dict[str, Any], claim: dict[str, Any]) -> bool:
         if key in fields and not _match_text(fields[key], device.get(key)):
             return False
 
-    if fields.get("kindle") is True and not device.get("kindle_shape"):
+    requires_kindle_shape = fields.get("kindle") is True or fields.get("kindle_shape") is True
+    if requires_kindle_shape and not device.get("kindle_shape"):
         return False
 
     required_paths = fields.get("mount_contains", [])
