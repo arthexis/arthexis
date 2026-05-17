@@ -142,3 +142,31 @@ def test_llm_summary_suite_fixture_links_summary_node_feature() -> None:
     )
     assert feature.node_feature is not None
     assert feature.node_feature.slug == "llm-summary"
+
+
+@pytest.mark.django_db
+def test_kindle_postbox_fixture_links_docs_node_feature() -> None:
+    """The suite feature should describe the docs-owned Kindle writer path."""
+
+    NodeFeature.objects.get_or_create(
+        slug="kindle-postbox",
+        defaults={"display": "Kindle Postbox"},
+    )
+    fixture_path = (
+        Path(settings.BASE_DIR)
+        / "apps"
+        / "features"
+        / "fixtures"
+        / "features__kindle_postbox.json"
+    )
+
+    call_command("register_site_apps")
+    call_command("loaddata", str(fixture_path))
+
+    feature = Feature.objects.select_related("node_feature").get(
+        slug="kindle-postbox"
+    )
+    assert feature.main_app is not None
+    assert feature.main_app.name == "docs"
+    assert feature.node_feature is not None
+    assert feature.node_feature.slug == "kindle-postbox"

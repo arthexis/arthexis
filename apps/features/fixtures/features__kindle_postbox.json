@@ -1,0 +1,40 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Docs management command can generate a current suite documentation bundle and sync it to Kindle postbox USB targets.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/docs/kindle_postbox.py",
+        "apps/docs/management/commands/docs.py",
+        "apps/docs/node_features.py",
+        "apps/sensors/usb_inventory.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Kindle Postbox",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "docs"
+      ],
+      "metadata": {},
+      "node_feature": [
+        "kindle-postbox"
+      ],
+      "protocol_coverage": {},
+      "public_requirements": "No public interface; artifacts are written to locally connected Kindle storage.",
+      "public_views": [],
+      "service_requirements": "Requires Control-node role, USB inventory claims, and writable Kindle storage.",
+      "service_views": [
+        "apps.docs.kindle_postbox.sync_to_kindle_postboxes"
+      ],
+      "slug": "kindle-postbox",
+      "source": "mainstream",
+      "summary": "Generates suite documentation bundles and copies them to Kindles connected to Control nodes.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

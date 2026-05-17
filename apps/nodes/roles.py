@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 CONTROL_NODE_ROLE = "Control"
-CONTROL_ONLY_NODE_FEATURE_SLUGS = frozenset({"llm-summary", "usb-inventory"})
+CONTROL_ONLY_NODE_FEATURE_SLUGS = frozenset(
+    {"kindle-postbox", "llm-summary", "usb-inventory"}
+)
 
 
 def node_has_role(node: object, role_name: str) -> bool:
