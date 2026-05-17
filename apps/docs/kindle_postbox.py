@@ -232,7 +232,10 @@ def build_suite_documentation_bundle(
     generated_at = datetime.now(timezone.utc).isoformat()
     resolved_destination = destination_dir.resolve()
     excluded_paths = ()
-    if resolved_destination not in {root / "docs", root / "apps" / "docs"}:
+    if resolved_destination != root and resolved_destination not in {
+        root / "docs",
+        root / "apps" / "docs",
+    }:
         excluded_paths = (destination_dir,)
     documents = iter_suite_documentation_files(base_dir=root, exclude_paths=excluded_paths)
     sources = tuple(path.relative_to(root).as_posix() for path in documents)

@@ -80,6 +80,20 @@ def test_build_suite_documentation_bundle_allows_docs_root_output_dir(tmp_path):
 
 
 @pytest.mark.django_db
+def test_build_suite_documentation_bundle_allows_project_root_output_dir(tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+    _write(tmp_path / "docs" / "guide.md", "# Guide\n")
+
+    bundle = kindle_postbox.build_suite_documentation_bundle(
+        base_dir=tmp_path,
+        output_dir=tmp_path,
+    )
+
+    assert "README.md" in bundle.sources
+    assert "docs/guide.md" in bundle.sources
+
+
+@pytest.mark.django_db
 def test_iter_suite_documentation_files_skips_symlinks_outside_base_dir(tmp_path):
     root = tmp_path / "root"
     outside = tmp_path / "outside.md"
