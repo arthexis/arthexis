@@ -118,6 +118,36 @@ def _path_is_excluded(path: Path, excluded_roots: tuple[Path, ...]) -> bool:
     )
 
 
+def _resolve_document_candidate(
+    path: Path,
+    *,
+    root: Path,
+    excluded_roots: tuple[Path, ...],
+    seen: set[Path],
+) -> Path | None:
+    if path.suffix.lower() not in DOCUMENT_EXTENSIONS:
+        return None
+    resolved = path.resolve()
+    if resolved in seen or not _path_is_relative_to(resolved, root):
+        return None
+    if _path_is_excluded(resolved, excluded_roots):
+        return None
+    return resolved
+
+
+def _iter_docs_root_files(docs_root: Path) -> Iterable[Path]:
+    if not docs_root.exists():
+        return
+    for path in sorted(docs_root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(docs_root)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if path.suffix.lower() in DOCUMENT_EXTENSIONS:
+            yield path
+
+
 def iter_suite_documentation_files(
     *,
     base_dir: Path | None = None,
@@ -130,35 +160,25 @@ def iter_suite_documentation_files(
     seen: set[Path] = set()
     documents: list[Path] = []
 
-    def add_document(path: Path) -> None:
-        if path.suffix.lower() not in DOCUMENT_EXTENSIONS:
-            return
-        resolved = path.resolve()
-        if (
-            resolved in seen
-            or not _path_is_relative_to(resolved, root)
-            or _path_is_excluded(resolved, excluded_roots)
-        ):
+    def add_candidate(path: Path) -> None:
+        resolved = _resolve_document_candidate(
+            path,
+            root=root,
+            excluded_roots=excluded_roots,
+            seen=seen,
+        )
+        if resolved is None:
             return
         seen.add(resolved)
         documents.append(resolved)
 
     readme = root / "README.md"
     if readme.is_file():
-        add_document(readme)
+        add_candidate(readme)
 
     for docs_root in (root / "docs", root / "apps" / "docs"):
-        if not docs_root.exists():
-            continue
-        for path in sorted(docs_root.rglob("*")):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(docs_root)
-            if any(part.startswith(".") for part in relative.parts):
-                continue
-            if path.suffix.lower() not in DOCUMENT_EXTENSIONS:
-                continue
-            add_document(path)
+        for path in _iter_docs_root_files(docs_root):
+            add_candidate(path)
     return documents
 
 
