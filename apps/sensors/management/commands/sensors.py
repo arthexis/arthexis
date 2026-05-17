@@ -332,6 +332,14 @@ class Command(BaseCommand):
 
     @staticmethod
     def _safe_terminal_text(value):
+        """Return terminal-safe text for console output by JSON-escaping control characters.
+
+        Converts ``value`` to ``str`` and applies ``json.dumps(..., ensure_ascii=False)[1:-1]``
+        so control characters, quotes, and backslashes are escaped while Unicode remains
+        readable. Example: ``"line\n\x1b[31mred"`` becomes ``"line\\n\\u001b[31mred"``.
+
+        This is for terminal/console rendering only and is not HTML, SQL, or shell escaping.
+        """
         return json.dumps(str(value), ensure_ascii=False)[1:-1]
 
     def _local_node_or_error(self):

@@ -212,8 +212,10 @@ def test_usb_inventory_text_output_escapes_control_characters(
 
     list_stdout = StringIO()
     call_command("sensors", "usb-inventory", "list", stdout=list_stdout)
-    assert "\\u001b" in list_stdout.getvalue()
-    assert "\\n" in list_stdout.getvalue()
+    list_output = list_stdout.getvalue()
+    assert "\\u001b" in list_output
+    assert "\\n" in list_output
+    assert "\x1b" not in list_output
 
     claimed_stdout = StringIO()
     call_command(
@@ -224,17 +226,20 @@ def test_usb_inventory_text_output_escapes_control_characters(
         "camera",
         stdout=claimed_stdout,
     )
-    assert "\\u001b" in claimed_stdout.getvalue()
-    assert "\\n" in claimed_stdout.getvalue()
+    claimed_output = claimed_stdout.getvalue()
+    assert "\\u001b" in claimed_output
+    assert "\\n" in claimed_output
+    assert "\x1b" not in claimed_output
 
     claims_stdout = StringIO()
     call_command(
         "sensors",
         "usb-inventory",
         "path-claims",
-        "--path",
         "/dev/sda1",
         stdout=claims_stdout,
     )
-    assert "\\u001b" in claims_stdout.getvalue()
-    assert "\\n" in claims_stdout.getvalue()
+    claims_output = claims_stdout.getvalue()
+    assert "\\u001b" in claims_output
+    assert "\\n" in claims_output
+    assert "\x1b" not in claims_output
