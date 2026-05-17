@@ -1308,7 +1308,13 @@ def test_start_background_watch_launches_child_without_console(tmp_path: Path):
         captured["kwargs"] = kwargs
         return Process()
 
-    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=FakeRunner())
+    other_cwd = tmp_path / "other-cwd"
+    other_cwd.mkdir()
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis",
+        runner=FakeRunner(),
+        cwd=other_cwd,
+    )
 
     with patch("apps.repos.pr_oversee.subprocess.Popen", side_effect=fake_popen):
         result = overseer.start_background_watch(
@@ -1324,6 +1330,9 @@ def test_start_background_watch_launches_child_without_console(tmp_path: Path):
     assert result["status"] == "watch_started"
     assert result["pid"] == 4242
     assert result["statePath"] == str(tmp_path / "watch.json")
+    assert Path(captured["command"][1]).is_absolute()
+    assert Path(captured["command"][1]).name == "manage.py"
+    assert captured["command"][1] != str(other_cwd / "manage.py")
     assert "--notify-windows" in captured["command"]
     assert "--expected-head-sha" in captured["command"]
     assert captured["kwargs"]["stdout"].name == str(tmp_path / "watch.log")

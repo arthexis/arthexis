@@ -96,6 +96,12 @@ def watch_state_path(root: Path, repo: str, number: int) -> Path:
     return root.expanduser() / f"{_slugify_path_segment(repo)}-pr-{number}.json"
 
 
+def default_manage_py_path() -> Path:
+    """Return the repository-root manage.py path for background relaunches."""
+
+    return Path(__file__).resolve().parents[2] / "manage.py"
+
+
 def windows_dismiss_notification(title: str, body: str, *, icon: str = "Information") -> dict[str, Any]:
     """Launch a dismissible Windows message-box notification."""
 
@@ -2005,7 +2011,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         expanded_log_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
             str(python_executable or Path(sys.executable)),
-            str(manage_py or self.cwd / "manage.py"),
+            str(manage_py or default_manage_py_path()),
             "pr_oversee",
             "--repo",
             self.repo,
