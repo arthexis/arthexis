@@ -1188,6 +1188,124 @@ def test_monitor_skips_validation_for_already_merged_missing_patchwork(tmp_path:
     assert worktree not in runner.cwd_history
 
 
+def test_watch_succeeds_when_pr_is_ready_and_notifies(tmp_path: Path):
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload())),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+        ]
+    )
+    notifications = []
+    state_path = tmp_path / "watch.json"
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.watch(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        state_path=state_path,
+        notifier=lambda title, body: notifications.append((title, body))
+        or {"notified": True},
+    )
+
+    assert result["status"] == "succeeded"
+    assert result["reason"] == "ready"
+    assert result["succeeded"] is True
+    assert result["notification"] == {"notified": True}
+    assert notifications[0][0] == "PR 123 watch succeeded"
+    assert json.loads(state_path.read_text())["status"] == "succeeded"
+    assert all(command[:3] != ["gh", "pr", "diff"] for command in runner.commands)
+
+
+def test_watch_waits_on_pending_then_fails_on_check_failure():
+    pending = _pr_payload(
+        statusCheckRollup=[{"name": "Tests", "status": "IN_PROGRESS", "conclusion": ""}]
+    )
+    failing = _pr_payload(
+        statusCheckRollup=[
+            {"name": "Tests", "status": "COMPLETED", "conclusion": "FAILURE"}
+        ]
+    )
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(pending)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+            CommandResult(0, json.dumps(failing)),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+        ]
+    )
+    sleeps = []
+    overseer = PullRequestOverseer(
+        repo="arthexis/arthexis",
+        runner=runner,
+        sleep_func=sleeps.append,
+    )
+
+    result = overseer.watch(123, interval_seconds=0, max_iterations=2)
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "checks_failed"
+    assert result["failed"] is True
+    assert result["iterationCount"] == 2
+    assert result["iterations"][0]["watchStatus"] == "waiting"
+    assert result["iterations"][1]["watchStatus"] == "failed"
+    assert sleeps == [0]
+
+
+def test_watch_fails_when_expected_head_changes():
+    runner = FakeRunner(
+        [
+            CommandResult(0, json.dumps(_pr_payload(headRefOid="new-head"))),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.watch(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        expected_head_sha="old-head",
+    )
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "head_changed"
+    assert result["blockers"] == ["head_changed:new-head"]
+
+
+def test_start_background_watch_launches_child_without_console(tmp_path: Path):
+    captured = {}
+
+    class Process:
+        pid = 4242
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return Process()
+
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=FakeRunner())
+
+    with patch("apps.repos.pr_oversee.subprocess.Popen", side_effect=fake_popen):
+        result = overseer.start_background_watch(
+            123,
+            interval_seconds=5,
+            max_iterations=9,
+            timeout_seconds=60,
+            expected_head_sha="head-sha",
+            state_path=tmp_path / "watch.json",
+            log_path=tmp_path / "watch.log",
+        )
+
+    assert result["status"] == "watch_started"
+    assert result["pid"] == 4242
+    assert result["statePath"] == str(tmp_path / "watch.json")
+    assert "--notify-windows" in captured["command"]
+    assert "--expected-head-sha" in captured["command"]
+    assert "stdout" in captured["kwargs"]
+    assert json.loads((tmp_path / "watch.json").read_text())["pid"] == 4242
+
+
 def test_management_command_monitor_invokes_overseer_monitor():
     fake = PullRequestOverseer(repo="arthexis/arthexis")
     fake.monitor = Mock(
@@ -1264,3 +1382,43 @@ def test_management_command_monitor_defaults_validation_to_patchwork(tmp_path: P
 
     _, kwargs = fake.monitor.call_args
     assert kwargs["worktree"] == tmp_path / "arthexis-arthexis-pr-123"
+
+
+def test_management_command_watch_background_invokes_launcher(tmp_path: Path):
+    fake = PullRequestOverseer(repo="arthexis/arthexis")
+    fake.start_background_watch = Mock(
+        return_value={
+            "status": "watch_started",
+            "watchStarted": True,
+            "pid": 4242,
+            "statePath": str(tmp_path / "watch.json"),
+            "logPath": str(tmp_path / "watch.log"),
+        }
+    )
+    buffer = StringIO()
+
+    with patch(
+        "apps.repos.management.commands.pr_oversee.PullRequestOverseer",
+        return_value=fake,
+    ):
+        call_command(
+            "pr_oversee",
+            "--repo",
+            "arthexis/arthexis",
+            "--json",
+            "watch",
+            "--pr",
+            "123",
+            "--background",
+            "--no-notify-windows",
+            "--state-file",
+            str(tmp_path / "watch.json"),
+            stdout=buffer,
+        )
+
+    payload = json.loads(buffer.getvalue())
+    assert payload["status"] == "watch_started"
+    fake.start_background_watch.assert_called_once()
+    _, kwargs = fake.start_background_watch.call_args
+    assert kwargs["state_path"] == tmp_path / "watch.json"
+    assert kwargs["notify_windows"] is False

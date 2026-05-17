@@ -54,6 +54,12 @@ Avoid mixing issue work and PR-review work in one worktree state.
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json monitor --pr <number> --expected-head-sha <sha> --max-iterations 120 --interval 30 --merge --write --delete-branch
 ```
 
+If the PR is waiting only on GitHub checks or review approval and you are leaving it unattended, hand it to the passive watcher instead of the smart monitor:
+
+```powershell
+.venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json watch --pr <number> --background --expected-head-sha <sha>
+```
+
 9. After merge, run patchwork read-only first, then prune only monitor-owned merged/closed candidates.
 
 ```powershell
@@ -89,4 +95,5 @@ Use `summary` or `manage.py pr_oversee reply-summary` to avoid hand-writing repe
 - Do not claim ready, merged, or blocked without a fresh live `pr_oversee` or `gh pr view` check.
 - Treat unresolved requested changes as blockers even if CI is green.
 - Treat pending CI as a wait state, not success.
+- Use `watch --background` only for notification handoff after your review work is done. It is intentionally passive and does not run tests, merge, or resolve threads.
 - If patchwork cleanup fails because of local `.venv` junctions or metadata created during validation, rerun `pr_oversee patchwork --write` first; it now prunes suite-owned residue after Git reports a partially removed worktree.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -57,6 +58,7 @@ VERSION_SUFFIX_SEPARATORS = "-_/"
 PATCHWORK_ENV_VAR = "ARTHEXIS_PATCHWORK_DIR"
 PATCHWORK_METADATA = ".arthexis-pr-oversee.json"
 PATCHWORK_OWNED_NOISE = {PATCHWORK_METADATA, ".venv"}
+WATCH_ENV_VAR = "ARTHEXIS_PR_WATCH_DIR"
 
 
 def default_patchwork_dir() -> Path:
@@ -77,6 +79,63 @@ def patchwork_worktree_path(root: Path, repo: str, number: int) -> Path:
     """Return the deterministic patchwork worktree path for a PR."""
 
     return root.expanduser() / f"{_slugify_path_segment(repo)}-pr-{number}"
+
+
+def default_watch_state_dir(root: Path | None = None) -> Path:
+    """Return the default directory for background PR watcher state."""
+
+    configured = os.environ.get(WATCH_ENV_VAR, "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return (root or Path.cwd()) / "work" / "pr-watch"
+
+
+def watch_state_path(root: Path, repo: str, number: int) -> Path:
+    """Return the deterministic state-file path for a PR watcher."""
+
+    return root.expanduser() / f"{_slugify_path_segment(repo)}-pr-{number}.json"
+
+
+def windows_dismiss_notification(title: str, body: str, *, icon: str = "Information") -> dict[str, Any]:
+    """Launch a dismissible Windows message-box notification."""
+
+    if os.name != "nt":
+        return {"notified": False, "reason": "not-windows"}
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        return {"notified": False, "reason": "powershell-not-found"}
+
+    title64 = base64.b64encode(title.encode("utf-8")).decode("ascii")
+    body64 = base64.b64encode(body.encode("utf-8")).decode("ascii")
+    clean_icon = icon if icon in {"Information", "Warning", "Error"} else "Information"
+    script = f"""
+$title = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{title64}'))
+$body = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{body64}'))
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show($body, $title, 'OK', '{clean_icon}') | Out-Null
+""".strip()
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+    )
+    process = subprocess.Popen(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-STA",
+            "-WindowStyle",
+            "Hidden",
+            "-EncodedCommand",
+            encoded,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+    return {"notified": True, "kind": "windows-message-box", "pid": process.pid}
 
 
 def _path_is_relative_to(path: Path, root: Path) -> bool:
@@ -1823,6 +1882,395 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 
     def hygiene(self, number: int) -> dict[str, Any]:
         return hygiene_report(self.pr_view(number), self.changed_files(number))
+
+    def watch(
+        self,
+        number: int,
+        *,
+        interval_seconds: float = 30.0,
+        max_iterations: int = 120,
+        timeout_seconds: float = 0.0,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+        expected_head_sha: str = "",
+        state_path: Path | None = None,
+        notifier: Callable[[str, str], dict[str, Any] | None] | None = None,
+    ) -> dict[str, Any]:
+        """Poll a PR until it reaches a deterministic success or failure state."""
+
+        if max_iterations < 0:
+            raise PullRequestOverseeError("max_iterations must be zero or positive")
+        if interval_seconds < 0:
+            raise PullRequestOverseeError("interval_seconds must be zero or positive")
+        if timeout_seconds < 0:
+            raise PullRequestOverseeError("timeout_seconds must be zero or positive")
+
+        deadline = self._clock() + timeout_seconds if timeout_seconds else 0.0
+        expanded_state_path = state_path.expanduser() if state_path else None
+        iterations: list[dict[str, Any]] = []
+        iteration = 0
+
+        while True:
+            iteration += 1
+            inspection = self.inspect(
+                number,
+                require_approval=require_approval,
+                allow_pending=allow_pending,
+            )
+            pr = _coerce_mapping(inspection.get("pullRequest"))
+            gate = _coerce_mapping(inspection.get("readiness"))
+            evaluation = self._watch_evaluation(
+                pr,
+                gate,
+                expected_head_sha=expected_head_sha,
+            )
+            if not evaluation["terminal"] and max_iterations and iteration >= max_iterations:
+                evaluation = {
+                    "status": "failed",
+                    "terminal": True,
+                    "reason": "max_iterations",
+                    "blockers": ["watch:max_iterations"],
+                    "waitingBlockers": evaluation.get("waitingBlockers", []),
+                    "failingChecks": [],
+                }
+            if not evaluation["terminal"] and deadline and self._clock() >= deadline:
+                evaluation = {
+                    "status": "failed",
+                    "terminal": True,
+                    "reason": "timeout",
+                    "blockers": ["watch:timeout"],
+                    "waitingBlockers": evaluation.get("waitingBlockers", []),
+                    "failingChecks": [],
+                }
+
+            iterations.append(
+                self._watch_iteration_summary(iteration, pr, gate, evaluation)
+            )
+            result = self._watch_result(
+                number,
+                inspection=inspection,
+                evaluation=evaluation,
+                iterations=iterations,
+                state_path=expanded_state_path,
+            )
+            if expanded_state_path:
+                self._write_watch_state(expanded_state_path, result)
+
+            if evaluation["terminal"]:
+                if notifier:
+                    title, body = self._watch_notification_text(
+                        number,
+                        evaluation=evaluation,
+                        pr=pr,
+                    )
+                    try:
+                        notification = notifier(title, body) or {"notified": True}
+                    except Exception as exc:  # pragma: no cover - defensive boundary
+                        notification = {"notified": False, "error": str(exc)}
+                    result["notification"] = notification
+                    if expanded_state_path:
+                        self._write_watch_state(expanded_state_path, result)
+                return result
+
+            self._sleep(interval_seconds)
+
+    def start_background_watch(
+        self,
+        number: int,
+        *,
+        interval_seconds: float = 30.0,
+        max_iterations: int = 120,
+        timeout_seconds: float = 0.0,
+        require_approval: bool = False,
+        allow_pending: bool = False,
+        expected_head_sha: str = "",
+        state_path: Path | None = None,
+        log_path: Path | None = None,
+        notify_windows: bool = True,
+        python_executable: Path | None = None,
+        manage_py: Path | None = None,
+    ) -> dict[str, Any]:
+        """Start a detached non-smart PR watcher process."""
+
+        state_root = default_watch_state_dir(self.cwd)
+        expanded_state_path = (
+            state_path.expanduser()
+            if state_path
+            else watch_state_path(state_root, self.repo, number)
+        )
+        expanded_log_path = (
+            log_path.expanduser() if log_path else expanded_state_path.with_suffix(".log")
+        )
+        expanded_state_path.parent.mkdir(parents=True, exist_ok=True)
+        expanded_log_path.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            str(python_executable or Path(sys.executable)),
+            str(manage_py or self.cwd / "manage.py"),
+            "pr_oversee",
+            "--repo",
+            self.repo,
+            "--json",
+            "watch",
+            "--pr",
+            str(number),
+            "--interval",
+            str(interval_seconds),
+            "--max-iterations",
+            str(max_iterations),
+            "--timeout",
+            str(timeout_seconds),
+            "--state-file",
+            str(expanded_state_path),
+        ]
+        if require_approval:
+            command.append("--require-approval")
+        if allow_pending:
+            command.append("--allow-pending")
+        if expected_head_sha:
+            command.extend(["--expected-head-sha", expected_head_sha])
+        if notify_windows:
+            command.append("--notify-windows")
+        self._write_watch_state(
+            expanded_state_path,
+            {
+                "number": number,
+                "repo": self.repo,
+                "status": "watch_launching",
+                "watchStarted": False,
+                "background": True,
+                "statePath": str(expanded_state_path),
+                "logPath": str(expanded_log_path),
+                "command": command,
+                "notifyWindows": notify_windows,
+            },
+        )
+
+        popen_kwargs: dict[str, Any] = {
+            "cwd": self.cwd,
+            "stdin": subprocess.DEVNULL,
+            "stderr": subprocess.STDOUT,
+        }
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = getattr(
+                subprocess, "CREATE_NO_WINDOW", 0
+            ) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        log_handle = expanded_log_path.open("ab")
+        try:
+            process = subprocess.Popen(command, stdout=log_handle, **popen_kwargs)
+        finally:
+            log_handle.close()
+
+        result = {
+            "number": number,
+            "repo": self.repo,
+            "status": "watch_started",
+            "watchStarted": True,
+            "background": True,
+            "pid": process.pid,
+            "statePath": str(expanded_state_path),
+            "logPath": str(expanded_log_path),
+            "command": command,
+            "notifyWindows": notify_windows,
+        }
+        existing_state = self._read_watch_state(expanded_state_path)
+        if not existing_state.get("terminal"):
+            self._write_watch_state(expanded_state_path, result)
+        return result
+
+    def _watch_evaluation(
+        self,
+        pr: Mapping[str, Any],
+        gate: Mapping[str, Any],
+        *,
+        expected_head_sha: str,
+    ) -> dict[str, Any]:
+        state = str(pr.get("state") or "").upper()
+        head_sha = str(pr.get("headRefOid") or gate.get("headRefOid") or "")
+        expected = expected_head_sha.strip()
+        if state == "MERGED":
+            return {
+                "status": "succeeded",
+                "terminal": True,
+                "reason": "merged",
+                "blockers": [],
+                "waitingBlockers": [],
+                "failingChecks": [],
+            }
+        if state == "CLOSED":
+            return {
+                "status": "failed",
+                "terminal": True,
+                "reason": "closed",
+                "blockers": ["state:CLOSED"],
+                "waitingBlockers": [],
+                "failingChecks": [],
+            }
+        if expected and head_sha != expected:
+            return {
+                "status": "failed",
+                "terminal": True,
+                "reason": "head_changed",
+                "blockers": [f"head_changed:{head_sha or 'missing'}"],
+                "waitingBlockers": [],
+                "failingChecks": [],
+            }
+
+        checks = _coerce_mapping(gate.get("checks"))
+        failing_checks = _coerce_list(checks.get("failing"))
+        pending_checks = _coerce_list(checks.get("pending"))
+        blockers = [str(blocker) for blocker in _coerce_list(gate.get("blockers"))]
+        waiting_blockers = self._watch_waiting_blockers(blockers)
+        has_waiting = bool(waiting_blockers or pending_checks)
+        terminal_blockers = [
+            blocker
+            for blocker in blockers
+            if blocker not in waiting_blockers
+            and not blocker.startswith("pending:")
+            and not (blocker == "merge_state:BLOCKED" and has_waiting)
+        ]
+
+        if failing_checks:
+            return {
+                "status": "failed",
+                "terminal": True,
+                "reason": "checks_failed",
+                "blockers": terminal_blockers,
+                "waitingBlockers": waiting_blockers,
+                "failingChecks": failing_checks,
+            }
+        if terminal_blockers:
+            return {
+                "status": "failed",
+                "terminal": True,
+                "reason": "blocked",
+                "blockers": terminal_blockers,
+                "waitingBlockers": waiting_blockers,
+                "failingChecks": failing_checks,
+            }
+        if gate.get("ready"):
+            return {
+                "status": "succeeded",
+                "terminal": True,
+                "reason": "ready",
+                "blockers": [],
+                "waitingBlockers": [],
+                "failingChecks": [],
+            }
+        reason = "pending_checks" if pending_checks else "review_wait"
+        return {
+            "status": "waiting",
+            "terminal": False,
+            "reason": reason,
+            "blockers": [],
+            "waitingBlockers": waiting_blockers,
+            "failingChecks": [],
+        }
+
+    def _watch_waiting_blockers(self, blockers: Iterable[str]) -> list[str]:
+        waiting: list[str] = []
+        for blocker in blockers:
+            if blocker.startswith("pending:") or blocker in {
+                "review:REVIEW_REQUIRED",
+                "review:MISSING_APPROVAL",
+            }:
+                waiting.append(blocker)
+        return waiting
+
+    def _watch_iteration_summary(
+        self,
+        iteration: int,
+        pr: Mapping[str, Any],
+        gate: Mapping[str, Any],
+        evaluation: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        checks = _coerce_mapping(gate.get("checks"))
+        return {
+            "iteration": iteration,
+            "state": pr.get("state"),
+            "headRefOid": pr.get("headRefOid"),
+            "ready": gate.get("ready"),
+            "watchStatus": evaluation.get("status"),
+            "reason": evaluation.get("reason"),
+            "blockers": gate.get("blockers") or [],
+            "waitingBlockers": evaluation.get("waitingBlockers") or [],
+            "failingCheckCount": len(_coerce_list(checks.get("failing"))),
+            "pendingCheckCount": len(_coerce_list(checks.get("pending"))),
+            "updatedAt": pr.get("updatedAt"),
+        }
+
+    def _watch_result(
+        self,
+        number: int,
+        *,
+        inspection: Mapping[str, Any],
+        evaluation: Mapping[str, Any],
+        iterations: list[dict[str, Any]],
+        state_path: Path | None,
+    ) -> dict[str, Any]:
+        pr = _coerce_mapping(inspection.get("pullRequest"))
+        result = {
+            "number": number,
+            "repo": self.repo,
+            "status": evaluation.get("status"),
+            "terminal": bool(evaluation.get("terminal")),
+            "succeeded": evaluation.get("status") == "succeeded",
+            "failed": evaluation.get("status") == "failed",
+            "reason": evaluation.get("reason"),
+            "blockers": evaluation.get("blockers") or [],
+            "waitingBlockers": evaluation.get("waitingBlockers") or [],
+            "failingChecks": evaluation.get("failingChecks") or [],
+            "iterationCount": len(iterations),
+            "iterations": iterations,
+            "last": inspection,
+            "headRefOid": pr.get("headRefOid"),
+            "url": pr.get("url"),
+        }
+        if state_path:
+            result["statePath"] = str(state_path)
+        return result
+
+    def _write_watch_state(self, path: Path, payload: Mapping[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f"{path.name}.tmp")
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+
+    def _read_watch_state(self, path: Path) -> dict[str, Any]:
+        try:
+            return _coerce_mapping(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _watch_notification_text(
+        self,
+        number: int,
+        *,
+        evaluation: Mapping[str, Any],
+        pr: Mapping[str, Any],
+    ) -> tuple[str, str]:
+        status = str(evaluation.get("status") or "finished")
+        reason = str(evaluation.get("reason") or "unknown")
+        title = f"PR {number} watch {status}"
+        head = str(pr.get("headRefOid") or "")
+        short_head = head[:12] if head else "unknown head"
+        lines = [
+            f"{self.repo}#{number} {status}.",
+            f"Reason: {reason}.",
+            f"Head: {short_head}.",
+        ]
+        url = str(pr.get("url") or "")
+        if url:
+            lines.append(url)
+        blockers = [str(item) for item in _coerce_list(evaluation.get("blockers"))]
+        if blockers:
+            lines.append("Blockers: " + ", ".join(blockers[:6]))
+        return title, "\n".join(lines)
 
     def monitor(
         self,

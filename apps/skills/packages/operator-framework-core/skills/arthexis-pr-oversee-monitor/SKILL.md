@@ -21,6 +21,12 @@ Controlled merge loop after the operator has asked to oversee or merge the PR:
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json monitor --pr <number> --max-iterations 120 --interval 30 --merge --write --delete-branch
 ```
 
+Passive background watcher after you have worked a PR and need a Windows dismissal notification when GitHub reaches success or failure:
+
+```powershell
+.venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json watch --pr <number> --background --expected-head-sha <sha>
+```
+
 Use an isolated worktree when local validation or review fixes may be needed:
 
 ```powershell
@@ -29,6 +35,8 @@ Use an isolated worktree when local validation or review fixes may be needed:
 
 The monitor defaults `--run-test-plan` worktrees to `ARTHEXIS_PATCHWORK_DIR` or the platform home patchwork directory, with deterministic names such as `arthexis-arthexis-pr-7662`.
 
+The passive watcher is not a smart monitor. It only polls `inspect` and `gate`, writes state under `work/pr-watch`, and exits when the PR becomes ready/merged or deterministically fails because checks failed, the PR closed, the head SHA moved, or a non-waiting blocker appears. It waits on pending checks and review approval. On Windows, background watchers are started without a visible console and default to a dismissible message-box notification; pass `--no-notify-windows` only when a state file/log is enough.
+
 ## Workflow
 
 1. Start with a read-only monitor pass and inspect `manualDecisionReasons`, `last.gate.blockers`, `last.inspect.pullRequest.reviewThreads`, `last.ci.failures`, and `last.hygiene`.
@@ -36,7 +44,8 @@ The monitor defaults `--run-test-plan` worktrees to `ARTHEXIS_PATCHWORK_DIR` or 
 3. Run the test plan the command reports. If a generated plan is too broad for the local platform, run the narrower changed-file targets and record the platform blocker exactly.
 4. Push fixes to the PR head branch, then rerun the monitor. Use `--expected-head-sha <sha>` when guarding against a moving PR head matters.
 5. Add `--merge --write --delete-branch` only after the gate is ready and the operator request covers merge work. The monitor should stop with `merge_decision_required` instead of merging when write mode is not present.
-6. After merge, run patchwork hygiene in read-only mode, then prune with `--write` when only monitor-owned merged or closed worktrees are candidates.
+6. If the PR is waiting only on GitHub checks or review approval and you are leaving it unattended, start `watch --background --expected-head-sha <sha>` so the operator gets a dismissal-required Windows notification.
+7. After merge, run patchwork hygiene in read-only mode, then prune with `--write` when only monitor-owned merged or closed worktrees are candidates.
 
 ## Related Commands
 
@@ -48,6 +57,7 @@ Use these commands for focused diagnosis when the monitor stops:
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json ci --pr <number> --logs
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json hygiene --pr <number>
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json test-plan --pr <number>
+.venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json watch --pr <number> --max-iterations 1 --interval 0
 .venv\Scripts\python.exe manage.py pr_oversee --repo arthexis/arthexis --json patchwork
 ```
 
@@ -58,3 +68,4 @@ Use these commands for focused diagnosis when the monitor stops:
 - Keep `.arthexis-pr-oversee.json`, local `.venv` junctions, and other worktree metadata out of commits; patchwork cleanup may remove worktrees when only those owned files are dirty.
 - Do not reset or clean a dirty checkout as part of the monitor workflow.
 - The monitor can wait on checks, sync a reused worktree, run validation, merge, and clean up; it cannot decide away substantive review comments or missing human approvals.
+- Use passive `watch` only for notification handoff. It must not replace the smart monitor when local validation, merging, cleanup, or review-thread action is still required.

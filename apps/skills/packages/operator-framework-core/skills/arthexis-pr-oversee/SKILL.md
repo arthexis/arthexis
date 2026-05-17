@@ -21,7 +21,7 @@ Default source-backed read-only pass from an Arthexis checkout:
 
 Use `--json` when another tool needs machine-readable output.
 
-For continuous oversight, use `$arthexis-pr-oversee-monitor` and its `monitor` workflow.
+For continuous oversight, use `$arthexis-pr-oversee-monitor` and its `monitor` or passive `watch` workflow.
 
 ## Priority Suggestions
 
@@ -67,6 +67,7 @@ To let the command perform deterministic writes instead of only planning them:
 - `merge --write`: gate and merge a PR.
 - `cleanup --write`: remove merged worktrees or branches after verification.
 - `monitor`: run the whole workflow until completion or manual decision.
+- `watch`: passively poll PR state until ready/merged success or deterministic failure; `watch --background` detaches a hidden Windows-friendly watcher and defaults to a dismissible Windows notification.
 - `patchwork --write`: prune monitor-owned patchwork worktrees for merged or closed PRs, with stale-open pruning only when explicitly requested.
 
 ## Windows Patchwork Residue Fallback

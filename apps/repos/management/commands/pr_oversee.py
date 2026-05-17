@@ -13,8 +13,11 @@ from apps.repos.pr_oversee import (
     PullRequestOverseeError,
     PullRequestOverseer,
     default_patchwork_dir,
+    default_watch_state_dir,
     patchwork_worktree_path,
     review_reply_summary,
+    watch_state_path,
+    windows_dismiss_notification,
 )
 
 
@@ -231,6 +234,45 @@ class Command(BaseCommand):
             help="Required for monitor local validation, merge, and cleanup actions.",
         )
 
+        watch_parser = subparsers.add_parser(
+            "watch",
+            help="Run a passive PR watcher until deterministic success or failure.",
+        )
+        self._add_pr_arg(watch_parser)
+        watch_parser.add_argument("--interval", type=float, default=30.0)
+        watch_parser.add_argument("--max-iterations", type=int, default=120)
+        watch_parser.add_argument("--timeout", type=float, default=0.0)
+        watch_parser.add_argument("--require-approval", action="store_true")
+        watch_parser.add_argument("--allow-pending", action="store_true")
+        watch_parser.add_argument("--expected-head-sha", default="")
+        watch_parser.add_argument(
+            "--state-file",
+            default="",
+            help="Optional JSON state file path. Defaults under work/pr-watch.",
+        )
+        watch_parser.add_argument(
+            "--log-file",
+            default="",
+            help="Optional background log file path. Defaults next to the state file.",
+        )
+        watch_parser.add_argument(
+            "--background",
+            action="store_true",
+            help="Detach a non-smart watcher process and return immediately.",
+        )
+        watch_parser.add_argument(
+            "--notify-windows",
+            action="store_true",
+            default=None,
+            help="Show a dismissible Windows notification when the watcher exits.",
+        )
+        watch_parser.add_argument(
+            "--no-notify-windows",
+            action="store_false",
+            dest="notify_windows",
+            help="Disable the default Windows notification for background watches.",
+        )
+
     def handle(self, *args, **options) -> None:
         repo = self._resolve_repository(str(options.get("repo") or ""))
         overseer = PullRequestOverseer(repo=repo)
@@ -255,6 +297,8 @@ class Command(BaseCommand):
                 "manual decision required: "
                 + ", ".join(result.get("manualDecisionReasons") or [])
             )
+        if action == "watch" and result.get("failed"):
+            raise CommandError(f"PR watch failed: {result.get('reason') or 'unknown'}")
 
     def _run_action(
         self,
@@ -379,6 +423,44 @@ class Command(BaseCommand):
                 admin=bool(options.get("admin")),
                 write=bool(options.get("write")),
             )
+        if action == "watch":
+            state_path = self._resolve_optional_path(options, "state_file")
+            if state_path is None:
+                state_path = watch_state_path(
+                    default_watch_state_dir(overseer.cwd), overseer.repo, number
+                )
+            log_path = self._resolve_optional_path(options, "log_file")
+            notify_option = options.get("notify_windows")
+            notify_windows = (
+                bool(options.get("background"))
+                if notify_option is None
+                else bool(notify_option)
+            )
+            if options.get("background"):
+                return overseer.start_background_watch(
+                    number,
+                    interval_seconds=float(options.get("interval") or 0.0),
+                    max_iterations=int(options.get("max_iterations") or 0),
+                    timeout_seconds=float(options.get("timeout") or 0.0),
+                    require_approval=bool(options.get("require_approval")),
+                    allow_pending=bool(options.get("allow_pending")),
+                    expected_head_sha=str(options.get("expected_head_sha") or ""),
+                    state_path=state_path,
+                    log_path=log_path,
+                    notify_windows=notify_windows,
+                )
+            notifier = windows_dismiss_notification if notify_windows else None
+            return overseer.watch(
+                number,
+                interval_seconds=float(options.get("interval") or 0.0),
+                max_iterations=int(options.get("max_iterations") or 0),
+                timeout_seconds=float(options.get("timeout") or 0.0),
+                require_approval=bool(options.get("require_approval")),
+                allow_pending=bool(options.get("allow_pending")),
+                expected_head_sha=str(options.get("expected_head_sha") or ""),
+                state_path=state_path,
+                notifier=notifier,
+            )
         if action == "reply-summary":
             return review_reply_summary(
                 commit=str(options.get("commit") or ""),
@@ -437,6 +519,16 @@ class Command(BaseCommand):
             )
         return None
 
+    def _resolve_optional_path(
+        self,
+        options: dict[str, object],
+        key: str,
+    ) -> Path | None:
+        raw_value = str(options.get(key) or "").strip()
+        if raw_value:
+            return Path(raw_value).expanduser()
+        return None
+
     def _resolve_repository(self, raw_repo: str) -> str:
         cleaned = raw_repo.strip()
         if cleaned:
@@ -480,6 +572,20 @@ class Command(BaseCommand):
             self.stdout.write(f"monitor={result.get('status')}")
             for reason in result.get("manualDecisionReasons") or []:
                 self.stdout.write(f"manual={reason}")
+            return
+
+        if result.get("watchStarted"):
+            self.stdout.write("watch=started")
+            self.stdout.write(f"pid={result.get('pid')}")
+            self.stdout.write(f"state={result.get('statePath')}")
+            self.stdout.write(f"log={result.get('logPath')}")
+            return
+
+        if "terminal" in result and "reason" in result:
+            self.stdout.write(f"watch={result.get('status')}")
+            self.stdout.write(f"reason={result.get('reason')}")
+            for blocker in result.get("blockers") or []:
+                self.stdout.write(f"blocker={blocker}")
             return
 
         if "body" in result:
