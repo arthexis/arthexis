@@ -119,11 +119,19 @@ class Command(BaseCommand):
             if not result.targets:
                 self.stdout.write("No Kindle postbox targets found.")
                 return
+            failed_targets = []
             for target in result.targets:
                 destination = target.output_path or target.root_path
                 self.stdout.write(f"{target.status}: {destination}")
                 if target.error:
                     self.stderr.write(target.error)
+                if target.status in {"failed", "missing"}:
+                    failed_targets.append(target)
+            if failed_targets:
+                raise CommandError(
+                    "Kindle postbox sync failed for "
+                    f"{len(failed_targets)} target(s)."
+                )
             return
 
         raise CommandError(f"Unsupported kindle-postbox action: {postbox_action}")

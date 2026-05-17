@@ -268,6 +268,64 @@ def test_kindle_postbox_sync_command_requires_usb_tools_without_target(
         )
 
 
+def test_kindle_postbox_sync_command_fails_when_target_copy_fails(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        classmethod(lambda cls: SimpleNamespace(role=SimpleNamespace(name="Control"))),
+    )
+    bundle = kindle_postbox.DocumentationBundle(
+        output_path=tmp_path / kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME,
+        manifest_path=tmp_path / kindle_postbox.KINDLE_POSTBOX_MANIFEST_FILENAME,
+        generated_at="2026-05-17T00:00:00+00:00",
+        document_count=1,
+        byte_count=12,
+        sources=("README.md",),
+    )
+    target_result = kindle_postbox.KindlePostboxTargetResult(
+        root_path=tmp_path / "kindle",
+        documents_path=tmp_path / "kindle" / "documents",
+        output_path=tmp_path
+        / "kindle"
+        / "documents"
+        / kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME,
+        status="failed",
+        error="permission denied",
+    )
+
+    def _sync_to_kindle_postboxes(**kwargs):
+        return kindle_postbox.KindlePostboxSyncResult(
+            bundle=bundle,
+            targets=(target_result,),
+            dry_run=False,
+        )
+
+    monkeypatch.setattr(
+        kindle_postbox,
+        "sync_to_kindle_postboxes",
+        _sync_to_kindle_postboxes,
+    )
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with pytest.raises(CommandError, match="failed for 1 target"):
+        call_command(
+            "docs",
+            "kindle-postbox",
+            "sync",
+            "--target",
+            str(tmp_path / "kindle"),
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    assert "failed:" in stdout.getvalue()
+    assert "permission denied" in stderr.getvalue()
+
+
 @pytest.mark.django_db
 def test_kindle_postbox_build_command_emits_json(tmp_path):
     _write(tmp_path / "README.md", "# Root\n")
