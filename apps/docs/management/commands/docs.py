@@ -108,8 +108,18 @@ class Command(BaseCommand):
                 dry_run=options["dry_run"],
                 targets=targets,
             )
+            failed_targets = [
+                target
+                for target in result.targets
+                if target.status in {"failed", "missing"}
+            ]
             if options["json"]:
                 self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))
+                if failed_targets:
+                    raise CommandError(
+                        "Kindle postbox sync failed for "
+                        f"{len(failed_targets)} target(s)."
+                    )
                 return
             self.stdout.write(
                 "Kindle postbox documentation built: "
@@ -119,14 +129,11 @@ class Command(BaseCommand):
             if not result.targets:
                 self.stdout.write("No Kindle postbox targets found.")
                 return
-            failed_targets = []
             for target in result.targets:
                 destination = target.output_path or target.root_path
                 self.stdout.write(f"{target.status}: {destination}")
                 if target.error:
                     self.stderr.write(target.error)
-                if target.status in {"failed", "missing"}:
-                    failed_targets.append(target)
             if failed_targets:
                 raise CommandError(
                     "Kindle postbox sync failed for "

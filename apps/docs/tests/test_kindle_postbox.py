@@ -325,6 +325,21 @@ def test_kindle_postbox_sync_command_fails_when_target_copy_fails(
     assert "failed:" in stdout.getvalue()
     assert "permission denied" in stderr.getvalue()
 
+    json_stdout = StringIO()
+    with pytest.raises(CommandError, match="failed for 1 target"):
+        call_command(
+            "docs",
+            "kindle-postbox",
+            "sync",
+            "--target",
+            str(tmp_path / "kindle"),
+            "--json",
+            stdout=json_stdout,
+        )
+
+    payload = json.loads(json_stdout.getvalue())
+    assert payload["targets"][0]["status"] == "failed"
+
 
 @pytest.mark.django_db
 def test_kindle_postbox_build_command_emits_json(tmp_path):
