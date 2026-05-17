@@ -192,9 +192,12 @@ def test_usb_inventory_text_output_escapes_control_characters(
         lambda *, refresh=False: {
             "devices": [
                 {
-                    "label": "EVIL\x1b]2;OWNED\x07\nspoofed",
-                    "mountpoint": "/mnt/usb\x1b[31m\nFAKEPATH",
-                    "claims": ["camera", "claim\x1b]2;CLAIM\x07\nFAKE-CLAIM"],
+                    "label": "EVIL\x1b]2;OWNED\x07\n\x9b31mspoofed",
+                    "mountpoint": "/mnt/usb\x1b[31m\n\x9b32mFAKEPATH",
+                    "claims": [
+                        "camera",
+                        "claim\x1b]2;CLAIM\x07\n\x9b33mFAKE-CLAIM",
+                    ],
                 }
             ]
         },
@@ -202,20 +205,22 @@ def test_usb_inventory_text_output_escapes_control_characters(
     monkeypatch.setattr(
         usb_inventory,
         "claimed_paths",
-        lambda *args, **kwargs: ["/mnt/usb\x1b[31m\nFAKEPATH"],
+        lambda *args, **kwargs: ["/mnt/usb\x1b[31m\n\x9b32mFAKEPATH"],
     )
     monkeypatch.setattr(
         usb_inventory,
         "path_claims",
-        lambda *args, **kwargs: ["claim\x1b]2;CLAIM\x07\nFAKE-CLAIM"],
+        lambda *args, **kwargs: ["claim\x1b]2;CLAIM\x07\n\x9b33mFAKE-CLAIM"],
     )
 
     list_stdout = StringIO()
     call_command("sensors", "usb-inventory", "list", stdout=list_stdout)
     list_output = list_stdout.getvalue()
     assert "\\u001b" in list_output
+    assert "\\u009b" in list_output
     assert "\\n" in list_output
     assert "\x1b" not in list_output
+    assert "\x9b" not in list_output
 
     claimed_stdout = StringIO()
     call_command(
@@ -228,8 +233,10 @@ def test_usb_inventory_text_output_escapes_control_characters(
     )
     claimed_output = claimed_stdout.getvalue()
     assert "\\u001b" in claimed_output
+    assert "\\u009b" in claimed_output
     assert "\\n" in claimed_output
     assert "\x1b" not in claimed_output
+    assert "\x9b" not in claimed_output
 
     claims_stdout = StringIO()
     call_command(
@@ -241,5 +248,7 @@ def test_usb_inventory_text_output_escapes_control_characters(
     )
     claims_output = claims_stdout.getvalue()
     assert "\\u001b" in claims_output
+    assert "\\u009b" in claims_output
     assert "\\n" in claims_output
     assert "\x1b" not in claims_output
+    assert "\x9b" not in claims_output

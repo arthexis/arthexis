@@ -336,11 +336,19 @@ class Command(BaseCommand):
 
         Converts ``value`` to ``str`` and applies ``json.dumps(..., ensure_ascii=False)[1:-1]``
         so control characters, quotes, and backslashes are escaped while Unicode remains
-        readable. Example: ``"line\n\x1b[31mred"`` becomes ``"line\\n\\u001b[31mred"``.
+        readable. C1 control characters are escaped after JSON rendering because
+        ``ensure_ascii=False`` leaves them raw. Example: ``"line\n\x1b[31mred"``
+        becomes ``"line\\n\\u001b[31mred"``.
 
         This is for terminal/console rendering only and is not HTML, SQL, or shell escaping.
         """
-        return json.dumps(str(value), ensure_ascii=False)[1:-1]
+        rendered = json.dumps(str(value), ensure_ascii=False)[1:-1]
+        return "".join(
+            f"\\u{ord(character):04x}"
+            if "\x80" <= character <= "\x9f"
+            else character
+            for character in rendered
+        )
 
     def _local_node_or_error(self):
         node = Node.get_local()
