@@ -35,8 +35,8 @@ concurrency:
 jobs:
   prepare-release-plan:
     # Security note: workflow_run uses base-repository privileges, so the planning job has
-    # read-only permissions and checks out only the default branch. Automatic runs skip
-    # release PR creation unless the checked-out default branch still matches the exact
+    # read-only permissions and fetches only the default branch. Automatic runs skip
+    # release PR creation unless the fetched default branch still matches the exact
     # successful simulator SHA.
     permissions:
       contents: read
@@ -53,11 +53,15 @@ jobs:
       ) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout trusted default branch
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.repository.default_branch }}
+      - name: Fetch trusted default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" fetch --tags --prune origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          git checkout --detach "refs/remotes/origin/${DEFAULT_BRANCH}"
 
       - name: Verify automatic source is still current
         id: source

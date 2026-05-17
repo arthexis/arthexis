@@ -736,10 +736,12 @@ def test_prepare_release_workflow_keeps_checkout_read_only_and_trusted() -> None
     assert workflow_run["branches"] == ["main"]
     assert plan_job["permissions"] == {"contents": "read", "issues": "read"}
 
-    checkout_step = _workflow_step(plan_job, "Checkout trusted default branch")
-    assert checkout_step["uses"] == "actions/checkout@v6"
-    assert checkout_step["with"]["ref"] == "${{ github.event.repository.default_branch }}"
-    assert "workflow_run.head_sha" not in str(checkout_step)
+    assert all(step.get("uses") != "actions/checkout@v6" for step in plan_job["steps"])
+    fetch_step = _workflow_step(plan_job, "Fetch trusted default branch")
+    assert fetch_step["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
+    assert "git -c http.extraheader=" in fetch_step["run"]
+    assert "refs/remotes/origin/${DEFAULT_BRANCH}" in fetch_step["run"]
+    assert "workflow_run.head_sha" not in str(fetch_step)
 
     source_step = _workflow_step(plan_job, "Verify automatic source is still current")
     assert source_step["env"]["WORKFLOW_RUN_HEAD_SHA"] == "${{ github.event.workflow_run.head_sha }}"
