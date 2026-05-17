@@ -35,6 +35,24 @@ class Command(BaseCommand):
             help="Directory where generated documentation artifacts should be written.",
         )
         build_parser.add_argument(
+            "--bundle",
+            choices=kindle_postbox.KINDLE_POSTBOX_BUNDLE_CHOICES,
+            default=kindle_postbox.KINDLE_POSTBOX_SUITE_BUNDLE,
+            help="Kindle documentation bundle to generate.",
+        )
+        build_parser.add_argument(
+            "--public-library",
+            help=(
+                "Optional public library directory that should receive a copy "
+                "for local postbox daemons to distribute."
+            ),
+        )
+        build_parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Report public-library copy status without writing the public copy.",
+        )
+        build_parser.add_argument(
             "--json",
             action="store_true",
             help="Emit machine-readable JSON output.",
@@ -46,7 +64,16 @@ class Command(BaseCommand):
         )
         sync_parser.add_argument(
             "--output-dir",
-            help="Directory where generated documentation artifacts should be written before copying.",
+            help=(
+                "Directory where generated documentation artifacts should be "
+                "written before copying."
+            ),
+        )
+        sync_parser.add_argument(
+            "--bundle",
+            choices=kindle_postbox.KINDLE_POSTBOX_BUNDLE_CHOICES,
+            default=kindle_postbox.KINDLE_POSTBOX_SUITE_BUNDLE,
+            help="Kindle documentation bundle to sync.",
         )
         sync_parser.add_argument(
             "--target",
@@ -83,12 +110,20 @@ class Command(BaseCommand):
         if postbox_action == "build":
             return self._handle_kindle_postbox_build(
                 output_dir=output_dir,
+                bundle=options["bundle"],
+                public_library=(
+                    Path(options["public_library"])
+                    if options.get("public_library")
+                    else None
+                ),
+                dry_run=options["dry_run"],
                 json_output=options["json"],
             )
 
         if postbox_action == "sync":
             return self._handle_kindle_postbox_sync(
                 output_dir=output_dir,
+                bundle=options["bundle"],
                 json_output=options["json"],
                 refresh_usb=options["refresh_usb"],
                 dry_run=options["dry_run"],
@@ -101,24 +136,48 @@ class Command(BaseCommand):
         self,
         *,
         output_dir: Path | None,
+        bundle: str,
+        public_library: Path | None,
+        dry_run: bool,
         json_output: bool,
     ) -> None:
-        bundle = kindle_postbox.build_suite_documentation_bundle(
-            output_dir=output_dir,
-        )
+        try:
+            built_bundle = kindle_postbox.build_documentation_bundle(
+                bundle=bundle,
+                output_dir=output_dir,
+            )
+        except kindle_postbox.DocumentationBundleError as exc:
+            raise CommandError(f"Kindle postbox build failed: {exc}") from exc
+        publish_result = None
+        if public_library is not None:
+            publish_result = kindle_postbox.publish_bundle_to_public_library(
+                built_bundle,
+                public_library,
+                dry_run=dry_run,
+            )
         if json_output:
-            self.stdout.write(json.dumps(bundle.as_dict(), sort_keys=True))
+            payload = built_bundle.as_dict()
+            if publish_result is not None:
+                payload["public_library"] = publish_result.as_dict()
+            self.stdout.write(json.dumps(payload, sort_keys=True))
+            self._raise_failed_public_library_publish(publish_result)
             return
         self.stdout.write(
-            "Kindle postbox documentation built: "
-            f"documents={bundle.document_count} bytes={bundle.byte_count} "
-            f"file={bundle.output_path}"
+            f"Kindle postbox {built_bundle.title} built: "
+            f"documents={built_bundle.document_count} bytes={built_bundle.byte_count} "
+            f"file={built_bundle.output_path}"
         )
+        if publish_result is not None:
+            self.stdout.write(f"{publish_result.status}: {publish_result.output_path}")
+            if publish_result.error:
+                self.stderr.write(publish_result.error)
+        self._raise_failed_public_library_publish(publish_result)
 
     def _handle_kindle_postbox_sync(
         self,
         *,
         output_dir: Path | None,
+        bundle: str,
         json_output: bool,
         refresh_usb: bool,
         dry_run: bool,
@@ -132,11 +191,14 @@ class Command(BaseCommand):
             )
         try:
             result = kindle_postbox.sync_to_kindle_postboxes(
+                bundle=bundle,
                 output_dir=output_dir,
                 refresh_usb=refresh_usb,
                 dry_run=dry_run,
                 targets=targets,
             )
+        except kindle_postbox.DocumentationBundleError as exc:
+            raise CommandError(f"Kindle postbox build failed: {exc}") from exc
         except kindle_postbox.usb_inventory.UsbInventoryError as exc:
             raise CommandError(f"Kindle postbox USB discovery failed: {exc}") from exc
         failed_targets = self._failed_kindle_targets(result)
@@ -167,12 +229,19 @@ class Command(BaseCommand):
                 f"{len(failed_targets)} target(s)."
             )
 
+    @staticmethod
+    def _raise_failed_public_library_publish(
+        publish_result: kindle_postbox.KindlePostboxPublishResult | None,
+    ) -> None:
+        if publish_result is not None and publish_result.status == "failed":
+            raise CommandError("Kindle postbox public-library publish failed.")
+
     def _write_kindle_sync_text(
         self,
         result: kindle_postbox.KindlePostboxSyncResult,
     ) -> None:
         self.stdout.write(
-            "Kindle postbox documentation built: "
+            f"Kindle postbox {result.bundle.title} built: "
             f"documents={result.bundle.document_count} bytes={result.bundle.byte_count} "
             f"file={result.bundle.output_path}"
         )

@@ -66,6 +66,55 @@ def test_build_suite_documentation_bundle_excludes_existing_postbox_outputs(tmp_
 
 
 @pytest.mark.django_db
+def test_build_operators_manual_bundle_uses_manifest_sections(tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+    _write(tmp_path / "docs" / "operations" / "runbook.md", "# Runbook\n")
+    _write(tmp_path / "docs" / "services" / "suite-service.md", "# Suite\n")
+    _write(
+        tmp_path / "docs" / "operators-manual.json",
+        json.dumps(
+            {
+                "sections": [
+                    {
+                        "title": "Start Here",
+                        "sources": ["README.md"],
+                    },
+                    {
+                        "title": "Operate The Node",
+                        "sources": [
+                            "docs/operations/runbook.md",
+                            "docs/services/suite-service.md",
+                        ],
+                    },
+                ]
+            }
+        ),
+    )
+
+    bundle = kindle_postbox.build_operators_manual_bundle(
+        base_dir=tmp_path,
+        output_dir=tmp_path / "out",
+    )
+
+    output = bundle.output_path.read_text(encoding="utf-8")
+    manifest = json.loads(bundle.manifest_path.read_text(encoding="utf-8"))
+
+    assert bundle.bundle == kindle_postbox.KINDLE_POSTBOX_OPERATORS_MANUAL_BUNDLE
+    assert bundle.title == "Arthexis Operators Manual"
+    assert bundle.sources == (
+        "README.md",
+        "docs/operations/runbook.md",
+        "docs/services/suite-service.md",
+    )
+    assert "Start Here" in output
+    assert "Operate The Node" in output
+    assert manifest["sections"][1]["sources"] == [
+        "docs/operations/runbook.md",
+        "docs/services/suite-service.md",
+    ]
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("output_relative", "source_relative"),
     (
@@ -176,6 +225,54 @@ def test_sync_to_explicit_kindle_target_rejects_existing_temp_symlink(tmp_path):
 
     assert result.targets[0].status == "copied"
     assert victim_path.read_text(encoding="utf-8") == "original"
+
+
+@pytest.mark.django_db
+def test_sync_to_explicit_kindle_target_skips_identical_bundle(tmp_path):
+    _write(tmp_path / "bundle.txt", "same content\n")
+    target = tmp_path / "kindle"
+    (target / "documents").mkdir(parents=True)
+    _write(target / "documents" / "bundle.txt", "same content\n")
+    bundle = kindle_postbox.DocumentationBundle(
+        output_path=tmp_path / "bundle.txt",
+        manifest_path=tmp_path / "bundle.json",
+        generated_at="2026-05-17T00:00:00+00:00",
+        document_count=1,
+        byte_count=13,
+        sources=("README.md",),
+    )
+
+    result = kindle_postbox._copy_bundle_to_target(
+        bundle,
+        target,
+        dry_run=False,
+    )
+
+    assert result.status == "current"
+    assert result.output_path == target / "documents" / "bundle.txt"
+
+
+@pytest.mark.django_db
+def test_publish_bundle_to_public_library_is_content_aware(tmp_path):
+    _write(tmp_path / "bundle.txt", "same content\n")
+    public_library = tmp_path / "Bookshelf"
+    _write(public_library / "bundle.txt", "same content\n")
+    bundle = kindle_postbox.DocumentationBundle(
+        output_path=tmp_path / "bundle.txt",
+        manifest_path=tmp_path / "bundle.json",
+        generated_at="2026-05-17T00:00:00+00:00",
+        document_count=1,
+        byte_count=13,
+        sources=("README.md",),
+    )
+
+    result = kindle_postbox.publish_bundle_to_public_library(
+        bundle,
+        public_library,
+    )
+
+    assert result.status == "current"
+    assert result.output_path == public_library / "bundle.txt"
 
 
 @pytest.mark.django_db
@@ -434,3 +531,60 @@ def test_kindle_postbox_build_command_emits_json(tmp_path):
     payload = json.loads(stdout.getvalue())
     assert payload["document_count"] >= 1
     assert payload["output_path"].endswith(kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME)
+
+
+@pytest.mark.django_db
+def test_kindle_postbox_build_command_publishes_operators_manual(tmp_path):
+    stdout = StringIO()
+
+    call_command(
+        "docs",
+        "kindle-postbox",
+        "build",
+        "--bundle",
+        "operators",
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--public-library",
+        str(tmp_path / "Bookshelf"),
+        "--json",
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    public_copy = tmp_path / "Bookshelf" / kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME
+    assert payload["bundle"] == kindle_postbox.KINDLE_POSTBOX_OPERATORS_MANUAL_BUNDLE
+    assert payload["output_path"].endswith(kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME)
+    assert payload["public_library"]["status"] == "published"
+    assert public_copy.exists()
+
+
+def test_kindle_postbox_sync_command_supports_operators_bundle(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        classmethod(lambda cls: SimpleNamespace(role=SimpleNamespace(name="Control"))),
+    )
+    target = tmp_path / "kindle"
+    (target / "documents").mkdir(parents=True)
+    stdout = StringIO()
+
+    call_command(
+        "docs",
+        "kindle-postbox",
+        "sync",
+        "--bundle",
+        "operators",
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--target",
+        str(target),
+        "--json",
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    copied = target / "documents" / kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME
+    assert payload["bundle"]["bundle"] == kindle_postbox.KINDLE_POSTBOX_OPERATORS_MANUAL_BUNDLE
+    assert payload["targets"][0]["status"] == "copied"
+    assert copied.exists()
