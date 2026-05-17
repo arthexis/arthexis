@@ -1,0 +1,71 @@
+{
+  "title": "Arthexis Operators Manual",
+  "sections": [
+    {
+      "title": "Orientation",
+      "sources": [
+        "docs/operators-manual.md",
+        "README.md",
+        "docs/index.md"
+      ]
+    },
+    {
+      "title": "Install, Start, Stop, And Upgrade",
+      "sources": [
+        "docs/development/install-lifecycle-scripts-manual.md",
+        "docs/auto-upgrade.md",
+        "docs/startup-sequence.md",
+        "apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md",
+        "docs/upgrade-error-handling.md"
+      ]
+    },
+    {
+      "title": "Service Operations",
+      "sources": [
+        "docs/suite-services-report.md",
+        "docs/services/suite-service.md",
+        "docs/services/celery-worker.md",
+        "docs/services/celery-beat.md",
+        "docs/operations/operational-commands.md",
+        "docs/operations/good-command.md",
+        "docs/operations/error-report.md"
+      ]
+    },
+    {
+      "title": "Control Node Hardware",
+      "sources": [
+        "docs/services/lcd-screen.md",
+        "docs/lcd-screen-hardware.md",
+        "docs/services/llm-lcd-summary.md",
+        "docs/services/rfid-scanner-service.md",
+        "docs/development/rfid-card-layout.md",
+        "docs/services/usb-inventory.md",
+        "docs/services/kindle-postbox.md",
+        "docs/usb-camera-power-off.md"
+      ]
+    },
+    {
+      "title": "Network And Access",
+      "sources": [
+        "docs/routing.md",
+        "docs/security-model.md",
+        "docs/operations/ap-portal.md",
+        "docs/operations/logging-loki-promtail.md",
+        "docs/logging-domain.md",
+        "docs/operations/workgroup-play-password.md"
+      ]
+    },
+    {
+      "title": "Recovery And Field Data",
+      "sources": [
+        "docs/operations/imager-sd-card-recovery.md",
+        "docs/operations/reinstall-data-import-runbook.md",
+        "apps/docs/cookbooks/managing-local-node-data.md",
+        "apps/docs/cookbooks/node-features.md",
+        "apps/docs/cookbooks/lcd-screen-flicker-troubleshooting.md",
+        "apps/docs/cookbooks/sigils.md",
+        "apps/docs/cookbooks/user-data.md"
+      ]
+    }
+  ]
+}

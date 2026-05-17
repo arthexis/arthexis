@@ -16,10 +16,30 @@ Build the current documentation bundle:
 python manage.py docs kindle-postbox build
 ```
 
+Build the curated operators manual bundle:
+
+```bash
+python manage.py docs kindle-postbox build --bundle operators
+```
+
+Publish the curated operators manual into a public library watched by a local
+postbox daemon:
+
+```bash
+python manage.py docs kindle-postbox build --bundle operators --public-library /home/arthe/Bookshelf
+```
+
 Copy the bundle to every connected USB target claimed as `kindle-postbox`:
 
 ```bash
 python manage.py docs kindle-postbox sync
+```
+
+Copy the operators manual to every connected USB target claimed as
+`kindle-postbox`:
+
+```bash
+python manage.py docs kindle-postbox sync --bundle operators
 ```
 
 Refresh USB inventory before resolving connected Kindles:
@@ -48,11 +68,23 @@ The generated bundle is:
 work/docs/kindle-postbox/arthexis-suite-documentation.txt
 ```
 
+The generated operators manual is:
+
+```text
+work/docs/kindle-postbox/arthexis-operators-manual.txt
+```
+
 The local manifest beside it records generation time, byte count, and the source
 documents included in the bundle:
 
 ```text
 work/docs/kindle-postbox/arthexis-suite-documentation.json
+```
+
+The operators manual manifest is:
+
+```text
+work/docs/kindle-postbox/arthexis-operators-manual.json
 ```
 
 The sync command writes the text bundle to the target `documents/` directory
@@ -77,3 +109,7 @@ The bundle is regenerated from the current checkout each time. It includes:
 Supported formats are Markdown, plain text, CSV, and reStructuredText. The bundle
 is intentionally plain text so it remains readable on Kindle devices without
 requiring an ebook conversion toolchain.
+
+The operators manual is also regenerated from the current checkout, but it uses
+the curated source order in `docs/operators-manual.json`. Use that manifest for
+field-handbook ordering and keep detailed facts in the owning canonical docs.
