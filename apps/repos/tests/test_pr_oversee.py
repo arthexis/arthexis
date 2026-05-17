@@ -1357,7 +1357,7 @@ def test_start_background_watch_launches_child_without_console(tmp_path: Path):
     assert result["statePath"] == str(tmp_path / "watch.json")
     assert "--notify-windows" in captured["command"]
     assert "--expected-head-sha" in captured["command"]
-    assert "stdout" in captured["kwargs"]
+    assert captured["kwargs"]["stdout"].name == str(tmp_path / "watch.log")
     assert json.loads((tmp_path / "watch.json").read_text())["pid"] == 4242
 
 

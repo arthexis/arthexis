@@ -2190,7 +2190,6 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
             blocker
             for blocker in blockers
             if blocker not in waiting_blockers
-            and not blocker.startswith("pending:")
             and not (blocker == "merge_state:BLOCKED" and has_waiting)
         ]
 
