@@ -139,6 +139,7 @@ def test_sync_to_explicit_kindle_target_rejects_symlinked_documents_dir(tmp_path
     target = tmp_path / "kindle"
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir(parents=True)
+    target.mkdir(parents=True)
     try:
         (target / "documents").symlink_to(outside_dir, target_is_directory=True)
     except OSError as exc:
