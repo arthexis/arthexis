@@ -44,6 +44,143 @@ def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
     assert "LOGS:\nlog line" in prompt
 
 
+def test_collect_recent_logs_uses_registered_log_and_state_sources(
+    monkeypatch, settings, tmp_path
+) -> None:
+    log_dir = tmp_path / "logs"
+    lock_dir = tmp_path / ".locks"
+    log_dir.mkdir()
+    lock_dir.mkdir()
+    log_path = log_dir / "arthexis.log"
+    state_path = lock_dir / "lcd-summary"
+    rfid_path = lock_dir / "rfid-scan.json"
+    log_path.write_text("ERROR worker failed\n", encoding="utf-8")
+    state_path.write_text("LCD low summary\n", encoding="utf-8")
+    rfid_path.write_text('{"label": "idle"}\n', encoding="utf-8")
+
+    config = SimpleNamespace(log_offsets={})
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(
+        services,
+        "_summary_state_paths",
+        lambda base_dir: [state_path, rfid_path],
+    )
+    sources = [
+        services.SummarySource(
+            name="logs",
+            group="logs",
+            priority=10,
+            max_bytes=1024,
+            collector=services._collect_log_file_source,
+        ),
+        services.SummarySource(
+            name="state",
+            group="state",
+            priority=20,
+            max_bytes=1024,
+            collector=services._collect_state_file_source,
+        ),
+    ]
+
+    chunks = services.collect_recent_logs(
+        config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        log_dir=log_dir,
+        sources=sources,
+    )
+    compacted = services.compact_log_chunks(chunks)
+
+    assert "[arthexis.log]" in compacted
+    assert "[state:.locks:lcd-summary]" in compacted
+    assert "[state:.locks:rfid-scan.json]" in compacted
+    assert "ERR worker failed" in compacted
+    assert "LCD low summary" in compacted
+    assert config.log_offsets[str(log_path)] == log_path.stat().st_size
+
+
+def test_get_summary_sources_respects_configured_groups_and_byte_budget(
+    monkeypatch,
+) -> None:
+    values = {
+        "enabled_sources": "state",
+        "max_source_bytes": "999999",
+    }
+    monkeypatch.setattr(
+        services,
+        "get_feature_parameter",
+        lambda slug, key, fallback="": values.get(key, fallback),
+    )
+
+    sources = services.get_summary_sources()
+
+    assert [source.name for source in sources] == ["suite-state-files"]
+    assert sources[0].max_bytes == services.SUMMARY_STATE_SOURCE_MAX_BYTES
+
+
+def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(
+        services,
+        "_run_summary_command",
+        lambda command: "0 loaded units listed.",
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="systemctl-failed",
+        group="journal",
+        priority=30,
+        max_bytes=1024,
+        collector=services._collect_systemctl_failed_source,
+    )
+
+    assert services._collect_systemctl_failed_source(context, source) == []
+
+
+def test_journal_warning_source_collects_suite_unit_warnings(
+    monkeypatch, settings, tmp_path
+) -> None:
+    settings.BASE_DIR = tmp_path
+    calls = []
+
+    def fake_run(command):
+        calls.append(command)
+        if "lcd-arthexis.service" in command:
+            return "2026-05-03T12:00:00 warning lcd refresh failed"
+        return "-- No entries --"
+
+    monkeypatch.setattr(services, "_run_summary_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "SUMMARY_JOURNAL_UNITS",
+        ("lcd-arthexis.service", "rfid-arthexis.service"),
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="journal",
+        group="journal",
+        priority=40,
+        max_bytes=1024,
+        collector=services._collect_journal_warning_source,
+    )
+
+    chunks = services._collect_journal_warning_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["journal:lcd-arthexis.service"]
+    assert "warning lcd refresh failed" in chunks[0].content
+    assert "--priority" in calls[0]
+    assert "warning..alert" in calls[0]
+
+
 def test_parse_screens_accepts_single_line_colon_buffers() -> None:
     screens = services.parse_screens("SCREEN 1:\nERR:svc fail -> rst\n---\n")
 
