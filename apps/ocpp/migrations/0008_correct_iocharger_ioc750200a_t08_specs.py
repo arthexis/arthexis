@@ -1,9 +1,17 @@
 from django.db import migrations
 
-OLD_LOOKUP = {
+LOOKUP = {
     "vendor": "IOCHARGER",
-    "model_family": "IOJ2Y",
     "model": "IOC750200A-T08",
+}
+
+OLD_VALUES = {
+    "model_family": "IOJ2Y",
+    "max_power_kw": "7.50",
+    "max_voltage_v": 480,
+    "connector_type": "CCS Type 1",
+    "notes": "Factory 7.5kW single-port configuration for IOCHARGER IOJ2Y series.",
+    "integration_rating": 4,
 }
 
 NEW_VALUES = {
@@ -16,25 +24,20 @@ NEW_VALUES = {
 }
 
 
-def _queryset(station_model):
-    return station_model.objects.filter(vendor="IOCHARGER", model="IOC750200A-T08")
-
-
 def apply_spec_correction(apps, schema_editor):
     station_model = apps.get_model("ocpp", "StationModel")
-    _queryset(station_model).update(**NEW_VALUES)
+    station_model.objects.filter(
+        **LOOKUP,
+        model_family=OLD_VALUES["model_family"],
+    ).update(**NEW_VALUES)
 
 
 def revert_spec_correction(apps, schema_editor):
     station_model = apps.get_model("ocpp", "StationModel")
-    _queryset(station_model).update(
-        model_family=OLD_LOOKUP["model_family"],
-        max_power_kw="7.50",
-        max_voltage_v=480,
-        connector_type="CCS Type 1",
-        notes="Factory 7.5kW single-port configuration for IOCHARGER IOJ2Y series.",
-        integration_rating=4,
-    )
+    station_model.objects.filter(
+        **LOOKUP,
+        model_family=NEW_VALUES["model_family"],
+    ).update(**OLD_VALUES)
 
 
 class Migration(migrations.Migration):
