@@ -38,7 +38,11 @@ jobs:
     # Security note: workflow_run may be triggered by fork activity, but this workflow only
     # checks out trusted base-repository refs (actions/checkout@v6 with explicit ref) and
     # executes in the base repository context with base repository tokens.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == github.event.repository.default_branch
+      ) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout trusted ref
