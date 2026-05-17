@@ -580,13 +580,13 @@ def _sanitize_rfid_scan_state(content: str) -> str:
     try:
         payload = json.loads(content)
     except (TypeError, ValueError):
-        return content
+        return "{}"
     if not isinstance(payload, dict):
-        return content
+        return "{}"
     payload.pop("deep_read", None)
     payload.pop("dump", None)
     payload.pop("keys", None)
-    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def _run_summary_command(command: list[str]) -> str:
