@@ -26,6 +26,16 @@ def _summary_window(
     )
 
 
+def _log_source(*, max_bytes: int = 12_000) -> services.SummarySource:
+    return services.SummarySource(
+        name="logs",
+        group="logs",
+        priority=10,
+        max_bytes=max_bytes,
+        collector=services._collect_log_file_source,
+    )
+
+
 def test_fixed_frame_window_does_not_pad_blank_frames() -> None:
     frames = services.fixed_frame_window([("A", "B"), ("C", "D")])
 
@@ -63,6 +73,309 @@ def test_build_summary_prompt_excludes_dedicated_resource_screens() -> None:
     assert "Shorten words aggressively" in prompt
     assert "Do not emit routine Host screens" in prompt
     assert "LOGS:\nlog line" in prompt
+
+
+def test_collect_recent_logs_uses_registered_log_and_state_sources(
+    monkeypatch, settings, tmp_path
+) -> None:
+    log_dir = tmp_path / "logs"
+    lock_dir = tmp_path / ".locks"
+    log_dir.mkdir()
+    lock_dir.mkdir()
+    log_path = log_dir / "arthexis.log"
+    state_path = lock_dir / "lcd-channels.lck"
+    rfid_path = lock_dir / "rfid-scan.json"
+    log_path.write_text("ERROR worker failed\n", encoding="utf-8")
+    state_path.write_text("LCD channels active\n", encoding="utf-8")
+    rfid_path.write_text('{"label": "idle"}\n', encoding="utf-8")
+
+    config = SimpleNamespace(log_offsets={})
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(
+        services,
+        "_summary_state_paths",
+        lambda base_dir: [state_path, rfid_path],
+    )
+    sources = [
+        services.SummarySource(
+            name="logs",
+            group="logs",
+            priority=10,
+            max_bytes=1024,
+            collector=services._collect_log_file_source,
+        ),
+        services.SummarySource(
+            name="state",
+            group="state",
+            priority=20,
+            max_bytes=1024,
+            collector=services._collect_state_file_source,
+        ),
+    ]
+
+    chunks = services.collect_recent_logs(
+        config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        log_dir=log_dir,
+        sources=sources,
+    )
+    compacted = services.compact_log_chunks(chunks)
+
+    assert "[arthexis.log]" in compacted
+    assert "[state:.locks:lcd-channels.lck]" in compacted
+    assert "[state:.locks:rfid-scan.json]" in compacted
+    assert "ERR worker failed" in compacted
+    assert "LCD channels active" in compacted
+    assert config.log_offsets[str(log_path)] == log_path.stat().st_size
+
+
+def test_summary_state_paths_excludes_generated_lcd_summary_locks(tmp_path) -> None:
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    generated_summary = lock_dir / "lcd-summary"
+    generated_summary_slot = lock_dir / "lcd-summary-1"
+    channel_lock = lock_dir / "lcd-channels.lck"
+    generated_summary.write_text("model output\n", encoding="utf-8")
+    generated_summary_slot.write_text("model output\n", encoding="utf-8")
+    channel_lock.write_text("channels\n", encoding="utf-8")
+
+    paths = services._summary_state_paths(tmp_path)
+
+    assert generated_summary not in paths
+    assert generated_summary_slot not in paths
+    assert channel_lock in paths
+
+
+def test_get_summary_sources_respects_configured_groups_and_byte_budget(
+    monkeypatch,
+) -> None:
+    values = {
+        "enabled_sources": "state",
+        "max_source_bytes": "999999",
+    }
+    monkeypatch.setattr(
+        services,
+        "get_feature_parameter",
+        lambda slug, key, fallback="": values.get(key, fallback),
+    )
+
+    sources = services.get_summary_sources()
+
+    assert [source.name for source in sources] == ["suite-state-files"]
+    assert sources[0].max_bytes == services.SUMMARY_STATE_SOURCE_MAX_BYTES
+
+
+def test_get_summary_sources_falls_back_when_groups_are_unknown(
+    monkeypatch,
+) -> None:
+    values = {
+        "enabled_sources": "log,statee",
+        "max_source_bytes": "12000",
+    }
+    monkeypatch.setattr(
+        services,
+        "get_feature_parameter",
+        lambda slug, key, fallback="": values.get(key, fallback),
+    )
+
+    sources = services.get_summary_sources()
+
+    assert [source.group for source in sources] == ["logs", "state", "journal", "journal"]
+
+
+def test_collect_log_file_source_enforces_total_log_byte_budget(tmp_path) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    first_log = log_dir / "a.log"
+    second_log = log_dir / "b.log"
+    first_log.write_text("a" * 5, encoding="utf-8")
+    second_log.write_text("b" * 5, encoding="utf-8")
+    config = SimpleNamespace(log_offsets={})
+    context = services.SummarySourceContext(
+        config=config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=log_dir,
+    )
+    source = services.SummarySource(
+        name="logs",
+        group="logs",
+        priority=10,
+        max_bytes=5,
+        collector=services._collect_log_file_source,
+    )
+
+    chunks = services._collect_log_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["a.log"]
+    assert chunks[0].content == "a" * 5
+    assert config.log_offsets[str(second_log)] == 0
+
+
+def test_collect_log_file_source_retries_budget_deferred_logs(tmp_path) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    first_log = log_dir / "a.log"
+    second_log = log_dir / "b.log"
+    first_log.write_text("a" * 5, encoding="utf-8")
+    second_log.write_text("b" * 5, encoding="utf-8")
+    config = SimpleNamespace(log_offsets={})
+    context = services.SummarySourceContext(
+        config=config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=log_dir,
+    )
+    source = services.SummarySource(
+        name="logs",
+        group="logs",
+        priority=10,
+        max_bytes=5,
+        collector=services._collect_log_file_source,
+    )
+
+    services._collect_log_file_source(context, source)
+    first_log.write_text("a" * 5, encoding="utf-8")
+    chunks = services._collect_log_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["b.log"]
+    assert chunks[0].content == "b" * 5
+
+
+def test_collect_state_file_source_enforces_total_byte_budget(
+    monkeypatch, tmp_path
+) -> None:
+    first_state = tmp_path / ".locks" / "lcd-channels.lck"
+    second_state = tmp_path / ".locks" / "rfid-scan.json"
+    first_state.parent.mkdir()
+    first_state.write_text("a" * 5, encoding="utf-8")
+    second_state.write_text("b" * 5, encoding="utf-8")
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="state",
+        group="state",
+        priority=20,
+        max_bytes=5,
+        collector=services._collect_state_file_source,
+    )
+    monkeypatch.setattr(
+        services,
+        "_summary_state_paths",
+        lambda base_dir: [first_state, second_state],
+    )
+
+    chunks = services._collect_state_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["state:.locks:lcd-channels.lck"]
+    assert "b" * 5 not in "\n".join(chunk.content for chunk in chunks)
+
+
+def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):
+    settings.BASE_DIR = tmp_path
+    monkeypatch.setattr(
+        services,
+        "_run_summary_command",
+        lambda command: "0 loaded units listed.",
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="systemctl-failed",
+        group="journal",
+        priority=30,
+        max_bytes=1024,
+        collector=services._collect_systemctl_failed_source,
+    )
+
+    assert services._collect_systemctl_failed_source(context, source) == []
+
+
+def test_journal_warning_source_collects_suite_unit_warnings(
+    monkeypatch, settings, tmp_path
+) -> None:
+    settings.BASE_DIR = tmp_path
+    calls = []
+
+    def fake_run(command):
+        calls.append(command)
+        if "lcd-arthexis.service" in command:
+            return "2026-05-03T12:00:00 warning lcd refresh failed"
+        return "-- No entries --"
+
+    monkeypatch.setattr(services, "_run_summary_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "SUMMARY_JOURNAL_UNITS",
+        ("lcd-arthexis.service", "rfid-arthexis.service"),
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="journal",
+        group="journal",
+        priority=40,
+        max_bytes=1024,
+        collector=services._collect_journal_warning_source,
+    )
+
+    chunks = services._collect_journal_warning_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["journal:lcd-arthexis.service"]
+    assert "warning lcd refresh failed" in chunks[0].content
+    assert "2026-05-03 12:00:00+00:00" in calls[0]
+    assert "--priority" in calls[0]
+    assert "emerg..warning" in calls[0]
+
+
+def test_journal_warning_source_enforces_total_byte_budget(
+    monkeypatch, settings, tmp_path
+) -> None:
+    settings.BASE_DIR = tmp_path
+
+    def fake_run(command):
+        if "lcd-arthexis.service" in command:
+            return "a" * 5
+        if "rfid-arthexis.service" in command:
+            return "b" * 5
+        return "-- No entries --"
+
+    monkeypatch.setattr(services, "_run_summary_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "SUMMARY_JOURNAL_UNITS",
+        ("lcd-arthexis.service", "rfid-arthexis.service"),
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="journal",
+        group="journal",
+        priority=40,
+        max_bytes=5,
+        collector=services._collect_journal_warning_source,
+    )
+
+    chunks = services._collect_journal_warning_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["journal:lcd-arthexis.service"]
+    assert chunks[0].content == "a" * 5
 
 
 def test_parse_screens_accepts_single_line_colon_buffers() -> None:
@@ -240,7 +553,12 @@ def test_collect_recent_logs_uses_timestamped_context_window(tmp_path) -> None:
 
     since = django_timezone.make_aware(datetime(2026, 5, 3, 11, 0))
 
-    chunks = services.collect_recent_logs(FakeConfig(), since=since, log_dir=tmp_path)
+    chunks = services.collect_recent_logs(
+        FakeConfig(),
+        since=since,
+        log_dir=tmp_path,
+        sources=[_log_source()],
+    )
 
     assert len(chunks) == 1
     content = chunks[0].content
@@ -272,6 +590,7 @@ def test_collect_recent_logs_reads_only_new_bytes_after_offset(tmp_path) -> None
         FakeConfig(),
         since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
         log_dir=tmp_path,
+        sources=[_log_source()],
     )
 
     assert len(chunks) == 1
@@ -297,6 +616,7 @@ def test_collect_recent_logs_keeps_unread_offsets_past_mtime_cutoff(
         FakeConfig(),
         since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
         log_dir=tmp_path,
+        sources=[_log_source()],
     )
 
     assert len(chunks) == 1
@@ -322,6 +642,7 @@ def test_collect_recent_logs_preserves_unread_timestamped_backlog(
         since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
         attention_since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
         log_dir=tmp_path,
+        sources=[_log_source()],
     )
 
     assert len(chunks) == 1
@@ -341,11 +662,26 @@ def test_collect_recent_logs_does_not_replay_timestamp_free_logs(
     config = FakeConfig()
     since = django_timezone.make_aware(datetime(2026, 5, 3, 11, 0))
 
-    first_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
-    second_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
+    first_chunks = services.collect_recent_logs(
+        config,
+        since=since,
+        log_dir=tmp_path,
+        sources=[_log_source()],
+    )
+    second_chunks = services.collect_recent_logs(
+        config,
+        since=since,
+        log_dir=tmp_path,
+        sources=[_log_source()],
+    )
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write("new warning without timestamp\n")
-    third_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
+    third_chunks = services.collect_recent_logs(
+        config,
+        since=since,
+        log_dir=tmp_path,
+        sources=[_log_source()],
+    )
 
     assert len(first_chunks) == 1
     assert first_chunks[0].content.splitlines() == ["old warning without timestamp"]
@@ -378,6 +714,7 @@ def test_collect_recent_logs_keeps_attention_from_full_attention_window(
         since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 55)),
         attention_since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
         log_dir=tmp_path,
+        sources=[_log_source()],
     )
 
     assert len(chunks) == 1

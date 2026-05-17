@@ -103,6 +103,24 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             ),
             default="60",
         ),
+        FeatureParameterDefinition(
+            key="enabled_sources",
+            label=_("Enabled summary sources"),
+            help_text=_(
+                "Comma-separated source groups for LCD summaries: logs, state, "
+                "journal, or all."
+            ),
+            default="logs,state,journal",
+        ),
+        FeatureParameterDefinition(
+            key="max_source_bytes",
+            label=_("Max bytes per source"),
+            help_text=_(
+                "Maximum text bytes read from any one summary source before "
+                "compaction."
+            ),
+            default="12000",
+        ),
     ),
     "celery-workers": (
         FeatureParameterDefinition(

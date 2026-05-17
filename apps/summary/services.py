@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+import subprocess
 import textwrap
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,6 +36,23 @@ LCD_SUMMARY_FRAME_COUNT = 10
 LCD_SUMMARY_EXPIRES_AFTER = timedelta(minutes=10)
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
+SUMMARY_SOURCE_GROUPS_DEFAULT = "logs,state,journal"
+SUMMARY_SOURCE_MAX_BYTES_DEFAULT = 12_000
+SUMMARY_SOURCE_MAX_BYTES_MIN = 2_048
+SUMMARY_SOURCE_MAX_BYTES_LIMIT = 65_536
+SUMMARY_SOURCE_COMMAND_TIMEOUT_SECONDS = 4
+SUMMARY_STATE_SOURCE_MAX_BYTES = 4_096
+SUMMARY_JOURNAL_SOURCE_MAX_BYTES = 8_192
+SUMMARY_JOURNAL_LINES_PER_UNIT = 40
+SUMMARY_SOURCE_GROUPS = frozenset({"logs", "state", "journal"})
+SUMMARY_JOURNAL_UNITS = (
+    "arthexis.service",
+    "celery-arthexis.service",
+    "celery-beat-arthexis.service",
+    "lcd-arthexis.service",
+    "rfid-arthexis.service",
+    "arthexis-usb-inventory.service",
+)
 
 UUID_RE = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE
@@ -79,6 +97,24 @@ class SummaryContextWindow:
     min_minutes: int
     max_minutes: int
     reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SummarySourceContext:
+    config: LLMSummaryConfig
+    since: datetime
+    base_dir: Path
+    log_dir: Path
+    attention_since: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SummarySource:
+    name: str
+    group: str
+    priority: int
+    max_bytes: int
+    collector: Callable[[SummarySourceContext, SummarySource], list[LogChunk]]
 
 
 def get_summary_config() -> LLMSummaryConfig:
@@ -325,23 +361,96 @@ def _safe_offset(value: object) -> int:
         return 0
 
 
-def collect_recent_logs(
-    config: LLMSummaryConfig,
+def _safe_positive_int(
+    value: object,
     *,
-    since: datetime,
-    attention_since: datetime | None = None,
-    log_dir: Path | None = None,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
+
+
+def _summary_source_groups() -> set[str]:
+    raw_groups = get_feature_parameter(
+        LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        "enabled_sources",
+        fallback=SUMMARY_SOURCE_GROUPS_DEFAULT,
+    )
+    groups = {
+        group.strip().lower()
+        for group in (raw_groups or SUMMARY_SOURCE_GROUPS_DEFAULT).split(",")
+        if group.strip()
+    }
+    if "all" in groups:
+        return set(SUMMARY_SOURCE_GROUPS)
+    if "systemd" in groups:
+        groups.add("journal")
+    known_groups = groups & SUMMARY_SOURCE_GROUPS
+    return known_groups or set(SUMMARY_SOURCE_GROUPS_DEFAULT.split(","))
+
+
+def _summary_source_byte_budget() -> int:
+    raw_budget = get_feature_parameter(
+        LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        "max_source_bytes",
+        fallback=str(SUMMARY_SOURCE_MAX_BYTES_DEFAULT),
+    )
+    return _safe_positive_int(
+        raw_budget,
+        default=SUMMARY_SOURCE_MAX_BYTES_DEFAULT,
+        minimum=SUMMARY_SOURCE_MAX_BYTES_MIN,
+        maximum=SUMMARY_SOURCE_MAX_BYTES_LIMIT,
+    )
+
+
+def _limit_text_bytes(text: str, max_bytes: int) -> str:
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= max_bytes:
+        return text
+    clipped = encoded[-max_bytes:].decode("utf-8", errors="replace")
+    return f"...<truncated {len(encoded) - max_bytes} bytes>\n{clipped}"
+
+
+def _read_tail_text(path: Path, max_bytes: int) -> str:
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            if size > max_bytes:
+                handle.seek(size - max_bytes)
+            content = handle.read(max_bytes)
+    except OSError:
+        return ""
+    text = content.decode("utf-8", errors="replace")
+    if size > max_bytes:
+        return f"...<truncated {size - max_bytes} bytes>\n{text}"
+    return text
+
+
+def _virtual_chunk(name: str, content: str) -> LogChunk | None:
+    text = content.strip()
+    if not text:
+        return None
+    return LogChunk(path=Path(name), content=text)
+
+
+def _collect_log_file_source(
+    context: SummarySourceContext, source: SummarySource
 ) -> list[LogChunk]:
-    if log_dir is None:
-        log_dir = Path(getattr(settings, "LOG_DIR", Path(settings.BASE_DIR) / "logs"))
-    offsets = dict(config.log_offsets or {})
+    offsets = dict(context.config.log_offsets or {})
     chunks: list[LogChunk] = []
+    remaining_bytes = source.max_bytes
 
-    if not log_dir.exists():
-        logger.warning("Log directory missing: %s", log_dir)
-        return []
+    if not context.log_dir.exists():
+        logger.warning("Log directory missing: %s", context.log_dir)
+        context.config.log_offsets = offsets
+        return chunks
 
-    candidates = sorted(log_dir.rglob("*.log"))
+    candidates = sorted(context.log_dir.rglob("*.log"))
     for path in candidates:
         path_key = str(path)
         try:
@@ -353,29 +462,256 @@ def collect_recent_logs(
         offset = _safe_offset(offsets.get(path_key))
         if offset > size:
             offset = 0
-        since_ts = (attention_since or since).timestamp()
+        since_ts = (context.attention_since or context.since).timestamp()
         if stat.st_mtime < since_ts and not (offset_known and size > offset):
             continue
         if size <= offset:
             offsets[path_key] = size
             continue
+        if remaining_bytes <= 0:
+            offsets.setdefault(path_key, offset)
+            continue
+        read_start = offset
+        truncated_bytes = 0
+        read_bytes = min(size - offset, remaining_bytes)
+        if size - offset > read_bytes:
+            read_start = size - read_bytes
+            truncated_bytes = read_start - offset
         try:
-            with path.open("rb") as handle:
-                handle.seek(offset)
-                content = handle.read().decode("utf-8", errors="replace")
+            with open(path, "rb") as handle:
+                handle.seek(read_start)
+                raw_content = handle.read(read_bytes)
+                content = raw_content.decode(
+                    "utf-8",
+                    errors="replace",
+                )
         except OSError:
             continue
+        remaining_bytes -= len(raw_content)
         if not offset_known:
             content = _filter_log_content_since(
                 content,
-                since,
-                attention_since=attention_since,
+                context.since,
+                attention_since=context.attention_since,
             )
         if content:
-            chunks.append(LogChunk(path=path, content=content))
+            if truncated_bytes:
+                content = f"...<truncated {truncated_bytes} bytes>\n{content}"
+            chunks.append(
+                LogChunk(
+                    path=path,
+                    content=content,
+                )
+            )
         offsets[path_key] = size
 
-    config.log_offsets = offsets
+    context.config.log_offsets = offsets
+    return chunks
+
+
+def _summary_state_paths(base_dir: Path) -> list[Path]:
+    lock_dir = base_dir / ".locks"
+    paths: list[Path] = []
+    paths.extend(
+        [
+            lock_dir / "lcd-channels.lck",
+            lock_dir / "rfid-scan.json",
+            Path("/run/arthexis-usb/devices.json"),
+            Path("/etc/arthexis-usb/claims.json"),
+            lock_dir / "startup_duration.lck",
+            lock_dir / "upgrade_duration.lck",
+            lock_dir / "upgrade_in_progress.lck",
+        ]
+    )
+    history_dir = base_dir / "logs"
+    history_files = sorted(
+        history_dir.glob("lcd-history-*.txt"),
+        key=_safe_mtime,
+        reverse=True,
+    )
+    paths.extend(history_files[:3])
+    return paths
+
+
+def _state_chunk_name(path: Path, base_dir: Path) -> str:
+    try:
+        label = path.relative_to(base_dir)
+    except ValueError:
+        label = path
+    label_text = label.as_posix().strip("/").replace("/", ":")
+    return f"state:{label_text}"
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _collect_state_file_source(
+    context: SummarySourceContext, source: SummarySource
+) -> list[LogChunk]:
+    chunks: list[LogChunk] = []
+    seen: set[Path] = set()
+    per_file_budget = min(source.max_bytes, SUMMARY_STATE_SOURCE_MAX_BYTES)
+    remaining_bytes = per_file_budget
+    for path in _summary_state_paths(context.base_dir):
+        if remaining_bytes <= 0:
+            break
+        if path in seen or not path.exists() or not path.is_file():
+            continue
+        seen.add(path)
+        content = _read_tail_text(path, remaining_bytes)
+        remaining_bytes -= len(content.encode("utf-8", errors="replace"))
+        chunk = _virtual_chunk(
+            _state_chunk_name(path, context.base_dir),
+            f"path={path}\n{content}",
+        )
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def _run_summary_command(command: list[str]) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=SUMMARY_SOURCE_COMMAND_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    output = "\n".join(
+        part.strip() for part in (completed.stdout, completed.stderr) if part.strip()
+    )
+    return output.strip()
+
+
+def _collect_systemctl_failed_source(
+    context: SummarySourceContext, source: SummarySource
+) -> list[LogChunk]:
+    output = _run_summary_command(["systemctl", "--failed", "--no-pager", "--plain"])
+    if not output or "0 loaded units listed" in output:
+        return []
+    output = _limit_text_bytes(
+        output,
+        min(source.max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES),
+    )
+    chunk = _virtual_chunk("journal:systemctl-failed", output)
+    return [chunk] if chunk else []
+
+
+def _collect_journal_warning_source(
+    context: SummarySourceContext, source: SummarySource
+) -> list[LogChunk]:
+    chunks: list[LogChunk] = []
+    since = context.since.isoformat(sep=" ", timespec="seconds")
+    remaining_bytes = min(source.max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES)
+    for unit in SUMMARY_JOURNAL_UNITS:
+        if remaining_bytes <= 0:
+            break
+        output = _run_summary_command(
+            [
+                "journalctl",
+                "-u",
+                unit,
+                "--since",
+                since,
+                "--priority",
+                "emerg..warning",
+                "--lines",
+                str(SUMMARY_JOURNAL_LINES_PER_UNIT),
+                "--no-pager",
+                "--output",
+                "short-iso",
+            ]
+        )
+        if not output or output.startswith("-- No entries --"):
+            continue
+        content = _limit_text_bytes(output, remaining_bytes)
+        remaining_bytes -= len(content.encode("utf-8", errors="replace"))
+        chunk = _virtual_chunk(
+            f"journal:{unit}",
+            content,
+        )
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def get_summary_sources(
+    enabled_groups: set[str] | None = None,
+) -> list[SummarySource]:
+    """Return enabled, ordered sources for LCD log summaries."""
+
+    groups = enabled_groups if enabled_groups is not None else _summary_source_groups()
+    max_bytes = _summary_source_byte_budget()
+    sources = [
+        SummarySource(
+            name="suite-log-files",
+            group="logs",
+            priority=10,
+            max_bytes=max_bytes,
+            collector=_collect_log_file_source,
+        ),
+        SummarySource(
+            name="suite-state-files",
+            group="state",
+            priority=20,
+            max_bytes=min(max_bytes, SUMMARY_STATE_SOURCE_MAX_BYTES),
+            collector=_collect_state_file_source,
+        ),
+        SummarySource(
+            name="systemctl-failed",
+            group="journal",
+            priority=30,
+            max_bytes=min(max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES),
+            collector=_collect_systemctl_failed_source,
+        ),
+        SummarySource(
+            name="suite-journal-warnings",
+            group="journal",
+            priority=40,
+            max_bytes=min(max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES),
+            collector=_collect_journal_warning_source,
+        ),
+    ]
+    return [source for source in sources if source.group in groups]
+
+
+def collect_recent_logs(
+    config: LLMSummaryConfig,
+    *,
+    since: datetime,
+    attention_since: datetime | None = None,
+    log_dir: Path | None = None,
+    sources: Iterable[SummarySource] | None = None,
+) -> list[LogChunk]:
+    if log_dir is None:
+        log_dir = Path(getattr(settings, "LOG_DIR", Path(settings.BASE_DIR) / "logs"))
+    context = SummarySourceContext(
+        config=config,
+        since=since,
+        attention_since=attention_since,
+        base_dir=Path(settings.BASE_DIR),
+        log_dir=log_dir,
+    )
+    chunks: list[LogChunk] = []
+    source_list = (
+        sorted(sources, key=lambda source: source.priority)
+        if sources is not None
+        else get_summary_sources()
+    )
+    for source in source_list:
+        try:
+            chunks.extend(source.collector(context, source))
+        except OSError:
+            logger.warning("Summary source failed: %s", source.name, exc_info=True)
     return chunks
 
 
