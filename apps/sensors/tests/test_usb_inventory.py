@@ -156,34 +156,7 @@ def test_usb_inventory_reads_service_generated_claim_state(settings, tmp_path):
     assert usb_inventory.path_claims(kindle_mount / "documents") == ["kindle-postbox"]
 
 
-def test_usb_inventory_treats_state_strings_as_single_values(settings, tmp_path):
-    kindle_mount = tmp_path / "kindle"
-    unrelated = tmp_path / "unrelated"
-    state_path = tmp_path / "devices.json"
-    settings.USB_INVENTORY_STATE_PATH = state_path
-    kindle_mount.mkdir()
-    unrelated.mkdir()
-    state_path.write_text(
-        json.dumps(
-            {
-                "devices": [
-                    {
-                        "claimed_roles": ["kindle-postbox"],
-                        "claims": "kindle-postbox",
-                        "mountpoints": str(kindle_mount),
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    assert usb_inventory.claimed_paths("kindle-postbox") == [str(kindle_mount)]
-    assert usb_inventory.path_claims(kindle_mount / "documents") == ["kindle-postbox"]
-    assert usb_inventory.path_claims(unrelated) == []
-
-
-def test_usb_inventory_reads_dict_claims_and_mounts(settings, tmp_path):
+def test_usb_inventory_reads_dict_claims_and_mount_maps(settings, tmp_path):
     kindle_mount = tmp_path / "kindle"
     state_path = tmp_path / "devices.json"
     settings.USB_INVENTORY_STATE_PATH = state_path
@@ -192,7 +165,8 @@ def test_usb_inventory_reads_dict_claims_and_mounts(settings, tmp_path):
             {
                 "devices": [
                     {
-                        "claims": {"kindle-postbox": {"owner": "kindle-postbox"}},
+                        "path": "/dev/sdb",
+                        "claims": {"kindle-postbox": {"owner": "docs"}},
                         "mounts": {"main": {"target": str(kindle_mount)}},
                     }
                 ]
@@ -202,20 +176,21 @@ def test_usb_inventory_reads_dict_claims_and_mounts(settings, tmp_path):
     )
 
     assert usb_inventory.claimed_paths("kindle-postbox") == [str(kindle_mount)]
+    assert usb_inventory.path_claims(kindle_mount / "documents") == ["kindle-postbox"]
 
 
-def test_usb_inventory_path_claims_ignores_broad_state_roots(settings, tmp_path):
-    unrelated = tmp_path / "unrelated"
+def test_usb_inventory_ignores_string_claim_collections(settings, tmp_path):
     state_path = tmp_path / "devices.json"
     settings.USB_INVENTORY_STATE_PATH = state_path
-    unrelated.mkdir()
     state_path.write_text(
         json.dumps(
             {
                 "devices": [
                     {
-                        "claimed_roles": ["kindle-postbox"],
-                        "mountpoints": [str(tmp_path.anchor)],
+                        "path": "/dev/sdz1",
+                        "claimed_roles": "kindle-postbox",
+                        "claims": "kindle-postbox",
+                        "mountpoints": "/media/kindle",
                     }
                 ]
             }
@@ -223,7 +198,8 @@ def test_usb_inventory_path_claims_ignores_broad_state_roots(settings, tmp_path)
         encoding="utf-8",
     )
 
-    assert usb_inventory.path_claims(unrelated) == []
+    assert usb_inventory.claimed_paths("kindle-postbox") == []
+    assert usb_inventory.path_claims("/media/kindle/documents") == []
 
 
 def test_atomic_write_json_cleans_temp_file_on_failure(tmp_path):

@@ -224,12 +224,14 @@ def _state_text_values(value: Any) -> list[str]:
 
 
 def _claim_items(value: Any) -> list[Any]:
-    if not isinstance(value, dict):
-        return _as_state_items(value)
-    return [
-        {"role": role, **claim} if isinstance(claim, dict) else role
-        for role, claim in value.items()
-    ]
+    if isinstance(value, dict):
+        return [
+            {"role": role, **claim} if isinstance(claim, dict) else role
+            for role, claim in value.items()
+        ]
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
 
 
 def _role_from_claim_item(claim: Any) -> str:
@@ -239,8 +241,16 @@ def _role_from_claim_item(claim: Any) -> str:
 
 
 def _device_claim_roles(device: dict[str, Any]) -> set[str]:
-    roles = set(_state_text_values(device.get("claimed_roles")))
-    for claim in _claim_items(device.get("claims")):
+    roles: set[str] = set()
+    claimed_roles = device.get("claimed_roles")
+    if isinstance(claimed_roles, (list, tuple, set)):
+        for role in claimed_roles:
+            normalized_role = str(role).strip()
+            if normalized_role:
+                roles.add(normalized_role)
+
+    claims = device.get("claims")
+    for claim in _claim_items(claims):
         role = _role_from_claim_item(claim)
         if role:
             roles.add(role)
@@ -260,9 +270,18 @@ def _mount_path(mount: Any) -> str:
 
 
 def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
-    paths = _state_text_values(device.get("mountpoint"))
-    paths.extend(_state_text_values(device.get("mountpoints")))
-    for mount in _mount_items(device.get("mounts")):
+    paths: list[str] = []
+    mountpoint = str(device.get("mountpoint") or "").strip()
+    if mountpoint:
+        paths.append(mountpoint)
+    mountpoints = device.get("mountpoints")
+    if isinstance(mountpoints, (list, tuple, set)):
+        for mountpoint in mountpoints:
+            path = str(mountpoint or "").strip()
+            if path:
+                paths.append(path)
+    mounts = device.get("mounts")
+    for mount in _mount_items(mounts):
         path = _mount_path(mount)
         if path:
             paths.append(path)

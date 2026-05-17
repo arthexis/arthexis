@@ -230,7 +230,14 @@ def build_suite_documentation_bundle(
     output_path = destination_dir / KINDLE_POSTBOX_BUNDLE_FILENAME
     manifest_path = destination_dir / KINDLE_POSTBOX_MANIFEST_FILENAME
     generated_at = datetime.now(timezone.utc).isoformat()
-    documents = iter_suite_documentation_files(base_dir=root)
+    resolved_destination = destination_dir.resolve()
+    excluded_paths = ()
+    if resolved_destination != root and resolved_destination not in {
+        root / "docs",
+        root / "apps" / "docs",
+    }:
+        excluded_paths = (destination_dir,)
+    documents = iter_suite_documentation_files(base_dir=root, exclude_paths=excluded_paths)
     sources = tuple(path.relative_to(root).as_posix() for path in documents)
 
     _write_suite_documentation_payload(
