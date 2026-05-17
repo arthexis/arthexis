@@ -96,11 +96,17 @@ class Command(BaseCommand):
 
         if postbox_action == "sync":
             self._local_control_node_or_error()
+            targets = options.get("target")
+            if targets is None and not kindle_postbox.usb_inventory.has_usb_inventory_tools():
+                raise CommandError(
+                    "Kindle postbox USB discovery requires lsblk and findmnt on this host; "
+                    "pass --target to sync an explicit Kindle mount."
+                )
             result = kindle_postbox.sync_to_kindle_postboxes(
                 output_dir=output_dir,
                 refresh_usb=options["refresh_usb"],
                 dry_run=options["dry_run"],
-                targets=options.get("target"),
+                targets=targets,
             )
             if options["json"]:
                 self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))

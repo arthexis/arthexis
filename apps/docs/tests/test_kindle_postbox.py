@@ -238,6 +238,36 @@ def test_kindle_postbox_sync_command_rejects_non_control_node(monkeypatch, tmp_p
         )
 
 
+def test_kindle_postbox_sync_command_requires_usb_tools_without_target(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        classmethod(lambda cls: SimpleNamespace(role=SimpleNamespace(name="Control"))),
+    )
+    monkeypatch.setattr(
+        kindle_postbox.usb_inventory,
+        "has_usb_inventory_tools",
+        lambda: False,
+    )
+
+    def _claimed_paths(role: str, *, refresh: bool = False) -> list[str]:
+        raise AssertionError("USB inventory should be preflighted before discovery")
+
+    monkeypatch.setattr(kindle_postbox.usb_inventory, "claimed_paths", _claimed_paths)
+
+    with pytest.raises(CommandError, match="requires lsblk and findmnt"):
+        call_command(
+            "docs",
+            "kindle-postbox",
+            "sync",
+            "--output-dir",
+            str(tmp_path / "out"),
+        )
+
+
 @pytest.mark.django_db
 def test_kindle_postbox_build_command_emits_json(tmp_path):
     _write(tmp_path / "README.md", "# Root\n")
