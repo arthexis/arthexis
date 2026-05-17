@@ -365,11 +365,12 @@ def collect_recent_logs(
                 content = handle.read().decode("utf-8", errors="replace")
         except OSError:
             continue
-        content = _filter_log_content_since(
-            content,
-            since,
-            attention_since=attention_since,
-        )
+        if not offset_known:
+            content = _filter_log_content_since(
+                content,
+                since,
+                attention_since=attention_since,
+            )
         if content:
             chunks.append(LogChunk(path=path, content=content))
         offsets[path_key] = size

@@ -304,6 +304,31 @@ def test_collect_recent_logs_keeps_unread_offsets_past_mtime_cutoff(
     assert "unread line" in chunks[0].content
 
 
+def test_collect_recent_logs_preserves_unread_timestamped_backlog(
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "app.log"
+    old_content = "2026-05-03 09:00:00,000 [INFO] consumed line\n"
+    log_path.write_text(
+        old_content + "2026-05-03 10:00:00,000 [ERROR] delayed unread line\n",
+        encoding="utf-8",
+    )
+
+    class FakeConfig:
+        log_offsets = {str(log_path): len(old_content.encode("utf-8"))}
+
+    chunks = services.collect_recent_logs(
+        FakeConfig(),
+        since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
+        attention_since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
+        log_dir=tmp_path,
+    )
+
+    assert len(chunks) == 1
+    assert "consumed line" not in chunks[0].content
+    assert "delayed unread line" in chunks[0].content
+
+
 def test_collect_recent_logs_does_not_replay_timestamp_free_logs(
     tmp_path,
 ) -> None:
