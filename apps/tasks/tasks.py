@@ -23,8 +23,12 @@ DEFAULT_SLEEP_SECONDS = 30
 DEFAULT_PROMPT_TIMEOUT = 240
 LCD_SUMMARY_COLUMNS = 16
 SUMMARY_COUNT_METRIC_RE = re.compile(
-    r"^(?P<count>\d+)\s*(?P<unit>lines?|lns?|x)\b(?:\s*/\s*\d+\s*[smhd])?",
+    r"^(?P<count>\d+)\s*(?P<unit>lines?|lns?|x)\b(?:\s*/\s*(?P<label>\d+\s*[smhd]))?",
     re.IGNORECASE,
+)
+SUMMARY_CONTEXT_WINDOW_LABEL_RE = re.compile(
+    r"^LCD_CONTEXT_WINDOW_LABEL:\s*(?P<label>\S+)\s*$",
+    re.MULTILINE,
 )
 
 
@@ -243,6 +247,7 @@ class LocalLLMSummarizer:
 
     def _fallback(self, prompt: str) -> str:
         """Build dense, repeatable LCD screens from compacted prompt log lines."""
+        window_label = _summary_window_label(prompt)
         log_lines: list[str] = []
         in_logs = False
         for line in prompt.splitlines():
@@ -259,7 +264,8 @@ class LocalLLMSummarizer:
         ]
         if not event_lines:
             return _summary_screen(
-                "No recent logs", _summary_status_line("0 ln", "NORMAL")
+                "No recent logs",
+                _summary_status_line("0 ln", "NORMAL", window_label=window_label),
             )
 
         attention_events = [
@@ -298,14 +304,22 @@ class LocalLLMSummarizer:
             screens.append(
                 (
                     _summary_compact_line(headline_line),
-                    _summary_status_line(f"{len(event_lines)} ln", evaluation),
+                    _summary_status_line(
+                        f"{len(event_lines)} ln",
+                        evaluation,
+                        window_label=window_label,
+                    ),
                 )
             )
         else:
             screens.append(
                 (
                     "No err/wrn logs",
-                    _summary_status_line(f"{len(event_lines)} ln", "NORMAL"),
+                    _summary_status_line(
+                        f"{len(event_lines)} ln",
+                        "NORMAL",
+                        window_label=window_label,
+                    ),
                 )
             )
 
@@ -319,25 +333,68 @@ class LocalLLMSummarizer:
                 (
                     _summary_compact_line(line),
                     _summary_status_line(
-                        "1 ln", "WARNING" if severity == "WRN" else "ERROR"
+                        "1 ln",
+                        "WARNING" if severity == "WRN" else "ERROR",
+                        window_label=window_label,
                     ),
                 )
             )
 
         for label, count in _summary_top_counts(task_counts, limit=4):
-            screens.append((label, _summary_status_line(f"{count}x", "NORMAL")))
+            screens.append(
+                (
+                    label,
+                    _summary_status_line(
+                        f"{count}x",
+                        "NORMAL",
+                        window_label=window_label,
+                    ),
+                )
+            )
 
         if len(screens) < 3:
             for label, count in _summary_top_counts(source_counts, limit=3):
-                screens.append((label, _summary_status_line(f"{count}x", "NORMAL")))
+                screens.append(
+                    (
+                        label,
+                        _summary_status_line(
+                            f"{count}x",
+                            "NORMAL",
+                            window_label=window_label,
+                        ),
+                    )
+                )
 
         if len(screens) == 1:
             if error_lines:
-                screens.append(("Check logs", _summary_status_line("1x", "FIX")))
+                screens.append(
+                    (
+                        "Check logs",
+                        _summary_status_line("1x", "FIX", window_label=window_label),
+                    )
+                )
             elif warn_lines:
-                screens.append(("Review logs", _summary_status_line("1x", "CHECK")))
+                screens.append(
+                    (
+                        "Review logs",
+                        _summary_status_line(
+                            "1x",
+                            "CHECK",
+                            window_label=window_label,
+                        ),
+                    )
+                )
             else:
-                screens.append(("Routine", _summary_status_line("0x", "NORMAL")))
+                screens.append(
+                    (
+                        "Routine",
+                        _summary_status_line(
+                            "0x",
+                            "NORMAL",
+                            window_label=window_label,
+                        ),
+                    )
+                )
 
         return "\n---\n".join(
             _summary_screen(subject, body) for subject, body in screens
@@ -363,6 +420,13 @@ SUMMARY_SOURCE_ALIASES = {
 SUMMARY_TASK_RE = re.compile(r"Task ([\w.]+)\[")
 SUMMARY_DUE_TASK_RE = re.compile(r"Sending due task [\w-]+ \(([\w.]+)\)")
 SUMMARY_SOURCE_RE = re.compile(r"^(?:DBG|INF|WRN|ERR|CRI)\s+([\w.]+):")
+
+
+def _summary_window_label(prompt: str) -> str:
+    match = SUMMARY_CONTEXT_WINDOW_LABEL_RE.search(prompt)
+    if not match:
+        return LCD_SUMMARY_WINDOW_LABEL
+    return match.group("label")[:8] or LCD_SUMMARY_WINDOW_LABEL
 
 
 def _summary_severity(line: str) -> str:
@@ -425,8 +489,13 @@ def _summary_compact_line(line: str) -> str:
     return cleaned[:24]
 
 
-def _summary_status_line(metric: str, evaluation: str) -> str:
-    left = _summary_metric_text(metric)
+def _summary_status_line(
+    metric: str,
+    evaluation: str,
+    *,
+    window_label: str = LCD_SUMMARY_WINDOW_LABEL,
+) -> str:
+    left = _summary_metric_text(metric, window_label=window_label)
     right = re.sub(r"\s+", " ", str(evaluation or "")).strip().upper()
     if not left:
         return right[:LCD_SUMMARY_COLUMNS]
@@ -439,7 +508,11 @@ def _summary_status_line(metric: str, evaluation: str) -> str:
     return f"{left}{' ' * (LCD_SUMMARY_COLUMNS - len(left) - len(right))}{right}"
 
 
-def _summary_metric_text(metric: str) -> str:
+def _summary_metric_text(
+    metric: str,
+    *,
+    window_label: str = LCD_SUMMARY_WINDOW_LABEL,
+) -> str:
     left = re.sub(r"\s+", " ", str(metric or "")).strip()
     match = SUMMARY_COUNT_METRIC_RE.match(left)
     if not match:
@@ -447,9 +520,14 @@ def _summary_metric_text(metric: str) -> str:
 
     count = match.group("count")
     unit = match.group("unit").lower()
+    effective_label = (
+        re.sub(r"\s+", "", match.group("label"))
+        if match.group("label")
+        else window_label
+    )
     if unit == "x":
-        return f"{count}x/{LCD_SUMMARY_WINDOW_LABEL}"
-    return f"{count} ln/{LCD_SUMMARY_WINDOW_LABEL}"
+        return f"{count}x/{effective_label}"
+    return f"{count} ln/{effective_label}"
 
 
 def _summary_lcd_line(text: str, *, collapse_whitespace: bool = True) -> str:
