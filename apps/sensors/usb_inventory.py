@@ -204,9 +204,33 @@ def _claim_role(claim: dict[str, Any]) -> str:
     return str(claim.get("role") or claim.get("name") or "").strip()
 
 
+def _as_state_sequence(value: Any) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, (list, tuple, set)):
+        return tuple(value)
+    return ()
+
+
 def _device_claim_roles(device: dict[str, Any]) -> set[str]:
-    roles = {str(role).strip() for role in device.get("claimed_roles") or []}
-    for claim in device.get("claims") or []:
+    roles = {
+        role
+        for role in (
+            str(role).strip() for role in _as_state_sequence(device.get("claimed_roles"))
+        )
+        if role
+    }
+    claims = device.get("claims")
+    if isinstance(claims, dict):
+        claim_items: tuple[Any, ...] = tuple(
+            {"role": role, **claim} if isinstance(claim, dict) else role
+            for role, claim in claims.items()
+        )
+    else:
+        claim_items = _as_state_sequence(claims)
+    for claim in claim_items:
         if isinstance(claim, dict):
             role = _claim_role(claim)
         else:
@@ -221,14 +245,17 @@ def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
     mountpoint = str(device.get("mountpoint") or "").strip()
     if mountpoint:
         paths.append(mountpoint)
-    for mountpoint in device.get("mountpoints") or []:
+    for mountpoint in _as_state_sequence(device.get("mountpoints")):
         path = str(mountpoint or "").strip()
         if path:
             paths.append(path)
-    for mount in device.get("mounts") or []:
-        if not isinstance(mount, dict):
-            continue
-        path = str(mount.get("target") or "").strip()
+    mounts = device.get("mounts")
+    mount_items = tuple(mounts.values()) if isinstance(mounts, dict) else _as_state_sequence(mounts)
+    for mount in mount_items:
+        if isinstance(mount, dict):
+            path = str(mount.get("target") or "").strip()
+        else:
+            path = str(mount or "").strip()
         if path:
             paths.append(path)
     if not paths:

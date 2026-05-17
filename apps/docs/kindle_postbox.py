@@ -88,7 +88,7 @@ class KindlePostboxSyncResult:
 def kindle_postbox_available(*, node: object) -> bool:
     """Return whether this node can run Kindle postbox sync."""
 
-    return bool(node is not None and node_is_control(node) and usb_inventory.has_usb_inventory_tools())
+    return bool(node is not None and node_is_control(node))
 
 
 def default_output_dir() -> Path:
@@ -210,7 +210,7 @@ def build_suite_documentation_bundle(
     output_path = destination_dir / KINDLE_POSTBOX_BUNDLE_FILENAME
     manifest_path = destination_dir / KINDLE_POSTBOX_MANIFEST_FILENAME
     generated_at = datetime.now(timezone.utc).isoformat()
-    documents = iter_suite_documentation_files(base_dir=root, exclude_paths=(destination_dir,))
+    documents = iter_suite_documentation_files(base_dir=root)
     sources = tuple(path.relative_to(root).as_posix() for path in documents)
 
     _write_suite_documentation_payload(

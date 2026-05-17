@@ -67,6 +67,37 @@ def test_build_suite_documentation_bundle_excludes_existing_postbox_outputs(tmp_
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("output_relative", "source_relative"),
+    (
+        ("docs", "docs/operations/runbook.md"),
+        ("apps/docs", "apps/docs/cookbooks/field.md"),
+    ),
+)
+def test_build_suite_documentation_bundle_keeps_docs_root_outputs(
+    tmp_path,
+    output_relative,
+    source_relative,
+):
+    _write(tmp_path / "README.md", "# Root\n")
+    _write(tmp_path / source_relative, "# Source\n")
+    output_dir = tmp_path / output_relative
+    _write(
+        output_dir / kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME,
+        "old recursive payload\n",
+    )
+
+    bundle = kindle_postbox.build_suite_documentation_bundle(
+        base_dir=tmp_path,
+        output_dir=output_dir,
+    )
+
+    output = bundle.output_path.read_text(encoding="utf-8")
+    assert source_relative in bundle.sources
+    assert "old recursive payload" not in output
+
+
+@pytest.mark.django_db
 def test_iter_suite_documentation_files_skips_symlinks_outside_base_dir(tmp_path):
     root = tmp_path / "root"
     outside = tmp_path / "outside.md"
@@ -197,7 +228,7 @@ def test_sync_to_kindle_postboxes_dry_run_does_not_write_target(tmp_path):
 
 
 def test_kindle_postbox_node_feature_is_control_only(monkeypatch, tmp_path):
-    monkeypatch.setattr(kindle_postbox.usb_inventory, "has_usb_inventory_tools", lambda: True)
+    monkeypatch.setattr(kindle_postbox.usb_inventory, "has_usb_inventory_tools", lambda: False)
     control = SimpleNamespace(role=SimpleNamespace(name="Control"))
     terminal = SimpleNamespace(role=SimpleNamespace(name="Terminal"))
 
