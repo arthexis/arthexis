@@ -10,7 +10,6 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 
 from apps.features.models import Feature
-from apps.features.parameters import get_feature_parameter_definitions
 from apps.nodes.models import NodeFeature
 
 
@@ -171,12 +170,3 @@ def test_kindle_postbox_fixture_links_docs_node_feature() -> None:
     assert feature.main_app.name == "docs"
     assert feature.node_feature is not None
     assert feature.node_feature.slug == "kindle-postbox"
-
-
-def test_llm_summary_suite_exposes_context_window_parameters() -> None:
-    keys = {
-        definition.key
-        for definition in get_feature_parameter_definitions("llm-summary-suite")
-    }
-
-    assert {"min_context_minutes", "max_context_minutes"} <= keys

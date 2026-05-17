@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from django.utils import timezone as django_timezone
-
 import pytest
+from django.utils import timezone as django_timezone
 
 from apps.summary import dense_lcd, services
 from apps.tasks import tasks as task_services
@@ -236,7 +235,7 @@ def test_collect_recent_logs_uses_timestamped_context_window(tmp_path) -> None:
     )
 
     class FakeConfig:
-        log_offsets = {str(log_path): log_path.stat().st_size}
+        log_offsets = {}
 
     since = django_timezone.make_aware(datetime(2026, 5, 3, 11, 0))
 
@@ -249,6 +248,59 @@ def test_collect_recent_logs_uses_timestamped_context_window(tmp_path) -> None:
     assert "cutoff line" in content
     assert "cutoff continuation" in content
     assert "newer line" in content
+
+
+def test_collect_recent_logs_reads_only_new_bytes_after_offset(tmp_path) -> None:
+    log_path = tmp_path / "app.log"
+    old_content = "\n".join(
+        [
+            "2026-05-03 11:10:00,000 [ERROR] old line",
+            "old continuation",
+            "",
+        ]
+    )
+    log_path.write_text(
+        old_content + "2026-05-03 11:30:00,000 [ERROR] newer line\n",
+        encoding="utf-8",
+    )
+
+    class FakeConfig:
+        log_offsets = {str(log_path): len(old_content.encode("utf-8"))}
+
+    chunks = services.collect_recent_logs(
+        FakeConfig(),
+        since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
+        log_dir=tmp_path,
+    )
+
+    assert len(chunks) == 1
+    assert "old line" not in chunks[0].content
+    assert "newer line" in chunks[0].content
+
+
+def test_collect_recent_logs_does_not_replay_timestamp_free_logs(
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "app.log"
+    log_path.write_text("old warning without timestamp\n", encoding="utf-8")
+
+    class FakeConfig:
+        log_offsets = {}
+
+    config = FakeConfig()
+    since = django_timezone.make_aware(datetime(2026, 5, 3, 11, 0))
+
+    first_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
+    second_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write("new warning without timestamp\n")
+    third_chunks = services.collect_recent_logs(config, since=since, log_dir=tmp_path)
+
+    assert len(first_chunks) == 1
+    assert first_chunks[0].content.splitlines() == ["old warning without timestamp"]
+    assert second_chunks == []
+    assert len(third_chunks) == 1
+    assert third_chunks[0].content.splitlines() == ["new warning without timestamp"]
 
 
 def test_collect_recent_logs_keeps_attention_from_full_attention_window(

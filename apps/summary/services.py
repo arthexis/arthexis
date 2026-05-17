@@ -318,6 +318,13 @@ def _filter_log_content_since(
     return "\n".join(lines)
 
 
+def _safe_offset(value: object) -> int:
+    try:
+        return max(int(value), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def collect_recent_logs(
     config: LLMSummaryConfig,
     *,
@@ -344,9 +351,16 @@ def collect_recent_logs(
         if stat.st_mtime < since_ts:
             continue
         size = stat.st_size
+        offset = _safe_offset(offsets.get(str(path)))
+        if offset > size:
+            offset = 0
+        if size <= offset:
+            offsets[str(path)] = size
+            continue
         try:
-            with path.open("r", encoding="utf-8", errors="replace") as handle:
-                content = handle.read()
+            with path.open("rb") as handle:
+                handle.seek(offset)
+                content = handle.read().decode("utf-8", errors="replace")
         except OSError:
             continue
         content = _filter_log_content_since(
