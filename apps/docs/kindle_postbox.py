@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,12 @@ KINDLE_POSTBOX_USB_CLAIM = "kindle-postbox"
 KINDLE_POSTBOX_BUNDLE_FILENAME = "arthexis-suite-documentation.txt"
 KINDLE_POSTBOX_MANIFEST_FILENAME = "arthexis-suite-documentation.json"
 KINDLE_DOCUMENTS_DIR_NAME = "documents"
+GENERATED_DOCUMENTATION_FILENAMES = frozenset(
+    {
+        KINDLE_POSTBOX_BUNDLE_FILENAME,
+        KINDLE_POSTBOX_MANIFEST_FILENAME,
+    }
+)
 DOCUMENT_EXTENSIONS = (
     rendering.MARKDOWN_FILE_EXTENSIONS
     | rendering.PLAINTEXT_FILE_EXTENSIONS
@@ -94,14 +101,51 @@ def default_output_dir() -> Path:
     )
 
 
-def iter_suite_documentation_files(*, base_dir: Path | None = None) -> list[Path]:
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _path_is_excluded(path: Path, excluded_roots: tuple[Path, ...]) -> bool:
+    if path.name in GENERATED_DOCUMENTATION_FILENAMES:
+        return True
+    return any(
+        path == excluded_root or _path_is_relative_to(path, excluded_root)
+        for excluded_root in excluded_roots
+    )
+
+
+def iter_suite_documentation_files(
+    *,
+    base_dir: Path | None = None,
+    exclude_paths: Iterable[Path] | None = None,
+) -> list[Path]:
     """Return documentation files that form the suite documentation bundle."""
 
     root = Path(base_dir or settings.BASE_DIR).resolve()
-    candidates: list[Path] = []
+    excluded_roots = tuple(Path(path).resolve() for path in exclude_paths or ())
+    seen: set[Path] = set()
+    documents: list[Path] = []
+
+    def add_document(path: Path) -> None:
+        if path.suffix.lower() not in DOCUMENT_EXTENSIONS:
+            return
+        resolved = path.resolve()
+        if (
+            resolved in seen
+            or not _path_is_relative_to(resolved, root)
+            or _path_is_excluded(resolved, excluded_roots)
+        ):
+            return
+        seen.add(resolved)
+        documents.append(resolved)
+
     readme = root / "README.md"
     if readme.is_file():
-        candidates.append(readme)
+        add_document(readme)
 
     for docs_root in (root / "docs", root / "apps" / "docs"):
         if not docs_root.exists():
@@ -114,17 +158,43 @@ def iter_suite_documentation_files(*, base_dir: Path | None = None) -> list[Path
                 continue
             if path.suffix.lower() not in DOCUMENT_EXTENSIONS:
                 continue
-            candidates.append(path)
-
-    seen: set[Path] = set()
-    documents: list[Path] = []
-    for path in candidates:
-        resolved = path.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        documents.append(resolved)
+            add_document(path)
     return documents
+
+
+def _write_suite_documentation_payload(
+    *,
+    output_path: Path,
+    root: Path,
+    generated_at: str,
+    documents: list[Path],
+    sources: tuple[str, ...],
+) -> None:
+    with output_path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("Arthexis Suite Documentation\n")
+        handle.write(f"Generated: {generated_at}\n")
+        handle.write(f"Source root: {root}\n")
+        handle.write(f"Documents: {len(documents)}\n")
+        handle.write("\n")
+        handle.write("Contents\n")
+        handle.write("========\n")
+        for index, source in enumerate(sources, start=1):
+            handle.write(f"{index}. {source}\n")
+        if documents:
+            handle.write("\n")
+
+        last_index = len(documents) - 1
+        for index, (source, path) in enumerate(zip(sources, documents, strict=True)):
+            handle.write("=" * 78)
+            handle.write("\n")
+            handle.write(source)
+            handle.write("\n")
+            handle.write("=" * 78)
+            handle.write("\n\n")
+            handle.write(rendering.read_document_text(path).strip())
+            handle.write("\n")
+            if index != last_index:
+                handle.write("\n")
 
 
 def build_suite_documentation_bundle(
@@ -140,35 +210,16 @@ def build_suite_documentation_bundle(
     output_path = destination_dir / KINDLE_POSTBOX_BUNDLE_FILENAME
     manifest_path = destination_dir / KINDLE_POSTBOX_MANIFEST_FILENAME
     generated_at = datetime.now(timezone.utc).isoformat()
-    documents = iter_suite_documentation_files(base_dir=root)
+    documents = iter_suite_documentation_files(base_dir=root, exclude_paths=(destination_dir,))
     sources = tuple(path.relative_to(root).as_posix() for path in documents)
 
-    lines = [
-        "Arthexis Suite Documentation",
-        f"Generated: {generated_at}",
-        f"Source root: {root}",
-        f"Documents: {len(documents)}",
-        "",
-        "Contents",
-        "========",
-    ]
-    lines.extend(f"{index}. {source}" for index, source in enumerate(sources, start=1))
-    lines.append("")
-
-    for source, path in zip(sources, documents, strict=True):
-        lines.extend(
-            [
-                "=" * 78,
-                source,
-                "=" * 78,
-                "",
-                rendering.read_document_text(path).strip(),
-                "",
-            ]
-        )
-
-    payload = "\n".join(lines).rstrip() + "\n"
-    output_path.write_text(payload, encoding="utf-8")
+    _write_suite_documentation_payload(
+        output_path=output_path,
+        root=root,
+        generated_at=generated_at,
+        documents=documents,
+        sources=sources,
+    )
     manifest = {
         "generated_at": generated_at,
         "document_count": len(documents),
@@ -223,7 +274,7 @@ def _copy_bundle_to_target(
 
     temp_path = output_path.with_name(f".{output_path.name}.tmp")
     try:
-        shutil.copyfile(bundle.output_path, temp_path)
+        shutil.copy2(bundle.output_path, temp_path)
         temp_path.replace(output_path)
     except OSError as exc:
         try:
@@ -259,7 +310,7 @@ def sync_to_kindle_postboxes(
     bundle = build_suite_documentation_bundle(output_dir=output_dir, base_dir=base_dir)
     raw_targets = (
         list(targets)
-        if targets
+        if targets is not None
         else usb_inventory.claimed_paths(
             KINDLE_POSTBOX_USB_CLAIM,
             refresh=refresh_usb,
@@ -278,6 +329,7 @@ def sync_to_kindle_postboxes(
 
 __all__ = [
     "DOCUMENT_EXTENSIONS",
+    "GENERATED_DOCUMENTATION_FILENAMES",
     "KINDLE_DOCUMENTS_DIR_NAME",
     "KINDLE_POSTBOX_BUNDLE_FILENAME",
     "KINDLE_POSTBOX_MANIFEST_FILENAME",

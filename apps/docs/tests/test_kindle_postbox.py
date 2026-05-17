@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,6 +44,47 @@ def test_build_suite_documentation_bundle_collects_docs_library_roots(tmp_path):
 
 
 @pytest.mark.django_db
+def test_build_suite_documentation_bundle_excludes_existing_postbox_outputs(tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+    output_dir = tmp_path / "docs" / "postbox"
+    _write(
+        output_dir / kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME,
+        "old recursive payload\n",
+    )
+    _write(
+        output_dir / kindle_postbox.KINDLE_POSTBOX_MANIFEST_FILENAME,
+        '{"old": true}\n',
+    )
+
+    bundle = kindle_postbox.build_suite_documentation_bundle(
+        base_dir=tmp_path,
+        output_dir=output_dir,
+    )
+
+    output = bundle.output_path.read_text(encoding="utf-8")
+    assert "old recursive payload" not in output
+    assert all("docs/postbox" not in source for source in bundle.sources)
+
+
+@pytest.mark.django_db
+def test_iter_suite_documentation_files_skips_symlinks_outside_base_dir(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside.md"
+    _write(root / "README.md", "# Root\n")
+    _write(outside, "# Outside\n")
+    link = root / "docs" / "outside.md"
+    link.parent.mkdir(parents=True)
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
+
+    documents = kindle_postbox.iter_suite_documentation_files(base_dir=root)
+
+    assert outside.resolve() not in documents
+
+
+@pytest.mark.django_db
 def test_sync_to_explicit_kindle_target_copies_bundle_to_documents_dir(tmp_path):
     _write(tmp_path / "README.md", "# Root\n")
     target = tmp_path / "kindle"
@@ -59,6 +101,40 @@ def test_sync_to_explicit_kindle_target_copies_bundle_to_documents_dir(tmp_path)
     assert copied.read_text(encoding="utf-8") == result.bundle.output_path.read_text(
         encoding="utf-8"
     )
+
+
+@pytest.mark.django_db
+def test_sync_to_explicit_kindle_target_uses_metadata_preserving_copy(
+    monkeypatch,
+    tmp_path,
+):
+    _write(tmp_path / "README.md", "# Root\n")
+    target = tmp_path / "kindle"
+    (target / "documents").mkdir(parents=True)
+    real_copy2 = shutil.copy2
+    calls: list[tuple[Path, Path]] = []
+
+    def _copy2(source: Path, destination: Path) -> Path:
+        calls.append((Path(source), Path(destination)))
+        return Path(real_copy2(source, destination))
+
+    monkeypatch.setattr(kindle_postbox.shutil, "copy2", _copy2)
+
+    result = kindle_postbox.sync_to_kindle_postboxes(
+        base_dir=tmp_path,
+        output_dir=tmp_path / "out",
+        targets=[target],
+    )
+
+    assert result.targets[0].status == "copied"
+    assert calls == [
+        (
+            result.bundle.output_path,
+            target
+            / "documents"
+            / f".{kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME}.tmp",
+        )
+    ]
 
 
 @pytest.mark.django_db
@@ -82,6 +158,24 @@ def test_sync_to_claimed_kindle_paths_uses_usb_inventory(monkeypatch, tmp_path):
 
     assert calls == [(kindle_postbox.KINDLE_POSTBOX_USB_CLAIM, True)]
     assert result.targets[0].status == "copied"
+
+
+@pytest.mark.django_db
+def test_sync_to_explicit_empty_targets_skips_usb_inventory(monkeypatch, tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+
+    def _claimed_paths(role: str, *, refresh: bool = False) -> list[str]:
+        raise AssertionError("USB inventory should not be used for explicit targets=[]")
+
+    monkeypatch.setattr(kindle_postbox.usb_inventory, "claimed_paths", _claimed_paths)
+
+    result = kindle_postbox.sync_to_kindle_postboxes(
+        base_dir=tmp_path,
+        output_dir=tmp_path / "out",
+        targets=[],
+    )
+
+    assert result.targets == ()
 
 
 @pytest.mark.django_db

@@ -51,7 +51,7 @@ class Command(BaseCommand):
         sync_parser.add_argument(
             "--target",
             action="append",
-            default=[],
+            default=None,
             help="Explicit mounted Kindle root to receive the bundle. Repeat for multiple targets.",
         )
         sync_parser.add_argument(
@@ -100,7 +100,7 @@ class Command(BaseCommand):
                 output_dir=output_dir,
                 refresh_usb=options["refresh_usb"],
                 dry_run=options["dry_run"],
-                targets=options.get("target") or None,
+                targets=options.get("target"),
             )
             if options["json"]:
                 self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))
