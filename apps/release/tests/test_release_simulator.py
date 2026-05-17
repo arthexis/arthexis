@@ -297,7 +297,7 @@ def test_release_simulation_quotes_package_name_for_pypi(
     assert user_agents == ["arthexis-release-simulator/1.2.3"]
 
 
-def test_release_simulation_reports_invalid_pypi_timeout(
+def test_release_simulation_reports_invalid_pypi_timeouts(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _write_project(tmp_path)
@@ -307,80 +307,41 @@ def test_release_simulation_reports_invalid_pypi_timeout(
 
     monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
 
-    result = run_release_simulation(
-        root=tmp_path,
-        skip_build=True,
-        pypi_timeout=0,
-    )
+    for invalid_timeout in (0, float("nan")):
+        result = run_release_simulation(
+            root=tmp_path,
+            skip_build=True,
+            pypi_timeout=invalid_timeout,
+        )
 
-    assert result.ok is False
-    assert result.failed_step == "preflight_pypi"
-    assert (
-        "PyPI timeout must be a finite value greater than zero seconds" in result.error
-    )
+        assert result.ok is False
+        assert result.failed_step == "preflight_pypi"
+        assert (
+            "PyPI timeout must be a finite value greater than zero seconds"
+            in result.error
+        )
 
 
-def test_release_simulation_reports_non_finite_pypi_timeout(
+def test_release_simulation_reports_invalid_pypi_json_payloads(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _write_project(tmp_path)
+    payloads = iter([b"{not json", b"\xff\xfe\xfa"])
 
     def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
-        raise AssertionError("urlopen should not be called for invalid timeouts")
+        return _FakeResponse(next(payloads))
 
     monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
 
-    result = run_release_simulation(
-        root=tmp_path,
-        skip_build=True,
-        pypi_timeout=float("nan"),
-    )
+    for _payload in range(2):
+        result = run_release_simulation(
+            root=tmp_path,
+            skip_build=True,
+        )
 
-    assert result.ok is False
-    assert result.failed_step == "preflight_pypi"
-    assert (
-        "PyPI timeout must be a finite value greater than zero seconds" in result.error
-    )
-
-
-def test_release_simulation_reports_invalid_pypi_json(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _write_project(tmp_path)
-
-    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(b"{not json")
-
-    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
-
-    result = run_release_simulation(
-        root=tmp_path,
-        skip_build=True,
-    )
-
-    assert result.ok is False
-    assert result.failed_step == "preflight_pypi"
-    assert "Received invalid JSON from PyPI" in result.error
-
-
-def test_release_simulation_reports_pypi_decode_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _write_project(tmp_path)
-
-    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(b"\xff\xfe\xfa")
-
-    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
-
-    result = run_release_simulation(
-        root=tmp_path,
-        skip_build=True,
-    )
-
-    assert result.ok is False
-    assert result.failed_step == "preflight_pypi"
-    assert "Received invalid JSON from PyPI" in result.error
+        assert result.ok is False
+        assert result.failed_step == "preflight_pypi"
+        assert "Received invalid JSON from PyPI" in result.error
 
 
 def test_release_simulation_reports_invalid_pypi_payload_type(
