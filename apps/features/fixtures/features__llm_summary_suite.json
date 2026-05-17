@@ -2,7 +2,7 @@
   {
     "model": "features.feature",
     "fields": {
-      "admin_requirements": "Summary admin surfaces can configure backend and model path parameters.",
+      "admin_requirements": "Summary admin surfaces can configure backend, model path, and adaptive context-window parameters.",
       "admin_views": [
         "admin:features_feature_changelist",
         "admin:summary_lcdlogsummary_changelist"

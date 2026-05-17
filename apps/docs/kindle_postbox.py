@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -261,8 +262,20 @@ def build_suite_documentation_bundle(
 def _resolve_documents_dir(root_path: Path) -> Path | None:
     if not root_path.is_dir():
         return None
+    try:
+        root_real_path = root_path.resolve()
+    except OSError:
+        return None
     documents_dir = root_path / KINDLE_DOCUMENTS_DIR_NAME
-    if documents_dir.is_dir():
+    if documents_dir.exists():
+        if documents_dir.is_symlink() or not documents_dir.is_dir():
+            return None
+        try:
+            resolved_docs = documents_dir.resolve()
+        except OSError:
+            return None
+        if not _path_is_relative_to(resolved_docs, root_real_path):
+            return None
         return documents_dir
     return root_path
 
@@ -292,15 +305,22 @@ def _copy_bundle_to_target(
             status="would-copy",
         )
 
-    temp_path = output_path.with_name(f".{output_path.name}.tmp")
+    temp_path: Path | None = None
     try:
-        shutil.copy2(bundle.output_path, temp_path)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            delete=False,
+            dir=documents_dir,
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            with open(bundle.output_path, "rb") as source_file:
+                shutil.copyfileobj(source_file, temp_file)
+        shutil.copystat(bundle.output_path, temp_path, follow_symlinks=False)
         temp_path.replace(output_path)
+        temp_path = None
     except OSError as exc:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
         return KindlePostboxTargetResult(
             root_path=root_path,
             documents_path=documents_dir,
@@ -308,6 +328,12 @@ def _copy_bundle_to_target(
             status="failed",
             error=str(exc),
         )
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
     return KindlePostboxTargetResult(
         root_path=root_path,

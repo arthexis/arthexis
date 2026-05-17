@@ -337,3 +337,87 @@ def test_usb_inventory_list_skips_malformed_state_entries(
 
     assert "sda1 /media/kindle claims=123" in stdout.getvalue()
     assert "Skipping malformed USB inventory entry." in stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_usb_inventory_text_output_escapes_control_characters(
+    settings, monkeypatch, tmp_path
+):
+    settings.BASE_DIR = tmp_path
+    Node._local_cache.clear()
+    role = NodeRole.objects.create(name="Control")
+    node = Node.objects.create(hostname="gway", public_endpoint="gway", role=role)
+    Node.objects.filter(pk=node.pk).update(current_relation=Node.Relation.SELF)
+    monkeypatch.setattr(usb_inventory, "has_usb_inventory_tools", lambda: True)
+    monkeypatch.setattr(
+        usb_inventory,
+        "state_or_refresh",
+        lambda *, refresh=False: {
+            "devices": [
+                {
+                    "label": "EVIL\x7f\x1b]2;OWNED\x07\n\x9b31mspoofed",
+                    "mountpoint": "/mnt/usb\x7f\x1b[31m\n\x9b32mFAKEPATH",
+                    "claims": [
+                        "camera",
+                        "claim\x7f\x1b]2;CLAIM\x07\n\x9b33mFAKE-CLAIM",
+                    ],
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        usb_inventory,
+        "claimed_paths",
+        lambda *args, **kwargs: ["/mnt/usb\x7f\x1b[31m\n\x9b32mFAKEPATH"],
+    )
+    monkeypatch.setattr(
+        usb_inventory,
+        "path_claims",
+        lambda *args, **kwargs: ["claim\x7f\x1b]2;CLAIM\x07\n\x9b33mFAKE-CLAIM"],
+    )
+
+    list_stdout = StringIO()
+    call_command("sensors", "usb-inventory", "list", stdout=list_stdout)
+    list_output = list_stdout.getvalue()
+    assert "\\u001b" in list_output
+    assert "\\u007f" in list_output
+    assert "\\u009b" in list_output
+    assert "\\n" in list_output
+    assert "\x1b" not in list_output
+    assert "\x7f" not in list_output
+    assert "\x9b" not in list_output
+
+    claimed_stdout = StringIO()
+    call_command(
+        "sensors",
+        "usb-inventory",
+        "claimed-path",
+        "--role",
+        "camera",
+        stdout=claimed_stdout,
+    )
+    claimed_output = claimed_stdout.getvalue()
+    assert "\\u001b" in claimed_output
+    assert "\\u007f" in claimed_output
+    assert "\\u009b" in claimed_output
+    assert "\\n" in claimed_output
+    assert "\x1b" not in claimed_output
+    assert "\x7f" not in claimed_output
+    assert "\x9b" not in claimed_output
+
+    claims_stdout = StringIO()
+    call_command(
+        "sensors",
+        "usb-inventory",
+        "path-claims",
+        "/dev/sda1",
+        stdout=claims_stdout,
+    )
+    claims_output = claims_stdout.getvalue()
+    assert "\\u001b" in claims_output
+    assert "\\u007f" in claims_output
+    assert "\\u009b" in claims_output
+    assert "\\n" in claims_output
+    assert "\x1b" not in claims_output
+    assert "\x7f" not in claims_output
+    assert "\x9b" not in claims_output

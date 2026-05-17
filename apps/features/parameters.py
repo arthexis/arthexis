@@ -88,6 +88,22 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             default="deterministic",
         ),
         FeatureParameterDefinition(
+            key="min_context_minutes",
+            label=_("Minimum context minutes"),
+            help_text=_(
+                "Smallest log lookback window to use when the node is hot or resource constrained."
+            ),
+            default="5",
+        ),
+        FeatureParameterDefinition(
+            key="max_context_minutes",
+            label=_("Maximum context minutes"),
+            help_text=_(
+                "Largest log lookback window to use when the node has resources to spare."
+            ),
+            default="60",
+        ),
+        FeatureParameterDefinition(
             key="enabled_sources",
             label=_("Enabled summary sources"),
             help_text=_(
