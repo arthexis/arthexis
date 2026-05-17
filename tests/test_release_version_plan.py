@@ -65,6 +65,7 @@ def test_policy_keeps_docs_and_workflows_at_patch() -> None:
             FileChange(status="M", path="docs/development/package-release-process.md"),
             FileChange(status="M", path=".github/workflows/publish.yml"),
             FileChange(status="M", path="apps/docs/templates/admin/release.html"),
+            FileChange(status="M", path="apps/sites/static/sites/css/admin/theme.css"),
         ]
     )
 

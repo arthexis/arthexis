@@ -750,6 +750,9 @@ def test_prepare_release_workflow_keeps_checkout_read_only_and_trusted() -> None
     assert 'echo "sha=$actual" >> "$GITHUB_OUTPUT"' in source_step["run"]
     assert "current=false" in source_step["run"]
 
+    readiness_step = _workflow_step(plan_job, "Gate automatic runs on readiness report")
+    assert "--limit 1000" in readiness_step["run"]
+
     assert write_job["permissions"] == {"contents": "write", "pull-requests": "write"}
     assert all(step.get("uses") != "actions/checkout@v6" for step in write_job["steps"])
     push_step = _workflow_step(write_job, "Push branch and open or update PR")

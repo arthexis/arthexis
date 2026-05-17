@@ -125,6 +125,7 @@ jobs:
           report_body="$(
             gh issue list \
               --state open \
+              --limit 1000 \
               --search "Release Readiness Report in:title" \
               --json body \
               --jq 'map(select(.body | contains("<!-- release-readiness-report -->")))[0].body // ""'

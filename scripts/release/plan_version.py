@@ -18,7 +18,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-
 DEFAULT_PACKAGE_NAME = "arthexis"
 PYPI_USER_AGENT = "arthexis-release-planner"
 SEMVER_RE = re.compile(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
@@ -477,7 +476,7 @@ def _is_patch_only_path(path: str) -> bool:
         return True
     if re.match(r"apps/[^/]+/(tests|admin)(/|\.py)", path):
         return True
-    if re.match(r"apps/[^/]+/(templates|static)/admin/", path):
+    if re.match(r"apps/[^/]+/(templates|static)(/[^/]+)*/admin/", path):
         return True
     if "/tests/" in path or path.endswith("_test.py") or path.startswith("scripts/"):
         return True
