@@ -38,6 +38,7 @@ flowchart TD
 ## Operational notes
 
 - The same step sequence is executed by the headless scheduler through `run_headless_publish`, which builds a `NodeWorkflow` from `PUBLISH_STEPS` and writes progress logs under `LOG_DIR`.
+- `.github/workflows/prepare-release.yml` prepares the reviewed `VERSION` change before publishing. It runs after a successful Release Simulator workflow when the open readiness report has no blockers, or by manual dispatch. The workflow applies `docs/development/versioning-maturity-policy.md`, writes the selected `VERSION` on a `release/prepare-vX.Y.Z` branch, and opens or updates a `Release vX.Y.Z` PR. Maintainers can dispatch it with a forced `patch`, `minor`, or `major` bump when the automatic file-path policy cannot infer a drastic interface change.
 - Dry-run mode exercises build and publish commands against Test PyPI, restoring `VERSION` and `pyproject.toml` afterward to avoid polluting the working tree.
 - Repository hygiene safeguards (dirty checks, syncs against `origin/main`, and build stale detection) ensure releases restart when source changes appear mid-run.
 - The automated release readiness report waits at least two hours after the latest `main` commit and requires zero open GitHub code-scanning alerts before it can recommend release simulation.

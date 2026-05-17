@@ -92,6 +92,7 @@ jobs:
       can_simulate: ${{ steps.evaluate.outputs.can_simulate }}
       blockers_json: ${{ steps.evaluate.outputs.blockers_json }}
       default_branch: ${{ steps.evaluate.outputs.default_branch }}
+      latest_release_tag: ${{ steps.evaluate.outputs.latest_release_tag }}
     steps:
       - name: Evaluate release blockers from install/upgrade pipeline state
         id: evaluate
@@ -110,12 +111,14 @@ jobs:
             const blockingIssueLabel = "enhancement";
             let shouldRun = true;
             let skipReason = '';
+            let latestReleaseTag = '';
 
             try {
               const { data: latestRelease } = await github.rest.repos.getLatestRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
               });
+              latestReleaseTag = latestRelease.tag_name || '';
 
               const releaseCompletedAt = latestRelease.published_at || latestRelease.created_at;
               const { data: comparison } = await github.rest.repos.compareCommits({
@@ -284,6 +287,7 @@ jobs:
             core.setOutput('can_simulate', canSimulate ? 'true' : 'false');
             core.setOutput('blockers_json', JSON.stringify(blockers));
             core.setOutput('default_branch', defaultBranch);
+            core.setOutput('latest_release_tag', latestReleaseTag);
 
   simulate_release:
     if: ${{ github.event_name != 'push' && needs.evaluate.outputs.should_run == 'true' }}
@@ -306,107 +310,23 @@ jobs:
       - name: Resolve simulation version against PyPI
         id: resolve_simulation_version
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        env:
+          BASE_REF: ${{ needs.evaluate.outputs.latest_release_tag }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-          from urllib.error import HTTPError, URLError
-          from urllib.request import urlopen
-
-          package_name = 'arthexis'
-          version_path = Path('VERSION')
-          current_version = version_path.read_text(encoding='utf-8').strip()
-          pypi_url = f'https://pypi.org/pypi/{package_name}/json'
-          semver_re = re.compile(r'^(?:(?P<epoch>\d+)!)?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[+].*)?$')
-
-
-          def parse_version(value: str):
-              match = semver_re.match(value.strip())
-              if not match:
-                  raise SystemExit(
-                      f'Release simulation blocked: cannot parse semver from VERSION value {value!r}.'
-                  )
-              groups = match.groupdict()
-              return (
-                  int(groups['epoch'] or 0),
-                  int(groups['major']),
-                  int(groups['minor']),
-                  int(groups['patch']),
-              )
-
-
-          def serialize_version(parts):
-              epoch, major, minor, patch = parts
-              value = f'{major}.{minor}.{patch}'
-              return f'{epoch}!{value}' if epoch else value
-
-
-          def bump_patch(parts):
-              epoch, major, minor, patch = parts
-              return epoch, major, minor, patch + 1
-
-
-          try:
-              with urlopen(pypi_url, timeout=15) as response:
-                  payload = json.load(response)
-          except HTTPError as exc:
-              if exc.code == 404:
-                  payload = {'releases': {}}
-              else:
-                  raise SystemExit(
-                      'Release simulation blocked: unable to verify existing PyPI versions '
-                      f'(HTTP {exc.code} from {pypi_url}).'
-                  ) from exc
-          except URLError as exc:
-              raise SystemExit(
-                  'Release simulation blocked: network failure while checking PyPI for an existing release '
-                  f'({exc.reason}).'
-              ) from exc
-
-          releases = payload.get('releases', {})
-          current_parts = parse_version(current_version)
-          published_parts = []
-          for release in releases.keys():
-              try:
-                  parsed = parse_version(release)
-              except SystemExit:
-                  continue
-              published_parts.append(parsed)
-
-          published_parts_by_version = {
-              serialize_version(parts): parts
-              for parts in published_parts
-          }
-
-          candidate_parts = current_parts
-          if published_parts:
-              candidate_parts = max(published_parts + [current_parts])
-          candidate_version = serialize_version(candidate_parts)
-
-          simulated_version = current_version
-          if candidate_version in published_parts_by_version or current_version in published_parts_by_version:
-              simulated_parts = bump_patch(candidate_parts)
-              simulated_version = serialize_version(simulated_parts)
-              while simulated_version in published_parts_by_version:
-                  simulated_parts = bump_patch(parse_version(simulated_version))
-                  simulated_version = serialize_version(simulated_parts)
-
-          if simulated_version != current_version:
-              version_path.write_text(simulated_version + '\n', encoding='utf-8')
-              print(
-                  f'Release simulation adjusted VERSION from {current_version!r} to {simulated_version!r} '
-                  'because the candidate version already exists on PyPI.'
-              )
-          else:
-              print(f'Simulated release version {simulated_version!r} is not yet published on PyPI.')
-
-          with open(Path(os.environ['GITHUB_OUTPUT']), 'a', encoding='utf-8') as output:
-              output.write(f'version_bumped={str(simulated_version != current_version).lower()}\n')
-              output.write(f'previous_version={current_version}\n')
-              output.write(f'simulated_version={simulated_version}\n')
-          PY
+          args=(
+            --root .
+            --package-name arthexis
+            --version-file VERSION
+            --head-ref HEAD
+            --bump-level auto
+            --write-version
+            --github-output "$GITHUB_OUTPUT"
+            --summary-file release-version-plan.md
+          )
+          if [ -n "$BASE_REF" ]; then
+            args+=(--base-ref "$BASE_REF")
+          fi
+          python -m scripts.release.plan_version "${args[@]}"
       - name: Validate release tag version gate (simulated)
         id: validate_version_gate
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
@@ -509,16 +429,18 @@ jobs:
               VERSION_BUMPED="${{ steps.resolve_simulation_version.outputs.version_bumped }}"
               SIMULATED_VERSION="${{ steps.resolve_simulation_version.outputs.simulated_version }}"
               PREVIOUS_VERSION="${{ steps.resolve_simulation_version.outputs.previous_version }}"
+              BUMP_LEVEL="${{ steps.resolve_simulation_version.outputs.bump_level }}"
               {
                 echo 'summary_markdown<<EOF'
                 echo '### Simulation result'
                 echo ''
-                echo '- ✅ Release simulation reached the authorization boundary successfully.'
+                echo "- INFO Version policy selected a \`$BUMP_LEVEL\` bump with simulated VERSION \`$SIMULATED_VERSION\`."
+                echo '- OK Release simulation reached the authorization boundary successfully.'
                 if [ "$VERSION_BUMPED" = "true" ]; then
-                  echo "- ℹ️ Simulation version advanced from \`$PREVIOUS_VERSION\` to \`$SIMULATED_VERSION\` to avoid an existing PyPI version."
+                  echo "- INFO Simulation version advanced from \`$PREVIOUS_VERSION\` to \`$SIMULATED_VERSION\`."
                 fi
-                echo '- ℹ️ Publish to PyPI was intentionally skipped because authorization is required.'
-                echo '- ✅ Recommendation: release is ready if maintainers approve and trigger a real publish.'
+                echo '- INFO Publish to PyPI was intentionally skipped because authorization is required.'
+                echo '- OK Recommendation: release is ready if maintainers approve and trigger a real publish.'
                 echo 'EOF'
                 echo 'simulated_ok=true'
               } >> "$GITHUB_OUTPUT"
