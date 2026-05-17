@@ -253,10 +253,12 @@ def collect_git_changes(*, root: Path, base_ref: str, head_ref: str) -> list[Fil
             path = _normalize_path(parts[1])
         if not path:
             continue
-        patch = _git_stdout(
-            ["git", "diff", "--unified=0", diff_range, "--", path],
-            cwd=root,
-        )
+        patch = ""
+        if re.fullmatch(r"apps/[^/]+/migrations/\d+_[^/]+\.py", path):
+            patch = _git_stdout(
+                ["git", "diff", "--unified=0", diff_range, "--", path],
+                cwd=root,
+            )
         changes.append(
             FileChange(
                 status=status[:1],
@@ -483,10 +485,7 @@ def _is_patch_only_path(path: str) -> bool:
 
 
 def _collect_app_manifests(*, root: Path, ref: str) -> set[str]:
-    try:
-        output = _git_stdout(["git", "ls-tree", "-r", "--name-only", ref, "--", "apps"], cwd=root)
-    except subprocess.CalledProcessError:
-        return set()
+    output = _git_stdout(["git", "ls-tree", "-r", "--name-only", ref, "--", "apps"], cwd=root)
     apps = set()
     for line in output.splitlines():
         match = re.fullmatch(r"apps/([^/]+)/manifest\.py", _normalize_path(line))
@@ -508,10 +507,8 @@ def _read_required_child_text(root: Path, path: Path) -> str:
 def _resolve_child_path(root: Path, path: Path, *, label: str) -> Path:
     candidate = path if path.is_absolute() else root / path
     resolved = candidate.resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise SystemExit(f"{label.capitalize()} escapes repository root: {resolved}") from exc
+    if not resolved.is_relative_to(root):
+        raise SystemExit(f"{label.capitalize()} escapes repository root: {resolved}")
     return resolved
 
 
