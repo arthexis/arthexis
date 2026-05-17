@@ -336,7 +336,7 @@ class Command(BaseCommand):
 
         Converts ``value`` to ``str`` and applies ``json.dumps(..., ensure_ascii=False)[1:-1]``
         so control characters, quotes, and backslashes are escaped while Unicode remains
-        readable. C1 control characters are escaped after JSON rendering because
+        readable. DEL and C1 controls are escaped after JSON rendering because
         ``ensure_ascii=False`` leaves them raw. Example: ``"line\n\x1b[31mred"``
         becomes ``"line\\n\\u001b[31mred"``.
 
@@ -345,7 +345,7 @@ class Command(BaseCommand):
         rendered = json.dumps(str(value), ensure_ascii=False)[1:-1]
         return "".join(
             f"\\u{ord(character):04x}"
-            if "\x80" <= character <= "\x9f"
+            if character == "\x7f" or "\x80" <= character <= "\x9f"
             else character
             for character in rendered
         )
