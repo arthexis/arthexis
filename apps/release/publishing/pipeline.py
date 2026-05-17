@@ -1345,6 +1345,65 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     )
 
 
+def _release_versions_equal(left: str, right: str) -> bool:
+    """Return whether two release version strings represent the same version."""
+
+    left_clean = PackageRelease.strip_dev_suffix((left or "").strip())
+    right_clean = PackageRelease.strip_dev_suffix((right or "").strip())
+    if not left_clean or not right_clean:
+        return left_clean == right_clean
+
+    try:
+        return Version(left_clean) == Version(right_clean)
+    except InvalidVersion:
+        return left_clean == right_clean
+
+
+def _previous_version_from_git_history(target_version: str) -> str:
+    """Return the latest VERSION value before ``target_version`` in git history."""
+
+    target = (target_version or "").strip()
+    if not target:
+        return ""
+
+    try:
+        history = _git_stdout(["git", "log", "--format=%H", "--", "VERSION"])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ""
+
+    for commit in history.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        try:
+            version = _git_stdout(["git", "show", f"{commit}:VERSION"]).strip()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        if version and not _release_versions_equal(version, target):
+            return version
+
+    return ""
+
+
+def _resolve_release_previous_version(
+    release, ctx: dict, current_version_text: str
+) -> str:
+    """Resolve the pre-bump release version for restart-safe publish gating."""
+
+    target_version = str(getattr(release, "version", "") or "").strip()
+    recorded_previous = str(ctx.get("release_previous_version") or "").strip()
+    if recorded_previous and not _release_versions_equal(
+        recorded_previous, target_version
+    ):
+        return recorded_previous
+
+    current_version = (current_version_text or "").strip()
+    if current_version and not _release_versions_equal(current_version, target_version):
+        return current_version
+
+    return _previous_version_from_git_history(target_version)
+
+
 def _test_pruning_required_for_release(release, ctx: dict) -> bool:
     """Return whether the release should require the 1% pruning PR gate."""
 
@@ -1614,14 +1673,17 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         formatted = ", ".join(_format_path(path) for path in staged_release_fixtures)
         _append_log(log_path, "Staged release fixtures " + formatted)
     version_path = Path("VERSION")
-    previous_version_text = (
+    current_version_text = (
         version_path.read_text(encoding="utf-8").strip()
         if version_path.exists()
         else ""
     )
+    previous_version_text = _resolve_release_previous_version(
+        release, ctx, current_version_text
+    )
     ctx["release_previous_version"] = previous_version_text
     ctx["release_target_version"] = release.version
-    if previous_version_text != release.version:
+    if current_version_text != release.version:
         version_path.write_text(f"{release.version}\n", encoding="utf-8")
         _append_log(log_path, f"Updated VERSION file to {release.version}")
         GIT_ADAPTER.run(["git", "add", "VERSION"], check=True)

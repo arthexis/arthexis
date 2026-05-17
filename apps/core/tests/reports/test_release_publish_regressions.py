@@ -924,6 +924,35 @@ def test_step_prune_low_value_tests_requires_minor_but_skips_patch(
     assert "test_pruning_error" not in patch_ctx
 
 
+def test_pre_release_actions_derives_previous_version_after_restart(
+    monkeypatch, tmp_path: Path
+):
+    _init_release_repo(tmp_path, "1.2.3")
+    (tmp_path / "VERSION").write_text("1.3.0\n", encoding="utf-8")
+    _run_git(tmp_path, "add", "VERSION")
+    _run_git(tmp_path, "commit", "-m", "pre-release commit 1.3.0")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline, "_sync_with_origin_main", lambda _log_path: None)
+    monkeypatch.setattr(pipeline.PackageRelease, "dump_fixture", lambda: None)
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {}
+
+    pipeline._step_pre_release_actions(
+        SimpleNamespace(version="1.3.0"), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["release_previous_version"] == "1.2.3"
+    assert ctx["release_target_version"] == "1.3.0"
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout == ""
+
+
 def test_step_prune_low_value_tests_accepts_scheduled_setting(
     monkeypatch, settings, tmp_path: Path
 ):
