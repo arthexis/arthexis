@@ -46,6 +46,7 @@ jobs:
       version_bumped: ${{ steps.plan.outputs.version_bumped }}
       next_version: ${{ steps.plan.outputs.next_version }}
       bump_level: ${{ steps.plan.outputs.bump_level }}
+      planned_sha: ${{ steps.source.outputs.sha }}
     if: >-
       ${{ github.event_name == 'workflow_dispatch' || (
         github.event.workflow_run.conclusion == 'success' &&
@@ -69,12 +70,14 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          actual="$(git rev-parse HEAD)"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+
           if [ "$EVENT_NAME" != "workflow_run" ]; then
             echo "current=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          actual="$(git rev-parse HEAD)"
           if [ "$actual" = "$WORKFLOW_RUN_HEAD_SHA" ]; then
             echo "current=true" >> "$GITHUB_OUTPUT"
             echo "Default branch matches triggering simulator SHA: ${actual}"
@@ -214,10 +217,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NEXT_VERSION: ${{ needs.prepare-release-plan.outputs.next_version }}
+          PLANNED_SHA: ${{ needs.prepare-release-plan.outputs.planned_sha }}
         run: |
           branch="release/prepare-v${NEXT_VERSION}"
           base_branch="${{ github.event.repository.default_branch }}"
           base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${base_branch}" --jq '.object.sha')"
+          if [ "$base_sha" != "$PLANNED_SHA" ]; then
+            echo "Default branch moved after release planning; skipping stale prepare PR update."
+            echo "Planned SHA: ${PLANNED_SHA}"
+            echo "Current ${base_branch} SHA: ${base_sha}"
+            exit 0
+          fi
 
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/tmp/prepare-release-ref.json 2>/dev/null; then
             gh api \
