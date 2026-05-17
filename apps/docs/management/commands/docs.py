@@ -130,12 +130,15 @@ class Command(BaseCommand):
                 "Kindle postbox USB discovery requires lsblk and findmnt on this host; "
                 "pass --target to sync an explicit Kindle mount."
             )
-        result = kindle_postbox.sync_to_kindle_postboxes(
-            output_dir=output_dir,
-            refresh_usb=refresh_usb,
-            dry_run=dry_run,
-            targets=targets,
-        )
+        try:
+            result = kindle_postbox.sync_to_kindle_postboxes(
+                output_dir=output_dir,
+                refresh_usb=refresh_usb,
+                dry_run=dry_run,
+                targets=targets,
+            )
+        except kindle_postbox.usb_inventory.UsbInventoryError as exc:
+            raise CommandError(f"Kindle postbox USB discovery failed: {exc}") from exc
         failed_targets = self._failed_kindle_targets(result)
         if json_output:
             self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))
