@@ -275,6 +275,72 @@ def test_collect_state_file_source_enforces_total_byte_budget(
     assert "b" * 5 not in "\n".join(chunk.content for chunk in chunks)
 
 
+def test_collect_state_file_source_sanitizes_rfid_scan_state(
+    monkeypatch, tmp_path
+) -> None:
+    rfid_state = tmp_path / ".locks" / "rfid-scan.json"
+    rfid_state.parent.mkdir()
+    rfid_state.write_text(
+        '{"uid":"1","keys":{"a":"A0A1A2A3A4A5"},"dump":{"b":"c"},"deep_read":true}\n',
+        encoding="utf-8",
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="state",
+        group="state",
+        priority=20,
+        max_bytes=1024,
+        collector=services._collect_state_file_source,
+    )
+    monkeypatch.setattr(services, "_summary_state_paths", lambda base_dir: [rfid_state])
+
+    chunks = services._collect_state_file_source(context, source)
+
+    assert len(chunks) == 1
+    assert '"uid": "1"' in chunks[0].content
+    assert "keys" not in chunks[0].content
+    assert "dump" not in chunks[0].content
+    assert "deep_read" not in chunks[0].content
+
+
+def test_collect_state_file_source_fail_closed_for_truncated_rfid_json(
+    monkeypatch, tmp_path
+) -> None:
+    rfid_state = tmp_path / ".locks" / "rfid-scan.json"
+    rfid_state.parent.mkdir()
+    rfid_state.write_text(
+        '{"uid":"1","keys":{"a":"A0A1A2A3A4A5"},"dump":{"b":"c"},"deep_read":true}\n',
+        encoding="utf-8",
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="state",
+        group="state",
+        priority=20,
+        max_bytes=32,
+        collector=services._collect_state_file_source,
+    )
+    monkeypatch.setattr(services, "_summary_state_paths", lambda base_dir: [rfid_state])
+
+    chunks = services._collect_state_file_source(context, source)
+
+    assert len(chunks) == 1
+    assert "{}" in chunks[0].content
+    assert "keys" not in chunks[0].content
+    assert "dump" not in chunks[0].content
+    assert "deep_read" not in chunks[0].content
+
+
 def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):
     settings.BASE_DIR = tmp_path
     monkeypatch.setattr(

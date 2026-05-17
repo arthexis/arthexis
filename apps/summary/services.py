@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -563,6 +564,8 @@ def _collect_state_file_source(
             continue
         seen.add(path)
         content = _read_tail_text(path, remaining_bytes)
+        if path.name == "rfid-scan.json":
+            content = _sanitize_rfid_scan_state(content)
         remaining_bytes -= len(content.encode("utf-8", errors="replace"))
         chunk = _virtual_chunk(
             _state_chunk_name(path, context.base_dir),
@@ -571,6 +574,19 @@ def _collect_state_file_source(
         if chunk:
             chunks.append(chunk)
     return chunks
+
+
+def _sanitize_rfid_scan_state(content: str) -> str:
+    try:
+        payload = json.loads(content)
+    except (TypeError, ValueError):
+        return "{}"
+    if not isinstance(payload, dict):
+        return "{}"
+    payload.pop("deep_read", None)
+    payload.pop("dump", None)
+    payload.pop("keys", None)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def _run_summary_command(command: list[str]) -> str:
