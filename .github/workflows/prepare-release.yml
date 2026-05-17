@@ -1,0 +1,267 @@
+name: Prepare Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_level:
+        description: "Release bump level. Use auto unless maintainers need to force a higher level."
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+      dry_run:
+        description: "Plan the release without pushing a branch or opening a PR."
+        required: false
+        default: false
+        type: boolean
+  workflow_run:
+    workflows:
+      - Release Simulator
+    types:
+      - completed
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: prepare-release-pr
+  cancel-in-progress: false
+
+jobs:
+  prepare-release-plan:
+    # Security note: workflow_run uses base-repository privileges, so the planning job has
+    # read-only permissions and fetches only the default branch. Automatic runs skip
+    # release PR creation unless the fetched default branch still matches the exact
+    # successful simulator SHA.
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      ready: ${{ steps.readiness.outputs.ready }}
+      version_bumped: ${{ steps.plan.outputs.version_bumped }}
+      next_version: ${{ steps.plan.outputs.next_version }}
+      bump_level: ${{ steps.plan.outputs.bump_level }}
+      planned_sha: ${{ steps.source.outputs.sha }}
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == github.event.repository.default_branch
+      ) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch trusted default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" fetch --tags --prune origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          git checkout --detach "refs/remotes/origin/${DEFAULT_BRANCH}"
+
+      - name: Verify automatic source is still current
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$actual" = "$WORKFLOW_RUN_HEAD_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            echo "Default branch matches triggering simulator SHA: ${actual}"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Default branch moved since the triggering simulator run."
+            echo "Triggering simulator SHA: ${WORKFLOW_RUN_HEAD_SHA}"
+            echo "Checked-out default branch SHA: ${actual}"
+          fi
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Resolve latest release tag
+        id: latest_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest_tag="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          echo "tag=${latest_tag}" >> "$GITHUB_OUTPUT"
+          if [ -n "$latest_tag" ]; then
+            echo "Latest release tag: ${latest_tag}"
+          else
+            echo "No published release found."
+          fi
+
+      - name: Gate automatic runs on readiness report
+        id: readiness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.source.outputs.current }}" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Automatic release prepare skipped because the default branch changed after the triggering simulator run."
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch bypasses readiness-report gating."
+            exit 0
+          fi
+
+          report_body="$(
+            gh issue list \
+              --state open \
+              --limit 1000 \
+              --search "Release Readiness Report in:title" \
+              --json body \
+              --jq 'map(select(.body | contains("<!-- release-readiness-report -->")))[0].body // ""'
+          )"
+          if [ -z "$report_body" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No open release readiness report found."
+            exit 0
+          fi
+          if [[ "$report_body" == *"## Release readiness blockers"* && "$report_body" == *"- None detected."* && "$report_body" == *"Recommendation: release can proceed"* ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Release readiness report allows automatic prepare PR creation."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Release readiness report is not ready for automatic prepare PR creation."
+          fi
+
+      - name: Plan next release version
+        id: plan
+        if: ${{ steps.readiness.outputs.ready == 'true' }}
+        env:
+          BASE_REF: ${{ steps.latest_release.outputs.tag }}
+          BUMP_LEVEL: ${{ github.event.inputs.bump_level || 'auto' }}
+        run: |
+          args=(
+            --root .
+            --package-name arthexis
+            --version-file VERSION
+            --head-ref HEAD
+            --bump-level "$BUMP_LEVEL"
+            --write-version
+            --github-output "$GITHUB_OUTPUT"
+            --summary-file release-version-plan.md
+          )
+          if [ -n "$BASE_REF" ]; then
+            args+=(--base-ref "$BASE_REF")
+          fi
+          python -m scripts.release.plan_version "${args[@]}"
+
+      - name: Stop when no release PR is needed
+        if: ${{ steps.readiness.outputs.ready != 'true' || steps.plan.outputs.version_bumped != 'true' }}
+        run: |
+          echo "No release prepare PR is needed for this run."
+
+      - name: Build release PR body
+        if: ${{ steps.readiness.outputs.ready == 'true' && steps.plan.outputs.version_bumped == 'true' }}
+        env:
+          NEXT_VERSION: ${{ steps.plan.outputs.next_version }}
+          BUMP_LEVEL: ${{ steps.plan.outputs.bump_level }}
+        run: |
+          {
+            echo "## Release v${NEXT_VERSION}"
+            echo ""
+            echo "This PR was generated by the Prepare Release PR workflow."
+            echo ""
+            echo "- Bump level: \`${BUMP_LEVEL}\`"
+            echo "- Source workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            if [ "${{ github.event_name }}" = "workflow_run" ]; then
+              echo "- Triggering simulator run: ${{ github.event.workflow_run.html_url }}"
+            fi
+            echo ""
+            cat release-version-plan.md
+            echo ""
+            echo "After this PR merges, tag-from-version creates the matching tag and dispatches publish.yml. The PyPI environment approval gate remains manual."
+          } > release-pr-body.md
+
+      - name: Upload release PR body
+        if: ${{ steps.readiness.outputs.ready == 'true' && steps.plan.outputs.version_bumped == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepare-release-pr-body
+          path: release-pr-body.md
+          if-no-files-found: error
+
+  open-or-update-release-pr:
+    needs: prepare-release-plan
+    if: ${{ needs.prepare-release-plan.outputs.ready == 'true' && needs.prepare-release-plan.outputs.version_bumped == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Download release PR body
+        uses: actions/download-artifact@v8
+        with:
+          name: prepare-release-pr-body
+          path: .
+
+      - name: Push branch and open or update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_VERSION: ${{ needs.prepare-release-plan.outputs.next_version }}
+          PLANNED_SHA: ${{ needs.prepare-release-plan.outputs.planned_sha }}
+        run: |
+          branch="release/prepare-v${NEXT_VERSION}"
+          base_branch="${{ github.event.repository.default_branch }}"
+          base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${base_branch}" --jq '.object.sha')"
+          if [ "$base_sha" != "$PLANNED_SHA" ]; then
+            echo "Default branch moved after release planning; skipping stale prepare PR update."
+            echo "Planned SHA: ${PLANNED_SHA}"
+            echo "Current ${base_branch} SHA: ${base_sha}"
+            exit 0
+          fi
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/tmp/prepare-release-ref.json 2>/dev/null; then
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}" \
+              -F sha="$base_sha" \
+              -F force=true >/dev/null
+          else
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/heads/${branch}" \
+              -f sha="$base_sha" >/dev/null
+          fi
+
+          version_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/VERSION?ref=${branch}" --jq '.sha')"
+          version_content="$(printf '%s\n' "$NEXT_VERSION" | base64 -w 0)"
+          gh api \
+            --method PUT \
+            "repos/${GITHUB_REPOSITORY}/contents/VERSION" \
+            -f message="Prepare release v${NEXT_VERSION}" \
+            -f content="$version_content" \
+            -f branch="$branch" \
+            -f sha="$version_sha" >/dev/null
+
+          existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // ""')"
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" --title "Release v${NEXT_VERSION}" --body-file release-pr-body.md
+            echo "Updated existing release PR #${existing_pr}."
+          else
+            gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$branch" \
+              --title "Release v${NEXT_VERSION}" \
+              --body-file release-pr-body.md
+          fi

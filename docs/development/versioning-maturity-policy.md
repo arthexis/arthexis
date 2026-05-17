@@ -48,7 +48,13 @@ Typical PATCH examples include:
 
 Developers should not manually edit `VERSION` while implementing changes.
 
-The release procedure is responsible for selecting the next version by applying this policy to the full set of changes included in that release.
+The release procedure is responsible for selecting the next version by applying this policy to the full set of changes included in that release. The automated prepare-release workflow encodes the same policy before opening a release PR:
+
+- app additions or removals require MAJOR
+- public UI, route, API, serializer, consumer, settings, and model-contract changes require at least MINOR
+- docs, tests, scripts, workflow changes, and admin-only changes remain PATCH unless a higher rule also applies
+
+Maintainers can force a higher bump level when the automatic path cannot infer intent, such as a drastic interface change that is not obvious from file paths.
 
 Version advancement is collapsed to a single step per release:
 
