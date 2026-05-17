@@ -236,10 +236,13 @@ def test_find_reserved_node_uses_address_fallback_only_without_hostname():
 
 
 @pytest.mark.django_db
-def test_node_info_omits_sensitive_identity_fields():
+def test_node_info_omits_sensitive_identity_fields(monkeypatch):
+    local_mac = "aa:bb:cc:dd:ef:02"
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: local_mac))
     node = Node.objects.create(
         hostname="mesh-local",
-        mac_address="aa:bb:cc:dd:ef:02",
+        mac_address=local_mac,
         host_instance_id="machine-1",
         address="198.51.100.42",
         port=8888,
