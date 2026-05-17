@@ -266,9 +266,12 @@ def _collect_log_file_source(
             read_start = size - source.max_bytes
             truncated_bytes = read_start - offset
         try:
-            with path.open("r", encoding="utf-8", errors="replace") as handle:
+            with open(path, "rb") as handle:
                 handle.seek(read_start)
-                content = handle.read(source.max_bytes)
+                content = handle.read(source.max_bytes).decode(
+                    "utf-8",
+                    errors="replace",
+                )
         except OSError:
             continue
         if content:
@@ -384,7 +387,7 @@ def _collect_journal_warning_source(
     context: SummarySourceContext, source: SummarySource
 ) -> list[LogChunk]:
     chunks: list[LogChunk] = []
-    since = context.since.strftime("%Y-%m-%d %H:%M:%S")
+    since = context.since.isoformat(sep=" ", timespec="seconds")
     per_unit_budget = min(source.max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES)
     for unit in SUMMARY_JOURNAL_UNITS:
         output = _run_summary_command(
@@ -395,7 +398,7 @@ def _collect_journal_warning_source(
                 "--since",
                 since,
                 "--priority",
-                "warning..alert",
+                "emerg..warning",
                 "--lines",
                 str(SUMMARY_JOURNAL_LINES_PER_UNIT),
                 "--no-pager",

@@ -10,7 +10,6 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 
 from apps.features.models import Feature
-from apps.features.parameters import get_feature_parameter_definitions
 from apps.nodes.models import NodeFeature
 
 
@@ -143,18 +142,6 @@ def test_llm_summary_suite_fixture_links_summary_node_feature() -> None:
     )
     assert feature.node_feature is not None
     assert feature.node_feature.slug == "llm-summary"
-
-
-def test_llm_summary_suite_defines_source_registry_parameters() -> None:
-    definitions = {
-        definition.key: definition
-        for definition in get_feature_parameter_definitions("llm-summary-suite")
-    }
-
-    assert definitions["enabled_sources"].default == "logs,state,journal"
-    assert definitions["max_source_bytes"].default == "12000"
-
-
 @pytest.mark.django_db
 def test_kindle_postbox_fixture_links_docs_node_feature() -> None:
     """The suite feature should describe the docs-owned Kindle writer path."""

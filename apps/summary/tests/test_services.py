@@ -177,8 +177,9 @@ def test_journal_warning_source_collects_suite_unit_warnings(
 
     assert [chunk.path.name for chunk in chunks] == ["journal:lcd-arthexis.service"]
     assert "warning lcd refresh failed" in chunks[0].content
+    assert "2026-05-03 12:00:00+00:00" in calls[0]
     assert "--priority" in calls[0]
-    assert "warning..alert" in calls[0]
+    assert "emerg..warning" in calls[0]
 
 
 def test_parse_screens_accepts_single_line_colon_buffers() -> None:
