@@ -67,7 +67,7 @@ To let the command perform deterministic writes instead of only planning them:
 - `merge --write`: gate and merge a PR.
 - `cleanup --write`: remove merged worktrees or branches after verification.
 - `monitor`: run the whole workflow until completion or manual decision.
-- `watch`: passively poll PR state until ready/merged success or deterministic failure; `watch --background` detaches a hidden Windows-friendly watcher and defaults to a dismissible Windows dialog with a `Go to PR` button when the PR URL is present.
+- `watch`: passively poll PR state until ready/merged success or deterministic failure; `watch --background` detaches a hidden Windows-friendly watcher and defaults to a dismissible Windows notification.
 - `patchwork --write`: prune monitor-owned patchwork worktrees for merged or closed PRs, with stale-open pruning only when explicitly requested.
 
 ## Windows Patchwork Residue Fallback

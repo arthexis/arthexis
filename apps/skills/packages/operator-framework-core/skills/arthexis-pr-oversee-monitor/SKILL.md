@@ -35,7 +35,7 @@ Use an isolated worktree when local validation or review fixes may be needed:
 
 The monitor defaults `--run-test-plan` worktrees to `ARTHEXIS_PATCHWORK_DIR` or the platform home patchwork directory, with deterministic names such as `arthexis-arthexis-pr-7662`.
 
-The passive watcher is not a smart monitor. It only polls `inspect` and `gate`, writes state under `work/pr-watch`, and exits when the PR becomes ready/merged or deterministically fails because checks failed, the PR closed, the head SHA moved, or a non-waiting blocker appears. It waits on pending checks and review approval. On Windows, background watchers are started without a visible console and default to a dismissible dialog with a `Go to PR` button when the PR URL is present; pass `--no-notify-windows` only when a state file/log is enough.
+The passive watcher is not a smart monitor. It only polls `inspect` and `gate`, writes state under `work/pr-watch`, and exits when the PR becomes ready/merged or deterministically fails because checks failed, the PR closed, the head SHA moved, or a non-waiting blocker appears. It waits on pending checks and review approval. On Windows, background watchers are started without a visible console and default to a dismissible message-box notification; pass `--no-notify-windows` only when a state file/log is enough.
 
 ## Workflow
 
@@ -44,7 +44,7 @@ The passive watcher is not a smart monitor. It only polls `inspect` and `gate`, 
 3. Run the test plan the command reports. If a generated plan is too broad for the local platform, run the narrower changed-file targets and record the platform blocker exactly.
 4. Push fixes to the PR head branch, then rerun the monitor. Use `--expected-head-sha <sha>` when guarding against a moving PR head matters.
 5. Add `--merge --write --delete-branch` only after the gate is ready and the operator request covers merge work. The monitor should stop with `merge_decision_required` instead of merging when write mode is not present.
-6. If the PR is waiting only on GitHub checks or review approval and you are leaving it unattended, start `watch --background --expected-head-sha <sha>` so the operator gets a dismissal-required Windows dialog with a `Go to PR` button.
+6. If the PR is waiting only on GitHub checks or review approval and you are leaving it unattended, start `watch --background --expected-head-sha <sha>` so the operator gets a dismissal-required Windows notification.
 7. After merge, run patchwork hygiene in read-only mode, then prune with `--write` when only monitor-owned merged or closed worktrees are candidates.
 
 ## Related Commands
