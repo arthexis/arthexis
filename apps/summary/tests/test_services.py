@@ -83,10 +83,10 @@ def test_collect_recent_logs_uses_registered_log_and_state_sources(
     log_dir.mkdir()
     lock_dir.mkdir()
     log_path = log_dir / "arthexis.log"
-    state_path = lock_dir / "lcd-summary"
+    state_path = lock_dir / "lcd-channels.lck"
     rfid_path = lock_dir / "rfid-scan.json"
     log_path.write_text("ERROR worker failed\n", encoding="utf-8")
-    state_path.write_text("LCD low summary\n", encoding="utf-8")
+    state_path.write_text("LCD channels active\n", encoding="utf-8")
     rfid_path.write_text('{"label": "idle"}\n', encoding="utf-8")
 
     config = SimpleNamespace(log_offsets={})
@@ -122,11 +122,28 @@ def test_collect_recent_logs_uses_registered_log_and_state_sources(
     compacted = services.compact_log_chunks(chunks)
 
     assert "[arthexis.log]" in compacted
-    assert "[state:.locks:lcd-summary]" in compacted
+    assert "[state:.locks:lcd-channels.lck]" in compacted
     assert "[state:.locks:rfid-scan.json]" in compacted
     assert "ERR worker failed" in compacted
-    assert "LCD low summary" in compacted
+    assert "LCD channels active" in compacted
     assert config.log_offsets[str(log_path)] == log_path.stat().st_size
+
+
+def test_summary_state_paths_excludes_generated_lcd_summary_locks(tmp_path) -> None:
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    generated_summary = lock_dir / "lcd-summary"
+    generated_summary_slot = lock_dir / "lcd-summary-1"
+    channel_lock = lock_dir / "lcd-channels.lck"
+    generated_summary.write_text("model output\n", encoding="utf-8")
+    generated_summary_slot.write_text("model output\n", encoding="utf-8")
+    channel_lock.write_text("channels\n", encoding="utf-8")
+
+    paths = services._summary_state_paths(tmp_path)
+
+    assert generated_summary not in paths
+    assert generated_summary_slot not in paths
+    assert channel_lock in paths
 
 
 def test_get_summary_sources_respects_configured_groups_and_byte_budget(
@@ -228,7 +245,7 @@ def test_collect_log_file_source_retries_budget_deferred_logs(tmp_path) -> None:
 def test_collect_state_file_source_enforces_total_byte_budget(
     monkeypatch, tmp_path
 ) -> None:
-    first_state = tmp_path / ".locks" / "lcd-summary"
+    first_state = tmp_path / ".locks" / "lcd-channels.lck"
     second_state = tmp_path / ".locks" / "rfid-scan.json"
     first_state.parent.mkdir()
     first_state.write_text("a" * 5, encoding="utf-8")
@@ -254,7 +271,7 @@ def test_collect_state_file_source_enforces_total_byte_budget(
 
     chunks = services._collect_state_file_source(context, source)
 
-    assert [chunk.path.name for chunk in chunks] == ["state:.locks:lcd-summary"]
+    assert [chunk.path.name for chunk in chunks] == ["state:.locks:lcd-channels.lck"]
     assert "b" * 5 not in "\n".join(chunk.content for chunk in chunks)
 
 

@@ -512,7 +512,6 @@ def _collect_log_file_source(
 def _summary_state_paths(base_dir: Path) -> list[Path]:
     lock_dir = base_dir / ".locks"
     paths: list[Path] = []
-    paths.extend(sorted(lock_dir.glob("lcd-summary*")))
     paths.extend(
         [
             lock_dir / "lcd-channels.lck",
