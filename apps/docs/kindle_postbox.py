@@ -623,7 +623,16 @@ def _resolve_documents_dir(root_path: Path) -> Path | None:
 
 def _same_file_content(source: Path, destination: Path) -> bool:
     try:
-        return destination.is_file() and source.read_bytes() == destination.read_bytes()
+        if (
+            not destination.is_file()
+            or source.stat().st_size != destination.stat().st_size
+        ):
+            return False
+        with source.open("rb") as source_file, destination.open("rb") as destination_file:
+            for source_chunk in iter(lambda: source_file.read(64 * 1024), b""):
+                if source_chunk != destination_file.read(len(source_chunk)):
+                    return False
+            return destination_file.read(1) == b""
     except OSError:
         return False
 
