@@ -142,6 +142,8 @@ def test_llm_summary_suite_fixture_links_summary_node_feature() -> None:
     )
     assert feature.node_feature is not None
     assert feature.node_feature.slug == "llm-summary"
+
+
 @pytest.mark.django_db
 def test_kindle_postbox_fixture_links_docs_node_feature() -> None:
     """The suite feature should describe the docs-owned Kindle writer path."""
