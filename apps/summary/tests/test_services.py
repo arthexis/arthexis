@@ -117,6 +117,53 @@ def test_get_summary_sources_respects_configured_groups_and_byte_budget(
     assert sources[0].max_bytes == services.SUMMARY_STATE_SOURCE_MAX_BYTES
 
 
+def test_get_summary_sources_falls_back_when_groups_are_unknown(
+    monkeypatch,
+) -> None:
+    values = {
+        "enabled_sources": "log,statee",
+        "max_source_bytes": "12000",
+    }
+    monkeypatch.setattr(
+        services,
+        "get_feature_parameter",
+        lambda slug, key, fallback="": values.get(key, fallback),
+    )
+
+    sources = services.get_summary_sources()
+
+    assert [source.group for source in sources] == ["logs", "state", "journal", "journal"]
+
+
+def test_collect_log_file_source_enforces_total_log_byte_budget(tmp_path) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    first_log = log_dir / "a.log"
+    second_log = log_dir / "b.log"
+    first_log.write_text("a" * 5, encoding="utf-8")
+    second_log.write_text("b" * 5, encoding="utf-8")
+    config = SimpleNamespace(log_offsets={})
+    context = services.SummarySourceContext(
+        config=config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=log_dir,
+    )
+    source = services.SummarySource(
+        name="logs",
+        group="logs",
+        priority=10,
+        max_bytes=5,
+        collector=services._collect_log_file_source,
+    )
+
+    chunks = services._collect_log_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["a.log"]
+    assert chunks[0].content == "a" * 5
+    assert str(second_log) not in config.log_offsets
+
+
 def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):
     settings.BASE_DIR = tmp_path
     monkeypatch.setattr(

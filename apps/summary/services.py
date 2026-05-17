@@ -42,6 +42,7 @@ SUMMARY_SOURCE_COMMAND_TIMEOUT_SECONDS = 4
 SUMMARY_STATE_SOURCE_MAX_BYTES = 4_096
 SUMMARY_JOURNAL_SOURCE_MAX_BYTES = 8_192
 SUMMARY_JOURNAL_LINES_PER_UNIT = 40
+SUMMARY_SOURCE_GROUPS = frozenset({"logs", "state", "journal"})
 SUMMARY_JOURNAL_UNITS = (
     "arthexis.service",
     "celery-arthexis.service",
@@ -183,10 +184,11 @@ def _summary_source_groups() -> set[str]:
         if group.strip()
     }
     if "all" in groups:
-        return {"logs", "state", "journal"}
+        return set(SUMMARY_SOURCE_GROUPS)
     if "systemd" in groups:
         groups.add("journal")
-    return groups or {"logs"}
+    known_groups = groups & SUMMARY_SOURCE_GROUPS
+    return known_groups or set(SUMMARY_SOURCE_GROUPS_DEFAULT.split(","))
 
 
 def _summary_source_byte_budget() -> int:
@@ -238,6 +240,7 @@ def _collect_log_file_source(
 ) -> list[LogChunk]:
     offsets = dict(context.config.log_offsets or {})
     chunks: list[LogChunk] = []
+    remaining_bytes = source.max_bytes
 
     if not context.log_dir.exists():
         logger.warning("Log directory missing: %s", context.log_dir)
@@ -246,6 +249,8 @@ def _collect_log_file_source(
 
     candidates = sorted(context.log_dir.rglob("*.log"))
     for path in candidates:
+        if remaining_bytes <= 0:
+            break
         try:
             stat = path.stat()
         except OSError:
@@ -262,18 +267,21 @@ def _collect_log_file_source(
             continue
         read_start = offset
         truncated_bytes = 0
-        if size - offset > source.max_bytes:
-            read_start = size - source.max_bytes
+        read_bytes = min(size - offset, remaining_bytes)
+        if size - offset > read_bytes:
+            read_start = size - read_bytes
             truncated_bytes = read_start - offset
         try:
             with open(path, "rb") as handle:
                 handle.seek(read_start)
-                content = handle.read(source.max_bytes).decode(
+                raw_content = handle.read(read_bytes)
+                content = raw_content.decode(
                     "utf-8",
                     errors="replace",
                 )
         except OSError:
             continue
+        remaining_bytes -= len(raw_content)
         if content:
             if truncated_bytes:
                 content = f"...<truncated {truncated_bytes} bytes>\n{content}"
