@@ -30,8 +30,9 @@ PYPI_USER_AGENT = "arthexis-release-simulator"
 SIMULATION_RESULT_HEADING = "### Simulation result"
 SUBPROCESS_TIMEOUT_SECONDS = 1800.0
 TEST_PRUNING_CHECKLIST_ACTIVITY = (
-    "Prune the worst 1% of tests by PR, prioritizing low-value, duplicate, "
-    "over-mocked, confusing, or misleading tests."
+    "Prune the worst 1% of tests by PR for minor and major releases, "
+    "prioritizing low-value, duplicate, over-mocked, confusing, or "
+    "misleading tests. Patch releases may record a skip rationale."
 )
 
 
@@ -628,7 +629,8 @@ def _success_summary() -> str:
             "",
             "- OK Release simulation reached the authorization boundary successfully.",
             "- INFO Publish to PyPI was intentionally skipped because authorization is required.",
-            "- TODO Release readiness: prune the worst 1% of tests by PR before every release.",
+            "- TODO Release readiness: prune the worst 1% of tests by PR "
+            "for minor and major releases; patch releases may record a skip rationale.",
             "- OK Recommendation: release is ready if maintainers approve "
             "and trigger a real publish.",
         ]

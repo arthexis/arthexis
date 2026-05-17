@@ -36,21 +36,6 @@ from django.utils.translation import gettext as _
 from packaging.version import InvalidVersion, Version
 
 import apps.release as release_utils
-from apps.nodes.models import NetMessage, Node
-from apps.release import git_utils
-from apps.release.domain import (
-    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
-    FIXTURE_REVIEW_STEP_NAME,
-)
-from apps.release.domain import (
-    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
-)
-from apps.release.models import PackageRelease
-from apps.release.services import builder as release_builder
-from apps.release.services import uploader as release_uploader
-from apps.repos.models import GitHubToken
-from utils import revision
-
 from apps.core.views.reports.common import (
     DIRTY_COMMIT_DEFAULT_MESSAGE,
     PYPI_REQUEST_TIMEOUT,
@@ -68,6 +53,21 @@ from apps.core.views.reports.report_rendering import (
     _render_release_progress_error,
     _sanitize_release_error_message,
 )
+from apps.nodes.models import NetMessage, Node
+from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+)
+from apps.release.domain import (
+    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
+)
+from apps.release.models import PackageRelease
+from apps.release.services import builder as release_builder
+from apps.release.services import uploader as release_uploader
+from apps.repos.models import GitHubToken
+from utils import revision
+
 from .context import (
     ReleaseContextState,
     load_release_context,
@@ -1345,6 +1345,17 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     )
 
 
+def _test_pruning_required_for_release(release, ctx: dict) -> bool:
+    """Return whether the release should require the 1% pruning PR gate."""
+
+    previous = str(ctx.get("release_previous_version") or "").strip()
+    current = str(getattr(release, "version", "") or "").strip()
+    if not previous or not current:
+        return True
+
+    return _major_minor_version_changed(previous, current)
+
+
 def _summarize_fixture_file(path: str) -> dict[str, object]:
     fixture_path = Path(path)
     try:
@@ -1608,6 +1619,8 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         if version_path.exists()
         else ""
     )
+    ctx["release_previous_version"] = previous_version_text
+    ctx["release_target_version"] = release.version
     if previous_version_text != release.version:
         version_path.write_text(f"{release.version}\n", encoding="utf-8")
         _append_log(log_path, f"Updated VERSION file to {release.version}")
@@ -1718,14 +1731,35 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
 
 
 def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> None:
-    """Require per-release test-suite pruning evidence.
+    """Require test-suite pruning evidence for minor and major releases.
 
     Prerequisites: release test gate completed.
     Side effects: records the pruning PR evidence in release context/logs.
     Rollback expectations: no rollback; missing evidence pauses progression.
     """
-    del release, user
+    del user
     _append_log(log_path, "Prune worst 1% of tests by PR")
+    if not _test_pruning_required_for_release(release, ctx):
+        previous = str(ctx.get("release_previous_version") or "").strip()
+        current = str(getattr(release, "version", "") or "").strip()
+        ctx.pop("test_pruning_required", None)
+        ctx.pop("test_pruning_error", None)
+        ctx["test_pruning_result"] = {
+            "success": True,
+            "source": "not_required",
+            "reason": "patch_release",
+            "previous_version": previous,
+            "version": current,
+            "criteria": list(TEST_PRUNING_CRITERIA),
+        }
+        _append_log(
+            log_path,
+            "Test pruning gate skipped for patch release "
+            f"{previous or 'unknown'} -> {current or 'unknown'}; operator policy "
+            "applies 1% pruning to minor and major releases.",
+        )
+        return
+
     pruning_result = ctx.get("test_pruning_result")
     pruning_pr_url = str(ctx.get("test_pruning_pr_url") or "").strip()
     pruning_source = "release_context"
