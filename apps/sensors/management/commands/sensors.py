@@ -280,16 +280,22 @@ class Command(BaseCommand):
                     self.stderr.write("Skipping malformed USB inventory entry.")
                     continue
                 claims = (
-                    ",".join(str(claim) for claim in (device.get("claims") or []))
+                    ",".join(
+                        self._safe_terminal_text(claim)
+                        for claim in (device.get("claims") or [])
+                    )
                     or "-"
                 )
-                path = device.get("mountpoint") or device.get("path") or "-"
+                path = self._safe_terminal_text(
+                    device.get("mountpoint") or device.get("path") or "-"
+                )
                 label = (
                     device.get("label")
                     or device.get("model")
                     or device.get("name")
                     or "-"
                 )
+                label = self._safe_terminal_text(label)
                 self.stdout.write(f"{label} {path} claims={claims}")
             return
         if usb_action == "claimed-path":
@@ -305,7 +311,7 @@ class Command(BaseCommand):
                 )
                 return
             for path in paths:
-                self.stdout.write(path)
+                self.stdout.write(self._safe_terminal_text(path))
             return
         if usb_action == "path-claims":
             claims = usb_inventory.path_claims(
@@ -320,9 +326,29 @@ class Command(BaseCommand):
                 )
                 return
             for claim in claims:
-                self.stdout.write(claim)
+                self.stdout.write(self._safe_terminal_text(claim))
             return
         raise CommandError(f"Unsupported usb-inventory action: {usb_action}")
+
+    @staticmethod
+    def _safe_terminal_text(value):
+        """Return terminal-safe text for console output by JSON-escaping control characters.
+
+        Converts ``value`` to ``str`` and applies ``json.dumps(..., ensure_ascii=False)[1:-1]``
+        so control characters, quotes, and backslashes are escaped while Unicode remains
+        readable. DEL and C1 controls are escaped after JSON rendering because
+        ``ensure_ascii=False`` leaves them raw. Example: ``"line\n\x1b[31mred"``
+        becomes ``"line\\n\\u001b[31mred"``.
+
+        This is for terminal/console rendering only and is not HTML, SQL, or shell escaping.
+        """
+        rendered = json.dumps(str(value), ensure_ascii=False)[1:-1]
+        return "".join(
+            f"\\u{ord(character):04x}"
+            if character == "\x7f" or "\x80" <= character <= "\x9f"
+            else character
+            for character in rendered
+        )
 
     def _local_node_or_error(self):
         node = Node.get_local()
