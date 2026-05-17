@@ -96,8 +96,15 @@ def watch_state_path(root: Path, repo: str, number: int) -> Path:
     return root.expanduser() / f"{_slugify_path_segment(repo)}-pr-{number}.json"
 
 
+def _extract_first_url(value: str) -> str:
+    match = re.search(r"https?://[^\s<>\")]+", value)
+    if not match:
+        return ""
+    return match.group(0).rstrip(".,;:")
+
+
 def windows_dismiss_notification(title: str, body: str, *, icon: str = "Information") -> dict[str, Any]:
-    """Launch a dismissible Windows message-box notification."""
+    """Launch a dismissible Windows dialog notification."""
 
     if os.name != "nt":
         return {"notified": False, "reason": "not-windows"}
@@ -107,12 +114,67 @@ def windows_dismiss_notification(title: str, body: str, *, icon: str = "Informat
 
     title64 = base64.b64encode(title.encode("utf-8")).decode("ascii")
     body64 = base64.b64encode(body.encode("utf-8")).decode("ascii")
-    clean_icon = icon if icon in {"Information", "Warning", "Error"} else "Information"
+    url64 = base64.b64encode(_extract_first_url(body).encode("utf-8")).decode("ascii")
+    icon64 = base64.b64encode(icon.encode("utf-8")).decode("ascii")
     script = f"""
 $title = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{title64}'))
 $body = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{body64}'))
-Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show($body, $title, 'OK', '{clean_icon}') | Out-Null
+$url = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{url64}'))
+$icon = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{icon64}'))
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$form = New-Object System.Windows.Forms.Form
+$form.Text = $title
+$form.StartPosition = 'CenterScreen'
+$form.TopMost = $true
+$form.ShowInTaskbar = $true
+$form.MinimizeBox = $false
+$form.MaximizeBox = $false
+$form.Size = New-Object System.Drawing.Size(640, 320)
+$form.MinimumSize = New-Object System.Drawing.Size(420, 220)
+$form.Padding = New-Object System.Windows.Forms.Padding(16)
+if ($icon -eq 'Error') {{
+    $form.BackColor = [System.Drawing.Color]::FromArgb(255, 250, 250)
+}} elseif ($icon -eq 'Warning') {{
+    $form.BackColor = [System.Drawing.Color]::FromArgb(255, 252, 242)
+}}
+
+$bodyBox = New-Object System.Windows.Forms.TextBox
+$bodyBox.Multiline = $true
+$bodyBox.ReadOnly = $true
+$bodyBox.BorderStyle = 'None'
+$bodyBox.BackColor = $form.BackColor
+$bodyBox.ScrollBars = 'Vertical'
+$bodyBox.Anchor = 'Top, Bottom, Left, Right'
+$bodyBox.Location = New-Object System.Drawing.Point(16, 16)
+$bodyBox.Size = New-Object System.Drawing.Size(590, 210)
+$bodyBox.Text = $body
+$form.Controls.Add($bodyBox)
+
+$dismissButton = New-Object System.Windows.Forms.Button
+$dismissButton.Text = 'Dismiss'
+$dismissButton.Anchor = 'Bottom, Right'
+$dismissButton.Size = New-Object System.Drawing.Size(96, 32)
+$dismissButton.Location = New-Object System.Drawing.Point(510, 238)
+$dismissButton.Add_Click({{ $form.Close() }})
+$form.Controls.Add($dismissButton)
+$form.CancelButton = $dismissButton
+
+if (-not [string]::IsNullOrWhiteSpace($url)) {{
+    $goButton = New-Object System.Windows.Forms.Button
+    $goButton.Text = 'Go to PR'
+    $goButton.Anchor = 'Bottom, Right'
+    $goButton.Size = New-Object System.Drawing.Size(96, 32)
+    $goButton.Location = New-Object System.Drawing.Point(404, 238)
+    $goButton.Add_Click({{ Start-Process $url; $form.Close() }})
+    $form.Controls.Add($goButton)
+    $form.AcceptButton = $goButton
+}} else {{
+    $form.AcceptButton = $dismissButton
+}}
+$form.Add_Shown({{ $form.Activate() }})
+[void]$form.ShowDialog()
 """.strip()
     encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
@@ -135,7 +197,7 @@ Add-Type -AssemblyName PresentationFramework
         stderr=subprocess.DEVNULL,
         creationflags=creationflags,
     )
-    return {"notified": True, "kind": "windows-message-box", "pid": process.pid}
+    return {"notified": True, "kind": "windows-dialog", "pid": process.pid}
 
 
 def _path_is_relative_to(path: Path, root: Path) -> bool:
@@ -2090,6 +2152,15 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         state = str(pr.get("state") or "").upper()
         head_sha = str(pr.get("headRefOid") or gate.get("headRefOid") or "")
         expected = expected_head_sha.strip()
+        if expected and head_sha != expected:
+            return {
+                "status": "failed",
+                "terminal": True,
+                "reason": "head_changed",
+                "blockers": [f"head_changed:{head_sha or 'missing'}"],
+                "waitingBlockers": [],
+                "failingChecks": [],
+            }
         if state == "MERGED":
             return {
                 "status": "succeeded",
@@ -2105,15 +2176,6 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
                 "terminal": True,
                 "reason": "closed",
                 "blockers": ["state:CLOSED"],
-                "waitingBlockers": [],
-                "failingChecks": [],
-            }
-        if expected and head_sha != expected:
-            return {
-                "status": "failed",
-                "terminal": True,
-                "reason": "head_changed",
-                "blockers": [f"head_changed:{head_sha or 'missing'}"],
                 "waitingBlockers": [],
                 "failingChecks": [],
             }

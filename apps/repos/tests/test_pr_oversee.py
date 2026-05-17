@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -23,6 +24,7 @@ from apps.repos.pr_oversee import (
     patchwork_worktree_path,
     readiness_gate,
     review_reply_summary,
+    windows_dismiss_notification,
 )
 
 
@@ -1271,6 +1273,59 @@ def test_watch_fails_when_expected_head_changes():
     assert result["status"] == "failed"
     assert result["reason"] == "head_changed"
     assert result["blockers"] == ["head_changed:new-head"]
+
+
+def test_watch_fails_when_expected_head_changes_before_merged_success():
+    runner = FakeRunner(
+        [
+            CommandResult(
+                0,
+                json.dumps(_pr_payload(state="MERGED", headRefOid="new-head")),
+            ),
+            CommandResult(0, json.dumps(_review_threads_payload())),
+        ]
+    )
+    overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
+
+    result = overseer.watch(
+        123,
+        interval_seconds=0,
+        max_iterations=1,
+        expected_head_sha="old-head",
+    )
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "head_changed"
+    assert result["succeeded"] is False
+
+
+def test_windows_dismiss_notification_adds_go_to_pr_button():
+    captured = {}
+
+    class Process:
+        pid = 5150
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return Process()
+
+    with (
+        patch("apps.repos.pr_oversee.os.name", "nt"),
+        patch("apps.repos.pr_oversee.shutil.which", return_value="powershell.exe"),
+        patch("apps.repos.pr_oversee.subprocess.Popen", side_effect=fake_popen),
+    ):
+        result = windows_dismiss_notification(
+            "PR 123 watch succeeded",
+            "arthexis/arthexis#123 succeeded.\nhttps://github.com/arthexis/arthexis/pull/123",
+        )
+
+    encoded = captured["command"][captured["command"].index("-EncodedCommand") + 1]
+    script = base64.b64decode(encoded).decode("utf-16le")
+    assert result == {"notified": True, "kind": "windows-dialog", "pid": 5150}
+    assert "$goButton.Text = 'Go to PR'" in script
+    assert "Start-Process $url" in script
+    assert captured["kwargs"]["stdout"] is not None
 
 
 def test_start_background_watch_launches_child_without_console(tmp_path: Path):
