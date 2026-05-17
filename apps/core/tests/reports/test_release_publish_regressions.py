@@ -725,6 +725,33 @@ def test_install_health_workflow_runs_on_default_branch_push_not_schedule() -> N
     )
 
 
+def test_prepare_release_workflow_keeps_checkout_read_only_and_trusted() -> None:
+    workflow = _workflow_data("prepare-release.yml")
+    on_section = _workflow_on(workflow)
+    workflow_run = on_section["workflow_run"]
+    plan_job = workflow["jobs"]["prepare-release-plan"]
+    write_job = workflow["jobs"]["open-or-update-release-pr"]
+
+    assert workflow["permissions"] == {}
+    assert workflow_run["branches"] == ["main"]
+    assert plan_job["permissions"] == {"contents": "read", "issues": "read"}
+
+    checkout_step = _workflow_step(plan_job, "Checkout trusted default branch")
+    assert checkout_step["uses"] == "actions/checkout@v6"
+    assert checkout_step["with"]["ref"] == "${{ github.event.repository.default_branch }}"
+    assert "workflow_run.head_sha" not in str(checkout_step)
+
+    source_step = _workflow_step(plan_job, "Verify automatic source is still current")
+    assert source_step["env"]["WORKFLOW_RUN_HEAD_SHA"] == "${{ github.event.workflow_run.head_sha }}"
+    assert "git rev-parse HEAD" in source_step["run"]
+    assert "current=false" in source_step["run"]
+
+    assert write_job["permissions"] == {"contents": "write", "pull-requests": "write"}
+    assert all(step.get("uses") != "actions/checkout@v6" for step in write_job["steps"])
+    push_step = _workflow_step(write_job, "Push branch and open or update PR")
+    assert "repos/${GITHUB_REPOSITORY}/contents/VERSION" in push_step["run"]
+
+
 def test_release_simulator_requires_current_main_install_health_success() -> None:
     workflow = _workflow_data("release-simulator.yml")
     evaluate_job = workflow["jobs"]["evaluate"]

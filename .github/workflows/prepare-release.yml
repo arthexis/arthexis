@@ -23,21 +23,29 @@ on:
       - Release Simulator
     types:
       - completed
+    branches:
+      - main
 
-permissions:
-  contents: write
-  issues: read
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: prepare-release-pr
   cancel-in-progress: false
 
 jobs:
-  prepare-release-pr:
-    # Security note: workflow_run may be triggered by fork activity, but this workflow only
-    # checks out trusted base-repository refs (actions/checkout@v6 with explicit ref) and
-    # executes in the base repository context with base repository tokens.
+  prepare-release-plan:
+    # Security note: workflow_run uses base-repository privileges, so the planning job has
+    # read-only permissions and checks out only the default branch. Automatic runs skip
+    # release PR creation unless the checked-out default branch still matches the exact
+    # successful simulator SHA.
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      ready: ${{ steps.readiness.outputs.ready }}
+      version_bumped: ${{ steps.plan.outputs.version_bumped }}
+      next_version: ${{ steps.plan.outputs.next_version }}
+      bump_level: ${{ steps.plan.outputs.bump_level }}
     if: >-
       ${{ github.event_name == 'workflow_dispatch' || (
         github.event.workflow_run.conclusion == 'success' &&
@@ -45,11 +53,33 @@ jobs:
       ) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout trusted ref
+      - name: Checkout trusted default branch
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.repository.default_branch }}
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Verify automatic source is still current
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" = "$WORKFLOW_RUN_HEAD_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            echo "Default branch matches triggering simulator SHA: ${actual}"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Default branch moved since the triggering simulator run."
+            echo "Triggering simulator SHA: ${WORKFLOW_RUN_HEAD_SHA}"
+            echo "Checked-out default branch SHA: ${actual}"
+          fi
 
       - uses: actions/setup-python@v6
         with:
@@ -73,6 +103,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "${{ steps.source.outputs.current }}" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Automatic release prepare skipped because the default branch changed after the triggering simulator run."
+            exit 0
+          fi
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "Manual dispatch bypasses readiness-report gating."
@@ -148,19 +184,60 @@ jobs:
             echo "After this PR merges, tag-from-version creates the matching tag and dispatches publish.yml. The PyPI environment approval gate remains manual."
           } > release-pr-body.md
 
+      - name: Upload release PR body
+        if: ${{ steps.readiness.outputs.ready == 'true' && steps.plan.outputs.version_bumped == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepare-release-pr-body
+          path: release-pr-body.md
+          if-no-files-found: error
+
+  open-or-update-release-pr:
+    needs: prepare-release-plan
+    if: ${{ needs.prepare-release-plan.outputs.ready == 'true' && needs.prepare-release-plan.outputs.version_bumped == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Download release PR body
+        uses: actions/download-artifact@v8
+        with:
+          name: prepare-release-pr-body
+          path: .
+
       - name: Push branch and open or update PR
-        if: ${{ steps.readiness.outputs.ready == 'true' && steps.plan.outputs.version_bumped == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true') }}
         env:
           GH_TOKEN: ${{ github.token }}
-          NEXT_VERSION: ${{ steps.plan.outputs.next_version }}
+          NEXT_VERSION: ${{ needs.prepare-release-plan.outputs.next_version }}
         run: |
           branch="release/prepare-v${NEXT_VERSION}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          git add VERSION
-          git commit -m "Prepare release v${NEXT_VERSION}"
-          git push --force-with-lease origin "HEAD:${branch}"
+          base_branch="${{ github.event.repository.default_branch }}"
+          base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${base_branch}" --jq '.object.sha')"
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/tmp/prepare-release-ref.json 2>/dev/null; then
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}" \
+              -F sha="$base_sha" \
+              -F force=true >/dev/null
+          else
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/heads/${branch}" \
+              -f sha="$base_sha" >/dev/null
+          fi
+
+          version_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/VERSION?ref=${branch}" --jq '.sha')"
+          version_content="$(printf '%s\n' "$NEXT_VERSION" | base64 -w 0)"
+          gh api \
+            --method PUT \
+            "repos/${GITHUB_REPOSITORY}/contents/VERSION" \
+            -f message="Prepare release v${NEXT_VERSION}" \
+            -f content="$version_content" \
+            -f branch="$branch" \
+            -f sha="$version_sha" >/dev/null
 
           existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // ""')"
           if [ -n "$existing_pr" ]; then
