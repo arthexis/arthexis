@@ -41,6 +41,10 @@ Resolve a mounted path to matching claims:
 python manage.py sensors usb-inventory path-claims /media/kindle
 ```
 
+Kindle Postbox uses the `kindle-postbox` claim to find mounted Kindle roots when
+copying generated suite documentation. Keep those match rules in the local
+claims file rather than hardcoding device paths in the docs sync command.
+
 The default local paths are `/etc/arthexis-usb/claims.json` for claims and
 `/run/arthexis-usb/devices.json` for generated state. Override them with
 `USB_INVENTORY_CLAIMS_PATH` and `USB_INVENTORY_STATE_PATH` in Django settings.

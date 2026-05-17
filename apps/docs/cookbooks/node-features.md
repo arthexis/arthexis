@@ -41,6 +41,7 @@ The current seed catalog in `apps/nodes/fixtures/node_features__nodefeature_*.js
 | Chat Bridge | `chat-bridge` | Control, Terminal, Watchtower | Role-assignment feature with no built-in default action link. |
 | GPIO RTC | `gpio-rtc` | Control | Auto-managed feature with a **Find Clock Devices** admin action. |
 | GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature for GUI toast notifications when supported. |
+| Kindle Postbox | `kindle-postbox` | Control | Auto-managed feature for syncing generated suite documentation to claimed Kindle USB targets. |
 | LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
 | LLM Summary | `llm-summary` | Control | Auto-managed feature with a **Configure** admin action. |
 | NGINX Server | `nginx-server` | Satellite, Control, Watchtower | Auto-managed flag for nodes running the bundled NGINX front end. |
@@ -49,6 +50,7 @@ The current seed catalog in `apps/nodes/fixtures/node_features__nodefeature_*.js
 | Playwright Chromium | `playwright-browser-chromium` | (auto-detected) | Engine-specific Playwright node capability. |
 | Playwright Firefox | `playwright-browser-firefox` | (auto-detected) | Engine-specific Playwright node capability. |
 | Playwright WebKit | `playwright-browser-webkit` | (auto-detected) | Engine-specific Playwright node capability. |
+| USB Inventory | `usb-inventory` | Control | Auto-managed feature for local USB block-device inventory and claim lookup. |
 | Video Camera | `video-cam` | (manual enablement) | Auto-managed feature with **Discover** and **Take Snapshot** default actions. |
 | Screenshot Poll | `screenshot-poll` | (manual enablement) | Manual feature providing a **Take Screenshot** admin action. |
 

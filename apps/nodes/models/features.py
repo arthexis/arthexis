@@ -215,6 +215,7 @@ class NodeFeatureMixin:
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "gpio-rtc",
         "gui-toast",
+        "kindle-postbox",
         "lcd-screen",
         "llm-summary",
         "playwright-automation",

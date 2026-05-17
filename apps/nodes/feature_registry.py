@@ -7,6 +7,9 @@ from collections.abc import Sequence
 from apps.cards.node_features import (
     register_node_feature_detection as register_cards_features,
 )
+from apps.docs.node_features import (
+    register_node_feature_detection as register_docs_features,
+)
 from apps.nodes.node_features import (
     register_node_feature_detection as register_nodes_features,
 )
@@ -28,6 +31,7 @@ from .feature_detection import DetectionRegistrar
 APPROVED_NODE_FEATURE_REGISTRARS: Sequence[DetectionRegistrar] = (
     register_nodes_features,
     register_cards_features,
+    register_docs_features,
     register_playwright_features,
     register_screens_features,
     register_sensors_features,
