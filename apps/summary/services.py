@@ -343,19 +343,21 @@ def collect_recent_logs(
 
     candidates = sorted(log_dir.rglob("*.log"))
     for path in candidates:
+        path_key = str(path)
         try:
             stat = path.stat()
         except OSError:
             continue
-        since_ts = (attention_since or since).timestamp()
-        if stat.st_mtime < since_ts:
-            continue
         size = stat.st_size
-        offset = _safe_offset(offsets.get(str(path)))
+        offset_known = path_key in offsets
+        offset = _safe_offset(offsets.get(path_key))
         if offset > size:
             offset = 0
+        since_ts = (attention_since or since).timestamp()
+        if stat.st_mtime < since_ts and not (offset_known and size > offset):
+            continue
         if size <= offset:
-            offsets[str(path)] = size
+            offsets[path_key] = size
             continue
         try:
             with path.open("rb") as handle:
@@ -370,7 +372,7 @@ def collect_recent_logs(
         )
         if content:
             chunks.append(LogChunk(path=path, content=content))
-        offsets[str(path)] = size
+        offsets[path_key] = size
 
     config.log_offsets = offsets
     return chunks

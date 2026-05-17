@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -276,6 +277,31 @@ def test_collect_recent_logs_reads_only_new_bytes_after_offset(tmp_path) -> None
     assert len(chunks) == 1
     assert "old line" not in chunks[0].content
     assert "newer line" in chunks[0].content
+
+
+def test_collect_recent_logs_keeps_unread_offsets_past_mtime_cutoff(
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "app.log"
+    old_content = "2026-05-03 11:10:00,000 [ERROR] old line\n"
+    log_path.write_text(
+        old_content + "2026-05-03 11:30:00,000 [ERROR] unread line\n",
+        encoding="utf-8",
+    )
+    os.utime(log_path, (1, 1))
+
+    class FakeConfig:
+        log_offsets = {str(log_path): len(old_content.encode("utf-8"))}
+
+    chunks = services.collect_recent_logs(
+        FakeConfig(),
+        since=django_timezone.make_aware(datetime(2026, 5, 3, 11, 0)),
+        log_dir=tmp_path,
+    )
+
+    assert len(chunks) == 1
+    assert "old line" not in chunks[0].content
+    assert "unread line" in chunks[0].content
 
 
 def test_collect_recent_logs_does_not_replay_timestamp_free_logs(
