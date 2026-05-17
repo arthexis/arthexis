@@ -120,6 +120,42 @@ def test_usb_inventory_matches_live_kindle_shape_claim_alias(settings, monkeypat
     assert usb_inventory.claimed_paths("kindle-postbox") == [str(kindle_mount)]
 
 
+def test_usb_inventory_reads_service_generated_claim_state(settings, tmp_path):
+    kindle_mount = tmp_path / "kindle"
+    state_path = tmp_path / "devices.json"
+    settings.USB_INVENTORY_STATE_PATH = state_path
+    state_path.write_text(
+        json.dumps(
+            {
+                "devices": [
+                    {
+                        "path": "/dev/sda1",
+                        "claimed_roles": ["bastion-unlock"],
+                        "claims": [{"role": "bastion-unlock"}],
+                        "mountpoints": [str(tmp_path / "bastion")],
+                    },
+                    {
+                        "path": "/dev/sdb",
+                        "claimed_roles": ["kindle-postbox"],
+                        "claims": [
+                            {
+                                "id": "kindle-postbox",
+                                "role": "kindle-postbox",
+                                "owner": "kindle-postbox",
+                            }
+                        ],
+                        "mountpoints": [str(kindle_mount)],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert usb_inventory.claimed_paths("kindle-postbox") == [str(kindle_mount)]
+    assert usb_inventory.path_claims(kindle_mount / "documents") == ["kindle-postbox"]
+
+
 def test_atomic_write_json_cleans_temp_file_on_failure(tmp_path):
     target = tmp_path / "devices.json"
 

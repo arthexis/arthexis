@@ -204,6 +204,40 @@ def _claim_role(claim: dict[str, Any]) -> str:
     return str(claim.get("role") or claim.get("name") or "").strip()
 
 
+def _device_claim_roles(device: dict[str, Any]) -> set[str]:
+    roles = {str(role).strip() for role in device.get("claimed_roles") or []}
+    for claim in device.get("claims") or []:
+        if isinstance(claim, dict):
+            role = _claim_role(claim)
+        else:
+            role = str(claim).strip()
+        if role:
+            roles.add(role)
+    return roles
+
+
+def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    mountpoint = str(device.get("mountpoint") or "").strip()
+    if mountpoint:
+        paths.append(mountpoint)
+    for mountpoint in device.get("mountpoints") or []:
+        path = str(mountpoint or "").strip()
+        if path:
+            paths.append(path)
+    for mount in device.get("mounts") or []:
+        if not isinstance(mount, dict):
+            continue
+        path = str(mount.get("target") or "").strip()
+        if path:
+            paths.append(path)
+    if not paths:
+        path = str(device.get("path") or "").strip()
+        if path:
+            paths.append(path)
+    return paths
+
+
 def _match_text(expected: object, actual: object) -> bool:
     if expected in (None, ""):
         return True
@@ -359,11 +393,9 @@ def claimed_paths(role: str, *, refresh: bool = False) -> list[str]:
     for device in state.get("devices", []):
         if not isinstance(device, dict):
             continue
-        if wanted not in set(device.get("claims") or []):
+        if wanted not in _device_claim_roles(device):
             continue
-        path = str(device.get("mountpoint") or device.get("path") or "")
-        if path:
-            paths.append(path)
+        paths.extend(_device_candidate_paths(device))
     return sorted(set(paths))
 
 
@@ -378,14 +410,13 @@ def path_claims(path: str | Path, *, refresh: bool = False) -> list[str]:
     for device in state.get("devices", []):
         if not isinstance(device, dict):
             continue
-        roots = [device.get("mountpoint"), device.get("path")]
-        for root in roots:
+        for root in _device_candidate_paths(device):
             if not root:
                 continue
             root_path = Path(str(root))
             try:
                 if resolved_target.is_relative_to(root_path.resolve()):
-                    claims.update(str(claim) for claim in device.get("claims") or [])
+                    claims.update(_device_claim_roles(device))
             except OSError:
                 continue
     return sorted(claims)
