@@ -194,6 +194,39 @@ def test_collect_log_file_source_retries_budget_deferred_logs(tmp_path) -> None:
     assert chunks[0].content == "b" * 5
 
 
+def test_collect_state_file_source_enforces_total_byte_budget(
+    monkeypatch, tmp_path
+) -> None:
+    first_state = tmp_path / ".locks" / "lcd-summary"
+    second_state = tmp_path / ".locks" / "rfid-scan.json"
+    first_state.parent.mkdir()
+    first_state.write_text("a" * 5, encoding="utf-8")
+    second_state.write_text("b" * 5, encoding="utf-8")
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="state",
+        group="state",
+        priority=20,
+        max_bytes=5,
+        collector=services._collect_state_file_source,
+    )
+    monkeypatch.setattr(
+        services,
+        "_summary_state_paths",
+        lambda base_dir: [first_state, second_state],
+    )
+
+    chunks = services._collect_state_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["state:.locks:lcd-summary"]
+    assert "b" * 5 not in "\n".join(chunk.content for chunk in chunks)
+
+
 def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):
     settings.BASE_DIR = tmp_path
     monkeypatch.setattr(
@@ -257,6 +290,44 @@ def test_journal_warning_source_collects_suite_unit_warnings(
     assert "2026-05-03 12:00:00+00:00" in calls[0]
     assert "--priority" in calls[0]
     assert "emerg..warning" in calls[0]
+
+
+def test_journal_warning_source_enforces_total_byte_budget(
+    monkeypatch, settings, tmp_path
+) -> None:
+    settings.BASE_DIR = tmp_path
+
+    def fake_run(command):
+        if "lcd-arthexis.service" in command:
+            return "a" * 5
+        if "rfid-arthexis.service" in command:
+            return "b" * 5
+        return "-- No entries --"
+
+    monkeypatch.setattr(services, "_run_summary_command", fake_run)
+    monkeypatch.setattr(
+        services,
+        "SUMMARY_JOURNAL_UNITS",
+        ("lcd-arthexis.service", "rfid-arthexis.service"),
+    )
+    context = services.SummarySourceContext(
+        config=SimpleNamespace(log_offsets={}),
+        since=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=tmp_path / "logs",
+    )
+    source = services.SummarySource(
+        name="journal",
+        group="journal",
+        priority=40,
+        max_bytes=5,
+        collector=services._collect_journal_warning_source,
+    )
+
+    chunks = services._collect_journal_warning_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["journal:lcd-arthexis.service"]
+    assert chunks[0].content == "a" * 5
 
 
 def test_parse_screens_accepts_single_line_colon_buffers() -> None:

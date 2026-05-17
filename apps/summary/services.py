@@ -347,11 +347,15 @@ def _collect_state_file_source(
     chunks: list[LogChunk] = []
     seen: set[Path] = set()
     per_file_budget = min(source.max_bytes, SUMMARY_STATE_SOURCE_MAX_BYTES)
+    remaining_bytes = per_file_budget
     for path in _summary_state_paths(context.base_dir):
+        if remaining_bytes <= 0:
+            break
         if path in seen or not path.exists() or not path.is_file():
             continue
         seen.add(path)
-        content = _read_tail_text(path, per_file_budget)
+        content = _read_tail_text(path, remaining_bytes)
+        remaining_bytes -= len(content.encode("utf-8", errors="replace"))
         chunk = _virtual_chunk(
             _state_chunk_name(path, context.base_dir),
             f"path={path}\n{content}",
@@ -399,8 +403,10 @@ def _collect_journal_warning_source(
 ) -> list[LogChunk]:
     chunks: list[LogChunk] = []
     since = context.since.isoformat(sep=" ", timespec="seconds")
-    per_unit_budget = min(source.max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES)
+    remaining_bytes = min(source.max_bytes, SUMMARY_JOURNAL_SOURCE_MAX_BYTES)
     for unit in SUMMARY_JOURNAL_UNITS:
+        if remaining_bytes <= 0:
+            break
         output = _run_summary_command(
             [
                 "journalctl",
@@ -419,9 +425,11 @@ def _collect_journal_warning_source(
         )
         if not output or output.startswith("-- No entries --"):
             continue
+        content = _limit_text_bytes(output, remaining_bytes)
+        remaining_bytes -= len(content.encode("utf-8", errors="replace"))
         chunk = _virtual_chunk(
             f"journal:{unit}",
-            _limit_text_bytes(output, per_unit_budget),
+            content,
         )
         if chunk:
             chunks.append(chunk)
