@@ -204,6 +204,40 @@ def _claim_role(claim: dict[str, Any]) -> str:
     return str(claim.get("role") or claim.get("name") or "").strip()
 
 
+def _as_state_items(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
+
+
+def _state_text_values(value: Any) -> list[str]:
+    values = []
+    for item in _as_state_items(value):
+        text = str(item or "").strip()
+        if text:
+            values.append(text)
+    return values
+
+
+def _claim_items(value: Any) -> list[Any]:
+    if not isinstance(value, dict):
+        return _as_state_items(value)
+    return [
+        {"role": role, **claim} if isinstance(claim, dict) else role
+        for role, claim in value.items()
+    ]
+
+
+def _role_from_claim_item(claim: Any) -> str:
+    if isinstance(claim, dict):
+        return _claim_role(claim)
+    return str(claim).strip()
+
+
 def _device_claim_roles(device: dict[str, Any]) -> set[str]:
     roles: set[str] = set()
     claimed_roles = device.get("claimed_roles")
@@ -226,6 +260,18 @@ def _device_claim_roles(device: dict[str, Any]) -> set[str]:
     return roles
 
 
+def _mount_items(value: Any) -> list[Any]:
+    if isinstance(value, dict):
+        return list(value.values())
+    return _as_state_items(value)
+
+
+def _mount_path(mount: Any) -> str:
+    if isinstance(mount, dict):
+        return str(mount.get("target") or "").strip()
+    return str(mount or "").strip()
+
+
 def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
     paths: list[str] = []
     mountpoint = str(device.get("mountpoint") or "").strip()
@@ -246,9 +292,7 @@ def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
             if path:
                 paths.append(path)
     if not paths:
-        path = str(device.get("path") or "").strip()
-        if path:
-            paths.append(path)
+        paths.extend(_state_text_values(device.get("path")))
     return paths
 
 
@@ -413,6 +457,19 @@ def claimed_paths(role: str, *, refresh: bool = False) -> list[str]:
     return sorted(set(paths))
 
 
+def _state_root_path(root: str) -> Path | None:
+    if "\x00" in root:
+        return None
+    root_path = Path(root)
+    if (
+        not root_path.is_absolute()
+        or ".." in root_path.parts
+        or root_path == Path(root_path.anchor)
+    ):
+        return None
+    return root_path
+
+
 def path_claims(path: str | Path, *, refresh: bool = False) -> list[str]:
     target = Path(path)
     try:
@@ -425,14 +482,11 @@ def path_claims(path: str | Path, *, refresh: bool = False) -> list[str]:
         if not isinstance(device, dict):
             continue
         for root in _device_candidate_paths(device):
-            if not root:
+            root_path = _state_root_path(root)
+            if root_path is None:
                 continue
-            root_path = Path(str(root))
-            try:
-                if resolved_target.is_relative_to(root_path.resolve()):
-                    claims.update(_device_claim_roles(device))
-            except OSError:
-                continue
+            if resolved_target.is_relative_to(root_path):
+                claims.update(_device_claim_roles(device))
     return sorted(claims)
 
 

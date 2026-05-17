@@ -287,6 +287,40 @@ def test_kindle_postbox_sync_command_requires_usb_tools_without_target(
         )
 
 
+def test_kindle_postbox_sync_command_translates_usb_inventory_error(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        Node,
+        "get_local",
+        classmethod(lambda cls: SimpleNamespace(role=SimpleNamespace(name="Control"))),
+    )
+    monkeypatch.setattr(
+        kindle_postbox.usb_inventory,
+        "has_usb_inventory_tools",
+        lambda: True,
+    )
+
+    def _sync_to_kindle_postboxes(**kwargs):
+        raise kindle_postbox.usb_inventory.UsbInventoryError("invalid inventory")
+
+    monkeypatch.setattr(
+        kindle_postbox,
+        "sync_to_kindle_postboxes",
+        _sync_to_kindle_postboxes,
+    )
+
+    with pytest.raises(CommandError, match="USB discovery failed: invalid inventory"):
+        call_command(
+            "docs",
+            "kindle-postbox",
+            "sync",
+            "--output-dir",
+            str(tmp_path / "out"),
+        )
+
+
 def test_kindle_postbox_sync_command_fails_when_target_copy_fails(
     monkeypatch,
     tmp_path,

@@ -81,67 +81,109 @@ class Command(BaseCommand):
         )
         postbox_action = options["postbox_action"]
         if postbox_action == "build":
-            bundle = kindle_postbox.build_suite_documentation_bundle(
+            return self._handle_kindle_postbox_build(
                 output_dir=output_dir,
+                json_output=options["json"],
             )
-            if options["json"]:
-                self.stdout.write(json.dumps(bundle.as_dict(), sort_keys=True))
-                return
-            self.stdout.write(
-                "Kindle postbox documentation built: "
-                f"documents={bundle.document_count} bytes={bundle.byte_count} "
-                f"file={bundle.output_path}"
-            )
-            return
 
         if postbox_action == "sync":
-            self._local_control_node_or_error()
-            targets = options.get("target")
-            if targets is None and not kindle_postbox.usb_inventory.has_usb_inventory_tools():
-                raise CommandError(
-                    "Kindle postbox USB discovery requires lsblk and findmnt on this host; "
-                    "pass --target to sync an explicit Kindle mount."
-                )
-            result = kindle_postbox.sync_to_kindle_postboxes(
+            return self._handle_kindle_postbox_sync(
                 output_dir=output_dir,
+                json_output=options["json"],
                 refresh_usb=options["refresh_usb"],
                 dry_run=options["dry_run"],
-                targets=targets,
+                targets=options.get("target"),
             )
-            failed_targets = [
-                target
-                for target in result.targets
-                if target.status in {"failed", "missing"}
-            ]
-            if options["json"]:
-                self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))
-                if failed_targets:
-                    raise CommandError(
-                        "Kindle postbox sync failed for "
-                        f"{len(failed_targets)} target(s)."
-                    )
-                return
-            self.stdout.write(
-                "Kindle postbox documentation built: "
-                f"documents={result.bundle.document_count} bytes={result.bundle.byte_count} "
-                f"file={result.bundle.output_path}"
-            )
-            if not result.targets:
-                self.stdout.write("No Kindle postbox targets found.")
-                return
-            for target in result.targets:
-                destination = target.output_path or target.root_path
-                self.stdout.write(f"{target.status}: {destination}")
-                if target.error:
-                    self.stderr.write(target.error)
-            if failed_targets:
-                raise CommandError(
-                    "Kindle postbox sync failed for "
-                    f"{len(failed_targets)} target(s)."
-                )
-            return
 
         raise CommandError(f"Unsupported kindle-postbox action: {postbox_action}")
+
+    def _handle_kindle_postbox_build(
+        self,
+        *,
+        output_dir: Path | None,
+        json_output: bool,
+    ) -> None:
+        bundle = kindle_postbox.build_suite_documentation_bundle(
+            output_dir=output_dir,
+        )
+        if json_output:
+            self.stdout.write(json.dumps(bundle.as_dict(), sort_keys=True))
+            return
+        self.stdout.write(
+            "Kindle postbox documentation built: "
+            f"documents={bundle.document_count} bytes={bundle.byte_count} "
+            f"file={bundle.output_path}"
+        )
+
+    def _handle_kindle_postbox_sync(
+        self,
+        *,
+        output_dir: Path | None,
+        json_output: bool,
+        refresh_usb: bool,
+        dry_run: bool,
+        targets: list[str] | None,
+    ) -> None:
+        self._local_control_node_or_error()
+        if targets is None and not kindle_postbox.usb_inventory.has_usb_inventory_tools():
+            raise CommandError(
+                "Kindle postbox USB discovery requires lsblk and findmnt on this host; "
+                "pass --target to sync an explicit Kindle mount."
+            )
+        try:
+            result = kindle_postbox.sync_to_kindle_postboxes(
+                output_dir=output_dir,
+                refresh_usb=refresh_usb,
+                dry_run=dry_run,
+                targets=targets,
+            )
+        except kindle_postbox.usb_inventory.UsbInventoryError as exc:
+            raise CommandError(f"Kindle postbox USB discovery failed: {exc}") from exc
+        failed_targets = self._failed_kindle_targets(result)
+        if json_output:
+            self.stdout.write(json.dumps(result.as_dict(), sort_keys=True))
+            self._raise_failed_kindle_targets(failed_targets)
+            return
+        self._write_kindle_sync_text(result)
+        self._raise_failed_kindle_targets(failed_targets)
+
+    @staticmethod
+    def _failed_kindle_targets(
+        result: kindle_postbox.KindlePostboxSyncResult,
+    ) -> list[kindle_postbox.KindlePostboxTargetResult]:
+        return [
+            target
+            for target in result.targets
+            if target.status in {"failed", "missing"}
+        ]
+
+    @staticmethod
+    def _raise_failed_kindle_targets(
+        failed_targets: list[kindle_postbox.KindlePostboxTargetResult],
+    ) -> None:
+        if failed_targets:
+            raise CommandError(
+                "Kindle postbox sync failed for "
+                f"{len(failed_targets)} target(s)."
+            )
+
+    def _write_kindle_sync_text(
+        self,
+        result: kindle_postbox.KindlePostboxSyncResult,
+    ) -> None:
+        self.stdout.write(
+            "Kindle postbox documentation built: "
+            f"documents={result.bundle.document_count} bytes={result.bundle.byte_count} "
+            f"file={result.bundle.output_path}"
+        )
+        if not result.targets:
+            self.stdout.write("No Kindle postbox targets found.")
+            return
+        for target in result.targets:
+            destination = target.output_path or target.root_path
+            self.stdout.write(f"{target.status}: {destination}")
+            if target.error:
+                self.stderr.write(target.error)
 
     def _local_control_node_or_error(self) -> Node:
         node = Node.get_local()
