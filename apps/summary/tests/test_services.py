@@ -161,7 +161,37 @@ def test_collect_log_file_source_enforces_total_log_byte_budget(tmp_path) -> Non
 
     assert [chunk.path.name for chunk in chunks] == ["a.log"]
     assert chunks[0].content == "a" * 5
-    assert str(second_log) not in config.log_offsets
+    assert config.log_offsets[str(second_log)] == 0
+
+
+def test_collect_log_file_source_retries_budget_deferred_logs(tmp_path) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    first_log = log_dir / "a.log"
+    second_log = log_dir / "b.log"
+    first_log.write_text("a" * 5, encoding="utf-8")
+    second_log.write_text("b" * 5, encoding="utf-8")
+    config = SimpleNamespace(log_offsets={})
+    context = services.SummarySourceContext(
+        config=config,
+        since=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        base_dir=tmp_path,
+        log_dir=log_dir,
+    )
+    source = services.SummarySource(
+        name="logs",
+        group="logs",
+        priority=10,
+        max_bytes=5,
+        collector=services._collect_log_file_source,
+    )
+
+    services._collect_log_file_source(context, source)
+    first_log.write_text("a" * 5, encoding="utf-8")
+    chunks = services._collect_log_file_source(context, source)
+
+    assert [chunk.path.name for chunk in chunks] == ["b.log"]
+    assert chunks[0].content == "b" * 5
 
 
 def test_systemctl_failed_source_skips_clean_output(monkeypatch, settings, tmp_path):

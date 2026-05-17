@@ -249,21 +249,24 @@ def _collect_log_file_source(
 
     candidates = sorted(context.log_dir.rglob("*.log"))
     for path in candidates:
-        if remaining_bytes <= 0:
-            break
+        path_key = str(path)
         try:
             stat = path.stat()
         except OSError:
             continue
-        since_ts = context.since.timestamp()
-        if stat.st_mtime < since_ts:
-            continue
-        offset = _safe_offset(offsets.get(str(path)))
         size = stat.st_size
+        offset_known = path_key in offsets
+        offset = _safe_offset(offsets.get(path_key))
         if offset > size:
             offset = 0
+        since_ts = context.since.timestamp()
+        if stat.st_mtime < since_ts and not (offset_known and size > offset):
+            continue
         if size <= offset:
-            offsets[str(path)] = size
+            offsets[path_key] = size
+            continue
+        if remaining_bytes <= 0:
+            offsets.setdefault(path_key, offset)
             continue
         read_start = offset
         truncated_bytes = 0
@@ -291,7 +294,7 @@ def _collect_log_file_source(
                     content=content,
                 )
             )
-        offsets[str(path)] = size
+        offsets[path_key] = size
 
     context.config.log_offsets = offsets
     return chunks
