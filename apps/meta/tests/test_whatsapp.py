@@ -1042,94 +1042,90 @@ def test_whatsapp_install_listener_linux_write_restricts_runner_permissions(tmp_
     assert runner_path.stat().st_mode & 0o777 == 0o700
 
 
-def test_install_listener_target_platform_controls_browser_defaults(tmp_path):
-    stdout = StringIO()
+def test_install_listener_browser_defaults_and_overrides(tmp_path):
+    cases = [
+        (
+            [
+                "--platform",
+                "windows",
+                "--python",
+                r"C:\Arthexis\.venv\Scripts\python.exe",
+                "--manage-py",
+                r"C:\Arthexis\manage.py",
+            ],
+            ["--browser", "'edge'", "--channel", "'msedge'"],
+            [],
+            [],
+            [],
+        ),
+        (
+            [
+                "--platform",
+                "windows",
+                "--browser",
+                "firefox",
+                "--python",
+                r"C:\Arthexis\.venv\Scripts\python.exe",
+                "--manage-py",
+                r"C:\Arthexis\manage.py",
+            ],
+            ["'firefox'"],
+            ["--channel"],
+            ["Playwright Firefox"],
+            ["Microsoft Edge"],
+        ),
+        (
+            [
+                "--platform",
+                "linux",
+                "--browser",
+                "chromium",
+                "--python",
+                "/opt/arthexis/.venv/bin/python",
+                "--manage-py",
+                "/opt/arthexis/manage.py",
+            ],
+            ["--browser chromium"],
+            [],
+            ["Playwright Chromium"],
+            ["Firefox"],
+        ),
+    ]
 
-    with override_settings(BASE_DIR=tmp_path):
-        call_command(
-            "whatsapp",
-            "install-listener",
-            "--from",
-            "5551234567",
-            "--platform",
-            "windows",
-            "--output-dir",
-            str(tmp_path / "install"),
-            "--python",
-            r"C:\Arthexis\.venv\Scripts\python.exe",
-            "--manage-py",
-            r"C:\Arthexis\manage.py",
-            "--json",
-            stdout=stdout,
-        )
+    for index, (
+        extra_args,
+        expected_command_fragments,
+        forbidden_command_fragments,
+        expected_requirements,
+        forbidden_requirements,
+    ) in enumerate(cases):
+        stdout = StringIO()
 
-    payload = json.loads(stdout.getvalue())
-    assert "--browser" in payload["listen_command"]
-    assert "'edge'" in payload["listen_command"]
-    assert "--channel" in payload["listen_command"]
-    assert "'msedge'" in payload["listen_command"]
+        with override_settings(BASE_DIR=tmp_path):
+            call_command(
+                "whatsapp",
+                "install-listener",
+                "--from",
+                "5551234567",
+                "--output-dir",
+                str(tmp_path / f"install-{index}"),
+                *extra_args,
+                "--json",
+                stdout=stdout,
+            )
 
-
-def test_install_listener_explicit_browser_skips_platform_channel_default(tmp_path):
-    stdout = StringIO()
-
-    with override_settings(BASE_DIR=tmp_path):
-        call_command(
-            "whatsapp",
-            "install-listener",
-            "--from",
-            "5551234567",
-            "--platform",
-            "windows",
-            "--browser",
-            "firefox",
-            "--output-dir",
-            str(tmp_path / "install"),
-            "--python",
-            r"C:\Arthexis\.venv\Scripts\python.exe",
-            "--manage-py",
-            r"C:\Arthexis\manage.py",
-            "--json",
-            stdout=stdout,
-        )
-
-    payload = json.loads(stdout.getvalue())
-    assert "'firefox'" in payload["listen_command"]
-    assert "--channel" not in payload["listen_command"]
-    assert any("Playwright Firefox" in item for item in payload["requirements"])
-    assert not any("Microsoft Edge" in item for item in payload["requirements"])
-
-
-def test_install_listener_requirements_match_chromium_override(tmp_path):
-    stdout = StringIO()
-
-    with override_settings(BASE_DIR=tmp_path):
-        call_command(
-            "whatsapp",
-            "install-listener",
-            "--from",
-            "5551234567",
-            "--platform",
-            "linux",
-            "--browser",
-            "chromium",
-            "--output-dir",
-            str(tmp_path / "install"),
-            "--python",
-            "/opt/arthexis/.venv/bin/python",
-            "--manage-py",
-            "/opt/arthexis/manage.py",
-            "--json",
-            stdout=stdout,
-        )
-
-    payload = json.loads(stdout.getvalue())
-    assert "--browser chromium" in payload["listen_command"]
-    assert any("Playwright Chromium" in item for item in payload["requirements"])
-    assert not any("Firefox" in item for item in payload["requirements"])
+        payload = json.loads(stdout.getvalue())
+        for fragment in expected_command_fragments:
+            assert fragment in payload["listen_command"]
+        for fragment in forbidden_command_fragments:
+            assert fragment not in payload["listen_command"]
+        for requirement in expected_requirements:
+            assert any(requirement in item for item in payload["requirements"])
+        for requirement in forbidden_requirements:
+            assert not any(requirement in item for item in payload["requirements"])
 
 
-def test_install_listener_cross_platform_uses_target_path_defaults(tmp_path):
+def test_install_listener_cross_platform_paths_use_target_defaults(tmp_path):
     target = "linux" if sys.platform == "win32" else "windows"
     stdout = StringIO()
 
@@ -1157,11 +1153,8 @@ def test_install_listener_cross_platform_uses_target_path_defaults(tmp_path):
         assert "/opt/arthexis/.venv/bin/python" in payload["listen_command"]
         assert "/opt/arthexis/manage.py" in payload["listen_command"]
 
-
-def test_install_listener_cross_platform_base_dir_controls_target_paths(tmp_path):
-    target = "linux" if sys.platform == "win32" else "windows"
     base_dir = "/srv/arthexis" if target == "linux" else r"D:\Arthexis"
-    stdout = StringIO()
+    base_stdout = StringIO()
 
     with override_settings(BASE_DIR=tmp_path):
         call_command(
@@ -1174,23 +1167,23 @@ def test_install_listener_cross_platform_base_dir_controls_target_paths(tmp_path
             "--base-dir",
             base_dir,
             "--json",
-            stdout=stdout,
+            stdout=base_stdout,
         )
 
-    payload = json.loads(stdout.getvalue())
-    assert payload["base_dir"] == base_dir
+    base_payload = json.loads(base_stdout.getvalue())
+    assert base_payload["base_dir"] == base_dir
     if target == "windows":
-        assert r"D:\Arthexis\.venv\Scripts\python.exe" in payload["listen_command"]
-        assert r"D:\Arthexis\manage.py" in payload["listen_command"]
+        assert (
+            r"D:\Arthexis\.venv\Scripts\python.exe"
+            in base_payload["listen_command"]
+        )
+        assert r"D:\Arthexis\manage.py" in base_payload["listen_command"]
     else:
-        assert "/srv/arthexis/.venv/bin/python" in payload["listen_command"]
-        assert "/srv/arthexis/manage.py" in payload["listen_command"]
+        assert "/srv/arthexis/.venv/bin/python" in base_payload["listen_command"]
+        assert "/srv/arthexis/manage.py" in base_payload["listen_command"]
 
-
-def test_install_listener_cross_platform_written_runner_uses_target_base_dir(tmp_path):
-    target = "linux" if sys.platform == "win32" else "windows"
     output_dir = tmp_path / "install"
-    stdout = StringIO()
+    write_stdout = StringIO()
     args = [
         "whatsapp",
         "install-listener",
@@ -1207,11 +1200,11 @@ def test_install_listener_cross_platform_written_runner_uses_target_base_dir(tmp
         args.extend(["--systemd-user-dir", str(tmp_path / "systemd")])
 
     with override_settings(BASE_DIR=tmp_path):
-        call_command(*args, stdout=stdout)
+        call_command(*args, stdout=write_stdout)
 
-    payload = json.loads(stdout.getvalue())
-    runner_text = Path(payload["runner_path"]).read_text(encoding="utf-8")
-    assert str(tmp_path) not in payload["listen_command"]
+    write_payload = json.loads(write_stdout.getvalue())
+    runner_text = Path(write_payload["runner_path"]).read_text(encoding="utf-8")
+    assert str(tmp_path) not in write_payload["listen_command"]
     assert str(tmp_path) not in runner_text
     if target == "windows":
         assert r"C:\Arthexis" in runner_text

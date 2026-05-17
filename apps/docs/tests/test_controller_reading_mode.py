@@ -1,18 +1,21 @@
-import pytest
 from django.test import RequestFactory
 
 from apps.docs import views
 
 
-@pytest.mark.parametrize("query", ["controller=1", "tv=true", "ps4", "ps4=on"])
-def test_controller_query_flags_force_full_document(query):
-    request = RequestFactory().get(f"/docs/?{query}")
+def test_controller_query_flags_classify_full_document_mode():
+    cases = {
+        "controller=1": True,
+        "tv=true": True,
+        "ps4": True,
+        "ps4=on": True,
+        "controller=0": False,
+        "tv=false": False,
+        "ps4=off": False,
+        "ps4=no": False,
+    }
 
-    assert views._should_force_controller_full_document(request) is True
+    for query, expected in cases.items():
+        request = RequestFactory().get(f"/docs/?{query}")
 
-
-@pytest.mark.parametrize("query", ["controller=0", "tv=false", "ps4=off", "ps4=no"])
-def test_controller_query_flags_allow_opt_out(query):
-    request = RequestFactory().get(f"/docs/?{query}")
-
-    assert views._should_force_controller_full_document(request) is False
+        assert views._should_force_controller_full_document(request) is expected

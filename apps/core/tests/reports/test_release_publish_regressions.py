@@ -926,20 +926,67 @@ def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
     assert ctx["trusted_publisher_environment"] == "pypi"
 
 
-def test_step_prune_low_value_tests_pauses_for_operator_evidence(
+def test_step_prune_low_value_tests_requires_minor_but_skips_patch(
     monkeypatch, settings, tmp_path: Path
 ):
     settings.RELEASE_PUBLISH_TEST_PRUNING_PR_URL = ""
     monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
-    ctx: dict[str, object] = {}
+    minor_ctx: dict[str, object] = {"release_previous_version": "1.2.3"}
 
     with pytest.raises(PublishPending):
-        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+        pipeline._step_prune_low_value_tests(
+            SimpleNamespace(version="1.3.0"), minor_ctx, tmp_path / "publish.log"
+        )
 
-    assert ctx["paused"] is True
-    assert ctx["test_pruning_required"] is True
-    assert "worst 1% of tests" in ctx["test_pruning_error"]
-    assert "error" not in ctx
+    assert minor_ctx["paused"] is True
+    assert minor_ctx["test_pruning_required"] is True
+    assert "worst 1% of tests" in minor_ctx["test_pruning_error"]
+    assert "error" not in minor_ctx
+
+    patch_ctx: dict[str, object] = {"release_previous_version": "1.2.3"}
+    pipeline._step_prune_low_value_tests(
+        SimpleNamespace(version="1.2.4"), patch_ctx, tmp_path / "publish.log"
+    )
+
+    assert patch_ctx["test_pruning_result"] == {
+        "success": True,
+        "source": "not_required",
+        "reason": "patch_release",
+        "previous_version": "1.2.3",
+        "version": "1.2.4",
+        "criteria": list(pipeline.TEST_PRUNING_CRITERIA),
+    }
+    assert "test_pruning_required" not in patch_ctx
+    assert "test_pruning_error" not in patch_ctx
+
+
+def test_pre_release_actions_derives_previous_version_after_restart(
+    monkeypatch, tmp_path: Path
+):
+    _init_release_repo(tmp_path, "1.2.3")
+    (tmp_path / "VERSION").write_text("1.3.0\n", encoding="utf-8")
+    _run_git(tmp_path, "add", "VERSION")
+    _run_git(tmp_path, "commit", "-m", "pre-release commit 1.3.0")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(pipeline, "_sync_with_origin_main", lambda _log_path: None)
+    monkeypatch.setattr(pipeline.PackageRelease, "dump_fixture", lambda: None)
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {}
+
+    pipeline._step_pre_release_actions(
+        SimpleNamespace(version="1.3.0"), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["release_previous_version"] == "1.2.3"
+    assert ctx["release_target_version"] == "1.3.0"
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout == ""
 
 
 def test_step_prune_low_value_tests_accepts_scheduled_setting(

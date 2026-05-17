@@ -36,21 +36,6 @@ from django.utils.translation import gettext as _
 from packaging.version import InvalidVersion, Version
 
 import apps.release as release_utils
-from apps.nodes.models import NetMessage, Node
-from apps.release import git_utils
-from apps.release.domain import (
-    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
-    FIXTURE_REVIEW_STEP_NAME,
-)
-from apps.release.domain import (
-    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
-)
-from apps.release.models import PackageRelease
-from apps.release.services import builder as release_builder
-from apps.release.services import uploader as release_uploader
-from apps.repos.models import GitHubToken
-from utils import revision
-
 from apps.core.views.reports.common import (
     DIRTY_COMMIT_DEFAULT_MESSAGE,
     PYPI_REQUEST_TIMEOUT,
@@ -68,6 +53,21 @@ from apps.core.views.reports.report_rendering import (
     _render_release_progress_error,
     _sanitize_release_error_message,
 )
+from apps.nodes.models import NetMessage, Node
+from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+)
+from apps.release.domain import (
+    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
+)
+from apps.release.models import PackageRelease
+from apps.release.services import builder as release_builder
+from apps.release.services import uploader as release_uploader
+from apps.repos.models import GitHubToken
+from utils import revision
+
 from .context import (
     ReleaseContextState,
     load_release_context,
@@ -1345,6 +1345,76 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     )
 
 
+def _release_versions_equal(left: str, right: str) -> bool:
+    """Return whether two release version strings represent the same version."""
+
+    left_clean = PackageRelease.strip_dev_suffix((left or "").strip())
+    right_clean = PackageRelease.strip_dev_suffix((right or "").strip())
+    if not left_clean or not right_clean:
+        return left_clean == right_clean
+
+    try:
+        return Version(left_clean) == Version(right_clean)
+    except InvalidVersion:
+        return left_clean == right_clean
+
+
+def _previous_version_from_git_history(target_version: str) -> str:
+    """Return the latest VERSION value before ``target_version`` in git history."""
+
+    target = (target_version or "").strip()
+    if not target:
+        return ""
+
+    try:
+        history = _git_stdout(["git", "log", "--format=%H", "--", "VERSION"])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ""
+
+    for commit in history.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        try:
+            version = _git_stdout(["git", "show", f"{commit}:VERSION"]).strip()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        if version and not _release_versions_equal(version, target):
+            return version
+
+    return ""
+
+
+def _resolve_release_previous_version(
+    release, ctx: dict, current_version_text: str
+) -> str:
+    """Resolve the pre-bump release version for restart-safe publish gating."""
+
+    target_version = str(getattr(release, "version", "") or "").strip()
+    recorded_previous = str(ctx.get("release_previous_version") or "").strip()
+    if recorded_previous and not _release_versions_equal(
+        recorded_previous, target_version
+    ):
+        return recorded_previous
+
+    current_version = (current_version_text or "").strip()
+    if current_version and not _release_versions_equal(current_version, target_version):
+        return current_version
+
+    return _previous_version_from_git_history(target_version)
+
+
+def _test_pruning_required_for_release(release, ctx: dict) -> bool:
+    """Return whether the release should require the 1% pruning PR gate."""
+
+    previous = str(ctx.get("release_previous_version") or "").strip()
+    current = str(getattr(release, "version", "") or "").strip()
+    if not previous or not current:
+        return True
+
+    return _major_minor_version_changed(previous, current)
+
+
 def _summarize_fixture_file(path: str) -> dict[str, object]:
     fixture_path = Path(path)
     try:
@@ -1603,12 +1673,17 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         formatted = ", ".join(_format_path(path) for path in staged_release_fixtures)
         _append_log(log_path, "Staged release fixtures " + formatted)
     version_path = Path("VERSION")
-    previous_version_text = (
+    current_version_text = (
         version_path.read_text(encoding="utf-8").strip()
         if version_path.exists()
         else ""
     )
-    if previous_version_text != release.version:
+    previous_version_text = _resolve_release_previous_version(
+        release, ctx, current_version_text
+    )
+    ctx["release_previous_version"] = previous_version_text
+    ctx["release_target_version"] = release.version
+    if current_version_text != release.version:
         version_path.write_text(f"{release.version}\n", encoding="utf-8")
         _append_log(log_path, f"Updated VERSION file to {release.version}")
         GIT_ADAPTER.run(["git", "add", "VERSION"], check=True)
@@ -1718,14 +1793,35 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
 
 
 def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> None:
-    """Require per-release test-suite pruning evidence.
+    """Require test-suite pruning evidence for minor and major releases.
 
     Prerequisites: release test gate completed.
     Side effects: records the pruning PR evidence in release context/logs.
     Rollback expectations: no rollback; missing evidence pauses progression.
     """
-    del release, user
+    del user
     _append_log(log_path, "Prune worst 1% of tests by PR")
+    if not _test_pruning_required_for_release(release, ctx):
+        previous = str(ctx.get("release_previous_version") or "").strip()
+        current = str(getattr(release, "version", "") or "").strip()
+        ctx.pop("test_pruning_required", None)
+        ctx.pop("test_pruning_error", None)
+        ctx["test_pruning_result"] = {
+            "success": True,
+            "source": "not_required",
+            "reason": "patch_release",
+            "previous_version": previous,
+            "version": current,
+            "criteria": list(TEST_PRUNING_CRITERIA),
+        }
+        _append_log(
+            log_path,
+            "Test pruning gate skipped for patch release "
+            f"{previous or 'unknown'} -> {current or 'unknown'}; operator policy "
+            "applies 1% pruning to minor and major releases.",
+        )
+        return
+
     pruning_result = ctx.get("test_pruning_result")
     pruning_pr_url = str(ctx.get("test_pruning_pr_url") or "").strip()
     pruning_source = "release_context"

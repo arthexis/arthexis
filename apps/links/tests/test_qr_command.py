@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from io import StringIO
-from pathlib import Path
 import stat
 import sys
+from io import StringIO
+from pathlib import Path
 
 import pytest
 from django.core.management import call_command
@@ -70,26 +70,39 @@ def test_qr_print_without_output_uses_secure_tempfile() -> None:
             pass
 
 
-def test_qr_print_wifi_does_not_echo_password(tmp_path) -> None:
-    output_path = tmp_path / "wifi-qr.png"
-    stdout = StringIO()
+def test_qr_print_wifi_does_not_echo_password_sources(tmp_path) -> None:
+    cases = [
+        (
+            "wifi-qr.png",
+            ["--wifi-password", "do-not-print-this-secret"],
+            "do-not-print-this-secret",
+        ),
+        ("wifi-file-qr.png", [], "secret from file"),
+    ]
+    password_file = tmp_path / "wifi-password.txt"
+    password_file.write_text("secret from file\n", encoding="utf-8")
 
-    call_command(
-        "qr",
-        "print",
-        "--wifi-ssid",
-        "Office WiFi",
-        "--wifi-password",
-        "do-not-print-this-secret",
-        "--output",
-        str(output_path),
-        stdout=stdout,
-    )
+    for filename, password_args, secret in cases:
+        output_path = tmp_path / filename
+        stdout = StringIO()
+        if not password_args:
+            password_args = ["--wifi-password-file", str(password_file)]
 
-    output = stdout.getvalue()
-    assert output_path.exists()
-    assert "WIFI_SSID=Office WiFi" in output
-    assert "do-not-print-this-secret" not in output
+        call_command(
+            "qr",
+            "print",
+            "--wifi-ssid",
+            "Office WiFi",
+            *password_args,
+            "--output",
+            str(output_path),
+            stdout=stdout,
+        )
+
+        output = stdout.getvalue()
+        assert output_path.exists()
+        assert "WIFI_SSID=Office WiFi" in output
+        assert secret not in output
 
 
 def test_qr_print_wifi_password_file_preserves_secret_spaces(tmp_path) -> None:
@@ -101,30 +114,6 @@ def test_qr_print_wifi_password_file_preserves_secret_spaces(tmp_path) -> None:
     )
 
     assert password == " leading-and-trailing-secret "
-
-
-def test_qr_print_wifi_password_file_does_not_echo_secret(tmp_path) -> None:
-    output_path = tmp_path / "wifi-file-qr.png"
-    password_file = tmp_path / "wifi-password.txt"
-    password_file.write_text("secret from file\n", encoding="utf-8")
-    stdout = StringIO()
-
-    call_command(
-        "qr",
-        "print",
-        "--wifi-ssid",
-        "Office WiFi",
-        "--wifi-password-file",
-        str(password_file),
-        "--output",
-        str(output_path),
-        stdout=stdout,
-    )
-
-    output = stdout.getvalue()
-    assert output_path.exists()
-    assert "WIFI_SSID=Office WiFi" in output
-    assert "secret from file" not in output
 
 
 def test_qr_print_wifi_profile_uses_profile_lookup(monkeypatch, tmp_path) -> None:
@@ -198,24 +187,21 @@ def test_qr_devices_lists_discovered_phomemo_paths(monkeypatch) -> None:
     assert "USB-B" in output
 
 
-def test_windows_wifi_profile_password_parser_accepts_localized_label() -> None:
-    output = "\n".join(
-        [
-            "Nombre de perfil     : Office WiFi",
-            "Contenido de la clave     : localized-secret",
-        ]
-    )
+def test_windows_wifi_profile_password_parser_handles_labels_and_spaces() -> None:
+    cases = {
+        "\n".join(
+            [
+                "Nombre de perfil     : Office WiFi",
+                "Contenido de la clave     : localized-secret",
+            ]
+        ): "localized-secret",
+        "Key Content     :  leading-and-trailing-secret ": (
+            " leading-and-trailing-secret "
+        ),
+    }
 
-    assert qr_command._extract_windows_wifi_profile_password(output) == "localized-secret"
-
-
-def test_windows_wifi_profile_password_parser_preserves_secret_spaces() -> None:
-    output = "Key Content     :  leading-and-trailing-secret "
-
-    assert (
-        qr_command._extract_windows_wifi_profile_password(output)
-        == " leading-and-trailing-secret "
-    )
+    for output, expected in cases.items():
+        assert qr_command._extract_windows_wifi_profile_password(output) == expected
 
 
 def test_qr_print_reference_uses_database_value(settings, tmp_path) -> None:

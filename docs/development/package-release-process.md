@@ -9,7 +9,7 @@ flowchart TD
     C --> D[Execute pre-release actions]
     D -->|Sync main, bump VERSION, stage fixtures| E[Build release artifacts]
     E -->|Promote build, commit metadata, push| F[Complete test suite with --all flag]
-    F --> P[Prune worst 1% of tests by PR]
+    F --> P[Prune worst 1% of tests by PR for minor/major]
     P --> TP[Confirm PyPI Trusted Publisher settings]
     TP --> G[Verify release environment]
     G -->|Environment ready| H[Export artifacts and create release tag]
@@ -27,7 +27,7 @@ flowchart TD
 3. **Execute pre-release actions** – Refreshes release fixtures, updates the `VERSION` file to the target value, stages the changes, and commits them if anything changed. The workflow also tracks the pre-sync version to support clean restarts.
 4. **Build release artifacts** – Re-validates that `origin/main` is unchanged, promotes the build via `release_utils.promote`, and commits any updated metadata (e.g., `VERSION`, release fixtures). The step sets the build revision and renames the log to the release-specific filename, ensuring traceability.
 5. **Complete test suite with --all flag** – Enforced gate. The workflow now requires test evidence in release context (`tests_verified_at`, `tests_command`, and a successful `tests_result`) or runs a configured validation command (`RELEASE_PUBLISH_VALIDATION_COMMAND`) and records the result before it can proceed.
-6. **Prune worst 1% of tests by PR** – Enforced gate. The workflow requires a pull request URL showing low-value test pruning evidence after the full suite passes and before external publish prerequisites can advance.
+6. **Prune worst 1% of tests by PR** – Operator quality gate for minor and major releases. The workflow requires a pull request URL showing low-value test pruning evidence after the full suite passes and before external publish prerequisites can advance when the release changes the major or minor version. Patch releases may skip this step with recorded rationale because the pruning pass is too much overhead for routine patch publication.
 7. **Confirm PyPI Trusted Publisher settings** – Enforced gate. The workflow validates the publish metadata against the expected Trusted Publisher values (`publish.yml`, `refs/tags/v*`, and `pypi`) and fails with actionable guidance when the workflow metadata is missing or mismatched.
 8. **Verify release environment** – Ensure the release environment can push tags to `origin/main` and has a GitHub token (for GitHub API operations like creating releases and fetching workflow runs). Missing requirements are reported with instructions before the publish step continues. In GitHub Actions, map a GitHub token into `GITHUB_TOKEN`/`GH_TOKEN` so the release tools can read it.
 9. **Export artifacts and create release tag** - Uploads the built wheel/sdist artifacts to the GitHub release for the version tag and creates/pushes the matching `vVERSION` tag. Before any tag push, the suite verifies that both `HEAD:VERSION` and the tag commit's `VERSION` exactly match the release version. On `main`, `.github/workflows/tag-from-version.yml` also acts as the automatic fallback: when `VERSION` changes and the matching tag is missing, it creates the annotated `vVERSION` tag and dispatches `publish.yml` from that tag. Manual tag pushes are fallback-only for authentication or GitHub Actions outages.
