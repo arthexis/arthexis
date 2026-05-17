@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -135,21 +134,38 @@ def test_sync_to_explicit_kindle_target_copies_bundle_to_documents_dir(tmp_path)
 
 
 @pytest.mark.django_db
-def test_sync_to_explicit_kindle_target_uses_metadata_preserving_copy(
-    monkeypatch,
-    tmp_path,
-):
+def test_sync_to_explicit_kindle_target_rejects_symlinked_documents_dir(tmp_path):
     _write(tmp_path / "README.md", "# Root\n")
     target = tmp_path / "kindle"
-    (target / "documents").mkdir(parents=True)
-    real_copy2 = shutil.copy2
-    calls: list[tuple[Path, Path]] = []
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir(parents=True)
+    try:
+        (target / "documents").symlink_to(outside_dir, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
 
-    def _copy2(source: Path, destination: Path) -> Path:
-        calls.append((Path(source), Path(destination)))
-        return Path(real_copy2(source, destination))
+    result = kindle_postbox.sync_to_kindle_postboxes(
+        base_dir=tmp_path,
+        output_dir=tmp_path / "out",
+        targets=[target],
+    )
 
-    monkeypatch.setattr(kindle_postbox.shutil, "copy2", _copy2)
+    assert result.targets[0].status == "missing"
+
+
+@pytest.mark.django_db
+def test_sync_to_explicit_kindle_target_rejects_existing_temp_symlink(tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+    target = tmp_path / "kindle"
+    documents_dir = target / "documents"
+    documents_dir.mkdir(parents=True)
+    victim_path = tmp_path / "victim.txt"
+    victim_path.write_text("original", encoding="utf-8")
+    temp_path = documents_dir / f".{kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME}.evil.tmp"
+    try:
+        temp_path.symlink_to(victim_path)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
 
     result = kindle_postbox.sync_to_kindle_postboxes(
         base_dir=tmp_path,
@@ -158,14 +174,7 @@ def test_sync_to_explicit_kindle_target_uses_metadata_preserving_copy(
     )
 
     assert result.targets[0].status == "copied"
-    assert calls == [
-        (
-            result.bundle.output_path,
-            target
-            / "documents"
-            / f".{kindle_postbox.KINDLE_POSTBOX_BUNDLE_FILENAME}.tmp",
-        )
-    ]
+    assert victim_path.read_text(encoding="utf-8") == "original"
 
 
 @pytest.mark.django_db

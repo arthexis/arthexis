@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -261,8 +263,15 @@ def build_suite_documentation_bundle(
 def _resolve_documents_dir(root_path: Path) -> Path | None:
     if not root_path.is_dir():
         return None
+    root_real_path = root_path.resolve()
     documents_dir = root_path / KINDLE_DOCUMENTS_DIR_NAME
-    if documents_dir.is_dir():
+    if documents_dir.exists():
+        if documents_dir.is_symlink() or not documents_dir.is_dir():
+            return None
+        try:
+            documents_dir.resolve().relative_to(root_real_path)
+        except ValueError:
+            return None
         return documents_dir
     return root_path
 
@@ -292,13 +301,22 @@ def _copy_bundle_to_target(
             status="would-copy",
         )
 
-    temp_path = output_path.with_name(f".{output_path.name}.tmp")
+    temp_file = tempfile.NamedTemporaryFile(
+        mode="wb",
+        delete=False,
+        dir=documents_dir,
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+    )
+    temp_path = Path(temp_file.name)
     try:
-        shutil.copy2(bundle.output_path, temp_path)
+        with bundle.output_path.open("rb") as source_file, temp_file:
+            shutil.copyfileobj(source_file, temp_file)
+        shutil.copystat(bundle.output_path, temp_path, follow_symlinks=False)
         temp_path.replace(output_path)
     except OSError as exc:
         try:
-            temp_path.unlink()
+            os.unlink(temp_path)
         except OSError:
             pass
         return KindlePostboxTargetResult(
