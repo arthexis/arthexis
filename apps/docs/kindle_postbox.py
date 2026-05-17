@@ -633,11 +633,15 @@ def _resolve_documents_dir(root_path: Path) -> Path | None:
 def _same_file_content(source: Path, destination: Path) -> bool:
     try:
         if (
-            not destination.is_file()
+            destination.is_symlink()
+            or not destination.is_file()
             or source.stat().st_size != destination.stat().st_size
         ):
             return False
-        with source.open("rb") as source_file, destination.open("rb") as destination_file:
+        with (
+            source.open("rb") as source_file,
+            destination.open("rb") as destination_file,
+        ):
             for source_chunk in iter(lambda: source_file.read(64 * 1024), b""):
                 if source_chunk != destination_file.read(len(source_chunk)):
                     return False

@@ -309,6 +309,41 @@ def test_sync_to_explicit_kindle_target_skips_identical_bundle(tmp_path):
 
 
 @pytest.mark.django_db
+def test_sync_to_explicit_kindle_target_replaces_matching_bundle_symlink(tmp_path):
+    _write(tmp_path / "bundle.txt", "same content\n")
+    target = tmp_path / "kindle"
+    documents_dir = target / "documents"
+    documents_dir.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    _write(outside, "same content\n")
+    destination = documents_dir / "bundle.txt"
+    try:
+        destination.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
+    bundle = kindle_postbox.DocumentationBundle(
+        output_path=tmp_path / "bundle.txt",
+        manifest_path=tmp_path / "bundle.json",
+        generated_at="2026-05-17T00:00:00+00:00",
+        document_count=1,
+        byte_count=13,
+        sources=("README.md",),
+    )
+
+    result = kindle_postbox._copy_bundle_to_target(
+        bundle,
+        target,
+        dry_run=False,
+    )
+
+    assert result.status == "copied"
+    assert result.output_path == destination
+    assert not destination.is_symlink()
+    assert destination.read_text(encoding="utf-8") == "same content\n"
+    assert outside.read_text(encoding="utf-8") == "same content\n"
+
+
+@pytest.mark.django_db
 def test_publish_bundle_to_public_library_is_content_aware(tmp_path):
     _write(tmp_path / "bundle.txt", "same content\n")
     public_library = tmp_path / "Bookshelf"
