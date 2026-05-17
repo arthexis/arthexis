@@ -324,22 +324,35 @@ def _resolve_operator_manual_source(
     manifest_path: Path,
     excluded_roots: tuple[Path, ...],
     seen: set[Path],
-) -> Path | None:
+) -> Path:
     relative = _relative_manifest_path(source, manifest_path)
-    candidate = (root / relative).resolve()
+    candidate = root / relative
     if not candidate.is_file():
         raise _manifest_error(
             f"source file is missing: {relative.as_posix()}",
             manifest_path,
         )
-    resolved = _resolve_document_candidate(
-        candidate,
-        root=root,
-        excluded_roots=excluded_roots,
-        seen=seen,
-    )
-    if resolved is None:
-        return None
+    if candidate.suffix.lower() not in DOCUMENT_EXTENSIONS:
+        raise _manifest_error(
+            f"source file is not a supported documentation file: {relative.as_posix()}",
+            manifest_path,
+        )
+    resolved = candidate.resolve()
+    if not _path_is_relative_to(resolved, root):
+        raise _manifest_error(
+            f"source file must stay inside the repo: {relative.as_posix()}",
+            manifest_path,
+        )
+    if _path_is_excluded(resolved, excluded_roots):
+        raise _manifest_error(
+            f"source file is excluded from the bundle: {relative.as_posix()}",
+            manifest_path,
+        )
+    if resolved in seen:
+        raise _manifest_error(
+            f"source file is listed more than once: {relative.as_posix()}",
+            manifest_path,
+        )
     seen.add(resolved)
     return resolved
 
@@ -385,18 +398,14 @@ def iter_operator_manual_sections(
         if not isinstance(raw_sources, list) or not raw_sources:
             raise _manifest_error(f"section {index} requires sources", source_manifest)
         sources = tuple(
-            source
-            for source in (
-                _resolve_operator_manual_source(
-                    raw_source,
-                    root=root,
-                    manifest_path=source_manifest,
-                    excluded_roots=excluded_roots,
-                    seen=seen,
-                )
-                for raw_source in raw_sources
+            _resolve_operator_manual_source(
+                raw_source,
+                root=root,
+                manifest_path=source_manifest,
+                excluded_roots=excluded_roots,
+                seen=seen,
             )
-            if source is not None
+            for raw_source in raw_sources
         )
         if sources:
             sections.append(OperatorManualSection(title=title, sources=sources))

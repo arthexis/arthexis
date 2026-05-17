@@ -115,6 +115,62 @@ def test_build_operators_manual_bundle_uses_manifest_sections(tmp_path):
 
 
 @pytest.mark.django_db
+def test_iter_operator_manual_sections_rejects_excluded_manifest_source(tmp_path):
+    _write(
+        tmp_path / "docs" / kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME,
+        "generated manual\n",
+    )
+    _write(
+        tmp_path / "docs" / "operators-manual.json",
+        json.dumps(
+            {
+                "sections": [
+                    {
+                        "title": "Generated",
+                        "sources": [
+                            f"docs/{kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME}"
+                        ],
+                    }
+                ]
+            }
+        ),
+    )
+
+    with pytest.raises(
+        kindle_postbox.DocumentationBundleError,
+        match=(
+            "source file is excluded from the bundle: "
+            f"docs/{kindle_postbox.KINDLE_OPERATORS_MANUAL_FILENAME}"
+        ),
+    ):
+        kindle_postbox.iter_operator_manual_sections(base_dir=tmp_path)
+
+
+@pytest.mark.django_db
+def test_iter_operator_manual_sections_rejects_duplicate_manifest_source(tmp_path):
+    _write(tmp_path / "README.md", "# Root\n")
+    _write(
+        tmp_path / "docs" / "operators-manual.json",
+        json.dumps(
+            {
+                "sections": [
+                    {
+                        "title": "Start Here",
+                        "sources": ["README.md", "README.md"],
+                    }
+                ]
+            }
+        ),
+    )
+
+    with pytest.raises(
+        kindle_postbox.DocumentationBundleError,
+        match="source file is listed more than once: README.md",
+    ):
+        kindle_postbox.iter_operator_manual_sections(base_dir=tmp_path)
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("output_relative", "source_relative"),
     (
