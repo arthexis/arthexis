@@ -205,8 +205,18 @@ def _claim_role(claim: dict[str, Any]) -> str:
 
 
 def _device_claim_roles(device: dict[str, Any]) -> set[str]:
-    roles = {str(role).strip() for role in device.get("claimed_roles") or []}
-    for claim in device.get("claims") or []:
+    roles: set[str] = set()
+    claimed_roles = device.get("claimed_roles")
+    if isinstance(claimed_roles, (list, tuple, set)):
+        for role in claimed_roles:
+            normalized_role = str(role).strip()
+            if normalized_role:
+                roles.add(normalized_role)
+
+    claims = device.get("claims")
+    if not isinstance(claims, (list, tuple)):
+        return roles
+    for claim in claims:
         if isinstance(claim, dict):
             role = _claim_role(claim)
         else:
@@ -221,16 +231,20 @@ def _device_candidate_paths(device: dict[str, Any]) -> list[str]:
     mountpoint = str(device.get("mountpoint") or "").strip()
     if mountpoint:
         paths.append(mountpoint)
-    for mountpoint in device.get("mountpoints") or []:
-        path = str(mountpoint or "").strip()
-        if path:
-            paths.append(path)
-    for mount in device.get("mounts") or []:
-        if not isinstance(mount, dict):
-            continue
-        path = str(mount.get("target") or "").strip()
-        if path:
-            paths.append(path)
+    mountpoints = device.get("mountpoints")
+    if isinstance(mountpoints, (list, tuple, set)):
+        for mountpoint in mountpoints:
+            path = str(mountpoint or "").strip()
+            if path:
+                paths.append(path)
+    mounts = device.get("mounts")
+    if isinstance(mounts, (list, tuple)):
+        for mount in mounts:
+            if not isinstance(mount, dict):
+                continue
+            path = str(mount.get("target") or "").strip()
+            if path:
+                paths.append(path)
     if not paths:
         path = str(device.get("path") or "").strip()
         if path:

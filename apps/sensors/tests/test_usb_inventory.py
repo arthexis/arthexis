@@ -156,6 +156,29 @@ def test_usb_inventory_reads_service_generated_claim_state(settings, tmp_path):
     assert usb_inventory.path_claims(kindle_mount / "documents") == ["kindle-postbox"]
 
 
+def test_usb_inventory_ignores_string_claim_collections(settings, tmp_path):
+    state_path = tmp_path / "devices.json"
+    settings.USB_INVENTORY_STATE_PATH = state_path
+    state_path.write_text(
+        json.dumps(
+            {
+                "devices": [
+                    {
+                        "path": "/dev/sdz1",
+                        "claimed_roles": "kindle-postbox",
+                        "claims": "kindle-postbox",
+                        "mountpoints": "/media/kindle",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert usb_inventory.claimed_paths("kindle-postbox") == []
+    assert usb_inventory.path_claims("/media/kindle/documents") == []
+
+
 def test_atomic_write_json_cleans_temp_file_on_failure(tmp_path):
     target = tmp_path / "devices.json"
 
