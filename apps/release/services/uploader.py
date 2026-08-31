@@ -108,6 +108,11 @@ def _write_private_askpass(path: Path, username: str, password: str) -> None:
     """Create Git's credential helper before placing credentials in it."""
 
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700)
+    fchmod = getattr(os, "fchmod", None)
+    if fchmod is not None:
+        fchmod(descriptor, 0o700)
+    else:
+        path.chmod(0o700)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(
             "\n".join(
