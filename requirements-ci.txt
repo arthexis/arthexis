@@ -82,7 +82,7 @@ twine==7.0.0
 Twisted==25.5.0
 txaio==25.9.2
 types-requests==2.33.0.20260712
-typing_extensions==4.15.0
+typing_extensions==4.16.0
 urllib3>=2.6.3,<2.8.0
 weasyprint==69.0
 webauthn==2.7.1

@@ -70,7 +70,7 @@ dependencies = [
   "tomli>=1.1.0; python_version < \"3.11\"",
   "Twisted==25.5.0",
   "txaio==25.9.2",
-  "typing_extensions==4.15.0",
+  "typing_extensions==4.16.0",
   "urllib3>=2.6.3,<2.8.0",
   "weasyprint==69.0",
   "webauthn==2.7.1",
