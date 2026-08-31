@@ -39,7 +39,7 @@ dependencies = [
   "django-timezone-field==7.2.2",
   "Django==5.2.17",
   "dnspython==2.8.0",
-  "docutils==0.22.4",
+  "docutils==0.23",
   "filelock==3.32.4",
   "httpx==0.28.1",
   "kombu==5.5.4",
