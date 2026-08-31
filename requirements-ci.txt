@@ -31,7 +31,7 @@ django-mermaid==0.1.1
 django-object-actions==5.0.1
 django-otp==1.7.0
 django-parler==2.4
-django-stubs-ext==6.0.3
+django-stubs-ext==6.0.9
 django-stubs==6.0.9
 django-timezone-field==7.2.2
 Django==5.2.17
