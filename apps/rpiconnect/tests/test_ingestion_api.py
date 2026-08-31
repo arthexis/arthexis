@@ -191,6 +191,7 @@ class IngestionApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid event"})
 
     def test_ignores_mismatched_deployment_id_and_resolves_by_device(self) -> None:
         other_device = ConnectDevice.objects.create(

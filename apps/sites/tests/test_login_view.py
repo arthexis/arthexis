@@ -54,6 +54,14 @@ def test_login_view_ignores_unsafe_next(client):
     assert Session.objects.count() == 0
 
 
+@pytest.mark.parametrize("target", ["https://attacker.example/", "//attacker.example/"])
+def test_logout_view_rejects_external_redirect_targets(client, target):
+    response = client.get(reverse("pages:logout"), {"next": target})
+
+    assert response.status_code == 302
+    assert response.url == reverse("pages:login")
+
+
 def test_login_view_passes_safe_next_to_rfid_login_url(client, monkeypatch):
     node = SimpleNamespace(
         role=None,

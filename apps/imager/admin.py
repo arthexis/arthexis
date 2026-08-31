@@ -228,7 +228,7 @@ class RaspberryPiImageBuildForm(forms.Form):
     @staticmethod
     def _resolved_within(path: Path, roots: tuple[Path, ...]) -> bool:
         resolved_path = path.resolve(strict=False)
-        return any(root == resolved_path or root in resolved_path.parents for root in roots)
+        return any(resolved_path.is_relative_to(root) for root in roots)
 
     @staticmethod
     def _clean_local_path(raw_path: str, *, allow_file_uri: bool) -> Path:

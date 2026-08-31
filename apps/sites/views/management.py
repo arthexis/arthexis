@@ -675,7 +675,14 @@ def logout_view(request):
     """Log out the current user and redirect to a safe target."""
 
     redirect_target = request.GET.get(CustomLoginView.redirect_field_name, "")
-    if redirect_target and not url_has_allowed_host_and_scheme(
+    parsed_target = urlparse(redirect_target)
+    is_local_path = (
+        parsed_target.scheme == ""
+        and parsed_target.netloc == ""
+        and parsed_target.path.startswith("/")
+        and not redirect_target.startswith("//")
+    )
+    if not is_local_path or not url_has_allowed_host_and_scheme(
         redirect_target,
         allowed_hosts={request.get_host()},
         require_https=is_https_request(request),

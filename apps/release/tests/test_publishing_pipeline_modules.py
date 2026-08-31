@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import stat
+
 from apps.release.publishing import pipeline
 from apps.release.publishing.pipeline import (
     actions,
@@ -11,6 +13,16 @@ from apps.release.publishing.pipeline import (
     progress,
     workflow,
 )
+from apps.release.services.uploader import _write_private_askpass
+
+
+def test_private_askpass_is_created_with_owner_only_permissions(tmp_path) -> None:
+    path = tmp_path / "askpass.sh"
+
+    _write_private_askpass(path, "operator", "secret-value")
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o700
+    assert 'echo "secret-value"' in path.read_text(encoding="utf-8")
 
 
 def test_pipeline_package_keeps_existing_publish_steps_export() -> None:
