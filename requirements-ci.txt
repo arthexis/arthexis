@@ -41,7 +41,7 @@ filelock==3.32.3
 gpiozero==2.0.1.post3; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
 graphviz==0.21
 httpx==0.28.1
-import-linter==2.11
+import-linter==2.14
 kombu==5.5.4
 Markdown==3.10.3
 mdx_truly_sane_lists==1.3
