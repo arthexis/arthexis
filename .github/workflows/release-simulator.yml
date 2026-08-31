@@ -722,7 +722,7 @@ jobs:
           clean: false
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Resolve simulation version against PyPI
