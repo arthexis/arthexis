@@ -1,11 +1,7 @@
 name: Create release tag from VERSION
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - VERSION
+  workflow_dispatch:
 
 permissions:
   actions: write
