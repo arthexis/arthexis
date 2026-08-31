@@ -717,7 +717,7 @@ jobs:
       simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
       summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           clean: false
           fetch-depth: 0

@@ -36,7 +36,7 @@ jobs:
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           clean: false
           fetch-depth: 0

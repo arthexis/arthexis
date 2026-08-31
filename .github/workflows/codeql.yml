@@ -52,7 +52,7 @@ jobs:
     # - Private repositories must opt in with CODEQL_ENABLED_ON_PRIVATE once code scanning is available.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           clean: false
 
