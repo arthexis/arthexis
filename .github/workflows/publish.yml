@@ -218,14 +218,14 @@ jobs:
         run: |
           ./scripts/ci/start-native-redis.sh
       - name: Cache pip
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             pip-${{ runner.os }}-
       - name: Cache virtualenv
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}

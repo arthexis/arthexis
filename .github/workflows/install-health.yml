@@ -105,7 +105,7 @@ jobs:
           fi
           python3 --version
       - name: Cache pip
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
@@ -113,7 +113,7 @@ jobs:
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-
       - name: Cache virtualenv
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
