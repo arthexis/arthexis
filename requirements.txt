@@ -31,7 +31,7 @@ django-otp==1.7.0
 django-parler==2.4
 django-timezone-field==7.2.2
 Django==5.2.17
-dnspython==2.7.0
+dnspython==2.8.0
 docutils==0.22.4
 filelock==3.32.3
 httpx==0.28.1
