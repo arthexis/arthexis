@@ -1,0 +1,729 @@
+#!/usr/bin/env bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+export TZ="${TZ:-America/Monterrey}"
+# shellcheck source=scripts/helpers/logging.sh
+. "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
+# shellcheck source=scripts/helpers/staticfiles.sh
+. "$BASE_DIR/scripts/helpers/staticfiles.sh"
+# shellcheck source=scripts/helpers/suite-uptime-lock.sh
+. "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+# shellcheck source=scripts/helpers/debug_toolbar.sh
+. "$BASE_DIR/scripts/helpers/debug_toolbar.sh"
+arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+ERROR_LOG="$LOG_DIR/error.log"
+DEFAULT_LOG_DIR="$BASE_DIR/logs"
+if [ "${LOG_DIR%/}" = "${DEFAULT_LOG_DIR%/}" ]; then
+  arthexis_mark_log_breaks "$(basename "$0")" "$LOG_DIR"
+else
+  arthexis_mark_log_breaks "$(basename "$0")" "$LOG_DIR" "$DEFAULT_LOG_DIR"
+fi
+exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
+cd "$BASE_DIR"
+LOG_FOLLOW_PID=""
+
+normalize_log_level() {
+  local raw_level="$1"
+  if [ -z "$raw_level" ]; then
+    return 1
+  fi
+
+  local normalized
+  normalized=$(echo "$raw_level" | tr '[:lower:]' '[:upper:]')
+  case "$normalized" in
+    DEBUG|INFO|WARNING|ERROR|CRITICAL)
+      echo "$normalized"
+      return 0
+      ;;
+    WARN)
+      echo "WARNING"
+      return 0
+      ;;
+    FATAL)
+      echo "CRITICAL"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+log_level_priority() {
+  case "$1" in
+    DEBUG)
+      echo 0
+      ;;
+    INFO)
+      echo 1
+      ;;
+    WARNING)
+      echo 2
+      ;;
+    ERROR)
+      echo 3
+      ;;
+    CRITICAL)
+      echo 4
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+extract_line_level() {
+  local line="$1"
+  if [[ "$line" =~ \[([A-Z]+)\] ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+start_log_follower() {
+  local log_file="$1"
+  local minimum_level="$2"
+
+  if [ -z "$minimum_level" ]; then
+    return 0
+  fi
+
+  local min_priority
+  min_priority=$(log_level_priority "$minimum_level") || return 1
+  touch "$log_file"
+  echo "Streaming log entries from $log_file at level $minimum_level or higher..."
+
+  tail -n0 -F "$log_file" | while IFS= read -r line; do
+    local line_level
+    line_level=$(extract_line_level "$line")
+    if [ -z "$line_level" ]; then
+      echo "$line"
+      continue
+    fi
+
+    local priority
+    priority=$(log_level_priority "$line_level") || priority=""
+    if [ -z "$priority" ] || [ "$priority" -ge "$min_priority" ]; then
+      echo "$line"
+    fi
+  done &
+
+  LOG_FOLLOW_PID=$!
+}
+
+upgrade_progress_lock_is_stale() {
+  local lock_file="$1"
+  local max_age_seconds="$2"
+  local lock_timestamp lock_epoch now_epoch lock_age lock_mtime max_future_skew_seconds
+
+  if ! [[ "$max_age_seconds" =~ ^[0-9]+$ ]] || [ "$max_age_seconds" -le 0 ]; then
+    return 1
+  fi
+
+  now_epoch="$(date +%s)"
+  max_future_skew_seconds="${ARTHEXIS_UPGRADE_IN_PROGRESS_LOCK_MAX_FUTURE_SKEW_SECONDS:-300}"
+  if ! [[ "$max_future_skew_seconds" =~ ^[0-9]+$ ]] || [ "${#max_future_skew_seconds}" -gt 5 ] || [ "$max_future_skew_seconds" -gt 86400 ]; then
+    max_future_skew_seconds=300
+  fi
+  lock_timestamp="$(head -n 1 "$lock_file" 2>/dev/null | tr -d '\r\n')"
+  if [ -z "$lock_timestamp" ]; then
+    lock_mtime="$(stat -c %Y "$lock_file" 2>/dev/null)" || return 1
+    lock_age=$((now_epoch - lock_mtime))
+    if [ "$lock_age" -lt 0 ]; then
+      [ $((lock_mtime - now_epoch)) -gt "$max_future_skew_seconds" ]
+      return $?
+    fi
+    [ "$lock_age" -ge "$max_age_seconds" ]
+    return $?
+  fi
+
+  if ! lock_epoch="$(date -d "$lock_timestamp" +%s 2>/dev/null)"; then
+    lock_mtime="$(stat -c %Y "$lock_file" 2>/dev/null)" || return 1
+    lock_age=$((now_epoch - lock_mtime))
+    if [ "$lock_age" -lt 0 ]; then
+      [ $((lock_mtime - now_epoch)) -gt "$max_future_skew_seconds" ]
+      return $?
+    fi
+    [ "$lock_age" -ge "$max_age_seconds" ]
+    return $?
+  fi
+
+  lock_age=$((now_epoch - lock_epoch))
+  if [ "$lock_age" -lt 0 ]; then
+    [ $((lock_epoch - now_epoch)) -gt "$max_future_skew_seconds" ]
+    return $?
+  fi
+
+  [ "$lock_age" -ge "$max_age_seconds" ]
+}
+
+expire_upgrade_progress_lock_if_stale() {
+  if [ ! -f "$UPGRADE_IN_PROGRESS_LOCK" ]; then
+    return 0
+  fi
+
+  if upgrade_progress_lock_is_stale "$UPGRADE_IN_PROGRESS_LOCK" "$UPGRADE_IN_PROGRESS_LOCK_MAX_AGE_SECONDS"; then
+    echo "Stale upgrade progress lock expired; continuing service start."
+    rm -f "$UPGRADE_IN_PROGRESS_LOCK"
+  fi
+}
+
+wait_for_upgrade_progress_lock() {
+  while [ -f "$UPGRADE_IN_PROGRESS_LOCK" ] && [ "${ARTHEXIS_ALLOW_SERVICE_START_DURING_UPGRADE:-0}" != "1" ]; do
+    expire_upgrade_progress_lock_if_stale
+    if [ ! -f "$UPGRADE_IN_PROGRESS_LOCK" ]; then
+      break
+    fi
+
+    echo "Upgrade in progress; waiting for upgrade to complete before service start."
+    sleep "$UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS"
+  done
+}
+
+LOCK_DIR="$BASE_DIR/.locks"
+STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
+STARTUP_DURATION_LOCK="$LOCK_DIR/startup_duration.lck"
+SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
+SERVICE_NAME=""
+if [ -f "$LOCK_DIR/service.lck" ]; then
+  SERVICE_NAME=$(tr -d '\r\n' < "$LOCK_DIR/service.lck")
+fi
+
+mkdir -p "$LOCK_DIR"
+UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
+UPGRADE_IN_PROGRESS_LOCK_MAX_AGE_SECONDS="${ARTHEXIS_UPGRADE_IN_PROGRESS_LOCK_MAX_AGE_SECONDS:-7200}"
+UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS="${ARTHEXIS_UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS:-30}"
+if ! [[ "$UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]] || [ "$UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS" -le 0 ]; then
+  UPGRADE_IN_PROGRESS_LOCK_WAIT_SECONDS=30
+fi
+wait_for_upgrade_progress_lock
+
+default_runserver_host() {
+  local role_name=""
+
+  if [[ -f "$LOCK_DIR/charger_facing.lck" || -f "$LOCK_DIR/ocpp_gateway.lck" ]]; then
+    printf '%s\n' "0.0.0.0"
+    return 0
+  fi
+
+  if [[ ! -f "$LOCK_DIR/charger_facing_disabled.lck" && -f "$LOCK_DIR/role.lck" ]]; then
+    role_name="$(tr -d '[:space:]' < "$LOCK_DIR/role.lck" 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+    case "$role_name" in
+      satellite|control)
+        printf '%s\n' "0.0.0.0"
+        return 0
+        ;;
+    esac
+  fi
+
+  printf '%s\n' "127.0.0.1"
+}
+
+DJANGO_PID_FILE="$LOCK_DIR/django.pid"
+CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
+CELERY_BEAT_PID_FILE="$LOCK_DIR/celery_beat.pid"
+LCD_PID_FILE="$LOCK_DIR/lcd.pid"
+
+record_pid_file() {
+  local pid="$1"
+  local file="$2"
+  if [ -n "$pid" ] && [ -n "$file" ]; then
+    printf '%s\n' "$pid" > "$file"
+  fi
+}
+
+clear_pid_files() {
+  rm -f "$DJANGO_PID_FILE" "$CELERY_WORKER_PID_FILE" "$CELERY_BEAT_PID_FILE" "$LCD_PID_FILE"
+}
+
+clear_pid_files
+
+# Ensure virtual environment is available
+if [ ! -d .venv ]; then
+  echo "Virtual environment not found. Run ./install.sh first." >&2
+  exit 1
+fi
+source .venv/bin/activate
+
+# Load any .env files to configure environment variables
+for env_file in *.env; do
+  [ -f "$env_file" ] || continue
+  set -a
+  . "$env_file"
+  set +a
+done
+
+SOFT_FD_LIMIT="$(ulimit -Sn 2>/dev/null || echo "unknown")"
+HARD_FD_LIMIT="$(ulimit -Hn 2>/dev/null || echo "unknown")"
+echo "Open file limits: soft=${SOFT_FD_LIMIT} hard=${HARD_FD_LIMIT}"
+
+# Determine default port based on nginx mode if present
+DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
+PORT="$DEFAULT_PORT"
+RUNSERVER_HOST="${ARTHEXIS_RUNSERVER_HOST:-$(default_runserver_host)}"
+RUNSERVER_BIND_HOST="$RUNSERVER_HOST"
+if [[ "$RUNSERVER_BIND_HOST" =~ ^\[[^]]+\]:[0-9]+$ || "$RUNSERVER_BIND_HOST" =~ ^[^:]+:[0-9]+$ ]]; then
+  echo "ARTHEXIS_RUNSERVER_HOST must contain only a host (no port): $RUNSERVER_BIND_HOST" >&2
+  exit 1
+fi
+if [[ "$RUNSERVER_BIND_HOST" == \[*\] ]]; then
+  RUNSERVER_BIND_HOST="${RUNSERVER_BIND_HOST#\[}"
+  RUNSERVER_BIND_HOST="${RUNSERVER_BIND_HOST%\]}"
+fi
+if [[ "$RUNSERVER_BIND_HOST" == *:* ]]; then
+  RUNSERVER_HOST="[$RUNSERVER_BIND_HOST]"
+else
+  RUNSERVER_HOST="$RUNSERVER_BIND_HOST"
+fi
+RELOAD=false
+# Whether to wait for the suite to become reachable after launching
+AWAIT_START=false
+STARTUP_TIMEOUT=300
+DEBUG_MODE=false
+FORCE_COLLECTSTATIC=false
+SHOW_LEVEL=""
+FOLLOW_LOGS=false
+APP_LOG_FILE="$LOG_DIR/$(hostname).log"
+# Celery workers process Post Office's email queue; prefer embedded mode.
+CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
+CELERY_FLAG_SET=false
+LCD_EMBEDDED=false
+CELERY_EMBEDDED=false
+CELERY_WORKER_PID=""
+CELERY_BEAT_PID=""
+LCD_PROCESS_PID=""
+LCD_STARTED=false
+DJANGO_SERVER_PID=""
+cleanup_background_processes() {
+  local lcd_pid="${LCD_PROCESS_PID:-}"
+  if [ -n "$CELERY_WORKER_PID" ]; then
+    kill "$CELERY_WORKER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$CELERY_BEAT_PID" ]; then
+    kill "$CELERY_BEAT_PID" 2>/dev/null || true
+  fi
+  if [ -z "$lcd_pid" ] && [ -f "$LCD_PID_FILE" ]; then
+    lcd_pid=$(tr -d '\r\n' < "$LCD_PID_FILE")
+  fi
+  if [ -n "$lcd_pid" ]; then
+    kill "$lcd_pid" 2>/dev/null || true
+  fi
+  if [ -n "$DJANGO_SERVER_PID" ]; then
+    kill "$DJANGO_SERVER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$LOG_FOLLOW_PID" ]; then
+    kill "$LOG_FOLLOW_PID" 2>/dev/null || true
+  fi
+  clear_pid_files
+}
+trap cleanup_background_processes EXIT
+
+start_embedded_lcd_if_needed() {
+  if [ "$LCD_EMBEDDED" != true ] || [ "$LCD_STARTED" = true ]; then
+    return 0
+  fi
+
+  python -m apps.screens.lcd_screen.runner &
+  LCD_PROCESS_PID=$!
+  LCD_STARTED=true
+  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
+}
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port)
+      PORT="$2"
+      shift 2
+      ;;
+    --reload)
+      RELOAD=true
+      shift
+      ;;
+    --await)
+      AWAIT_START=true
+      shift
+      ;;
+    --debug)
+      DEBUG_MODE=true
+      shift
+      ;;
+    --show)
+      if [ -z "${2:-}" ]; then
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--embedded|--systemd|--celery] [--force-collectstatic] [--log-follow]" >&2
+        exit 1
+      fi
+      SHOW_LEVEL="$2"
+      FOLLOW_LOGS=true
+      shift 2
+      ;;
+    --embedded|--celery)
+      CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+      CELERY_FLAG_SET=true
+      shift
+      ;;
+    --systemd)
+      CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+      CELERY_FLAG_SET=true
+      shift
+      ;;
+    --force-collectstatic)
+      FORCE_COLLECTSTATIC=true
+      shift
+      ;;
+    --log-follow)
+      FOLLOW_LOGS=true
+      shift
+      ;;
+    *)
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--embedded|--systemd|--celery] [--force-collectstatic] [--log-follow]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$FOLLOW_LOGS" = true ] && [ -z "$SHOW_LEVEL" ]; then
+  SHOW_LEVEL="INFO"
+fi
+
+if [ -n "$SHOW_LEVEL" ]; then
+  if ! SHOW_LEVEL=$(normalize_log_level "$SHOW_LEVEL"); then
+    echo "Invalid log level: $SHOW_LEVEL" >&2
+    exit 1
+  fi
+fi
+
+if [ "$SHOW_LEVEL" = "DEBUG" ]; then
+  DEBUG_MODE=true
+fi
+
+if [ "$DEBUG_MODE" = true ]; then
+  export DEBUG=1
+  arthexis_ensure_debug_toolbar_installed "python"
+fi
+
+if [ "$FOLLOW_LOGS" = true ]; then
+  start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
+fi
+
+STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"
+STATIC_META_FILE="$LOCK_DIR/staticfiles.meta"
+STATIC_HASH=""
+STORED_HASH=""
+[ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
+
+resolve_collectstatic_policy() {
+  local configured_policy="${ARTHEXIS_COLLECTSTATIC_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    echo "apply"
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_COLLECTSTATIC_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
+
+if [ "$FORCE_COLLECTSTATIC" = true ]; then
+  if [ -n "${ARTHEXIS_COLLECTSTATIC_POLICY:-}" ] && [ "${ARTHEXIS_COLLECTSTATIC_POLICY,,}" != "apply" ]; then
+    echo "Forcing collectstatic due to --force-collectstatic (overriding ARTHEXIS_COLLECTSTATIC_POLICY=${ARTHEXIS_COLLECTSTATIC_POLICY})."
+  fi
+  COLLECTSTATIC_POLICY="apply"
+else
+  COLLECTSTATIC_POLICY="$(resolve_collectstatic_policy)"
+fi
+
+if [ "$COLLECTSTATIC_POLICY" = "skip" ]; then
+  echo "Skipping collectstatic (ARTHEXIS_COLLECTSTATIC_POLICY=skip)."
+else
+if [ "$FORCE_COLLECTSTATIC" = false ]; then
+  set +e
+  STATIC_HASH=$(arthexis_staticfiles_snapshot_check "$STATIC_MD5_FILE" "$STATIC_META_FILE")
+  FAST_PATH_STATUS=$?
+  set -e
+
+  if [ "$FAST_PATH_STATUS" -eq 0 ] && [ -n "$STATIC_HASH" ]; then
+    echo "Static files unchanged since last run; using lock metadata."
+  elif [ "$FAST_PATH_STATUS" -ne 3 ]; then
+    echo "Static files metadata unavailable (exit $FAST_PATH_STATUS); recalculating."
+    STATIC_HASH=""
+  else
+    STATIC_HASH=""
+  fi
+fi
+
+if [ -z "$STATIC_HASH" ]; then
+  if ! STATIC_HASH=$(arthexis_staticfiles_compute_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" "$FORCE_COLLECTSTATIC"); then
+    if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+      echo "Static files preflight failed: unable to compute hash while ARTHEXIS_COLLECTSTATIC_POLICY=check." >&2
+      arthexis_staticfiles_clear_staged_lock
+      exit 1
+    fi
+
+    echo "Failed to compute static files hash; running collectstatic."
+    arthexis_staticfiles_clear_staged_lock
+    python manage.py collectstatic --noinput
+    STATIC_HASH=""
+  fi
+fi
+
+if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
+  if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+    echo "Collectstatic preflight failed: static assets are stale and policy is check-only." >&2
+    arthexis_staticfiles_clear_staged_lock
+    exit 1
+  fi
+
+  if python manage.py collectstatic --noinput; then
+    arthexis_staticfiles_commit_staged_lock "$STATIC_MD5_FILE" "$STATIC_META_FILE"
+  else
+    echo "collectstatic failed"
+    arthexis_staticfiles_clear_staged_lock
+    exit 1
+  fi
+else
+  arthexis_staticfiles_clear_staged_lock
+  echo "Static files unchanged. Skipping collectstatic."
+fi
+fi
+
+arthexis_suite_reachable() {
+  local host="$1"
+  local port="$2"
+  if [ -z "$host" ] || [ -z "$port" ]; then
+    return 1
+  fi
+
+  local python_bin
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin=python3
+  elif command -v python >/dev/null 2>/dev/null; then
+    python_bin=python
+  else
+    return 1
+  fi
+
+  "$python_bin" - "$host" "$port" <<'PY'
+import socket
+import sys
+
+host_value = sys.argv[1] if len(sys.argv) > 1 else ""
+
+try:
+    port_value = int(sys.argv[2])
+except (IndexError, ValueError):
+    sys.exit(1)
+
+try:
+    with socket.create_connection((host_value, port_value), timeout=2):
+        pass
+except OSError:
+    sys.exit(1)
+
+sys.exit(0)
+PY
+}
+
+wait_for_suite_startup() {
+  local host="$1"
+  local port="$2"
+  local server_pid="$3"
+  local timeout_seconds="$4"
+  local start_time
+  start_time=$(date +%s)
+
+  echo "Waiting for suite to become reachable on ${host}:$port (timeout ${timeout_seconds}s)..."
+
+  while true; do
+    if [ -n "$server_pid" ] && ! kill -0 "$server_pid" 2>/dev/null; then
+      echo "Web server process ($server_pid) exited before readiness was confirmed."
+      if [ -s "$ERROR_LOG" ]; then
+        echo "Recent errors from $ERROR_LOG:"
+        tail -n 40 "$ERROR_LOG"
+      elif [ -f "$ERROR_LOG" ]; then
+        echo "No errors captured in $ERROR_LOG."
+      fi
+      return 1
+    fi
+
+    if arthexis_suite_reachable "$host" "$port"; then
+      arthexis_service_access_message_for_port "$host" "$port"
+      return 0
+    fi
+
+    if [ $(( $(date +%s) - start_time )) -ge "$timeout_seconds" ]; then
+      echo "Timed out waiting for the suite to become reachable on ${host}:$port."
+      if [ -s "$ERROR_LOG" ]; then
+        echo "Recent errors from $ERROR_LOG:"
+        tail -n 40 "$ERROR_LOG"
+      elif [ -f "$ERROR_LOG" ]; then
+        echo "No errors captured in $ERROR_LOG."
+      fi
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+record_startup_duration() {
+  local status="${1:-0}"
+  local end_time
+  end_time=$(date +%s)
+  local duration=$((end_time - STARTUP_STARTED_AT))
+  python - "$STARTUP_DURATION_LOCK" "$STARTUP_STARTED_AT" "$end_time" "$duration" "$status" "$PORT" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+started_at = int(sys.argv[2])
+finished_at = int(sys.argv[3])
+duration = int(sys.argv[4])
+status = int(sys.argv[5])
+port = sys.argv[6] if len(sys.argv) > 6 else ""
+
+payload = {
+    "started_at": datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat(),
+    "finished_at": datetime.fromtimestamp(finished_at, tz=timezone.utc).isoformat(),
+    "duration_seconds": duration,
+    "status": status,
+    "port": port,
+}
+
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path.write_text(json.dumps(payload), encoding="utf-8")
+PY
+}
+
+STARTUP_STARTED_AT=$(date +%s)
+ORCHESTRATE_OUTPUT_FILE="$(mktemp)"
+if ! python manage.py startup_orchestrate \
+  --port "$PORT" \
+  --lock-dir "$LOCK_DIR" \
+  --service-name "$SERVICE_NAME" \
+  --service-mode "$SERVICE_MANAGEMENT_MODE" \
+  --celery-mode "$CELERY_MANAGEMENT_MODE" > "$ORCHESTRATE_OUTPUT_FILE"; then
+  echo "Startup orchestration failed; aborting startup." >&2
+  cat "$ORCHESTRATE_OUTPUT_FILE" >&2 || true
+  rm -f "$ORCHESTRATE_OUTPUT_FILE"
+  exit 1
+fi
+
+readarray -t ORCHESTRATE_EXPORTS < <(
+  python - "$ORCHESTRATE_OUTPUT_FILE" <<'PY'
+import pathlib
+import sys
+
+from scripts.startup_orchestration import extract_payload
+
+payload = extract_payload(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+launch = payload.get("launch") or {}
+service = payload.get("service") or {}
+
+def emit(name, value):
+    print(f"{name}={value}")
+
+emit("ORCHESTRATE_STATUS", payload.get("status") or "error")
+emit("STARTUP_STARTED_AT", int(payload.get("started_at_epoch") or 0))
+emit("CELERY_EMBEDDED", "true" if bool(launch.get("celery_embedded")) else "false")
+emit("LCD_EMBEDDED", "true" if bool(launch.get("lcd_embedded")) else "false")
+emit("LCD_TARGET_MODE", launch.get("lcd_target_mode") or "embedded")
+emit("LCD_SYSTEMD_UNIT", "true" if bool(service.get("lcd_systemd_unit")) else "false")
+PY
+)
+rm -f "$ORCHESTRATE_OUTPUT_FILE"
+for export_line in "${ORCHESTRATE_EXPORTS[@]}"; do
+  eval "$export_line"
+done
+
+if [ "${ORCHESTRATE_STATUS:-error}" != "ok" ]; then
+  echo "Startup orchestration returned error status; aborting startup." >&2
+  exit 1
+fi
+
+if [ "$STARTUP_STARTED_AT" -le 0 ]; then
+  STARTUP_STARTED_AT=$(date +%s)
+fi
+
+if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] || [ "$LCD_EMBEDDED" = true ]; then
+  arthexis_disable_lcd_modes "$LOCK_DIR" "$SERVICE_NAME"
+fi
+
+if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ -n "$SERVICE_NAME" ]; then
+  arthexis_start_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
+elif [ "$LCD_EMBEDDED" = true ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
+  echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
+fi
+
+RUNSERVER_EXTRA_ARGS=()
+
+# Start Celery components to handle queued email if enabled
+if [ "$CELERY_EMBEDDED" = true ]; then
+  CELERY_NODE_SERVICE_NAME="${SERVICE_NAME:-}"
+  if [ -z "$CELERY_NODE_SERVICE_NAME" ]; then
+    CELERY_NODE_SERVICE_NAME="embedded-$$"
+  fi
+
+  PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m celery -A config worker -l info --concurrency=2 -n "worker.${CELERY_NODE_SERVICE_NAME}@%h" &
+  CELERY_WORKER_PID=$!
+  record_pid_file "$CELERY_WORKER_PID" "$CELERY_WORKER_PID_FILE"
+  PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m celery -A config beat -l info &
+  CELERY_BEAT_PID=$!
+  record_pid_file "$CELERY_BEAT_PID" "$CELERY_BEAT_PID_FILE"
+elif [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
+     [ -n "$SERVICE_NAME" ] && [ -f "$LOCK_DIR/celery.lck" ]; then
+  # Keep dedicated Celery units aligned with the core service in systemd mode.
+  arthexis_start_systemd_unit_if_present "celery-${SERVICE_NAME}.service"
+  arthexis_start_systemd_unit_if_present "celery-beat-${SERVICE_NAME}.service"
+fi
+
+if [ "$AWAIT_START" = true ]; then
+  if [ "$RELOAD" = true ]; then
+    python manage.py runserver "${RUNSERVER_HOST}:$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
+  else
+    python manage.py runserver "${RUNSERVER_HOST}:$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}" &
+  fi
+  DJANGO_SERVER_PID=$!
+  record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+
+  if wait_for_suite_startup "$RUNSERVER_BIND_HOST" "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    start_embedded_lcd_if_needed
+    record_startup_duration 0
+    arthexis_log_suite_uptime "$BASE_DIR" || true
+    wait "$DJANGO_SERVER_PID"
+  else
+    record_startup_duration 1
+    exit 1
+  fi
+else
+  if [ "$RELOAD" = true ]; then
+    python manage.py runserver "${RUNSERVER_HOST}:$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
+  else
+    python manage.py runserver "${RUNSERVER_HOST}:$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}" &
+  fi
+  DJANGO_SERVER_PID=$!
+  record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+  (
+    if wait_for_suite_startup "$RUNSERVER_BIND_HOST" "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+      start_embedded_lcd_if_needed
+      record_startup_duration 0
+      arthexis_log_suite_uptime "$BASE_DIR" || true
+    else
+      record_startup_duration 1
+    fi
+  ) &
+  wait "$DJANGO_SERVER_PID"
+fi

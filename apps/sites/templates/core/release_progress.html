@@ -1,0 +1,380 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .release-progress-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    margin-top: 1.5rem;
+  }
+  .progress-column,
+  .log-column {
+    flex: 1 1 320px;
+    min-width: 280px;
+  }
+  .progress-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+  }
+  .progress-actions button {
+    padding-inline: 1.1rem;
+    padding-block: 0.45rem 0.6rem;
+  }
+  .progress-actions form {
+    display: inline;
+  }
+  .progress-actions button {
+    min-width: 8rem;
+  }
+  .token-card {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: rgba(13, 110, 253, 0.08);
+  }
+  .token-card h2 {
+    margin: 0 0 0.5rem;
+  }
+  .token-card p {
+    margin: 0.4rem 0 0.8rem;
+  }
+  .token-card form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .token-card input[type="password"] {
+    min-width: 18rem;
+    padding: 0.35rem 0.5rem;
+  }
+  .token-card textarea {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+  .token-card .help {
+    color: var(--body-quiet-color);
+  }
+  .progress-steps {
+    margin: 0 0 1.5rem;
+    padding-left: 1.5rem;
+  }
+  .progress-steps li {
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .progress-steps li .progress-icon {
+    font-size: 1.1em;
+  }
+  .progress-steps li.status-active .progress-name,
+  .progress-steps li.status-paused .progress-name,
+  .progress-steps li.status-complete .progress-name {
+    font-weight: 600;
+  }
+  .progress-steps li.status-error .progress-name {
+    color: var(--error-fg, #ba2121);
+  }
+  .progress-steps li.status-blocked .progress-name {
+    color: var(--warning-fg, #c09853);
+  }
+  .log-column {
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.05));
+    padding: 1rem;
+    border-radius: 6px;
+  }
+  .log-column h2 {
+    margin-top: 0;
+  }
+  .log-text {
+    background: var(--body-bg);
+    padding: 0.75rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow: auto;
+  }
+  .log-empty {
+    color: var(--body-quiet-color);
+    font-style: italic;
+  }
+  .status-message {
+    margin: 1rem 0;
+  }
+  .status-message.paused {
+    color: var(--link-fg);
+    font-weight: 600;
+  }
+  .status-guidance {
+    margin: 0.75rem 0 1.25rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--hairline-color);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--body-bg);
+  }
+  .status-guidance h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+  }
+  .status-guidance p {
+    margin: 0;
+  }
+  .status-guidance.tone-info {
+    border-left-color: var(--link-fg);
+  }
+  .status-guidance.tone-warning {
+    border-left-color: var(--warning-fg, #c09853);
+    background: rgba(var(--warning-rgb, 192, 152, 83), 0.12);
+  }
+  .status-guidance.tone-error {
+    border-left-color: var(--error-fg, #ba2121);
+    background: rgba(var(--error-rgb, 186, 33, 33), 0.08);
+  }
+  .status-guidance.tone-success {
+    border-left-color: var(--success-fg, #198754);
+    background: rgba(var(--success-rgb, 25, 135, 84), 0.1);
+  }
+</style>
+{% endblock %}
+
+{% block nav-breadcrumbs %}
+<nav aria-label="{% translate 'Breadcrumbs' %}">
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    {% url 'admin:app_list' 'release' as core_admin_url %}
+    <a href="{{ core_admin_url }}">{% trans '2. Business' %}</a> ›
+    <a href="{% url 'admin:release_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a> ›
+    <a href="{% url 'admin:release_packagerelease_change' release.pk %}">{{ release }}</a> ›
+    {{ action|capfirst }}
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
+<div class="release-progress-layout">
+  <div class="progress-column">
+    <div class="status-guidance tone-{{ status_guidance.tone }}">
+      <h2>{{ status_guidance.title }}</h2>
+      <p>{{ status_guidance.message }}</p>
+    </div>
+    <div class="token-card">
+      <h2>{% trans "Release description" %}</h2>
+      <p>{% trans "Write a short human paragraph for the top of the GitHub release. If left blank, Arthexis will use the general description below." %}</p>
+      <form method="post">
+        {% csrf_token %}
+        <textarea name="release_summary" rows="4" aria-label="{% trans 'Release description' %}">{{ release.release_summary }}</textarea>
+        <button type="submit" name="set_release_summary" value="1">{% trans "Save description" %}</button>
+      </form>
+      <p class="help">{% trans "Current release opening:" %} {{ release_description }}</p>
+    </div>
+    <div class="progress-actions">
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        <button type="submit" name="start" value="1" {% if is_running or done or error %}disabled{% endif %}>
+          {% if can_resume %}
+          ▶️ {% trans 'Continue Publish' %}
+          {% else %}
+          ▶️ {% trans 'Start Publish' %}
+          {% endif %}
+        </button>
+      </form>
+      <form method="get">
+        <button type="submit" name="pause" value="1" {% if not is_running %}disabled{% endif %}>⏸️ {% trans 'Pause Publish' %}</button>
+      </form>
+      {% if resume_available %}
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        <button type="submit" name="resume" value="1">⏯️ {% trans 'Resume Publish' %}</button>
+      </form>
+      {% endif %}
+      {% if started %}
+      <form method="get">
+        <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if manual_git_push %}
+    <p class="status-message paused">
+      {% blocktrans with step=manual_git_push.step %}Manual git push required to continue "{{ step }}".{% endblocktrans %}
+    </p>
+    <p>
+      {% trans 'Run' %} <code>{{ manual_git_push_command }}</code>
+      {% trans 'then confirm or retry the push below.' %}
+    </p>
+    {% if manual_git_push_error %}
+    <p class="error">{{ manual_git_push_error }}</p>
+    {% endif %}
+    <div class="progress-actions">
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        <button type="submit" name="manual_push_action" value="retry">🔁 {% trans 'Retry push' %}</button>
+      </form>
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        <button type="submit" name="manual_push_action" value="confirm">✅ {% trans 'Manual push completed' %}</button>
+      </form>
+    </div>
+    {% endif %}
+    <ol class="progress-steps">
+    {% for step in step_states %}
+      <li class="status-{{ step.status }}">
+        <span class="progress-icon">{{ step.icon }}</span>
+        <span class="progress-name">{{ step.name }}</span>
+      </li>
+    {% endfor %}
+    </ol>
+    {% if test_pruning_required %}
+    <div class="token-card">
+      <h2>{% trans "Test pruning evidence required" %}</h2>
+      <p>{% trans "Enter the pull request URL that prunes the lowest-value tests for this release." %}</p>
+      {% if test_pruning_error %}
+      <p class="error">{{ test_pruning_error }}</p>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="url" name="test_pruning_pr_url" value="{{ test_pruning_pr_url }}" placeholder="https://github.com/org/repo/pull/123" aria-label="{% trans 'Test pruning PR URL' %}">
+        <button type="submit" name="set_test_pruning_evidence" value="1">{% trans "Record evidence" %}</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if not done %}
+    {% if github_credentials_missing or github_token_using_stored %}
+    <div class="token-card">
+      {% if github_token_using_stored %}
+      <h2>🔑 {% trans "GitHub token" %}</h2>
+      <p>
+        {% trans "Using your stored token," %}
+        <a href="{{ github_token_edit_url }}">{% trans "click here to edit." %}</a>
+      </p>
+      {% else %}
+      <h2>🔑 {% trans "GitHub token required" %}</h2>
+      {% if github_token_required %}
+      <p>{% trans "Publishing paused. Enter a GitHub token to continue. The token is used for this publish session unless you choose to store it." %}</p>
+      {% else %}
+      <p>{% trans "Enter a GitHub token before starting the publish. The token is used for this publish session unless you choose to store it." %}</p>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="password" name="github_token" autocomplete="off" placeholder="{% trans 'GitHub token' %}" aria-label="{% trans 'GitHub token' %}">
+        <button type="submit" name="set_github_token" value="1">🔑 {% trans "Use Token" %}</button>
+        <label class="checkbox">
+          <input type="checkbox" name="store_github_token" value="1">
+          {% trans "Store token for my account" %}
+        </label>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+    {% if paused and started and not done and not error %}
+    {% if not github_token_required %}
+    {% if publish_pending and publish_workflow_url %}
+    <p class="status-message paused">
+      {% trans 'Publishing paused. Press Continue to resume after approving the workflow below:' %}
+    </p>
+    <p class="status-message paused">
+      <a href="{{ publish_workflow_url }}" target="_blank" rel="noopener">{{ publish_workflow_url }}</a>
+    </p>
+    {% else %}
+    <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
+    {% endif %}
+    {% endif %}
+    {% endif %}
+    {% if fixtures %}
+    <h2>{% trans 'Fixture changes' %}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>{% trans 'Fixture' %}</th>
+          <th>{% trans 'Entries' %}</th>
+          <th>{% trans 'Models' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for fx in fixtures %}
+        <tr>
+          <td>{{ fx.path }}</td>
+          <td>{{ fx.count }}</td>
+          <td>{{ fx.models|join:', ' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    <p class="status-message">{% trans 'Resolve the issue above, then continue to retry this step without restarting.' %}</p>
+    {% include "core/partials/release_ack_error_form.html" %}
+    {% elif not done %}
+    {% if started and next_step is not None %}
+    <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
+    {% endif %}
+    {% if started %}
+      {% if paused %}
+      {# Paused message shown above #}
+      {% else %}
+      <p class="status-message">{% trans 'Running…' %}</p>
+      {% endif %}
+    {% else %}
+    <p class="status-message">{% trans 'Waiting to start' %}</p>
+    {% endif %}
+    {% else %}
+    <p>{% trans 'All steps completed.' %}</p>
+    {% if release.pypi_url %}
+    <p><a href="{{ release.pypi_url }}" target="_blank" rel="noopener">{{ release.pypi_url }}</a></p>
+    {% endif %}
+    {% if release.github_url %}
+    <p><a href="{{ release.github_url }}" target="_blank" rel="noopener">{{ release.github_url }}</a></p>
+    {% endif %}
+    <div>
+      <input type="text" id="logpath" value="{{ log_path }}" readonly>
+      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">{% trans 'Copy log path' %}</button>
+    </div>
+    {% if cert_log %}
+    <p>{% blocktrans %}Certification logged in {{ cert_log }}{% endblocktrans %}</p>
+    {% endif %}
+    {% endif %}
+    <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
+  </div>
+  <div class="log-column">
+    <h2>{% trans 'Logs' %}</h2>
+    {% if show_log %}
+      {% if log_content %}
+      <pre class="log-text" id="release-log">{{ log_content }}</pre>
+      {% else %}
+      <p class="log-empty">{% trans 'Logs will appear here as steps progress.' %}</p>
+      {% endif %}
+    {% else %}
+    <p class="log-empty">{% trans 'Logs will appear here after publishing starts.' %}</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+  (function () {
+    const logEl = document.getElementById('release-log');
+    if (!logEl) {
+      return;
+    }
+
+    const scrollToBottom = () => {
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    scrollToBottom();
+
+    const observer = new MutationObserver(scrollToBottom);
+    observer.observe(logEl, { childList: true, characterData: true, subtree: true });
+  })();
+</script>
+{% endblock %}

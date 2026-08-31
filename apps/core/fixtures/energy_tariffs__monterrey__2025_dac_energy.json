@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "annual",
+      "zone": "1C",
+      "contract_type": "dac",
+      "period": "flat",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "5.9451",
+      "cost_mxn": "5.9451",
+      "notes": "Tarifa DAC sin subsidio para todo el consumo residencial de alto uso en la zona norte."
+    }
+  }
+]

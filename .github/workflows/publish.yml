@@ -1,0 +1,594 @@
+name: Publish Python distributions to GitHub Releases and PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing v* tag to publish when a workflow creates the tag."
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+  RELEASE_REF: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+jobs:
+  readiness-gate:
+    name: Verify release readiness report
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release readiness report
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+[.][0-9]+[.][0-9]+ ]]; then
+            echo "Release publish blocked: release ref must be a version tag like 'v1.2.3'." >&2
+            exit 1
+          fi
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "v${version}" != "$RELEASE_TAG" ]; then
+            echo "Release publish blocked: tag and VERSION mismatch (tag=${RELEASE_TAG}, VERSION=${version})." >&2
+            exit 1
+          fi
+
+          target_sha="$(git rev-parse HEAD)"
+          default_branch_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${DEFAULT_BRANCH}" --jq '.object.sha')"
+          if [ "$target_sha" != "$default_branch_sha" ]; then
+            echo "Release publish blocked: ${RELEASE_TAG} points to ${target_sha}, but ${DEFAULT_BRANCH} is ${default_branch_sha}." >&2
+            echo "Move ${RELEASE_TAG} to the reviewed ${DEFAULT_BRANCH} commit before publishing." >&2
+            exit 1
+          fi
+
+          expected_commit_line="- Commit: ${target_sha}"
+          report_body="$(
+            gh issue list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --state open \
+              --limit 1000 \
+              --search "Release Readiness Report in:title" \
+              --json author,body,updatedAt \
+              --jq 'map(select(
+                .author.is_bot == true and
+                (.author.login == "github-actions[bot]" or .author.login == "app/github-actions") and
+                (.body | contains("<!-- release-readiness-report -->")) and
+                (.body | contains("<!-- release-readiness-fingerprint:"))
+              )) | sort_by(.updatedAt) | reverse | .[0].body // ""'
+          )"
+
+          expected_simulated_version='simulated VERSION `'"${version}"'`'
+          refresh_release_readiness_report_body() {
+            gh issue list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --state open \
+              --limit 1000 \
+              --search "Release Readiness Report in:title" \
+              --json author,body,updatedAt \
+              --jq 'map(select(
+                .author.is_bot == true and
+                (.author.login == "github-actions[bot]" or .author.login == "app/github-actions") and
+                (.body | contains("<!-- release-readiness-report -->")) and
+                (.body | contains("<!-- release-readiness-fingerprint:"))
+              )) | sort_by(.updatedAt) | reverse | .[0].body // ""'
+          }
+          report_body_indicates_green() {
+            [[ "$report_body" == *"## Release readiness blockers"* ]] &&
+            [[ "$report_body" == *"- None detected."* ]] &&
+            [[ "$report_body" == *"Recommendation: release can proceed once maintainers approve authorization."* ]]
+          }
+          release_simulator_ref="refs/heads/${DEFAULT_BRANCH}"
+          readiness_timeout_seconds="${RELEASE_READINESS_TIMEOUT_SECONDS:-1800}"
+          readiness_poll_seconds="${RELEASE_READINESS_POLL_SECONDS:-60}"
+          readiness_dispatch_interval_seconds="${RELEASE_READINESS_DISPATCH_INTERVAL_SECONDS:-300}"
+          deadline=$((SECONDS + readiness_timeout_seconds))
+          next_dispatch_at=0
+          dispatch_count=0
+
+          while ! {
+            [ -n "$report_body" ] &&
+            [[ "$report_body" == *"$expected_commit_line"* ]] &&
+            [[ "$report_body" == *"$expected_simulated_version"* ]] &&
+            report_body_indicates_green
+          }; do
+            if (( SECONDS >= deadline )); then
+              break
+            fi
+
+            if (( SECONDS >= next_dispatch_at )); then
+              dispatch_count=$((dispatch_count + 1))
+              echo "Requesting Release Simulator for ${release_simulator_ref} before publishing ${RELEASE_TAG} (attempt ${dispatch_count})."
+              if gh workflow run release-simulator.yml \
+                --repo "${GITHUB_REPOSITORY}" \
+                --ref "${release_simulator_ref}"; then
+                echo "Release Simulator dispatch requested."
+              else
+                echo "Warning: unable to dispatch Release Simulator; continuing to poll for a matching report." >&2
+              fi
+              next_dispatch_at=$((SECONDS + readiness_dispatch_interval_seconds))
+            fi
+
+            remaining_seconds=$((deadline - SECONDS))
+            echo "Release readiness report is not green for ${target_sha} yet; waiting ${readiness_poll_seconds}s (${remaining_seconds}s remaining)."
+            sleep "$readiness_poll_seconds"
+            report_body="$(refresh_release_readiness_report_body)"
+          done
+
+          if [ -z "$report_body" ]; then
+            echo "Release publish blocked: no open Release Readiness Report was found after waiting for Release Simulator." >&2
+            exit 1
+          fi
+
+          if [[ "$report_body" != *"$expected_commit_line"* ]]; then
+            echo "Release publish blocked: Release Readiness Report is not for ${target_sha}." >&2
+            exit 1
+          fi
+
+          if [[ "$report_body" != *"$expected_simulated_version"* ]]; then
+            echo "Release publish blocked: Release Readiness Report simulated version does not match ${version}." >&2
+            exit 1
+          fi
+
+          if ! REPORT_BODY="$report_body" python - <<'PY'
+          import os
+          import re
+          import sys
+
+          report_body = os.environ["REPORT_BODY"]
+
+          blockers_match = re.search(
+              r"^## Release readiness blockers\n(?P<body>.*?)(?:\n## |\Z)",
+              report_body,
+              re.MULTILINE | re.DOTALL,
+          )
+          recommendation_match = re.search(
+              r"^## Recommendation\n(?P<body>.*?)(?:\n## |\Z)",
+              report_body,
+              re.MULTILINE | re.DOTALL,
+          )
+
+          if not blockers_match or not recommendation_match:
+              sys.exit(1)
+
+          blockers_lines = [
+              line.strip()
+              for line in blockers_match.group("body").splitlines()
+              if line.strip()
+          ]
+          recommendation_lines = [
+              line.strip()
+              for line in recommendation_match.group("body").splitlines()
+              if line.strip()
+          ]
+
+          if blockers_lines != ["- None detected."]:
+              sys.exit(1)
+
+          if recommendation_lines != [
+              "✅ Recommendation: release can proceed once maintainers approve authorization.",
+          ]:
+              sys.exit(1)
+          PY
+          then
+            echo "Release publish blocked: Release Readiness Report is not green for ${target_sha}." >&2
+            echo "Wait for the simulator to publish a report with no blockers before dispatching publish.yml." >&2
+            exit 1
+          fi
+
+          echo "Release readiness report is green for ${target_sha}; publish may continue."
+
+  test:
+    name: Run full test suite
+    needs: readiness-gate
+    runs-on: ubuntu-latest
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Start native Redis
+        run: |
+          ./scripts/ci/start-native-redis.sh
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh
+      - name: Validate migrations
+        run: |
+          ./scripts/preflight-env.sh
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+      - name: Install CI dependencies
+        run: |
+          ./scripts/preflight-env.sh
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+      - name: Run tests
+        run: |
+          set -o pipefail
+          ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
+          python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml | tee pytest.log
+      - name: Check test pruning evidence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          junit_path = Path("pytest-junit.xml")
+          if not junit_path.exists():
+              raise SystemExit(
+                  "Release publish blocked: missing pytest-junit.xml needed for test pruning evidence checks."
+              )
+
+          root = ET.parse(junit_path).getroot()
+          pruning_tests_passed = any(
+              "prune_low_value_tests" in case.attrib.get("name", "")
+              and not any(child.tag in ("failure", "error", "skipped") for child in case)
+              for case in root.iter("testcase")
+          )
+          if not pruning_tests_passed:
+              raise SystemExit(
+                  "Release publish blocked: no passing test with 'prune_low_value_tests' found in pytest junit report."
+              )
+          PY
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-pytest-log
+          path: pytest.log
+          if-no-files-found: warn
+  build:
+    name: Build distributions
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          persist-credentials: false
+
+      - name: Resolve publish version against PyPI
+        id: resolve_publish_version
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import json
+          import re
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          root = Path(".")
+          semver_re = re.compile(
+              r'^(?:(?P<epoch>\d+)!)?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[+].*)?$'
+          )
+          pypi_url = "https://pypi.org/pypi/arthexis/json"
+
+          version_path = root / "VERSION"
+          version_seed = version_path.read_text(encoding="utf-8").strip()
+          ref_name = os.environ.get("RELEASE_TAG") or os.environ["GITHUB_REF_NAME"].strip()
+          if not ref_name.startswith("v"):
+              raise SystemExit(
+                  "Release publish blocked: release ref must be a version tag like 'v1.2.3'."
+              )
+          tag_version = ref_name[1:]
+          if not tag_version:
+              raise SystemExit(
+                  "Release publish blocked: tag 'v' does not include a version."
+              )
+
+          expected_version = version_seed
+
+          if not expected_version:
+              raise SystemExit(
+                  "Release publish blocked: VERSION file is empty."
+              )
+
+          if tag_version != expected_version:
+              raise SystemExit(
+                  "Release publish blocked: tag and VERSION mismatch "
+                  f"(tag={tag_version!r}, VERSION={expected_version!r}). "
+                  "Create tags from VERSION to preserve reviewed release intent."
+              )
+
+          resolved_seed = expected_version
+
+          def parse_version(value: str):
+              match = semver_re.match(value.strip())
+              if not match:
+                  raise SystemExit(
+                      f"Release publish blocked: cannot parse semver from value {value!r}."
+                  )
+              groups = match.groupdict()
+              return (
+                  int(groups["epoch"] or 0),
+                  int(groups["major"]),
+                  int(groups["minor"]),
+                  int(groups["patch"]),
+              )
+
+
+          def serialize_version(parts):
+              epoch, major, minor, patch = parts
+              value = f"{major}.{minor}.{patch}"
+              return f"{epoch}!{value}" if epoch else value
+
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  releases = json.load(response).get("releases", {})
+          except HTTPError as exc:
+              if exc.code == 404:
+                  releases = {}
+              else:
+                  raise SystemExit(
+                      "Release publish blocked: unable to verify existing PyPI versions "
+                      f"(HTTP {exc.code} from {pypi_url})."
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  "Release publish blocked: network failure while checking PyPI for an existing release "
+                  f"({exc.reason})."
+              ) from exc
+
+          base_parts = parse_version(resolved_seed)
+          published_parts = []
+          for value in releases.keys():
+              try:
+                  parsed = parse_version(value)
+              except SystemExit:
+                  continue
+              published_parts.append(parsed)
+
+          resolved_parts = base_parts
+          resolved_version = serialize_version(resolved_parts)
+          published = {serialize_version(parts) for parts in published_parts}
+
+          if resolved_version in published:
+              raise SystemExit(
+                  "Release publish blocked: VERSION already exists on PyPI "
+                  f"(VERSION={resolved_version!r}). Bump VERSION in source control, then "
+                  "create a matching tag from that reviewed commit."
+              )
+
+          version_path.write_text(f"{resolved_version}\n", encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"resolved_version={resolved_version}\n")
+              output.write(f"seed_version={resolved_seed}\n")
+
+          print(f"Resolved publish version is {resolved_version!r} from seed {resolved_seed!r}.")
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Preflight PyPI version availability
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = "arthexis"
+          package_version = Path("VERSION").read_text(encoding="utf-8").strip()
+          pypi_url = f"https://pypi.org/pypi/{package_name}/json"
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {"releases": {}}
+              else:
+                  raise SystemExit(
+                      "Release publish blocked: unable to verify existing PyPI versions "
+                      f"(HTTP {exc.code} from {pypi_url}). "
+                      "Check Arthexis release UI/headless logs, then rerun intentionally."
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  "Release publish blocked: network failure while checking PyPI for an existing release "
+                  f"({exc.reason}). Check Arthexis release UI/headless logs, then rerun intentionally."
+              ) from exc
+
+          releases = payload.get("releases", {})
+          if package_version in releases:
+              raise SystemExit(
+                  f"Release publish blocked: {package_name} {package_version} is already available on PyPI. "
+                  "Use a new VERSION/tag before publishing again, and confirm the rerun intent in "
+                  "Arthexis release UI/headless logs for traceability."
+              )
+
+          print(
+              f"Preflight passed: {package_name} {package_version} is not yet published on PyPI; "
+              "continuing with build and publish workflow."
+          )
+          PY
+
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build sdist and wheel
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          python -m build 2>&1 | tee validation-logs/build.log
+
+      - name: Validate package metadata
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          python -m twine check dist/* 2>&1 | tee validation-logs/twine-check.log
+
+      - name: Smoke install from built artifacts
+        run: |
+          mkdir -p validation-logs
+          python -m venv .smoke-venv
+          source .smoke-venv/bin/activate
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee validation-logs/smoke-pip-upgrade.log
+          python -m pip install --no-index --find-links dist --no-deps arthexis 2>&1 | tee validation-logs/smoke-install.log
+          python - <<'PY' 2>&1 | tee validation-logs/smoke-import.log
+          import importlib.metadata
+          import arthexis
+
+          package_version = importlib.metadata.version("arthexis")
+          module_version = getattr(arthexis, "__version__", None)
+          print(f"Installed package version: {package_version}")
+          print(f"arthexis.__version__: {module_version}")
+          if module_version is None:
+              raise SystemExit("arthexis.__version__ is missing")
+          if module_version != package_version:
+              raise SystemExit(
+                  f"Version mismatch between module ({module_version}) and metadata ({package_version})"
+              )
+          PY
+
+      - name: Upload validation logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: arthexis-validation-logs
+          path: validation-logs/
+          if-no-files-found: warn
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: arthexis-dists
+          path: dist/
+
+  publish-to-github-release:
+    name: Upload distributions to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: arthexis-dists
+          path: dist/
+
+      - name: Upload distributions to GitHub Release
+        run: |
+          shopt -s nullglob
+          artifacts=(dist/*.whl dist/*.tar.gz)
+          if [ ${#artifacts[@]} -eq 0 ]; then
+            echo "No release distributions found in dist/." >&2
+            exit 1
+          fi
+
+          release_version="${RELEASE_TAG#v}"
+          release_title="Release ${release_version}"
+          release_notes="release-notes.md"
+          {
+            printf 'Arthexis has a new release: %s. This release packages the latest reviewed suite updates for installation, upgrade, and distribution through the standard release channel.\n\n' "${release_version}"
+            printf '[View the package on PyPI](https://pypi.org/project/arthexis/%s/)\n' "${release_version}"
+          } > "${release_notes}"
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${artifacts[@]}" --clobber --repo "${GITHUB_REPOSITORY}"
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${release_title}" \
+              --notes-file "${release_notes}"
+          else
+            gh release create "${RELEASE_TAG}" "${artifacts[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --verify-tag \
+              --title "${release_title}" \
+              --notes-file "${release_notes}"
+          fi
+
+          printf 'Published GitHub Release assets for %s:\n' "${RELEASE_TAG}"
+          printf ' - %s\n' "${artifacts[@]}"
+
+  publish-to-pypi:
+    name: Publish to PyPI via Trusted Publisher
+    needs:
+      - build
+      - publish-to-github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/arthexis/
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: arthexis-dists
+          path: dist/
+
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true

@@ -1,0 +1,39 @@
+"""Celery application configuration."""
+
+import os
+
+from celery import Celery
+
+from config.loadenv import loadenv
+from config.sqlite_driver import bootstrap_sqlite_driver
+
+loadenv()
+bootstrap_sqlite_driver()
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+from apps.core.checks.apps_registry import enforce_apps_registry_configuration  # noqa: E402
+from django.conf import settings  # noqa: E402
+
+# When running on production-oriented nodes, avoid Celery debug mode.
+node_role = str(getattr(settings, "NODE_ROLE", "")).strip().lower()
+production_roles = settings.PRODUCTION_ROLES
+if node_role in production_roles:
+    for var in ["CELERY_TRACE_APP", "CELERY_DEBUG"]:
+        os.environ.pop(var, None)
+    os.environ.setdefault("CELERY_LOG_LEVEL", "INFO")
+
+    # Ensure a durable broker is used on production roles even if redis.env is not loaded.
+    default_prod_broker_url = "redis://localhost:6379/0"
+    if not os.environ.get("CELERY_BROKER_URL"):
+        os.environ.setdefault("CELERY_BROKER_URL", default_prod_broker_url)
+        settings.CELERY_BROKER_URL = default_prod_broker_url
+    if not os.environ.get("CELERY_RESULT_BACKEND"):
+        os.environ.setdefault("CELERY_RESULT_BACKEND", default_prod_broker_url)
+        settings.CELERY_RESULT_BACKEND = default_prod_broker_url
+
+
+enforce_apps_registry_configuration()
+
+app = Celery("config")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()

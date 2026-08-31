@@ -1,0 +1,50 @@
+"""Channels and OCPP-related settings."""
+
+import os
+
+from config.channel_layer import resolve_channel_layers
+from utils.env import env_bool
+
+from .broker import resolve_celery_broker_url
+
+# Channels configuration
+CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "").strip()
+OCPP_STATE_REDIS_URL = os.environ.get("OCPP_STATE_REDIS_URL", "").strip()
+if not OCPP_STATE_REDIS_URL:
+    OCPP_STATE_REDIS_URL = CHANNEL_REDIS_URL or resolve_celery_broker_url()
+
+OCPP_AUTHORIZATION_POLICY = (
+    os.environ.get("OCPP_AUTHORIZATION_POLICY", "").strip().lower()
+)
+
+CHANNEL_LAYERS, CHANNEL_LAYER_DECISION = resolve_channel_layers(
+    channel_redis_url=CHANNEL_REDIS_URL,
+    ocpp_state_redis_url=OCPP_STATE_REDIS_URL,
+)
+
+OCPP_PENDING_CALL_TTL = int(os.environ.get("OCPP_PENDING_CALL_TTL", "1800"))
+OCPP_ASYNC_LOGGING = env_bool(
+    "OCPP_ASYNC_LOGGING", bool(CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL)
+)
+
+OCPP_CERT_STATUS_OCSP_URL = os.environ.get("OCPP_CERT_STATUS_OCSP_URL", "").strip()
+OCPP_CERT_STATUS_CRL_URL = os.environ.get("OCPP_CERT_STATUS_CRL_URL", "").strip()
+OCPP_CERT_STATUS_TRUST_STORE = os.environ.get(
+    "OCPP_CERT_STATUS_TRUST_STORE", ""
+).strip()
+OCPP_CERT_STATUS_FAIL_CLOSED = env_bool("OCPP_CERT_STATUS_FAIL_CLOSED", False)
+try:
+    OCPP_CERT_STATUS_TIMEOUT_SECONDS = int(
+        os.environ.get("OCPP_CERT_STATUS_TIMEOUT_SECONDS", "3")
+    )
+except (TypeError, ValueError):
+    OCPP_CERT_STATUS_TIMEOUT_SECONDS = 3
+if OCPP_CERT_STATUS_TIMEOUT_SECONDS <= 0:
+    OCPP_CERT_STATUS_TIMEOUT_SECONDS = 3
+
+try:
+    OCPP_CERT_STATUS_RETRIES = int(os.environ.get("OCPP_CERT_STATUS_RETRIES", "1"))
+except (TypeError, ValueError):
+    OCPP_CERT_STATUS_RETRIES = 1
+if OCPP_CERT_STATUS_RETRIES < 0:
+    OCPP_CERT_STATUS_RETRIES = 0

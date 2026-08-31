@@ -1,0 +1,16 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:nodes_nodescreenshot_capture' %}" class="addlink">
+            {% trans 'Take site screenshot' %}
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:nodes_nodescreenshot_capture_desktop' %}" class="addlink">
+            {% trans 'Take desktop screenshot' %}
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

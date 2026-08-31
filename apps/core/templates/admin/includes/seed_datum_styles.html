@@ -1,0 +1,35 @@
+<style>
+.seed-datum-flag {
+    color: var(--body-quiet-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.seed-datum-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.seed-datum-text a {
+    color: inherit;
+}
+.seed-datum-flag--seed .seed-datum-text {
+    font-weight: normal;
+}
+:root[data-theme="dark"] .seed-datum-flag {
+    color: var(--body-fg);
+}
+:root[data-theme="dark"] .seed-datum-flag--seed .seed-datum-text {
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .seed-datum-checkbox {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+:root[data-theme="dark"] .seed-datum-checkbox:checked {
+    background-color: var(--link-fg, #58a6ff);
+    border-color: var(--link-fg, #58a6ff);
+}
+</style>

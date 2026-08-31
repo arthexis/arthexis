@@ -1,0 +1,638 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Upgrade Report" %}
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  :root {
+    --upgrade-card-bg: #fff;
+    --upgrade-card-border: #e0e0e0;
+    --upgrade-card-fg: inherit;
+    --upgrade-muted: var(--body-quiet-color, #4b5563);
+    --upgrade-code-bg: #f1f5f9;
+    --upgrade-code-fg: #0f172a;
+    --upgrade-chip-ok-bg: #e6f4ea;
+    --upgrade-chip-ok-fg: #0d652d;
+    --upgrade-chip-warning-bg: #fef3c7;
+    --upgrade-chip-warning-fg: #92400e;
+    --upgrade-chip-error-bg: #fee2e2;
+    --upgrade-chip-error-fg: #991b1b;
+  }
+
+  .upgrade-report .upgrade-report-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .upgrade-report .upgrade-report-header h2 {
+    margin: 0;
+  }
+
+  .upgrade-report .upgrade-report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .upgrade-report .upgrade-summary-card {
+    border: 1px solid var(--upgrade-card-border, #e0e0e0);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    background: var(--upgrade-card-bg, #fff);
+    color: var(--upgrade-card-fg, inherit);
+  }
+
+  .upgrade-report .upgrade-summary-card h4 {
+    margin: 0 0 0.35rem 0;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .upgrade-report .upgrade-summary-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .upgrade-report .upgrade-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .upgrade-report .state-ok {
+    background: var(--upgrade-chip-ok-bg, #e6f4ea);
+    color: var(--upgrade-chip-ok-fg, #0d652d);
+  }
+
+  .upgrade-report .state-warning {
+    background: var(--upgrade-chip-warning-bg, #fef3c7);
+    color: var(--upgrade-chip-warning-fg, #92400e);
+  }
+
+  .upgrade-report .state-error {
+    background: var(--upgrade-chip-error-bg, #fee2e2);
+    color: var(--upgrade-chip-error-fg, #991b1b);
+  }
+
+  .upgrade-report .upgrade-issues {
+    margin: 0.25rem 0 0;
+    padding-left: 1.25rem;
+    color: var(--upgrade-muted, inherit);
+  }
+
+  .upgrade-report .upgrade-issues li {
+    margin: 0.15rem 0;
+  }
+
+  .upgrade-report .upgrade-report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .upgrade-report .upgrade-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1.25rem;
+    gap: 0.375rem;
+    min-height: 2.5rem;
+    flex: 1 1 8rem;
+  }
+
+  .upgrade-report .upgrade-report-action-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .upgrade-report .upgrade-report-action-group form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .upgrade-report .precheck-button {
+    flex: 0 0 auto;
+  }
+
+  .upgrade-report code {
+    background: var(--upgrade-code-bg, #f1f5f9);
+    color: var(--upgrade-code-fg, #0f172a);
+    border-radius: 4px;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .upgrade-report .upgrade-policy-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .upgrade-report .upgrade-policy-item {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .upgrade-report .upgrade-policy-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .upgrade-report .upgrade-policy-requirements {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .upgrade-report .upgrade-policy-requirements span {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: var(--upgrade-code-bg, #f1f5f9);
+    color: var(--upgrade-code-fg, #0f172a);
+  }
+
+  .upgrade-report .upgrade-report-collapsible summary {
+    cursor: pointer;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .upgrade-report .upgrade-report-collapsible-body {
+    margin-top: 0.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: light dark;
+      --upgrade-card-bg: #0b1727;
+      --upgrade-card-border: rgba(148, 163, 184, 0.35);
+      --upgrade-card-fg: #e2e8f0;
+      --upgrade-muted: #cbd5e1;
+      --upgrade-code-bg: rgba(226, 232, 240, 0.12);
+      --upgrade-code-fg: #e2e8f0;
+      --upgrade-chip-ok-bg: rgba(16, 185, 129, 0.18);
+      --upgrade-chip-ok-fg: #6ee7b7;
+      --upgrade-chip-warning-bg: rgba(249, 213, 35, 0.22);
+      --upgrade-chip-warning-fg: #facc15;
+      --upgrade-chip-error-bg: rgba(248, 113, 113, 0.22);
+      --upgrade-chip-error-fg: #fca5a5;
+    }
+  }
+
+  /* Keep in sync with the prefers-color-scheme dark variables above. */
+  :is(html[data-theme="dark"], body.dark-theme) {
+    --upgrade-card-bg: #0b1727;
+    --upgrade-card-border: rgba(148, 163, 184, 0.35);
+    --upgrade-card-fg: #e2e8f0;
+    --upgrade-muted: #cbd5e1;
+    --upgrade-code-bg: rgba(226, 232, 240, 0.12);
+    --upgrade-code-fg: #e2e8f0;
+    --upgrade-chip-ok-bg: rgba(16, 185, 129, 0.18);
+    --upgrade-chip-ok-fg: #6ee7b7;
+    --upgrade-chip-warning-bg: rgba(249, 213, 35, 0.22);
+    --upgrade-chip-warning-fg: #facc15;
+    --upgrade-chip-error-bg: rgba(248, 113, 113, 0.22);
+    --upgrade-chip-error-fg: #fca5a5;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .upgrade-report .upgrade-summary-card .help,
+    .upgrade-report .upgrade-issues,
+    .upgrade-report .upgrade-report-header h2 {
+      color: var(--upgrade-muted, inherit);
+    }
+  }
+
+  :is(html[data-theme="dark"], body.dark-theme)
+    .upgrade-report
+    :is(.upgrade-summary-card .help, .upgrade-issues, .upgrade-report-header h2) {
+    color: var(--upgrade-muted, inherit);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module upgrade-report">
+    <div class="upgrade-report-header">
+      <h2>{% trans "Upgrade Report" %}</h2>
+      <div class="upgrade-report-actions">
+        <div class="upgrade-report-action-group">
+          <form method="post" action="{% url 'admin:system-upgrade-run-check' %}" class="upgrade-report-trigger">
+            {% csrf_token %}
+            {% if auto_upgrade_report.settings.stable_only %}
+            {% blocktrans trimmed asvar unstable_confirm_message %}
+              This node is configured for stable updates. Continue with an unstable upgrade?
+            {% endblocktrans %}
+            {% endif %}
+            <div class="upgrade-report-action-group">
+              <button
+                type="submit"
+                name="channel"
+                value="unstable"
+                class="button default upgrade-action-button"
+                {% if auto_upgrade_report.settings.stable_only %}
+                onclick="return confirm('{{ unstable_confirm_message|escapejs }}');"
+                {% endif %}
+              >
+                {% trans "Upgrade Immediately (Unstable)" %}
+              </button>
+              <button
+                type="submit"
+                name="channel"
+                value="stable"
+                class="button upgrade-action-button"
+              >
+                {% trans "Upgrade on Next Release (Stable)" %}
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="upgrade-report-action-group">
+          <form method="post" action="{% url 'admin:system-upgrade-check-revision' %}">
+            {% csrf_token %}
+            <button type="submit" class="button upgrade-action-button precheck-button">
+              {% trans "Pre-Upgrade Checks" %}
+            </button>
+          </form>
+        </div>
+        <div class="upgrade-report-action-group">
+          <a href="{% url 'admin:nodes_upgradepolicy_changelist' %}" class="button upgrade-action-button">
+            {% trans "Review Upgrade Policies" %}
+          </a>
+        </div>
+      </div>
+    </div>
+    {% with report=auto_upgrade_report %}
+    <div class="upgrade-report-summary">
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Overall status" %}</h4>
+        <p class="upgrade-summary-value">
+          <span class="upgrade-status-chip state-{{ report.summary.state }}">
+            {{ report.summary.headline }}
+          </span>
+        </p>
+        {% if report.summary.issues %}
+          <ul class="upgrade-issues">
+            {% for issue in report.summary.issues %}
+            <li class="state-{{ issue.severity }}">{{ issue.label }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="help">{% trans "No outstanding issues detected." %}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Upgrade policies" %}</h4>
+        {% if report.settings.policies %}
+          <ul class="upgrade-policy-list">
+            {% for policy in report.settings.policies %}
+            <li class="upgrade-policy-item">
+              <strong>{{ policy.name }}</strong>
+              <div class="upgrade-policy-meta">
+                <span class="upgrade-status-chip state-{{ policy.channel_state }}">
+                  {{ policy.channel_label }}
+                </span>
+                {% if policy.interval_label %}
+                  <span class="help">{{ policy.interval_label }}</span>
+                {% endif %}
+                {% if policy.target_branch and policy.target_branch != "main" %}
+                  <span class="help">{% blocktrans %}Branch {{ policy.target_branch }}{% endblocktrans %}</span>
+                {% endif %}
+                {% if policy.last_checked_label %}
+                  <span class="help">{% blocktrans %}Last checked {{ policy.last_checked_label }}{% endblocktrans %}</span>
+                {% endif %}
+              </div>
+              <div class="upgrade-policy-requirements">
+                {% if policy.channel == "custom" %}
+                  <span>{% blocktrans with allowed=policy.allowed_bumps|join:", "|default:"none" %}Allowed bumps: {{ allowed }}{% endblocktrans %}</span>
+                  {% if policy.include_live_branch %}
+                    <span>{% trans "Live branch enabled" %}</span>
+                  {% else %}
+                    <span>{% trans "Release bumps only" %}</span>
+                  {% endif %}
+                {% endif %}
+                {% if policy.requires_pypi %}
+                  <span>{% trans "PyPI required" %}</span>
+                {% endif %}
+                {% if policy.last_status %}
+                  <span>{% blocktrans %}Last status {{ policy.last_status }}{% endblocktrans %}</span>
+                {% endif %}
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="upgrade-summary-value"><em>{% trans "Manual" %}</em></p>
+          <p class="help">{% trans "No upgrade policies apply to this node." %}</p>
+        {% endif %}
+        {% if report.settings.revision_status_label %}
+          <p class="upgrade-summary-value">
+            <span class="upgrade-status-chip state-{{ report.settings.revision_status_state }}">
+              {{ report.settings.revision_status_label }}
+            </span>
+          </p>
+        {% endif %}
+        {% if report.settings.revision_checked_label %}
+          <p class="help">{% blocktrans %}Revision last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Next scheduled run" %}</h4>
+        <p class="upgrade-summary-value">
+          {% if report.summary.next_run %}
+            {{ report.summary.next_run }}
+          {% else %}
+            <em>{% trans "Not scheduled" %}</em>
+          {% endif %}
+        </p>
+        {% if report.schedule.description %}
+          <p class="help">{{ report.schedule.description }}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Last activity" %}</h4>
+        {% if report.summary.last_activity.message %}
+          <p class="upgrade-summary-value">
+            <code>{{ report.summary.last_activity.message }}</code>
+          </p>
+          <p class="help">{{ report.summary.last_activity.timestamp|default:"" }}</p>
+        {% else %}
+          <p class="upgrade-summary-value"><em>{% trans "No activity recorded yet." %}</em></p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="upgrade-report-section">
+      <h3>{% trans "Settings" %}</h3>
+      <dl>
+        <dt>{% trans "Upgrade policy status" %}</dt>
+        <dd>
+          {% if report.settings.manual %}
+            {% trans "Manual (no policies configured)" %}
+          {% else %}
+            {% blocktrans %}Enabled ({{ report.settings.policies|length }} policy{{ report.settings.policies|length|pluralize }}){% endblocktrans %}
+          {% endif %}
+        </dd>
+        <dt>{% trans "Channels" %}</dt>
+        <dd>
+          {% if report.settings.channels %}
+            <code>{{ report.settings.channels|join:", " }}</code>
+          {% else %}
+            <em>{% trans "Manual" %}</em>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Local revision" %}</dt>
+        <dd>
+          {% if report.settings.local_revision %}
+            <code>{{ report.settings.local_revision }}</code>
+          {% else %}
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "Run Pre-Upgrade Checks to capture the local revision from the auto-upgrade worker." %}</p>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Origin revision" %}</dt>
+        <dd>
+          {% if report.settings.origin_revision %}
+            <code>{{ report.settings.origin_revision }}</code>
+          {% else %}
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "No origin revision has been recorded yet. Run Pre-Upgrade Checks to query the upstream repository and confirm connectivity." %}</p>
+          {% endif %}
+          {% if report.settings.origin_revision_error %}
+            <p class="errornote">{{ report.settings.origin_revision_error }}</p>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Revision checks" %}</dt>
+        <dd>
+          {% if report.settings.revision_checked_label %}
+            <p class="help">{% blocktrans %}Last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
+          {% else %}
+            <p class="help">{% trans "Run Pre-Upgrade Checks to refresh revision details." %}</p>
+          {% endif %}
+        </dd>
+        <dt>{% trans "CI status" %}</dt>
+        <dd>
+          {% if report.settings.ci_status %}
+            <code>{{ report.settings.ci_status }}</code>
+          {% else %}
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "CI results are fetched during revision checks. Rerun Pre-Upgrade Checks after verifying connectivity to the CI service." %}</p>
+          {% endif %}
+          {% if not report.settings.revision_checked_label %}
+            <p class="help">{% trans "Run Pre-Upgrade Checks to retrieve the current CI status." %}</p>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Task" %}</dt>
+        <dd>
+          <code>{{ report.settings.task_name }}</code>
+          {% if report.schedule.task_admin_url %}
+            [ <a href="{{ report.schedule.task_admin_url }}">{% trans "View" %}</a> ]
+          {% endif %}
+          {% if report.settings.task_path %}
+            — <code>{{ report.settings.task_path }}</code>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Log file" %}</dt>
+        <dd><code>{{ report.settings.log_path }}</code></dd>
+        <dt>{% trans "Suite uptime" %}</dt>
+        <dd>
+          {% if report.settings.suite_uptime %}
+            {{ report.settings.suite_uptime }}
+            {% if report.settings.suite_uptime_details.boot_time_label %}
+              <p class="help">{% blocktrans with boot_time=report.settings.suite_uptime_details.boot_time_label %}Tracking since {{ boot_time }}.{% endblocktrans %}</p>
+            {% endif %}
+          {% else %}
+            <p><em>{% trans "Unavailable" %}</em></p>
+            {% with details=report.settings.suite_uptime_details %}
+              {% if details.lock_predates_boot and details.boot_time_label %}
+                <p class="help">{% blocktrans with boot_time=details.boot_time_label %}The uptime lock predates the current boot on {{ boot_time }}; tracking will resume after the next check.{% endblocktrans %}</p>
+              {% elif details.boot_time_label %}
+                <p class="help">{% blocktrans with boot_time=details.boot_time_label %}Uptime tracking will begin from {{ boot_time }} after the monitor writes a fresh lock.{% endblocktrans %}</p>
+              {% else %}
+                <p class="help">{% trans "Start the suite uptime monitor or rerun Pre-Upgrade Checks to populate this value." %}</p>
+              {% endif %}
+            {% endwith %}
+          {% endif %}
+        </dd>
+        <dt>{% trans "Blocked revisions" %}</dt>
+        <dd>
+          {% if report.settings.skip_revisions %}
+          <ul>
+            {% for revision in report.settings.skip_revisions %}
+            <li><code>{{ revision }}</code></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <em>{% trans "No revisions are currently blocked." %}</em>
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+    <div class="upgrade-report-section">
+      <details class="upgrade-report-collapsible">
+        <summary>{% trans "Auto-upgrade return codes" %}</summary>
+        <div class="upgrade-report-collapsible-body">
+          <p class="help">{% trans "LCD status codes are shortened to fit a 16-character display." %}</p>
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th scope="col">{% trans "LCD code" %}</th>
+                <th scope="col">{% trans "Meaning" %}</th>
+                <th scope="col">{% trans "Suggested action" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in report.failure_guide %}
+              <tr>
+                <td><code>{{ entry.code }}</code></td>
+                <td>
+                  <strong>{{ entry.label }}</strong><br />
+                  <span class="help">{{ entry.details }}</span>
+                </td>
+                <td>{{ entry.action }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+    <div class="upgrade-report-section">
+      <h3>{% trans "Schedule" %}</h3>
+      {% if report.schedule.available %}
+        {% if report.schedule.configured %}
+        <table class="table table-striped">
+          <tbody>
+            <tr>
+              <th scope="row">{% trans "Enabled" %}</th>
+              <td>
+                {% if report.schedule.enabled %}
+                  {% trans "Yes" %}
+                {% else %}
+                  {% trans "No" %}
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "One-off" %}</th>
+              <td>
+                {% if report.schedule.one_off %}
+                  {% trans "Yes" %}
+                {% else %}
+                  {% trans "No" %}
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Queue" %}</th>
+              <td>{{ report.schedule.queue|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Schedule" %}</th>
+              <td>
+                {{ report.schedule.schedule|default:"" }}
+                {% if report.schedule.config_admin_url %}
+                  [ <a href="{{ report.schedule.config_admin_url }}">{% trans "View" %}</a> ]
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Next run" %}</th>
+              <td>{{ report.schedule.next_run|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Last run" %}</th>
+              <td>{{ report.schedule.last_run_at|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Start time" %}</th>
+              <td>{{ report.schedule.start_time|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Expires" %}</th>
+              <td>{{ report.schedule.expires|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Run count" %}</th>
+              <td>{{ report.schedule.total_run_count }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Failure count" %}</th>
+              <td>{{ report.schedule.failure_count }}</td>
+            </tr>
+            {% if report.schedule.description %}
+            <tr>
+              <th scope="row">{% trans "Description" %}</th>
+              <td>{{ report.schedule.description }}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+        {% else %}
+          <p class="help">{% trans "The auto-upgrade periodic task has not been created yet." %}</p>
+        {% endif %}
+      {% else %}
+        {% if report.schedule.error %}
+          <p class="help">{{ report.schedule.error }}</p>
+        {% else %}
+          <p class="help">{% trans "Scheduling information is unavailable." %}</p>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="upgrade-report-section">
+      <h3>{% trans "Recent activity" %}</h3>
+      <p class="help">{% blocktrans with hours=report.recent_activity_hours %}Showing the last {{ hours }} hours of activity.{% endblocktrans %}</p>
+      {% if report.log_entries %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Timestamp" %}</th>
+            <th scope="col">{% trans "Message" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in report.log_entries %}
+          <tr>
+            <td>{{ entry.timestamp|default:"" }}</td>
+            <td><code>{{ entry.message }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p class="help">{% trans "No auto-upgrade activity has been recorded yet." %}</p>
+      {% endif %}
+      {% if report.log_error %}
+        <p class="errornote">{{ report.log_error }}</p>
+      {% endif %}
+    </div>
+    {% endwith %}
+  </div>
+</div>
+{% endblock %}

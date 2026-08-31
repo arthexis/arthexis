@@ -1,0 +1,692 @@
+from datetime import datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from urllib.parse import urlencode
+
+from django.contrib import admin, messages
+from django.contrib.admin.utils import quote
+from django.db.models import Exists, OuterRef, Q
+from django.db.models.deletion import ProtectedError
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
+
+from apps.core.admin import OwnableAdminMixin
+from apps.energy.models import EnergyTariff
+from apps.locals.user_data import EntityModelAdmin
+from apps.ocpp.admin.public_routes import reverse_public_ocpp_route
+
+from ... import store
+from ...models import Charger, ControlOperationEvent, SecurityEvent, Transaction
+from ...status_resets import clear_stale_cached_statuses
+from ..common import LogViewAdminMixin
+from .actions import ChargerAdminActionsMixin
+from .helpers import charger_status_state
+from .views import ChargerAdminViewsMixin
+
+
+@admin.register(Charger)
+class ChargerAdmin(
+    ChargerAdminActionsMixin,
+    ChargerAdminViewsMixin,
+    LogViewAdminMixin,
+    OwnableAdminMixin,
+    EntityModelAdmin,
+):
+    change_form_template = "admin/ocpp/charger/change_form.html"
+    _REMOTE_DATETIME_FIELDS = {
+        "availability_state_updated_at",
+        "availability_requested_at",
+        "availability_request_status_at",
+        "last_online_at",
+    }
+
+    fieldsets = (
+        (
+            "General",
+            {
+                "fields": (
+                    "charger_id",
+                    "display_name",
+                    "connector_id",
+                    "language",
+                    "preferred_ocpp_version",
+                    "energy_unit",
+                    "location",
+                    "station_model",
+                    "last_path",
+                    "last_heartbeat",
+                    "last_meter_values",
+                )
+            },
+        ),
+        (
+            "Firmware",
+            {
+                "fields": (
+                    "firmware_status",
+                    "firmware_status_info",
+                    "firmware_timestamp",
+                )
+            },
+        ),
+        (
+            "Diagnostics",
+            {
+                "fields": (
+                    "diagnostics_status",
+                    "diagnostics_timestamp",
+                    "diagnostics_location",
+                    "diagnostics_bucket",
+                )
+            },
+        ),
+        (
+            "Maintenance",
+            {
+                "fields": (
+                    "maintenance_email",
+                    "email_when_offline",
+                    "offline_notification_sent_at",
+                )
+            },
+        ),
+        (
+            "Availability",
+            {
+                "fields": (
+                    "availability_state",
+                    "availability_state_updated_at",
+                    "availability_requested_state",
+                    "availability_requested_at",
+                    "availability_request_status",
+                    "availability_request_status_at",
+                    "availability_request_details",
+                )
+            },
+        ),
+        (
+            "Configuration",
+            {
+                "fields": (
+                    "public_display",
+                    "authorization_policy",
+                    "configuration_check_enabled",
+                    "power_projection_enabled",
+                    "firmware_snapshot_enabled",
+                    "configuration",
+                    "network_profile",
+                )
+            },
+        ),
+        (
+            "Local authorization",
+            {
+                "fields": (
+                    "local_auth_list_version",
+                    "local_auth_list_updated_at",
+                )
+            },
+        ),
+        (
+            "Network",
+            {
+                "description": _(
+                    "Export transactions makes this charge point available to signed "
+                    "node import/export tools. Allow remote lets the manager send "
+                    "commands to the device."
+                ),
+                "fields": (
+                    "node_origin",
+                    "manager_node",
+                    "allow_remote",
+                    "export_transactions",
+                    "last_online_at",
+                ),
+            },
+        ),
+        (
+            "Authentication",
+            {
+                "description": _(
+                    "Configure HTTP Basic authentication requirements for this charge point."
+                ),
+                "fields": ("ws_auth_user", "ws_auth_group"),
+            },
+        ),
+        (
+            "Visibility",
+            {
+                "fields": ("owner_users", "owner_groups"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+    readonly_fields = (
+        "last_heartbeat",
+        "last_meter_values",
+        "firmware_status",
+        "firmware_status_info",
+        "firmware_timestamp",
+        "availability_state",
+        "availability_state_updated_at",
+        "availability_requested_state",
+        "availability_requested_at",
+        "availability_request_status",
+        "availability_request_status_at",
+        "availability_request_details",
+        "configuration",
+        "local_auth_list_version",
+        "local_auth_list_updated_at",
+        "diagnostics_bucket",
+        "last_online_at",
+        "offline_notification_sent_at",
+    )
+    list_display = (
+        "display_name_with_fallback",
+        "charging_station_display_name",
+        "connector_number",
+        "connection_health",
+        "local_indicator",
+        "authorization_policy_display",
+        "credentials_health",
+        "action_history_link",
+        "public_display",
+        "export_sync_ready",
+        "last_heartbeat_display",
+        "today_kw",
+        "total_kw_display",
+        "page_link",
+        "log_link",
+        "status_link",
+        "recent_failures_link",
+    )
+    list_filter = ("export_transactions",)
+    search_fields = ("charger_id", "connector_id", "location__name")
+    filter_horizontal = ("owner_users", "owner_groups")
+    actions = [
+        "purge_data",
+        "recheck_charger_status",
+        "setup_cp_diagnostics",
+        "request_cp_diagnostics",
+        "get_diagnostics",
+        "change_availability_operative",
+        "change_availability_inoperative",
+        "set_availability_state_operative",
+        "set_availability_state_inoperative",
+        "unlock_connector",
+        "remote_stop_transaction",
+        "reset_chargers",
+        "setup_charger_location",
+        "view_charge_point_dashboard",
+        "delete_selected",
+    ]
+
+    @admin.display(description="Token/Credential")
+    def credentials_health(self, obj):
+        indicators = []
+        if obj.ws_auth_user_id or obj.ws_auth_group_id:
+            indicators.append("WS auth")
+        if obj.allow_remote:
+            indicators.append("Remote enabled")
+        if obj.node_origin_id and not obj.is_local:
+            indicators.append("Remote origin")
+        if obj.export_transactions:
+            indicators.append("Export sync")
+        return ", ".join(indicators) if indicators else "Default"
+
+    @admin.display(description="Connection/session")
+    def connection_health(self, obj):
+        bits = []
+        if self._has_active_session(obj):
+            bits.append("Active session")
+        else:
+            bits.append("No active session")
+        state = self._charger_availability_state(obj)
+        if state:
+            bits.append(f"Avail: {state}")
+        if obj.last_online_at:
+            bits.append("Online tracked")
+        else:
+            bits.append("No online signal")
+        return " · ".join(bits)
+
+    @admin.display(description="Ops history")
+    def action_history_link(self, obj):
+        base_url = reverse("admin:ocpp_controloperationevent_changelist")
+        query = urlencode({"charger__id__exact": obj.pk})
+        return format_html('<a href="{}?{}">view</a>', base_url, query)
+
+    @admin.display(description="Recent issues")
+    def recent_failures_link(self, obj):
+        window_start = timezone.now() - timedelta(days=2)
+        failed_ops = ControlOperationEvent.objects.filter(
+            charger=obj,
+            status=ControlOperationEvent.Status.FAILED,
+            created_at__gte=window_start,
+        ).count()
+        rejected_sessions = Transaction.objects.filter(
+            charger=obj,
+            authorization_status=Transaction.AuthorizationStatus.REJECTED,
+            start_time__gte=window_start,
+        ).count()
+        security_events = SecurityEvent.objects.filter(
+            charger=obj,
+            event_timestamp__gte=window_start,
+        ).count()
+        total = failed_ops + rejected_sessions + security_events
+        if not total:
+            return "-"
+        url = reverse("admin:ocpp_controloperationevent_changelist")
+        return format_html(
+            '<a href="{}?charger__id__exact={}">{} in last 48h</a>', url, obj.pk, total
+        )
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        charger = self.get_object(request, object_id)
+        if charger:
+            extra_context.update(self._operations_health_context(charger))
+        return super().change_view(
+            request,
+            object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def _operations_health_context(self, charger: Charger):
+        recent_transactions = list(
+            Transaction.objects.filter(charger=charger)
+            .order_by("-start_time")[:8]
+            .only(
+                "pk",
+                "start_time",
+                "stop_time",
+                "authorization_status",
+                "authorization_reason",
+            )
+        )
+        recent_security_events = list(
+            SecurityEvent.objects.filter(charger=charger)
+            .order_by("-event_timestamp")[:8]
+            .only("pk", "event_type", "event_timestamp", "trigger")
+        )
+        recent_control_operations = list(
+            ControlOperationEvent.objects.filter(charger=charger)
+            .select_related("actor")
+            .order_by("-created_at")[:10]
+            .only("pk", "created_at", "action", "status", "detail", "actor__username")
+        )
+        now = timezone.now()
+        lookback_start = now - timedelta(hours=24)
+        rejected_count = Transaction.objects.filter(
+            charger=charger,
+            authorization_status=Transaction.AuthorizationStatus.REJECTED,
+            start_time__gte=lookback_start,
+        ).count()
+        failed_ops_count = ControlOperationEvent.objects.filter(
+            charger=charger,
+            status=ControlOperationEvent.Status.FAILED,
+            created_at__gte=lookback_start,
+        ).count()
+        security_count = SecurityEvent.objects.filter(
+            charger=charger,
+            event_timestamp__gte=lookback_start,
+        ).count()
+        return {
+            "ops_health_overview": {
+                "active_session": self._has_active_session(charger),
+                "availability_state": self._charger_availability_state(charger) or "-",
+                "last_online_at": charger.last_online_at,
+                "rejected_sessions_24h": rejected_count,
+                "failed_ops_24h": failed_ops_count,
+                "security_events_24h": security_count,
+            },
+            "ops_credential_status": self.credentials_health(charger),
+            "recent_transactions_for_admin": recent_transactions,
+            "recent_security_events_for_admin": recent_security_events,
+            "recent_control_operations_for_admin": recent_control_operations,
+        }
+
+    def get_queryset(self, request):
+        """Hide station root rows on the changelist while keeping detail URLs reachable."""
+
+        queryset = super().get_queryset(request)
+        resolver_match = getattr(request, "resolver_match", None)
+        changelist_url_name = f"{self.opts.app_label}_{self.opts.model_name}_changelist"
+        if not resolver_match or resolver_match.url_name != changelist_url_name:
+            return queryset
+
+        has_connector_rows = Charger.objects.filter(
+            charger_id=OuterRef("charger_id"),
+            connector_id__isnull=False,
+        )
+        queryset = queryset.annotate(_has_connector_rows=Exists(has_connector_rows))
+
+        return queryset.exclude(
+            Q(connector_id__isnull=True)
+            & Q(charging_station__isnull=False)
+            & Q(_has_connector_rows=True)
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and obj.charging_station_id:
+            station_managed_fields = (
+                "display_name",
+                "public_display",
+                "language",
+                "preferred_ocpp_version",
+                "energy_unit",
+                "authorization_policy",
+                "location",
+                "station_model",
+            )
+            for field in station_managed_fields:
+                if field not in readonly:
+                    readonly.append(field)
+        if obj and not obj.is_local:
+            for field in ("allow_remote", "export_transactions"):
+                if field not in readonly:
+                    readonly.append(field)
+        return tuple(readonly)
+
+    def get_view_on_site_url(self, obj=None):
+        return obj.get_absolute_url() if obj else None
+
+    @admin.display(description="Auth Policy")
+    def authorization_policy_display(self, obj):
+        if obj.authorization_policy:
+            return obj.get_authorization_policy_display()
+        return f"Global ({obj.resolved_authorization_policy()})"
+
+    @admin.display(boolean=True, description="Export enabled")
+    def export_sync_ready(self, obj):
+        return bool(obj.export_transactions)
+
+    @admin.display(description="Last heartbeat", ordering="last_heartbeat")
+    def last_heartbeat_display(self, obj):
+        value = obj.last_heartbeat
+        if not value:
+            return "-"
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+        localized = timezone.localtime(value)
+        iso_value = localized.isoformat(timespec="minutes")
+        return iso_value.replace("T", " ")
+
+    def page_link(self, obj):
+        url = obj.get_absolute_url()
+        if not url:
+            return "-"
+        return format_html('<a href="{}" target="_blank">open</a>', url)
+
+    page_link.short_description = "Landing"
+
+    def log_link(self, obj):
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name
+        url = reverse(
+            f"admin:{app_label}_{model_name}_log",
+            args=[quote(obj.pk)],
+            current_app=self.admin_site.name,
+        )
+        return format_html('<a href="{}" target="_blank">view</a>', url)
+
+    log_link.short_description = "Log"
+
+    def get_log_identifier(self, obj):
+        return store.identity_key(obj.charger_id, obj.connector_id)
+
+    def connector_number(self, obj):
+        return obj.connector_id if obj.connector_id is not None else ""
+
+    connector_number.short_description = "#"
+    connector_number.admin_order_field = "connector_id"
+
+    def status_link(self, obj):
+        url = reverse_public_ocpp_route(
+            "ocpp:charger-status-connector",
+            args=[obj.charger_id, obj.connector_slug],
+        )
+        if not url:
+            return "-"
+        state = charger_status_state(obj)
+        return format_html('<a href="{}" target="_blank">{}</a>', url, state)
+
+    status_link.short_description = "Status"
+
+    def _has_active_session(self, charger: Charger) -> bool:
+        """Return whether ``charger`` currently has an active session."""
+
+        if store.get_transaction(charger.charger_id, charger.connector_id):
+            return True
+        if charger.connector_id is not None:
+            return False
+        sibling_connectors = (
+            Charger.objects.filter(charger_id=charger.charger_id)
+            .exclude(pk=charger.pk)
+            .values_list("connector_id", flat=True)
+        )
+        for connector_id in sibling_connectors:
+            if store.get_transaction(charger.charger_id, connector_id):
+                return True
+        return False
+
+    @admin.display(description="Display Name", ordering="display_name")
+    def display_name_with_fallback(self, obj):
+        return self._charger_display_name(obj)
+
+    @admin.display(description="Station", ordering="charging_station__display_name")
+    def charging_station_display_name(self, obj):
+        station = obj.charging_station
+        if not station:
+            return "-"
+        return station.display_name or station.station_id
+
+    def _charger_display_name(self, obj):
+        if obj.display_name:
+            return obj.display_name
+        if obj.location:
+            return obj.location.name
+        return obj.charger_id
+
+    @admin.display(boolean=True, description="Local")
+    def local_indicator(self, obj):
+        return obj.is_local
+
+    def location_name(self, obj):
+        return obj.location.name if obj.location else ""
+
+    location_name.short_description = "Location"
+
+    def delete_queryset(self, request, queryset):
+        protected: list[Charger] = []
+        for obj in queryset:
+            try:
+                obj.delete()
+            except ProtectedError:
+                protected.append(obj)
+        if protected:
+            count = len(protected)
+            message = ngettext(
+                "Purge charger data before deleting this charger.",
+                "Purge charger data before deleting these chargers.",
+                count,
+            )
+            self.message_user(request, message, level=messages.ERROR)
+
+    def delete_view(self, request, object_id, extra_context=None):
+        try:
+            return super().delete_view(request, object_id, extra_context=extra_context)
+        except ProtectedError:
+            if request.method == "POST":
+                self.message_user(
+                    request,
+                    _("Purge charger data before deleting this charger."),
+                    level=messages.ERROR,
+                )
+                change_url = reverse("admin:ocpp_charger_change", args=[object_id])
+                return HttpResponseRedirect(change_url)
+            raise
+
+    @staticmethod
+    def _round_kw(value: float) -> float:
+        return round(value, 2)
+
+    def total_kw_display(self, obj):
+        return self._round_kw(obj.total_kw)
+
+    total_kw_display.short_description = "Total kW"
+
+    def today_kw(self, obj):
+        start, end = self._today_range()
+        return self._round_kw(obj.total_kw_for_range(start, end))
+
+    today_kw.short_description = "Today kW"
+
+    def changelist_view(self, request, extra_context=None):
+        clear_stale_cached_statuses()
+        response = super().changelist_view(request, extra_context=extra_context)
+        if hasattr(response, "context_data"):
+            cl = response.context_data.get("cl")
+            if cl is not None:
+                response.context_data.update(
+                    self._charger_quick_stats_context(cl.queryset)
+                )
+        return response
+
+    def _charger_quick_stats_context(self, queryset):
+        chargers = list(queryset)
+        stats = {
+            "total_kw": 0.0,
+            "today_kw": 0.0,
+            "estimated_cost": None,
+            "availability_percentage": None,
+        }
+        if not chargers:
+            return {"charger_quick_stats": stats}
+
+        parent_ids = {c.charger_id for c in chargers if c.connector_id is None}
+        start, end = self._today_range()
+        window_end = timezone.now()
+        window_start = window_end - timedelta(hours=24)
+        tariff_cache = self._build_tariff_cache(window_end)
+        estimated_cost = Decimal("0")
+        cost_available = False
+        reported_count = 0
+        available_count = 0
+
+        for charger in chargers:
+            include_totals = True
+            if charger.connector_id is not None and charger.charger_id in parent_ids:
+                include_totals = False
+            if not include_totals:
+                continue
+
+            stats["total_kw"] += charger.total_kw
+            stats["today_kw"] += charger.total_kw_for_range(start, end)
+
+            energy_window = Decimal(
+                str(charger.total_kw_for_range(window_start, window_end))
+            )
+            price = self._select_tariff_price(
+                tariff_cache,
+                getattr(charger.location, "zone", None),
+                getattr(charger.location, "contract_type", None),
+                window_end,
+            )
+            if price is not None:
+                estimated_cost += energy_window * price
+                cost_available = True
+
+            availability_state = self._charger_availability_state(charger)
+            availability_timestamp = self._charger_availability_timestamp(charger)
+            if availability_timestamp and availability_timestamp >= window_start:
+                reported_count += 1
+                if availability_state.casefold() == "operative":
+                    available_count += 1
+
+        stats["total_kw"] = self._round_kw(stats["total_kw"])
+        stats["today_kw"] = self._round_kw(stats["today_kw"])
+        if cost_available:
+            stats["estimated_cost"] = estimated_cost.quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        if reported_count:
+            stats["availability_percentage"] = round(
+                (available_count / reported_count) * 100.0, 1
+            )
+
+        return {"charger_quick_stats": stats}
+
+    @staticmethod
+    def _tariff_active_at(tariff, moment: time) -> bool:
+        start = tariff.start_time
+        end = tariff.end_time
+        if start <= end:
+            return start <= moment < end
+        return moment >= start or moment < end
+
+    def _build_tariff_cache(
+        self, reference_time: datetime
+    ) -> dict[tuple[str | None, str | None], list[EnergyTariff]]:
+        tariffs = list(
+            EnergyTariff.objects.filter(
+                unit=EnergyTariff.Unit.KWH, year__lte=reference_time.year
+            ).order_by("-year", "season", "start_time")
+        )
+        cache: dict[tuple[str | None, str | None], list[EnergyTariff]] = {}
+        fallback: list[EnergyTariff] = []
+        for tariff in tariffs:
+            key = (tariff.zone, tariff.contract_type)
+            cache.setdefault(key, []).append(tariff)
+            fallback.append(tariff)
+        cache[(None, None)] = fallback
+        return cache
+
+    def _select_tariff_price(
+        self,
+        cache: dict[tuple[str | None, str | None], list[EnergyTariff]],
+        zone: str | None,
+        contract_type: str | None,
+        reference_time: datetime,
+    ) -> Decimal | None:
+        key = (zone or None, contract_type or None)
+        candidates = cache.get(key)
+        if not candidates:
+            candidates = cache.get((None, None), [])
+        if not candidates:
+            return None
+        moment = reference_time.time()
+        for tariff in candidates:
+            if self._tariff_active_at(tariff, moment):
+                return tariff.price_mxn
+        return candidates[0].price_mxn
+
+    @staticmethod
+    def _charger_availability_state(charger) -> str:
+        state = (getattr(charger, "availability_state", "") or "").strip()
+        if state:
+            return state
+        derived = Charger.availability_state_from_status(
+            getattr(charger, "last_status", "")
+        )
+        return derived or ""
+
+    @staticmethod
+    def _charger_availability_timestamp(charger):
+        timestamp = getattr(charger, "availability_state_updated_at", None)
+        if timestamp:
+            return timestamp
+        return getattr(charger, "last_status_timestamp", None)
+
+    def _today_range(self):
+        today = timezone.localdate()
+        start = datetime.combine(today, time.min)
+        if timezone.is_naive(start):
+            start = timezone.make_aware(start, timezone.get_current_timezone())
+        end = start + timedelta(days=1)
+        return start, end

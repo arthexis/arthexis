@@ -1,0 +1,116 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Sigil Builder" %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
+    {% csrf_token %}
+    {% if errors %}
+    <ul class="errorlist">
+      {% for error in errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if show_sigils_input %}
+    <label for="sigils_text">{% trans "Sigils" %}</label>
+    <textarea
+      name="sigils_text"
+      id="sigils_text"
+      rows="1"
+      cols="80"
+      style="width:100%; resize: vertical;"
+    >{{ sigils_text }}</textarea>
+    {% endif %}
+    <input type="file" name="sigils_file" id="sigils_file" />
+    <button type="submit">{% trans "Validate" %}</button>
+  </form>
+  {% if show_result %}
+  <label for="resolved_text">{% trans "Result" %}</label>
+  <textarea id="resolved_text" rows="10" cols="80" style="width:100%;" readonly>{{ resolved_text }}</textarea>
+  {% endif %}
+  <h2>{% trans "Built-in Sigil Roots" %}</h2>
+  <ul>
+    {% for root in builtin_roots %}
+      <li>[{{ root.prefix }}] – {% if root.url %}<a href="{{ root.url }}">{{ root.label }}</a>{% else %}{{ root.label }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <input type="text" id="sigil-filter" placeholder="{% trans 'Filter' %}" />
+  <table id="sigil-table">
+    <thead>
+      <tr><th>{% trans "Prefixes" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th></tr>
+    </thead>
+    <tbody>
+    {% for root in sigil_roots %}
+      <tr>
+        <td>
+          {% for prefix in root.prefixes %}[{{ prefix }}]{% if not forloop.last %}, {% endif %}{% endfor %}
+        </td>
+        <td>{{ root.model }}</td>
+        <td>{% for field in root.fields %}{{ field }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3">{% trans "No Sigil Roots." %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2 style="margin-top:1em;">{% trans "Auto-resolvable Fields" %}</h2>
+  <input type="text" id="auto-filter" placeholder="{% trans 'Filter' %}" />
+  <table id="auto-table">
+    <thead>
+      <tr><th>{% trans "Model" %}</th><th>{% trans "Root" %}</th><th>{% trans "Field" %}</th></tr>
+    </thead>
+    <tbody>
+    {% for item in auto_fields %}
+      <tr>
+        <td>{{ item.model }}</td>
+        <td>{% for root in item.roots %}[{{ root }}]{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td>{{ item.field }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3">{% trans "No auto-resolvable fields." %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+  function setupFilter(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const table = document.getElementById(tableId);
+    if (!input || !table) return;
+    input.addEventListener('input', function () {
+      const term = this.value.toLowerCase();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      }
+    });
+  }
+  function setupAutoGrow(textarea, maxLines) {
+    if (!textarea) return;
+    const computedStyle = window.getComputedStyle(textarea);
+    const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+    const baseHeight = lineHeight + paddingTop + paddingBottom;
+    const maxHeight = lineHeight * maxLines + paddingTop + paddingBottom;
+    const resize = () => {
+      textarea.style.height = 'auto';
+      const desired = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${Math.max(desired, baseHeight)}px`;
+    };
+    textarea.style.overflowY = 'auto';
+    textarea.style.maxHeight = `${maxHeight}px`;
+    resize();
+    textarea.addEventListener('input', resize);
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    setupFilter('sigil-filter', 'sigil-table');
+    setupFilter('auto-filter', 'auto-table');
+    setupAutoGrow(document.getElementById('sigils_text'), 20);
+  });
+</script>
+{% endblock %}

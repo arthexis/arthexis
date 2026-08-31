@@ -1,0 +1,47 @@
+:root {
+  --landing-card-radius: var(--bs-border-radius-xl);
+  --landing-card-gap-y: var(--bs-spacer);
+  --landing-card-gap-x: calc(var(--bs-spacer) * 2);
+  --landing-meta-font-size: var(--bs-body-font-size-sm, 0.875rem);
+  --landing-meta-letter-spacing: 0.04em;
+  --landing-section-spacing: calc(var(--bs-spacer) * 1.25);
+  --landing-section-title-size: var(--bs-body-font-size-sm, 0.875rem);
+}
+
+.landing-meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--landing-card-gap-y) var(--landing-card-gap-x);
+  margin: 0;
+  padding: 0;
+}
+
+.landing-meta-list div {
+  min-width: 0;
+}
+
+.landing-meta-list dt {
+  margin: 0;
+  font-size: var(--landing-meta-font-size);
+  letter-spacing: var(--landing-meta-letter-spacing);
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.landing-meta-list dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--bs-body-color);
+}
+
+.landing-card-section + .landing-card-section {
+  margin-top: var(--landing-section-spacing);
+}
+
+.landing-card-section-title {
+  font-size: var(--landing-section-title-size);
+  letter-spacing: var(--landing-meta-letter-spacing);
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin: 0 0 calc(var(--bs-spacer) * 0.5);
+}

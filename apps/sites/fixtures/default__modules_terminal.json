@@ -1,0 +1,60 @@
+[
+  {
+    "model": "modules.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [],
+      "application": [
+        "ocpp"
+      ],
+      "path": "/ocpp/",
+      "menu": "Charge Points",
+      "priority": 20,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/ocpp/"
+      ],
+      "path": "/ocpp/cpms/dashboard/",
+      "label": "Charging Station Dashboards",
+      "enabled": true,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/ocpp/"
+      ],
+      "path": "/ocpp/reports/energy/",
+      "label": "Energy Reports",
+      "enabled": true,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/ocpp/"
+      ],
+      "path": "/ocpp/charge-point-models/",
+      "label": "Supported CP Models",
+      "enabled": true,
+      "description": ""
+    }
+  }
+]

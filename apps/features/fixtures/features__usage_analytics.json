@@ -1,0 +1,42 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "usage-analytics",
+      "display": "Usage Analytics",
+      "summary": "Collect request and model usage events for historical operator reporting.",
+      "is_enabled": true,
+      "main_app": [
+        "core"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Allow administrators to review stored usage events and summary dashboards even when collection is paused.",
+      "public_requirements": "",
+      "service_requirements": "Collect request and model events only while the suite feature is enabled, while preserving access to historical summaries and exports.",
+      "admin_views": [
+        "admin:core_usageevent_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "core:usage-analytics-summary",
+        "apps.core.management.commands.analytics.Command"
+      ],
+      "code_locations": [
+        "apps/core/analytics.py",
+        "apps/core/admin/usage.py",
+        "apps/core/views/usage_analytics.py",
+        "apps/core/management/commands/analytics.py",
+        "config/middleware.py"
+      ],
+      "protocol_coverage": {},
+      "metadata": {
+        "disable_policy": "pause_collection_keep_history_viewable"
+      },
+      "created_at": "2026-03-22T00:00:00Z",
+      "updated_at": "2026-03-22T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]

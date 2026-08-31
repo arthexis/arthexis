@@ -1,0 +1,17 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:pages_siteproxy_register_current' %}" class="addlink">
+            {% trans 'Register Current' %}
+        </a>
+    </li>
+    <li>
+        <form method="post" action="{% url 'admin:pages_siteproxy_reload_site_fixtures' %}">
+            {% csrf_token %}
+            <button type="submit">{% trans 'Reload site fixtures' %}</button>
+        </form>
+    </li>
+    {{ block.super }}
+{% endblock %}

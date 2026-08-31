@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "annual",
+      "zone": "1C",
+      "contract_type": "gdbt",
+      "period": "flat",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "3.4500",
+      "cost_mxn": "3.4500",
+      "notes": "Cargo por energía para clientes GDBT en baja tensión con demanda superior a 25 kW."
+    }
+  }
+]

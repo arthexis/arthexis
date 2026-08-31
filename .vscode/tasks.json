@@ -1,0 +1,127 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Dev: install",
+            "type": "shell",
+            "command": "./install.sh",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": ".\\install.bat"
+            },
+            "problemMatcher": [],
+            "detail": "Set up virtual environment and install dependencies"
+        },
+        {
+            "label": "Dev: refresh",
+            "type": "shell",
+            "command": "./env-refresh.sh --latest",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": ".\\env-refresh.bat --latest"
+            },
+            "problemMatcher": [],
+            "detail": "Refresh virtual environment and database"
+        },
+        {
+            "label": "Dev: refresh clean",
+            "type": "shell",
+            "command": "./env-refresh.sh --latest --clean",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": ".\\env-refresh.bat --latest --clean"
+            },
+            "problemMatcher": [],
+            "detail": "Delete database file and refresh virtual environment and database"
+        },
+        {
+            "label": "Dev: start",
+            "type": "shell",
+            "command": "${workspaceFolder}/start.sh --reload",
+            "windows": {
+                "command": "${workspaceFolder}\\start.bat --reload"
+            },
+            "problemMatcher": [],
+            "detail": "Start the Django development server"
+        },
+        {
+            "label": "Dev: stop",
+            "type": "shell",
+            "command": "${workspaceFolder}/stop.sh",
+            "windows": {
+                "command": "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'manage.py runserver' } | ForEach-Object { Stop-Process -Id $_.ProcessId }"
+            },
+            "problemMatcher": [],
+            "detail": "Stop Django development server processes"
+        },
+        {
+            "label": "Dev: manage",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py"
+            },
+            "problemMatcher": [],
+            "detail": "Run manage.py"
+        },
+        {
+            "label": "Dev: command",
+            "type": "shell",
+            "command": "${workspaceFolder}/command.sh",
+            "windows": {
+                "command": "${workspaceFolder}\\command.sh"
+            },
+            "problemMatcher": [],
+            "detail": "Run manage.py subcommands"
+        },
+        {
+            "label": "Dev: collectstatic",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py collectstatic --noinput",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py collectstatic --noinput"
+            },
+            "problemMatcher": [],
+            "detail": "Collect static files"
+        },
+        {
+            "label": "Update requirements",
+            "type": "shell",
+            "command": "${workspaceFolder}/install.sh && ${workspaceFolder}/.venv/bin/python ${workspaceFolder}/freeze_requirements.py",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip install -U -r requirements.txt; if ($?) { ${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\freeze_requirements.py }"
+            },
+            "problemMatcher": [],
+            "detail": "Install updated dependencies and regenerate requirements.txt"
+        },
+        {
+            "label": "Purge logs",
+            "type": "shell",
+            "command": "rm -rf ${workspaceFolder}/logs/*",
+            "windows": {
+                "command": "if exist \"${workspaceFolder}\\logs\" (rmdir /s /q \"${workspaceFolder}\\logs\" && mkdir \"${workspaceFolder}\\logs\")"
+            },
+            "problemMatcher": [],
+            "detail": "Remove all files from logs and its subdirectories"
+        },
+        {
+            "label": "Dev: pyxel viewport",
+            "type": "shell",
+            "command": "${workspaceFolder}/pyxel-viewport.sh",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\pyxel-viewport.bat"
+            },
+            "problemMatcher": [],
+            "detail": "Stage and launch the Pyxel viewport, ensuring the instance is running"
+        }
+    ]
+}

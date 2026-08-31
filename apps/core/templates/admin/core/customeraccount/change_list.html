@@ -1,0 +1,12 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+{{ block.super }}
+<li><a href="{% url 'admin:core_customeraccount_onboard_details' %}">{% translate "Onboard customer" %}</a></li>
+{% if has_add_permission %}
+  <li><a href="{% url 'admin:core_customeraccount_import_from_odoo' %}" class="addlink">{% translate "Import from Odoo" %}</a></li>
+{% else %}
+  <li><a href="{% url 'admin:core_customeraccount_import_from_odoo' %}">{% translate "Import from Odoo" %}</a></li>
+{% endif %}
+{% endblock %}

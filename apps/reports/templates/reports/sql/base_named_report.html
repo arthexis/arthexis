@@ -1,0 +1,33 @@
+{% load i18n %}
+<h1>{{ report.name }}</h1>
+<p>{{ report_definition.label }}</p>
+<p>{% trans "Executed" %}: {{ execution.executed_at }}</p>
+<p>{% trans "Rows" %}: {{ execution.row_count }}</p>
+{% if execution.details %}
+  <h2>{% trans "Parameters" %}</h2>
+  <ul>
+    {% for key, value in execution.details.items %}
+      <li><strong>{{ key }}</strong>: {{ value }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% if execution.columns %}
+<table>
+  <thead>
+    <tr>
+      {% for column in execution.columns %}
+      <th>{{ column }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in execution.rows %}
+    <tr>
+      {% for value in row %}
+      <td>{{ value }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

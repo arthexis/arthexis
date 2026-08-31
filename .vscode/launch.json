@@ -1,0 +1,107 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "runserver",
+                "--noreload",
+                "--skip-checks"
+            ],
+            "django": true,
+            "noDebug": true,
+            "env": {
+                "DJANGO_SUPPRESS_MIGRATION_CHECK": "1"
+            }
+        },
+        {
+            "name": "Debug Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "runserver",
+                "--skip-checks"
+            ],
+            "env": {
+                "DEBUG": "1",
+                "DJANGO_SUPPRESS_MIGRATION_CHECK": "1"
+            },
+            "subProcess": true
+        },
+        {
+            "name": "Run Migrations",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "module": "utils.devtools.migration_server",
+            "cwd": "${workspaceFolder}",
+            "noDebug": true,
+            "console": "integratedTerminal",
+            "subProcess": true
+        },
+        {
+            "name": "Migration Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "module": "utils.devtools.migration_server",
+            "cwd": "${workspaceFolder}",
+            "noDebug": true,
+            "console": "integratedTerminal",
+            "subProcess": true,
+            "args": [
+                "--watch"
+            ]
+        },
+        {
+            "name": "Run Tests",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "module": "utils.devtools.test_server",
+            "cwd": "${workspaceFolder}",
+            "noDebug": true
+        },
+        {
+            "name": "Pyxel viewport",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "pyxel_viewport",
+                "--output-dir",
+                "${workspaceFolder}/work/pyxel_viewport",
+                "--pyxel-runner",
+                "pyxel",
+                "--ensure-instance"
+            ],
+            "django": true,
+            "console": "integratedTerminal"
+        }
+    ]
+}

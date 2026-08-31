@@ -1,0 +1,166 @@
+{% load i18n %}
+<div class="js-inline-admin-formset inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="tabular"
+     data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
+  {{ inline_admin_formset.formset.management_form }}
+  <fieldset class="module {{ inline_admin_formset.classes }}" aria-labelledby="{{ inline_admin_formset.formset.prefix }}-heading">
+    <h2 id="{{ inline_admin_formset.formset.prefix }}-heading" class="inline-heading">
+      {% if inline_admin_formset.formset.max_num == 1 %}
+        {{ inline_admin_formset.opts.verbose_name|capfirst }}
+      {% else %}
+        {{ inline_admin_formset.opts.verbose_name_plural|capfirst }}
+      {% endif %}
+    </h2>
+    {{ inline_admin_formset.formset.non_form_errors }}
+    <style>
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-filter-container {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-filter-container label {
+        font-weight: 600;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-filter {
+        max-width: 320px;
+        width: 100%;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-keys-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-keys-table th,
+      #{{ inline_admin_formset.formset.prefix }}-group .config-keys-table td {
+        vertical-align: top;
+        padding: 0.35rem 0.5rem;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-keys-table th {
+        text-align: left;
+        white-space: nowrap;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-value textarea {
+        min-height: 2.5rem;
+        resize: vertical;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-value-empty {
+        color: var(--body-quiet-color);
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-name {
+        font-weight: 600;
+        width: 24%;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-key-position {
+        display: inline-block;
+        margin-left: 0.25rem;
+        color: var(--body-quiet-color);
+        font-weight: 400;
+      }
+      #{{ inline_admin_formset.formset.prefix }}-group .config-no-results {
+        display: none;
+        text-align: center;
+        color: var(--body-quiet-color);
+      }
+    </style>
+    <div class="config-key-filter-container">
+      <label for="{{ inline_admin_formset.formset.prefix }}-filter">{% trans "Search" %}</label>
+      <input type="search"
+             id="{{ inline_admin_formset.formset.prefix }}-filter"
+             class="config-key-filter"
+             placeholder="{% trans 'Filter keys or values…' %}">
+    </div>
+    <table class="config-keys-table admin-table">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "Key" %}</th>
+          <th scope="col">{% trans "Value" %}</th>
+          <th scope="col">{% trans "Read-only" %}</th>
+          <th scope="col">{% trans "Extra data" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inline_admin_form in inline_admin_formset %}
+          {% with entry=inline_admin_form.form.instance %}
+            {% if inline_admin_form.form.non_field_errors %}
+              <tr class="row-form-errors">
+                <td colspan="4">{{ inline_admin_form.form.non_field_errors }}</td>
+              </tr>
+            {% endif %}
+            <tr class="config-key-row"
+                data-search="{{ entry.key|default_if_none:''|lower }} {{ entry.value|default_if_none:''|lower }}">
+              <th scope="row" class="config-key-name">
+                <span class="config-key-label">{{ entry.key }}</span>
+                {% if entry.position is not None %}
+                  <span class="config-key-position">#{{ entry.position }}</span>
+                {% endif %}
+              </th>
+              <td class="config-key-value">
+                {% for hidden in inline_admin_form.form.hidden_fields %}{{ hidden }}{% endfor %}
+                {% if inline_admin_form.needs_explicit_pk_field %}{{ inline_admin_form.pk_field.field }}{% endif %}
+                {% if inline_admin_form.fk_field %}{{ inline_admin_form.fk_field.field }}{% endif %}
+                {% with field=inline_admin_form.form.value_input %}
+                  {% if field.field.disabled %}
+                    <span class="config-value-empty">-</span>
+                  {% else %}
+                    {{ field.errors.as_ul }}
+                    {{ field }}
+                  {% endif %}
+                {% endwith %}
+              </td>
+              <td class="config-key-readonly">
+                {% if entry.readonly %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
+              </td>
+              <td class="config-key-extra">
+                {% with extra=inline_admin_form.form.extra_display %}
+                  {% if extra %}
+                    {{ extra|safe }}
+                  {% else %}
+                    <span class="config-value-empty">-</span>
+                  {% endif %}
+                {% endwith %}
+              </td>
+            </tr>
+          {% endwith %}
+        {% endfor %}
+        <tr class="config-no-results">
+          <td colspan="4">{% trans "No configuration keys match the current filter." %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </fieldset>
+</div>
+<script>
+(function() {
+  const group = document.getElementById("{{ inline_admin_formset.formset.prefix }}-group");
+  if (!group) {
+    return;
+  }
+  const filterInput = group.querySelector('.config-key-filter');
+  const rows = Array.from(group.querySelectorAll('tr.config-key-row'));
+  const emptyRow = group.querySelector('.config-no-results');
+  function applyFilter() {
+    if (!filterInput) {
+      return;
+    }
+    const query = filterInput.value.trim().toLowerCase();
+    let visible = 0;
+    rows.forEach((row) => {
+      const haystack = (row.dataset.search || '').toLowerCase();
+      const match = !query || haystack.includes(query);
+      row.style.display = match ? '' : 'none';
+      if (match) {
+        visible += 1;
+      }
+    });
+    if (emptyRow) {
+      emptyRow.style.display = visible ? 'none' : '';
+    }
+  }
+  if (filterInput) {
+    filterInput.addEventListener('input', applyFilter);
+    applyFilter();
+  }
+})();
+</script>

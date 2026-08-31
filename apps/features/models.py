@@ -1,0 +1,334 @@
+from __future__ import annotations
+
+from django.apps import apps as django_apps
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models, router
+from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
+
+from apps.core.entity import Entity
+from apps.core.models import Ownable
+from .versioning import current_suite_version, is_baseline_version_reached
+
+
+class FeatureManager(models.Manager):
+    def get_by_natural_key(self, slug: str):  # pragma: no cover - used by fixtures
+        return self.get(slug=slug)
+
+
+class Feature(Ownable):
+    """Suite feature definitions that describe external interfaces and contracts.
+
+    Suite features are user-facing (or user-agent-facing) capabilities that we expect
+    to be mostly enabled across deployments, except when toggled off for compatibility.
+    They contrast with node features, which are minimal, device-specific capabilities
+    internal to a node. Suite features often gate behavior behind user profiles or
+    other business rules and define interfaces we want to remember as contracts.
+    """
+
+    class Source(models.TextChoices):
+        """Origin of a suite feature definition."""
+
+        MAINSTREAM = "mainstream", _("Main")
+        CUSTOM = "custom", _("Custom")
+
+    owner_required = False
+
+    slug = models.SlugField(max_length=120, unique=True)
+    display = models.CharField(max_length=120)
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.CUSTOM,
+        editable=False,
+        help_text=_(
+            "Feature origin. Main features come from development fixtures; custom features are local."
+        ),
+    )
+    summary = models.TextField(blank=True)
+    baseline_version = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional minimum Arthexis version where this suite feature should be "
+            "enabled by default."
+        ),
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text=_(
+            "Global gate for this feature. Disable to block the feature everywhere."
+        ),
+    )
+    main_app = models.ForeignKey(
+        "app.Application",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="features",
+        help_text=_(
+            "Primary application that owns most of the implementation for this feature."
+        ),
+    )
+    node_feature = models.ForeignKey(
+        "nodes.NodeFeature",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="suite_features",
+        help_text=_(
+            "Optional node feature that must be enabled for this feature to unlock."
+        ),
+    )
+    admin_requirements = models.TextField(
+        blank=True,
+        help_text=_("Admin-side capabilities, screens, and workflows."),
+    )
+    public_requirements = models.TextField(
+        blank=True,
+        help_text=_("Public-facing UI/UX requirements for this feature."),
+    )
+    service_requirements = models.TextField(
+        blank=True,
+        help_text=_("Non-user surfaces such as APIs, webhooks, or websockets."),
+    )
+    admin_views = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Admin views or URLs used to deliver this feature."),
+    )
+    public_views = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Public views or URLs used to deliver this feature."),
+    )
+    service_views = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Non-user endpoints such as APIs, sockets, or background workers."),
+    )
+    code_locations = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Relevant code modules, files, or packages for this feature."),
+    )
+    protocol_coverage = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Protocol call coverage keyed by protocol slug (e.g. ocpp16, ocpp201, ocpp21)."
+        ),
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Feature metadata including optional runtime parameters editable from admin."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = FeatureManager()
+
+    class Meta:
+        ordering = ["display"]
+        verbose_name = "Suite Feature"
+        verbose_name_plural = "Suite Features"
+
+    def natural_key(self):  # pragma: no cover - used by fixtures
+        return (self.slug,)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.display
+
+    def get_absolute_url(self):
+        return reverse("features:detail", kwargs={"slug": self.slug})
+
+    @staticmethod
+    def infer_main_app_name(code_locations: object) -> str | None:
+        """Infer an application label from feature code locations."""
+
+        if not isinstance(code_locations, list):
+            return None
+
+        local_app_paths = sorted(
+            (
+                (
+                    config.label,
+                    tuple(part for part in config.name.split(".")[1:] if part),
+                )
+                for config in django_apps.get_app_configs()
+                if config.name.startswith("apps.")
+            ),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+
+        for location in code_locations:
+            if not isinstance(location, str):
+                continue
+            location_parts = [part for part in location.strip(" /").split("/") if part]
+            if len(location_parts) < 2 or location_parts[0] != "apps":
+                continue
+            candidate_parts = tuple(location_parts[1:])
+            for label, app_parts in local_app_paths:
+                if candidate_parts[: len(app_parts)] == app_parts:
+                    return label
+            fallback = location_parts[1].strip()
+            if fallback:
+                return fallback
+        return None
+
+    @property
+    def params_count(self) -> int:
+        """Return the count of configured feature parameter values."""
+
+        parameters = (self.metadata or {}).get("parameters")
+        if not isinstance(parameters, dict):
+            return 0
+        return len(parameters)
+
+    def set_enabled(self, enabled: bool, *, update_fields: list[str] | None = None) -> bool:
+        """Set and persist enabled state, returning whether a transition occurred."""
+
+        next_state = bool(enabled)
+        changed = self.is_enabled != next_state
+        if not changed:
+            return False
+        self.is_enabled = next_state
+        fields_to_save = {"is_enabled", "updated_at"}
+        if update_fields is not None:
+            fields_to_save.update(update_fields)
+        self.save(update_fields=sorted(fields_to_save))
+        return True
+
+    def delete(self, using=None, keep_parents=False):
+        """Prevent deleting enabled suite features before they are explicitly disabled."""
+
+        if self.is_enabled:
+            raise ValidationError(
+                _("Disable this suite feature before deleting it."),
+                code="enabled_feature_delete_blocked",
+            )
+        return super().delete(using=using, keep_parents=keep_parents)
+
+    def is_enabled_for_node(self, node=None) -> bool:
+        """Return whether the feature is enabled for the supplied node."""
+        if not self.is_enabled:
+            return False
+        if not self.node_feature_id:
+            return True
+        try:
+            NodeModel = django_apps.get_model("nodes", "Node")
+        except LookupError:
+            return False
+        if node is None:
+            node = NodeModel.get_local()
+        if not node:
+            return False
+        return node.features.filter(pk=self.node_feature_id).exists()
+
+    def baseline_reached(self, *, current_version: str | None = None) -> bool:
+        """Return whether the current suite version reaches this feature baseline."""
+
+        resolved_current = current_suite_version() if current_version is None else current_version
+        return is_baseline_version_reached(
+            baseline_version=self.baseline_version,
+            current_version=resolved_current,
+        )
+
+    def save(self, *args, **kwargs):
+        """Persist and auto-link a main app when code locations provide one."""
+
+        update_fields = kwargs.get("update_fields")
+        if not self.main_app_id:
+            inferred_name = self.infer_main_app_name(self.code_locations)
+            if inferred_name:
+                Application = django_apps.get_model("app", "Application")
+                db_alias = kwargs.get("using") or self._state.db or router.db_for_write(
+                    Application,
+                    instance=self,
+                )
+                app, _ = Application.objects.using(db_alias).get_or_create(name=inferred_name)
+                self.main_app = app
+                if update_fields is not None:
+                    kwargs["update_fields"] = sorted({*update_fields, "main_app"})
+        return super().save(*args, **kwargs)
+
+
+class FeatureTestManager(models.Manager):
+    def get_by_natural_key(self, feature_slug: str, node_id: str):  # pragma: no cover
+        return self.select_related("feature").get(
+            feature__slug=feature_slug,
+            node_id=node_id,
+        )
+
+
+class FeatureTest(Entity):
+    """Track tests that guard a feature from regressions."""
+
+    feature = models.ForeignKey(
+        Feature,
+        on_delete=models.CASCADE,
+        related_name="tests",
+    )
+    node_id = models.CharField(max_length=512, help_text="Full pytest node identifier")
+    name = models.CharField(max_length=255, help_text="Short test name")
+    is_regression_guard = models.BooleanField(
+        default=True,
+        help_text=_("Marks this test as a required regression guard for the feature."),
+    )
+    notes = models.TextField(blank=True)
+
+    objects = FeatureTestManager()
+
+    class Meta:
+        ordering = ["feature", "node_id"]
+        unique_together = ("feature", "node_id")
+        verbose_name = "Feature test"
+        verbose_name_plural = "Feature tests"
+
+    def natural_key(self):  # pragma: no cover - used by fixtures
+        return (*self.feature.natural_key(), self.node_id)
+
+    natural_key.dependencies = ["features.feature"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.feature.display}: {self.name}"
+
+
+class FeatureNote(Entity):
+    """Track developer commentary for a feature over time."""
+
+    feature = models.ForeignKey(
+        Feature,
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feature_notes",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-pk"]
+        verbose_name = "Feature note"
+        verbose_name_plural = "Feature notes"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        snippet = (self.body or "").strip()
+        if len(snippet) > 80:
+            snippet = f"{snippet[:77]}..."
+        return f"{self.feature.display}: {snippet}"
+
+
+__all__ = ["Feature", "FeatureNote", "FeatureTest"]

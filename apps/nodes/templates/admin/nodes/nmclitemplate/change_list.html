@@ -1,0 +1,11 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:nodes_nmclitemplate_scan' %}" class="addlink">
+            {% trans 'Import active connections' %}
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

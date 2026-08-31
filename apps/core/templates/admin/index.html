@@ -1,0 +1,38 @@
+{% extends "admin/index.html" %}
+{% load i18n admin_notices %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .admin-notice {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--hairline-color, #e5e7eb);
+      border-radius: 6px;
+      background: var(--body-bg, #fff);
+    }
+
+    .admin-notice__message {
+      margin: 0;
+      font-weight: 500;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {% latest_admin_notice as admin_notice %}
+  {% if admin_notice %}
+    <div class="admin-notice">
+      <p class="admin-notice__message">{{ admin_notice.message }}</p>
+      <form method="post" action="{% url 'admin:dismiss-admin-notice' admin_notice.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="button">{% trans "Dismiss" %}</button>
+      </form>
+    </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

@@ -1,0 +1,235 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "Public site traffic" %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'pages/js/admin_cache.js' %}"></script>
+  <script src="{% static 'core/vendor/chart.umd.min.js' %}" data-chartjs="true"></script>
+  <style>
+    #viewhistory-graph-module {
+      background: var(--body-bg);
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+    }
+    #viewhistory-chart {
+      max-width: 100%;
+    }
+    #viewhistory-empty {
+      margin-top: 16px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div id="viewhistory-graph-module" class="module">
+    <h1>{% translate "Public site traffic" %}</h1>
+    <p class="help">{% translate "Daily visits for the most frequently viewed public pages over the last 30 days." %}</p>
+    <p><a class="button" href="{% url 'admin:pages_viewhistory_changelist' %}">{% translate "Back to entries" %}</a></p>
+    <p id="viewhistory-meta" class="quiet"></p>
+    <canvas id="viewhistory-chart" role="img" aria-label="{% translate 'Line chart showing visit counts per day' %}" height="360"></canvas>
+    <p id="viewhistory-empty" class="quiet" hidden>{% translate "No visit data is available yet." %}</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extrahead_bottom %}{% endblock %}
+
+{% block extrajs %}
+  {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('viewhistory-chart');
+      if (!canvas) {
+        return;
+      }
+      const metaLabel = document.getElementById('viewhistory-meta');
+      const emptyLabel = document.getElementById('viewhistory-empty');
+      const chartJsUrl = '{% static "core/vendor/chart.umd.min.js" %}';
+
+      const waitForChart = (resolve) => {
+        if (window.Chart) {
+          resolve(window.Chart);
+          return true;
+        }
+        return false;
+      };
+
+      const ensureChartJs = () => {
+        const existing = document.querySelector('script[data-chartjs]');
+        if (existing) {
+          if (existing.dataset.chartjsState === 'error') {
+            return Promise.resolve(null);
+          }
+
+          if (existing.dataset.chartjsState !== 'loaded') {
+            return new Promise((resolve) => {
+              existing.addEventListener(
+                'load',
+                () => {
+                  existing.dataset.chartjsState = 'loaded';
+                  resolve(window.Chart || null);
+                },
+                { once: true },
+              );
+              existing.addEventListener(
+                'error',
+                () => {
+                  existing.dataset.chartjsState = 'error';
+                  resolve(null);
+                },
+                { once: true },
+              );
+            });
+          }
+
+          return Promise.resolve(window.Chart || null);
+        }
+
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = chartJsUrl;
+          script.async = true;
+          script.dataset.chartjs = 'true';
+          script.dataset.chartjsState = 'loading';
+          script.addEventListener(
+            'load',
+            () => {
+              script.dataset.chartjsState = 'loaded';
+              resolve(window.Chart || null);
+            },
+            { once: true },
+          );
+          script.addEventListener(
+            'error',
+            () => {
+              script.dataset.chartjsState = 'error';
+              resolve(null);
+            },
+            { once: true },
+          );
+          document.head.appendChild(script);
+        });
+      };
+
+      const chartEndpoint = new URL('{{ chart_endpoint }}', window.location);
+
+      let chart;
+
+      const applyData = (Chart, data) => {
+        if (!data || !Array.isArray(data.labels) || !Array.isArray(data.datasets)) {
+          throw new Error('Invalid chart data');
+        }
+        if (!data.datasets.length) {
+          if (chart) {
+            chart.destroy();
+            chart = null;
+          }
+          canvas.hidden = true;
+          emptyLabel.hidden = false;
+          return;
+        }
+        if (data.meta && metaLabel) {
+          const start = data.meta.start || '';
+          const end = data.meta.end || '';
+          const pages = Array.isArray(data.meta.pages) ? data.meta.pages : [];
+          const summary = [];
+          if (start && end) {
+            summary.push(`{% translate "Range" %}: ${start} – ${end}`);
+          }
+          if (pages.length) {
+            summary.push(`{% translate "Pages" %}: ${pages.join(', ')}`);
+          }
+          metaLabel.textContent = summary.join(' \u2022 ');
+        }
+        emptyLabel.hidden = true;
+        canvas.hidden = false;
+        const nextData = {
+          labels: data.labels,
+          datasets: data.datasets.map((dataset) => ({
+            ...dataset,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          })),
+        };
+        if (chart) {
+          chart.data = nextData;
+          chart.update();
+          return;
+        }
+        const context = canvas.getContext('2d');
+        chart = new Chart(context, {
+          type: 'line',
+          data: nextData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: '{% translate "Date" %}',
+                },
+              },
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: '{% translate "Visits" %}',
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+              },
+              tooltip: {
+                mode: 'nearest',
+                intersect: false,
+              },
+            },
+          },
+        });
+      };
+
+      const fetchData = (Chart) =>
+        window.ArthexisAdminCache.fetchJSON(chartEndpoint.toString(), {
+          keyParams: ['days', 'page', 'pages'],
+          maxPayloadBytes: 262144,
+          onRevalidate: (nextData, state) => {
+            if (state.changed) {
+              applyData(Chart, nextData);
+            }
+          },
+          requestInit: {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          },
+          staleWhileRevalidate: true,
+          ttlMs: 60000,
+        }).then((result) => result.data);
+
+      ensureChartJs()
+        .then((Chart) => {
+          if (!Chart && !waitForChart(() => {})) {
+            throw new Error('Chart.js unavailable');
+          }
+          return fetchData(window.Chart).then((data) => ({ Chart: window.Chart, data }));
+        })
+        .then(({ Chart, data }) => {
+          applyData(Chart, data);
+        })
+        .catch(() => {
+          canvas.hidden = true;
+          emptyLabel.hidden = false;
+          if (emptyLabel) {
+            emptyLabel.textContent = '{% translate "Unable to load visit data at this time." %}';
+          }
+        });
+    });
+  </script>
+{% endblock %}

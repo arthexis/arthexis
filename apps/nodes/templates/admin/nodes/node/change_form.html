@@ -1,0 +1,11 @@
+{% extends "admin/django_object_actions_user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if public_key_url %}
+        <li>
+            <a href="{{ public_key_url }}">{% trans "Download public key" %}</a>
+        </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% if widget.is_initial %}
+  <span class="base64-widget__current">
+    {{ widget.initial_text }}:
+    <a href="data:{{ widget.content_type }};base64,{{ widget.base64_value }}" download="{{ widget.download_name }}">
+      {{ widget.download_name }}
+    </a>
+    {% if not widget.required %}
+      <input type="checkbox" name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}"{% if widget.attrs.disabled %} disabled{% endif %}{% if widget.attrs.checked %} checked{% endif %}>
+      <label for="{{ widget.checkbox_id }}">{{ widget.clear_checkbox_label }}</label>
+    {% endif %}
+  </span><br>
+  <span class="base64-widget__upload-label">{{ widget.input_text }}:</span>
+{% endif %}
+<input type="{{ widget.type }}" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>

@@ -1,0 +1,95 @@
+{% load i18n admin_extras favorites %}
+
+{% if app_list %}
+  {% favorite_map as favorites_map %}
+  {% favorite_entries app_list favorites_map as favorite_entries %}
+  {% if favorite_entries %}
+    <div class="module favorites-module">
+      <table>
+        <caption class="visually-hidden">{% translate 'Favorite models' %}</caption>
+        <thead class="visually-hidden">
+          <tr>
+            <th scope="col">{% translate 'Model name' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for entry in favorite_entries %}
+          {% with app=entry.app model=entry.model fav=entry.favorite ct_id=entry.ct_id %}
+            {% model_app_label model app.app_label as model_app_label %}
+            {% with model_name=model.object_name|lower %}
+            <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
+              <th scope="row" id="favorites-{{ model_app_label }}-{{ model_name }}">
+                {% if ct_id %}
+                  <a
+                    href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+                    class="favorite-star favorited"
+                    title="{% translate 'Configure favorite' %}"
+                    aria-label="{% translate 'Configure favorite' %}"
+                  >
+                    &#9733;
+                  </a>
+                {% endif %}
+                {% if model.admin_url %}
+                  <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
+                {% else %}
+                  {{ fav.custom_label|default:model.name }}
+                {% endif %}
+              </th>
+            </tr>
+            {% endwith %}
+          {% endwith %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% celery_feature_enabled as celery_enabled %}
+  {% for app in app_list %}
+    {% if app.app_label != 'django_celery_beat' or celery_enabled %}
+    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}">
+      <table>
+        <caption class="app-caption">
+          <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
+        </caption>
+        <thead class="visually-hidden">
+          <tr>
+            <th scope="col">{% translate 'Model name' %}</th>
+          </tr>
+        </thead>
+        <tbody id="app-{{ app.app_label }}-models">
+        {% for model in app.models %}
+          {% model_app_label model app.app_label as model_app_label %}
+          {% with model_name=model.object_name|lower %}
+            {% favorite_ct_id model_app_label model.object_name as ct_id %}
+            {% favorite_from_map favorites_map ct_id as fav %}
+            {% if not fav %}
+            <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
+              <th scope="row" id="{{ model_app_label }}-{{ model_name }}">
+                {% if ct_id %}
+                  <a
+                    href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+                    class="favorite-star{% if fav %} favorited{% endif %}"
+                    title="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+                    aria-label="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+                  >
+                    &#9733;
+                  </a>
+                {% endif %}
+                {% if model.admin_url %}
+                  <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
+                {% else %}
+                  {{ fav.custom_label|default:model.name }}
+                {% endif %}
+              </th>
+            </tr>
+            {% endif %}
+          {% endwith %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% endfor %}
+{% else %}
+  <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
+{% endif %}

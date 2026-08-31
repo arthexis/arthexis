@@ -1,0 +1,42 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_extras %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module system-reports">
+    <h2>{% trans "Task Panels" %}</h2>
+    <p class="help">{% trans "Choose which task panels appear as top dashboard buttons for your account." %}</p>
+    <form method="post">
+      {% csrf_token %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Task" %}</th>
+            <th scope="col">{% trans "Purpose" %}</th>
+            <th scope="col">{% trans "Dashboard Button" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in task_rows %}
+            <tr>
+              <th scope="row"><a href="{{ row.url }}">{{ row.task.label }}</a></th>
+              <td>{{ row.task.description }}</td>
+              <td>
+                <label>
+                  <input type="checkbox" name="dashboard_tasks" value="{{ row.task.pk }}" {% if row.is_enabled %}checked{% endif %}>
+                  {% trans "Show button" %}
+                </label>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3"><p class="help">{% trans "No task panels are configured." %}</p></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="submit" class="button">{% trans "Save task panel preferences" %}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

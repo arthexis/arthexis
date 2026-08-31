@@ -1,0 +1,214 @@
+{% extends "pages/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans "Edit" %} {{ title }}{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{% static 'core/vendor/easymde/easymde.min.css' %}">
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  >
+  <style>
+    .EasyMDEContainer .CodeMirror,
+    .EasyMDEContainer .CodeMirror-scroll {
+      min-height: 26rem;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-scroll {
+      background-color: var(--bs-body-bg);
+      color: var(--bs-body-color);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-gutters {
+      background-color: var(--bs-dark-bg-subtle, rgba(255, 255, 255, 0.05));
+      border-right: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-linenumber {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-guttermarker {
+      color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-guttermarker-subtle,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-statusbar {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-cursor {
+      border-left-color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-placeholder {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-activeline-background {
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-selected,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line::selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span::selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span > span::selection {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line::-moz-selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span::-moz-selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span > span::-moz-selection {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar {
+      background-color: var(--bs-dark, #343a40);
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button {
+      color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button .fa,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button svg,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button svg path {
+      color: var(--bs-body-color, #f8f9fa);
+      fill: currentColor;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button:after {
+      color: inherit;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button.active,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-side,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-full {
+      background-color: var(--bs-body-bg);
+      color: var(--bs-body-color);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview pre {
+      background-color: var(--bs-dark-bg-subtle, rgba(255, 255, 255, 0.05));
+      color: inherit;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview table td,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview table th {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview a {
+      color: var(--bs-link-color, var(--bs-primary, #0d6efd));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-side {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-fullscreen,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar.fullscreen {
+      background-color: var(--bs-body-bg);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 col-xl-8 mx-auto">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h3 mb-0">{% trans "Edit document" %}</h1>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ read_url }}">
+        {% trans "Back to reader" %}
+      </a>
+    </div>
+    {% if relative_path %}
+      <p class="text-muted small mb-4">
+        {% blocktrans trimmed with path=relative_path %}
+          Editing <code>{{ path }}</code>
+        {% endblocktrans %}
+      </p>
+    {% endif %}
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="status">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="{% trans 'Close' %}"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger" role="alert">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.content.id_for_label }}">{% trans "Document content" %}</label>
+        {{ form.content }}
+        {% if form.content.errors %}
+          <div class="invalid-feedback d-block">
+            {{ form.content.errors|join:', ' }}
+          </div>
+        {% endif %}
+        <div class="form-text">
+          {% trans "Markdown syntax is supported. Changes are saved to the underlying file immediately." %}
+        </div>
+      </div>
+      <div class="d-flex justify-content-end gap-2">
+        <a class="btn btn-outline-secondary" href="{{ read_url }}">{% trans "Cancel" %}</a>
+        <button type="submit" class="btn btn-primary">{% trans "Save changes" %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'core/vendor/easymde/easymde.min.js' %}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var textarea = document.getElementById('{{ form.content.id_for_label }}');
+      if (!textarea) {
+        return;
+      }
+      var editor = new EasyMDE({
+        element: textarea,
+        autoDownloadFontAwesome: false,
+        forceSync: true,
+        spellChecker: false,
+        status: ['lines', 'words', 'cursor'],
+        toolbar: [
+          'bold', 'italic', 'heading', '|',
+          'quote', 'unordered-list', 'ordered-list', '|',
+          'link', 'image', '|',
+          'code', 'table', '|',
+          'preview', 'side-by-side', 'fullscreen', '|',
+          'guide'
+        ],
+      });
+      editor.codemirror.setOption('viewportMargin', Infinity);
+    });
+  </script>
+{% endblock %}

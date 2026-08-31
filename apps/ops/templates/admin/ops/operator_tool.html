@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% load i18n tz %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo;
+    <span>{{ title }}</span>
+  </div>
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .operator-tool-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-ui-space-2, 0.5rem);
+      margin: var(--admin-ui-space-3, 0.75rem) 0;
+    }
+    .operator-tool-grid {
+      display: grid;
+      gap: var(--admin-ui-space-4, 1rem);
+      grid-template-columns: repeat(auto-fit, minmax(var(--admin-ui-card-min-width, 16rem), 1fr));
+      margin: var(--admin-ui-space-4, 1rem) 0;
+    }
+    .operator-tool-card {
+      border: 1px solid var(--hairline-color);
+      border-radius: var(--admin-ui-radius-md, 0.5rem);
+      padding: var(--admin-ui-space-4, 1rem);
+    }
+    .operator-tool-card h2 {
+      margin-top: 0;
+    }
+    .operator-tool-card__value {
+      font-size: var(--admin-ui-font-size-xxl, 1.6em);
+      margin: 0;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="module aligned operator-tool">
+    <h1>{{ title }}</h1>
+    <p>{{ summary }}</p>
+
+    <div class="operator-tool-actions">
+      {% for item in tool_nav %}
+        <a class="button{% if item.label == title %} default{% endif %}" href="{{ item.url }}" title="{{ item.description }}">{{ item.label }}</a>
+      {% endfor %}
+    </div>
+
+    <div class="operator-tool-grid">
+      {% for metric in metrics %}
+        <section class="operator-tool-card">
+          <h2>{{ metric.label }}</h2>
+          <p class="operator-tool-card__value">{{ metric.value }}</p>
+        </section>
+      {% endfor %}
+    </div>
+
+    <section class="operator-tool-section">
+      <h2>{% translate "Operator tasks" %}</h2>
+      <ul>
+        {% for task in operator_tasks %}
+          <li>{{ task }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="operator-tool-section">
+      <h2>{% translate "Actions" %}</h2>
+      <p>
+        {% for action in actions %}
+          <a class="button" href="{{ action.url }}">{{ action.label }}</a>
+        {% endfor %}
+      </p>
+    </section>
+
+    {% if recent_rfids %}
+      <section class="operator-tool-section">
+        <h2>{% translate "Recent RFIDs" %}</h2>
+        <ul>
+          {% for rfid in recent_rfids %}
+            <li><a href="{% url 'admin:cards_rfid_change' rfid.pk %}">{{ rfid }}</a></li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if recent_attempts %}
+      <section class="operator-tool-section">
+        <h2>{% translate "Recent scan attempts" %}</h2>
+        <ul>
+          {% for attempt in recent_attempts %}
+            <li>{{ attempt.attempted_at|localtime|date:"Y-m-d H:i" }} — {{ attempt }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+  </div>
+{% endblock %}

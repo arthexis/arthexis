@@ -1,0 +1,190 @@
+from __future__ import annotations
+
+from django.contrib import admin, messages
+from django.shortcuts import redirect
+from django.urls import path, reverse
+from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
+from django_object_actions import DjangoObjectActions
+
+from apps.discovery.services import record_discovery_item, start_discovery
+from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.feature_detection import is_feature_active_for_node
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+
+from .models import ClockDevice
+
+
+@admin.register(ClockDevice)
+class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
+    list_display = ("address", "bus", "node", "description", "public_view")
+    search_fields = ("address", "description", "raw_info", "node__hostname")
+    changelist_actions = ["find_devices"]
+    change_list_template = "django_object_actions/change_list.html"
+
+    def get_urls(self):
+        custom = [
+            path(
+                "find-clock-devices/",
+                self.admin_site.admin_view(self.find_devices_view),
+                name="clocks_clockdevice_find_devices",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def find_devices(self, request, queryset=None):
+        return redirect("admin:clocks_clockdevice_find_devices")
+
+    find_devices.label = _("Discover")
+    find_devices.short_description = _("Discover")
+    find_devices.changelist = True
+    find_devices.is_discover_action = True
+
+    @admin.display(description=_("Public View"))
+    def public_view(self, obj):
+        if not obj.enable_public_view:
+            return _("Disabled")
+        if not obj.public_view_slug:
+            return _("Missing slug")
+        url = reverse("clockdevice-public-view", args=[obj.public_view_slug])
+        return format_html('<a href="{}" target="_blank">{}</a>', url, _("Open"))
+
+    def _ensure_rtc_feature_enabled(
+        self,
+        request,
+        action_label: str,
+        *,
+        node: Node | None = None,
+        auto_enable: bool = False,
+    ):
+        auto_enabled = False
+        try:
+            feature = NodeFeature.objects.get(slug="gpio-rtc")
+        except NodeFeature.DoesNotExist:
+            self.message_user(
+                request,
+                _("%(action)s is unavailable because the feature is not configured.")
+                % {"action": action_label},
+                level=messages.ERROR,
+            )
+            return None
+        assignment_exists = bool(
+            node
+            and NodeFeatureAssignment.objects.filter(
+                node=node,
+                feature=feature,
+            ).exists()
+        )
+        if auto_enable and node and not assignment_exists:
+            auto_enabled = NodeFeatureAssignment.objects.update_or_create(
+                node=node,
+                feature=feature,
+            )[1]
+            node.sync_feature_tasks()
+            if auto_enabled:
+                self.message_user(
+                    request,
+                    _("%(feature)s feature was automatically enabled.")
+                    % {"feature": feature.display},
+                    level=messages.SUCCESS,
+                )
+        elif not feature.is_enabled:
+            self.message_user(
+                request,
+                _("%(feature)s feature is not enabled on this node.")
+                % {"feature": feature.display},
+                level=messages.WARNING,
+            )
+            return None
+        return feature, auto_enabled
+
+    def _get_local_node(self, request):
+        node = Node.get_local()
+        if node is None:
+            self.message_user(
+                request,
+                _("No local node is registered; cannot perform clock actions."),
+                level=messages.ERROR,
+            )
+        return node
+
+    def find_devices_view(self, request):
+        node = self._get_local_node(request)
+        if node is None:
+            return redirect("..")
+
+        feature_info = self._ensure_rtc_feature_enabled(
+            request,
+            _("Discover"),
+            node=node,
+            auto_enable=True,
+        )
+        if not feature_info:
+            return redirect("..")
+        feature, auto_enabled = feature_info
+
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "clock_find_devices"},
+        )
+
+        if not is_feature_active_for_node(node=node, slug="gpio-rtc"):
+            if auto_enabled:
+                NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+                self.message_user(
+                    request,
+                    _("%(feature)s feature was disabled because no devices were found.")
+                    % {"feature": feature.display},
+                    level=messages.INFO,
+                )
+            if discovery:
+                discovery.metadata = {
+                    "action": "clock_find_devices",
+                    "result": "no_devices",
+                }
+                discovery.save(update_fields=["metadata"])
+            self.message_user(
+                request,
+                _("No I2C clock devices were detected on this node."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
+
+        created, updated, created_devices, updated_devices = (
+            ClockDevice.refresh_from_system(node=node, return_objects=True)
+        )
+        if discovery:
+            for device_list, is_created in [
+                (created_devices, True),
+                (updated_devices, False),
+            ]:
+                for device in device_list:
+                    record_discovery_item(
+                        discovery,
+                        obj=device,
+                        label=str(device),
+                        created=is_created,
+                        overwritten=not is_created,
+                    )
+            discovery.metadata = {
+                "action": "clock_find_devices",
+                "created": created,
+                "updated": updated,
+            }
+            discovery.save(update_fields=["metadata"])
+        if created or updated:
+            self.message_user(
+                request,
+                _("Updated %(created)s new and %(updated)s existing clock devices.")
+                % {"created": created, "updated": updated},
+                level=messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                _("No clock devices were added or updated."),
+                level=messages.INFO,
+            )
+        return redirect("..")

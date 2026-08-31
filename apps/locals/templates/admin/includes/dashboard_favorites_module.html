@@ -1,0 +1,26 @@
+{% load i18n admin_extras favorites %}
+
+<div class="module favorites-module">
+  {% dashboard_model_status_map app_list as model_statuses %}
+  <table>
+    <caption class="visually-hidden">{% translate 'Favorite models' %}</caption>
+    <thead class="visually-hidden">
+      <tr>
+        <th scope="col">{% translate 'Model name' %}</th>
+        <th scope="col">{% translate 'Model actions' %}</th>
+        <th scope="col">{% translate 'Add link' %}</th>
+        <th scope="col">{% translate 'Change or view list link' %}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for entry in favorite_entries %}
+      {% with app=entry.app model=entry.model fav=entry.favorite ct_id=entry.ct_id %}
+        {% model_app_label model app.app_label as model_app_label %}
+        {% with model_name=model.object_name|lower %}
+        {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id="favorites-"|add:model_app_label|add:"-"|add:model_name show_changelinks=show_changelinks show_model_badges=show_model_badges model_statuses=model_statuses %}
+        {% endwith %}
+      {% endwith %}
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

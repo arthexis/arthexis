@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Run ``pip install`` with compact output for satisfied requirements."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from typing import Iterable, Set
+
+
+ALLOWED_BUILD_FAILURES = {"spidev", "RPi.GPIO"}
+
+
+def _extract_failed_builds(line: str) -> Set[str]:
+    """Extract failed package names from a single pip output line.
+
+    :param line: Raw pip output line.
+    :return: Package names that the line reports as failed.
+    """
+    failures: Set[str] = set()
+    marker = "Failed to build "
+    if marker in line:
+        failures.update(line.split(marker, 1)[1].split())
+        return failures
+
+    wheel_marker = "ERROR: Failed building wheel for "
+    if wheel_marker in line:
+        pkg = line.split(wheel_marker, 1)[1].split()[0].strip()
+        failures.add(pkg)
+        return failures
+
+    wheel_fail_marker = "ERROR: Could not build wheels for "
+    if wheel_fail_marker in line:
+        pkg = line.split(wheel_fail_marker, 1)[1].split(",", 1)[0].split()[0].strip()
+        failures.add(pkg)
+        return failures
+
+    trimmed = line.strip()
+    if trimmed.startswith("╰─>") or trimmed.startswith("->"):
+        names = trimmed.split(">", 1)[1]
+        for name in names.split(","):
+            cleaned = name.strip()
+            if cleaned:
+                failures.add(cleaned)
+    return failures
+
+
+def _iter_pip_output(cmd: Iterable[str]) -> int:
+    """Stream pip output while downgrading allowed hardware wheel failures.
+
+    :param cmd: Command to execute.
+    :return: Process exit status, or ``0`` when only allowed failures occurred.
+    :raises AssertionError: If the child process does not expose stdout.
+    """
+    process = subprocess.Popen(
+        list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+    )
+    assert process.stdout is not None
+
+    printed_dot = False
+    failed_builds: Set[str] = set()
+    non_allowed_failure = False
+    missing_compiler = False
+    try:
+        for raw_line in process.stdout:
+            line = raw_line.rstrip("\r\n")
+            if "Requirement already satisfied" in line:
+                if not printed_dot:
+                    sys.stdout.write("Skipping requirements without updates\n")
+                    sys.stdout.flush()
+                sys.stdout.write(".")
+                sys.stdout.flush()
+                printed_dot = True
+                continue
+
+            if printed_dot:
+                sys.stdout.write("\n")
+                printed_dot = False
+
+            new_failures = _extract_failed_builds(line)
+            if new_failures:
+                failed_builds.update(new_failures)
+                if not new_failures.issubset(ALLOWED_BUILD_FAILURES):
+                    non_allowed_failure = True
+            if "ERROR:" in line:
+                if new_failures and new_failures.issubset(ALLOWED_BUILD_FAILURES):
+                    pass
+                elif "Failed building wheel for" in line or "Failed to build " in line:
+                    pass
+                else:
+                    non_allowed_failure = True
+            if "No such file or directory" in line and "gcc" in line:
+                missing_compiler = True
+
+            sys.stdout.write(raw_line)
+        return_code = process.wait()
+    finally:
+        if printed_dot:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    if return_code != 0 and failed_builds and not non_allowed_failure:
+        sys.stderr.write(
+            "Optional hardware dependencies failed to build "
+            f"({', '.join(sorted(failed_builds))}); continuing install.\n"
+        )
+        if missing_compiler:
+            sys.stderr.write(
+                "Install build tools if you need GPIO/SPIDEV support. "
+                "On Debian/Ubuntu run: "
+                "`sudo apt update && sudo apt install -y build-essential`.\n"
+            )
+        return 0
+
+    return return_code
+
+
+def main() -> int:
+    """Execute pip with the current interpreter.
+
+    :return: Exit status from the wrapped pip invocation.
+    """
+    pip_args = sys.argv[1:]
+    cmd = [sys.executable, "-m", "pip", "install", *pip_args]
+    return _iter_pip_output(cmd)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

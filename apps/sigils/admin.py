@@ -1,0 +1,55 @@
+from django import forms
+from django.contrib import admin
+
+from apps.locals.user_data import EntityModelAdmin
+
+from .builtin_policy import BUILTIN_SIGIL_POLICIES
+from .models import CustomSigil, SigilRoot
+
+
+class CustomSigilAdminForm(forms.ModelForm):
+    class Meta:
+        model = CustomSigil
+        fields = ["prefix", "content_type", "is_user_safe"]
+
+
+@admin.register(CustomSigil)
+class CustomSigilAdmin(EntityModelAdmin):
+    form = CustomSigilAdminForm
+    list_display = ("prefix", "content_type", "is_user_safe")
+    list_filter = ("is_user_safe",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.filter(context_type=SigilRoot.Context.ENTITY)
+
+    def save_model(self, request, obj, form, change):
+        obj.context_type = SigilRoot.Context.ENTITY
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SigilRoot)
+class SigilRootAdmin(EntityModelAdmin):
+    BUILTIN_PREFIXES = set(BUILTIN_SIGIL_POLICIES)
+
+    list_display = (
+        "prefix",
+        "context_type",
+        "content_type",
+        "is_user_safe",
+        "is_built_in",
+        "is_seed_data",
+        "is_deleted",
+    )
+    list_filter = ("context_type", "is_user_safe", "is_seed_data", "is_deleted")
+    search_fields = ("prefix",)
+
+    @admin.display(boolean=True, description="Is Built-In")
+    def is_built_in(self, obj):
+        return obj.prefix.upper() in self.BUILTIN_PREFIXES
+
+    def has_delete_permission(self, request, obj=None):
+        return False

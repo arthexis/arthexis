@@ -1,0 +1,10 @@
+"""Manifest entries for Django app loading."""
+
+DJANGO_APPS = [
+    "apps.core",
+]
+
+REQUIRES_APPS = [
+    "apps.discovery",
+    "apps.emails",
+]

@@ -1,0 +1,206 @@
+# shellcheck shell=bash
+
+normalize_path() {
+  local raw="$1"
+  local converted=""
+
+  if [ -z "$raw" ]; then
+    return 1
+  fi
+
+  if command -v wslpath >/dev/null 2>&1; then
+    case "$raw" in
+      [A-Za-z]:\\*|[A-Za-z]:/*)
+        converted=$(wslpath -u "$raw" 2>/dev/null) || converted=""
+        if [ -n "$converted" ]; then
+          printf '%s' "$converted"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+
+  printf '%s' "$raw"
+}
+
+arthexis_is_wsl() {
+  if [ -n "${WSL_DISTRO_NAME:-}" ] || [ -n "${WSL_INTEROP:-}" ]; then
+    return 0
+  fi
+
+  if [ -r /proc/version ] && grep -qi "microsoft" /proc/version; then
+    return 0
+  fi
+
+  return 1
+}
+
+arthexis_prime_sudo_credentials() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if sudo -n true >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! arthexis_is_wsl; then
+    return 1
+  fi
+
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+
+  printf '%s\n' "WSL detected and sudo access is required. Please enter your password to continue." > /dev/tty
+  sudo -v
+}
+
+arthexis_python_bin() {
+  local path_entry
+  local candidate
+  local versioned_candidates
+  local current_path
+  local cache_owner
+  local path_separator
+
+  _arthexis_python_candidate_is_py3() {
+    local python_candidate="$1"
+    "$python_candidate" -c 'import sys; raise SystemExit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1
+  }
+
+  _arthexis_python_candidate_is_executable() {
+    local python_candidate="$1"
+
+    if [ ! -f "$python_candidate" ]; then
+      return 1
+    fi
+
+    if [ -x "$python_candidate" ]; then
+      return 0
+    fi
+
+    # Some WSL-mounted files (especially Windows temp directories) can be
+    # runnable even when POSIX execute bits are reported as unset.
+    "$python_candidate" -c 'raise SystemExit(0)' >/dev/null 2>&1
+  }
+
+  _arthexis_python_path_entry_for_name() {
+    local entry="$1"
+    local name="$2"
+
+    for candidate in "$entry/$name" "$entry/$name.exe" "$entry/$name.bat" "$entry/$name.cmd"; do
+      if _arthexis_python_candidate_is_executable "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    done
+
+    return 1
+  }
+
+  if [ -n "${ARTHEXIS_PYTHON_BIN:-}" ] \
+    && _arthexis_python_candidate_is_executable "${ARTHEXIS_PYTHON_BIN}" \
+    && _arthexis_python_candidate_is_py3 "${ARTHEXIS_PYTHON_BIN}"; then
+    printf '%s' "${ARTHEXIS_PYTHON_BIN}"
+    return 0
+  fi
+
+  if [ -n "${VIRTUAL_ENV:-}" ]; then
+    for candidate in "${VIRTUAL_ENV}/bin/python" "${VIRTUAL_ENV}/Scripts/python.exe"; do
+      if _arthexis_python_candidate_is_executable "$candidate" && _arthexis_python_candidate_is_py3 "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    done
+  fi
+
+  # Cache is PATH-dependent so inherited shell state cannot override lookup
+  # results when the caller provides a different PATH.
+  current_path="${PATH-}"
+  cache_owner="${BASHPID:-$$}"
+  if [ "${_arthexis_python_bin_cached_owner-}" = "$cache_owner" ] \
+    && [ "${_arthexis_python_bin_cached_path+x}" = "x" ] \
+    && [ "$_arthexis_python_bin_cached_path" = "$current_path" ] \
+    && [ -n "${_arthexis_python_bin_cached-}" ]; then
+    if [ "$_arthexis_python_bin_cached" = "not_found" ]; then
+      return 1
+    fi
+    printf '%s' "$_arthexis_python_bin_cached"
+    return 0
+  fi
+
+  unset _arthexis_python_bin_cached
+  _arthexis_python_bin_cached_path="$current_path"
+  _arthexis_python_bin_cached_owner="$cache_owner"
+
+  # Bash on Windows can surface PATH-like values separated by ';'.
+  path_separator=':'
+  if [[ "$current_path" == *';'* && ( "$current_path" != *:* || "$current_path" == *[A-Za-z]:* ) ]]; then
+    path_separator=';'
+  fi
+
+  local _arthexis_path_remainder
+  _arthexis_path_remainder="${PATH}${path_separator}"
+
+  while [ -n "$_arthexis_path_remainder" ]; do
+    path_entry=${_arthexis_path_remainder%%"$path_separator"*}
+    _arthexis_path_remainder=${_arthexis_path_remainder#*"$path_separator"}
+
+    if [ -z "$path_entry" ]; then
+      path_entry='.'
+    fi
+
+    candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python3")
+    if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
+      _arthexis_python_bin_cached="$candidate"
+      break
+    fi
+
+    candidate=$(_arthexis_python_path_entry_for_name "$path_entry" "python")
+    if [ -n "$candidate" ] && _arthexis_python_candidate_is_py3 "$candidate"; then
+      _arthexis_python_bin_cached="$candidate"
+      break
+    fi
+
+    versioned_candidates=""
+    while IFS= read -r candidate; do
+      if [ -z "$candidate" ]; then
+        continue
+      fi
+      if [ -n "$versioned_candidates" ]; then
+        versioned_candidates+=$'\n'
+      fi
+      versioned_candidates+="$candidate"
+    done < <(
+      compgen -f "$path_entry/python3" | while IFS= read -r resolved; do
+        candidate=${resolved##*/}
+        case "$candidate" in
+          python3|python3[0-9]|python3.[0-9]*)
+            printf '%s\n' "$resolved"
+            ;;
+          python3.exe|python3.bat|python3.cmd|python3[0-9].exe|python3[0-9].bat|python3[0-9].cmd|python3.[0-9]*.exe|python3.[0-9]*.bat|python3.[0-9]*.cmd)
+            printf '%s\n' "$resolved"
+            ;;
+        esac
+      done | sort -rV -u
+    )
+
+    while IFS= read -r candidate; do
+      if [ -z "$candidate" ]; then
+        continue
+      fi
+      if _arthexis_python_candidate_is_executable "$candidate" && _arthexis_python_candidate_is_py3 "$candidate"; then
+        _arthexis_python_bin_cached="$candidate"
+        break 2
+      fi
+    done <<<"$versioned_candidates"
+  done
+
+  if [ -z "${_arthexis_python_bin_cached-}" ]; then
+    _arthexis_python_bin_cached="not_found"
+    return 1
+  fi
+
+  printf '%s' "$_arthexis_python_bin_cached"
+}

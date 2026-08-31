@@ -1,0 +1,15 @@
+{% load i18n %}
+<h2 class="h4">{% trans "Last Run" %}</h2>
+{% if latest_execution %}
+  <dl class="row">
+    <dt class="col-sm-3">{% trans "Status" %}</dt>
+    <dd class="col-sm-9">{{ latest_execution.get_status_display }}</dd>
+    <dt class="col-sm-3">{% trans "Triggered" %}</dt>
+    <dd class="col-sm-9">{{ latest_execution.triggered_at }}</dd>
+    <dt class="col-sm-3">{% trans "Completed" %}</dt>
+    <dd class="col-sm-9">{{ latest_execution.completed_at|default:"-" }}</dd>
+  </dl>
+  <pre class="p-3 bg-dark-subtle text-break"><code>{{ latest_result_json }}</code></pre>
+{% else %}
+  <p>{% trans "No recorded run yet." %}</p>
+{% endif %}

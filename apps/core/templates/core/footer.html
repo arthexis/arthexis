@@ -1,0 +1,30 @@
+
+{% if show_footer %}
+  <footer class="container mt-5 border-top pt-3">
+    {% if footer_refs %}
+      <div class="row row-cols-2 row-cols-md-6">
+        {% for ref in footer_refs %}
+          <div class="col mb-2">
+            {% if ref.value|slice:":1" == "/" and ref.value|slice:":2" != "//" %}
+              <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+            {% else %}
+              <a href="{{ ref.value }}" target="_blank" rel="noopener noreferrer">{{ ref.alt_text|default:ref.value }}</a>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if show_release %}
+      <div class="text-center border-top mt-3 pt-4 pb-2">
+        <div class="text-muted fs-6">
+          {% if request.user.is_staff and release_url %}
+            <a href="{{ release_url }}" target="_blank" rel="noopener noreferrer">{{ release_name }}</a>
+          {% else %}
+            {{ release_name }}
+          {% endif %}
+          {% if fresh_since %} fresh since {{ fresh_since }}{% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </footer>
+{% endif %}

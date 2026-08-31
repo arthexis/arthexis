@@ -1,0 +1,406 @@
+name: Issue Intake
+
+env:
+  NODE_OPTIONS: '--no-deprecation'
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - labeled
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  intake:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage and acknowledge issue
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            /**
+             * Manage new/edited issues in a single flow:
+             * - classify and apply labels
+             * - acknowledge as ready for implement-or-close handling
+             * - post/update an acknowledgement + routing comment
+             */
+            const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              core.info('Skipping because this event does not target a standard issue.');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const issueAuthor = issue.user?.login || 'unknown';
+
+            const title = (issue.title || '').toLowerCase();
+            const bodyRaw = issue.body || '';
+            const body = bodyRaw.toLowerCase();
+            const issueText = title + '\n' + body;
+            const isBotActor = issue.user?.type === 'Bot' || issueAuthor.endsWith('[bot]');
+
+            const hasAny = (text, needles) => needles.some((needle) => text.includes(needle));
+            const hasRegex = (text, patterns) => patterns.some((pattern) => pattern.test(text));
+            const addSet = new Set();
+            const missingConfiguredLabels = new Set();
+            const issueTypeLabels = new Set(['bug', 'enhancement']);
+            const priorityLabelPrefix = 'priority:';
+            const priorityRank = new Map([
+              ['priority: low', 1],
+              ['priority: high', 2],
+              ['priority: critical', 3],
+            ]);
+            const isIssueTypeLabel = (name) =>
+              issueTypeLabels.has((name || '').trim().toLowerCase());
+            const chooseIssueTypeLabel = (labels) => {
+              const normalizedLabels = new Set(
+                labels.map((label) => (label || '').trim().toLowerCase())
+              );
+              if (normalizedLabels.has('bug')) {
+                return 'bug';
+              }
+              if (normalizedLabels.has('enhancement')) {
+                return 'enhancement';
+              }
+              return null;
+            };
+            const isPriorityLabel = (name) =>
+              (name || '').trim().toLowerCase().startsWith(priorityLabelPrefix);
+            const chooseHighestPriorityLabel = (labels) => {
+              let chosen = null;
+              let chosenRank = -1;
+              for (const label of labels) {
+                const rank = priorityRank.get((label || '').trim().toLowerCase()) || 0;
+                if (rank >= chosenRank) {
+                  chosen = label;
+                  chosenRank = rank;
+                }
+              }
+              return chosen;
+            };
+
+            const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const repoLabelNames = new Set(repoLabels.map((label) => label.name));
+            const queueLabel = (name) => {
+              if (repoLabelNames.has(name)) {
+                addSet.add(name);
+              } else {
+                missingConfiguredLabels.add(name);
+              }
+            };
+
+            const hasBugSignal = hasAny(issueText, ['bug', 'error', 'fails', 'failure', 'crash', 'regression']);
+            const hasFeatureSignal = hasAny(issueText, ['feature', 'enhancement', 'proposal', 'request']);
+            const hasQuestionSignal = hasRegex(issueText, [
+              /\bquestion\b/i,
+              /\bhow\s+(do|can)\s+i\b/i,
+              /\bhow\s+to\s+(use|configure|set\s+up|troubleshoot)\b/i,
+              /\bhelp\s+(me|with|using|understand|troubleshoot|debug)\b/i,
+            ]);
+            const hasDocumentationSignal = hasAny(issueText, ['docs', 'documentation', 'readme']);
+            const hasInstallSignal = hasAny(issueText, ['install', 'setup', 'pip', 'venv', 'dependency']);
+            const hasSecuritySignal =
+              hasAny(issueText, ['security', 'vulnerability', 'xss', 'csrf', 'authentication', 'authorization']) ||
+              hasRegex(issueText, [/\bauth\b/i, /\bauthn\b/i, /\bauthz\b/i]);
+            const ocppVersionMatch = bodyRaw.match(/###\s*OCPP protocol version\s*([\s\S]*?)(?=\n###|\n##|$)/i);
+            const ocppVersionValue = (ocppVersionMatch?.[1] || '').trim().toLowerCase();
+            const hasSpecificOcppVersion =
+              ocppVersionValue.length > 0 &&
+              !hasAny(ocppVersionValue, ['not sure', 'not applicable']);
+            const bodyWithoutOcppTemplateField = bodyRaw
+              .replace(/###\s*OCPP protocol version\s*([\s\S]*?)(?=\n###|\n##|$)/i, '')
+              .toLowerCase();
+            const hasOcppSignal =
+              hasSpecificOcppVersion ||
+              hasAny(title + '\n' + bodyWithoutOcppTemplateField, ['ocpp', 'charger', 'charge point', 'evse']);
+            const hasImagerSignal = hasRegex(title + '\n' + bodyWithoutOcppTemplateField, [
+              /\bimager\b/i,
+              /\bimage\s+burn\b/i,
+              /\bburn\s+image\b/i,
+              /\bgway\s+image\b/i,
+              /\bbase\s+image\b/i,
+            ]);
+            const hasAutomationSignal =
+              isBotActor ||
+              ['feedback-bot', 'runtime-bot'].includes(issueAuthor) ||
+              hasAny(issueText, ['automation', 'github action', 'workflow', 'runtime exception']);
+
+            // Classification labels
+            if (hasBugSignal) {
+              queueLabel('bug');
+            } else if (hasFeatureSignal) {
+              queueLabel('enhancement');
+            }
+            if (hasQuestionSignal) {
+              queueLabel('question');
+            }
+            if (hasDocumentationSignal) {
+              queueLabel('documentation');
+            }
+            if (hasAutomationSignal) {
+              queueLabel('automation');
+            }
+            if (hasOcppSignal || hasImagerSignal || hasSecuritySignal || hasAny(issueText, ['urgent', 'critical', 'sev1', 'p0'])) {
+              queueLabel('priority: critical');
+            } else if (hasBugSignal || hasInstallSignal || hasAny(issueText, ['high priority', 'priority high', 'p1'])) {
+              queueLabel('priority: high');
+            }
+
+            const existingLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingNames = new Set(existingLabels.map((label) => label.name));
+            const queuedIssueTypeLabels = [...addSet].filter(isIssueTypeLabel);
+            const existingIssueTypeLabels = [...existingNames].filter(isIssueTypeLabel);
+            const queuedPriorityLabels = [...addSet].filter(isPriorityLabel);
+            const existingPriorityLabels = [...existingNames].filter(isPriorityLabel);
+            const eventLabelName = (context.payload.label?.name || '').trim();
+            const eventIssueTypeLabel = isIssueTypeLabel(eventLabelName)
+              ? eventLabelName.toLowerCase()
+              : null;
+            const eventPriorityLabel = isPriorityLabel(eventLabelName) ? eventLabelName : null;
+            const desiredIssueTypeLabel =
+              eventIssueTypeLabel ||
+              chooseIssueTypeLabel(existingIssueTypeLabels) ||
+              chooseIssueTypeLabel(queuedIssueTypeLabels);
+            const desiredPriorityLabel =
+              eventPriorityLabel ||
+              chooseHighestPriorityLabel([...existingPriorityLabels, ...queuedPriorityLabels]);
+
+            for (const label of queuedIssueTypeLabels) {
+              if (label !== desiredIssueTypeLabel) {
+                addSet.delete(label);
+              }
+            }
+            for (const label of queuedPriorityLabels) {
+              if (label !== desiredPriorityLabel) {
+                addSet.delete(label);
+              }
+            }
+
+            const issueTypeLabelsToRemove = existingIssueTypeLabels.filter(
+              (name) => name.toLowerCase() !== desiredIssueTypeLabel
+            );
+            for (const name of issueTypeLabelsToRemove) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+                core.info(`Removed conflicting issue type label: ${name}`);
+                existingNames.delete(name);
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            const priorityLabelsToRemove = existingPriorityLabels.filter(
+              (name) => name !== desiredPriorityLabel
+            );
+            for (const name of priorityLabelsToRemove) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+                core.info(`Removed conflicting priority label: ${name}`);
+                existingNames.delete(name);
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            const labelsToAdd = [...addSet].filter((name) => !existingNames.has(name));
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: labelsToAdd });
+              core.info(`Added labels: ${labelsToAdd.join(', ')}`);
+            }
+
+            if (missingConfiguredLabels.size > 0) {
+              core.info(`Configured labels not present in repository: ${[...missingConfiguredLabels].join(', ')}`);
+            }
+
+            // The intake receipt is authoritative: once acknowledged, an issue is ready
+            // for implementation or closure. Avoid long-lived needs-info tracking.
+            if (existingNames.has('needs-info')) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'needs-info' });
+                core.info('Removed label: needs-info');
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
+            const routingMentions = [];
+            if (hasSecuritySignal) {
+              routingMentions.push('@arthexis/security-maintainers');
+            }
+            if (hasDocumentationSignal) {
+              routingMentions.push('@arthexis/docs-maintainers');
+            }
+
+            const qualityMessage = [
+              '### Implement-or-close ready',
+              'Thanks — this issue has been acknowledged and is considered ready for implementation or closure.',
+              '',
+              'If implementation uncovers a necessary change, maintainers may amend the issue during execution rather than asking the reporter to pre-specify more details.',
+            ].join('\n');
+
+            const sourceDescriptor = isBotActor
+              ? 'Bot-originated issue detected.'
+              : issueAuthor === 'feedback-bot'
+                ? 'Feedback-created issue detected.'
+                : issueAuthor === 'runtime-bot'
+                  ? 'Runtime-created issue detected.'
+                  : 'Human-submitted issue detected.';
+
+            const intakeState = 'Ready to implement or close.';
+
+            const acknowledgementLines = [
+              '<!-- issue-intake-bot-comment -->',
+              '## Arthexis intake receipt',
+              '',
+              `Source: ${sourceDescriptor}`,
+              `Intake state: **${intakeState}**`,
+              '',
+              qualityMessage,
+              '',
+              !isBotActor ? 'Next routing: maintainer review validates classification and execution path. Local implementation routing is handled by device-local operator tooling.' : '_Maintainer routing hints are skipped for bot-originated issues._',
+              !isBotActor && routingMentions.length > 0 ? `Routing hint: ${routingMentions.join(' ')}` : '',
+            ].filter(Boolean);
+
+            const bodyComment = acknowledgementLines.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const botComment = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes('<!-- issue-intake-bot-comment -->')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: botComment.id,
+                body: bodyComment,
+              });
+              core.info(`Updated existing intake comment ${botComment.id}`);
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: bodyComment });
+              core.info('Created intake comment');
+            }
+
+  cloud_worktree_request:
+    if: github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Handle authorized cloud worktree requests
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const comment = context.payload.comment;
+            if (!issue || issue.pull_request || !comment) {
+              core.info('Skipping because this event does not target a standard issue comment.');
+              return;
+            }
+
+            const body = (comment.body || '').trim();
+            if (!body.startsWith('/cloud-worktree')) {
+              core.info('No cloud worktree command detected.');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const actor = comment.user?.login || context.actor;
+
+            let permission = 'none';
+            try {
+              const collaborator = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: actor,
+              });
+              permission = collaborator.data?.permission || 'none';
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            const authorizedPermissions = new Set(['admin', 'maintain', 'write']);
+            const isAuthorized = authorizedPermissions.has(permission);
+
+            if (!isAuthorized) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: [
+                  '<!-- issue-cloud-worktree-request -->',
+                  'Cloud worktree request ignored: this command is limited to authorized operators (write access or higher).',
+                ].join('\n'),
+              });
+              core.info(`Ignored unauthorized cloud worktree request from ${actor} with permission ${permission}.`);
+              return;
+            }
+
+            const labelName = 'cloud-worktree:requested';
+            const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const repoLabelNames = new Set(repoLabels.map((label) => label.name));
+
+            if (repoLabelNames.has(labelName)) {
+              const currentLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner,
+                repo,
+                issue_number,
+                per_page: 100,
+              });
+              const hasLabel = currentLabels.some((label) => label.name === labelName);
+              if (!hasLabel) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [labelName] });
+              }
+            } else {
+              core.warning(`Repository label missing: ${labelName}`);
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body: [
+                '<!-- issue-cloud-worktree-request -->',
+                `Authorized cloud worktree request recorded from @${actor}.`,
+                'A monitor/operator will route this request through the approved cloud worktree path.',
+              ].join('\n'),
+            });
+            core.info(`Recorded authorized cloud worktree request from ${actor}.`);

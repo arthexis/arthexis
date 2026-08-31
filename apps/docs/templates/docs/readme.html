@@ -1,0 +1,46 @@
+{% extends "pages/base.html" %}
+{% load i18n static docs_mermaid %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_head %}
+  {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url }}">
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  {% if toc %}
+  <div class="col-12 col-lg-3 mt-4 mt-lg-0 order-2 order-lg-1">
+    <div class="reader-sidebar">
+      <nav class="toc">
+        <h4>Contents</h4>
+        {{ toc|safe }}
+      </nav>
+      <div class="reader-qr-card mt-4">
+        <div
+          id="reader-qr"
+          class="reader-qr-image"
+          data-url="{{ page_url }}"
+          role="img"
+          aria-label="{% trans 'QR code linking to this page' %}"
+        ></div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  <div class="{% if toc %}col-12 col-lg-9 order-1 order-lg-2{% else %}col-12{% endif %}">
+    {% include "pages/includes/funding_banner.html" with funding_banner=funding_banner funding_banner_classes="funding-banner--sidebar mb-4" only %}
+    <div class="markdown-body" id="reader-content">
+      {{ content|safe }}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block funding_banner %}{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'docs/js/qrcode.min.js' %}"></script>
+  {% include "includes/reader_qr_script.html" %}
+  {% mermaid_assets %}
+{% endblock %}

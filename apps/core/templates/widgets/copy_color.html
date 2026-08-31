@@ -1,0 +1,7 @@
+<input
+  type="{{ widget.type }}"
+  name="{{ widget.name }}"
+  {% if widget.value != None %}value="{{ widget.value }}"{% endif %}
+  {% include "django/forms/widgets/attrs.html" %}
+/>
+<a href="#" class="button copy-color-button" data-target="{{ widget.attrs.id }}">Copy</a>

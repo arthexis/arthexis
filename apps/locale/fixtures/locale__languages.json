@@ -1,0 +1,13 @@
+[
+  {
+    "model": "locale.language",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "code": "en",
+      "english_name": "English",
+      "native_name": "English",
+      "is_default": true
+    }
+  }
+]

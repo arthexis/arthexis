@@ -1,0 +1,973 @@
+{% extends "pages/base.html" %}
+
+{% load i18n static %}
+
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'ocpp/charger_status.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}" data-chart-url="{{ chart_data_url }}"{% if chart_session %} data-chart-session="{{ chart_session }}"{% endif %}>
+  {% if show_connector_tabs and connector_links %}
+  <div class="mb-3">
+    <div class="nav nav-pills flex-wrap gap-2">
+      {% for link in connector_links %}
+      <a class="nav-link {% if link.active %}active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+    <div class="flex-grow-1">
+      <h1 class="mb-1">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+    </div>
+    <div class="charger-meta">
+      <span class="charger-meta-label">{% trans "Serial Number" %}</span>
+      <span class="charger-meta-value">{{ charger.charger_id }}</span>
+    </div>
+  </div>
+
+  {% if past_session %}
+  <div class="alert alert-info" role="alert">
+    {% trans "Viewing past session" %} {{ tx.id }}. <a href="{{ page_url }}">{% trans "Back to live" %}</a>
+  </div>
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-4">
+      <section class="status-card card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "State" %}</h2>
+          <div class="d-flex align-items-center mb-3">
+            <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+            <strong id="charger-state">{{ state }}</strong>
+          </div>
+          {% if charger_error_code %}
+          <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger_error_code }}</p>
+          {% endif %}
+          {% if charger.last_status_timestamp %}
+          <p class="text-muted small mb-1" id="last-status-timestamp">{% trans "Last status update" %}: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+          {% endif %}
+          {% if charger.last_status_vendor_info %}
+            {% if charger.last_status_vendor_info.vendorId %}
+            <p class="text-muted small mb-1" id="last-status-vendor">{% trans "Vendor" %}: {{ charger.last_status_vendor_info.vendorId }}</p>
+            {% endif %}
+            {% if charger.last_status_vendor_info.info %}
+            <p class="text-muted small mb-1" id="last-status-info">{% trans "Info" %}: {{ charger.last_status_vendor_info.info }}</p>
+            {% endif %}
+          {% endif %}
+          <p class="mb-0">{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
+          {% if charger.temperature is not None %}
+          <p class="mb-0 mt-2">{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
+          {% endif %}
+        </div>
+      </section>
+
+      {% if charger.diagnostics_status or charger.diagnostics_timestamp or charger.diagnostics_location %}
+      <section class="status-card card shadow-sm border-0 mt-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Diagnostics" %}</h2>
+          {% if charger.diagnostics_status %}
+          <p class="mb-1">{% trans "Status" %}: <span id="diagnostics-status">{{ charger.diagnostics_status }}</span></p>
+          {% endif %}
+          {% if charger.diagnostics_timestamp %}
+          <p class="mb-1 text-muted"><small>{% trans "Reported" %}: <span id="diagnostics-timestamp">{{ charger.diagnostics_timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small></p>
+          {% endif %}
+          {% if charger.diagnostics_location %}
+          <p class="mb-0 text-break"><small>{% trans "Location" %}: <span id="diagnostics-location">{{ charger.diagnostics_location }}</span></small></p>
+          {% endif %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if charging_limit %}
+      <section class="status-card card shadow-sm border-0 mt-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Charging Limit" %}</h2>
+          {% if charging_limit.source %}
+          <p class="mb-1" id="charging-limit-source">{% trans "Source" %}: {{ charging_limit.source }}</p>
+          {% endif %}
+          {% if charging_limit.is_grid_critical is not None %}
+          <p class="mb-1" id="charging-limit-grid">{% trans "Grid critical" %}: {{ charging_limit.is_grid_critical|yesno:_("Yes,No") }}</p>
+          {% endif %}
+          {% if charging_limit.schedules %}
+          <ul class="mb-1" id="charging-limit-schedules">
+            {% for summary in charging_limit.schedules %}
+            <li>{{ summary }}</li>
+            {% endfor %}
+          </ul>
+          {% elif charging_limit.evse_id %}
+          <p class="mb-1">{% blocktrans with evse=charging_limit.evse_id %}Applies to EVSE {{ evse }}{% endblocktrans %}</p>
+          {% endif %}
+          {% if charging_limit.timestamp %}
+          <p class="mb-0 text-muted"><small>{% trans "Reported" %}: <span id="charging-limit-timestamp">{{ charging_limit.timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small></p>
+          {% endif %}
+        </div>
+      </section>
+      {% endif %}
+    </div>
+
+    <div class="col-12 col-lg-8">
+      <section class="status-card card shadow-sm border-0 mb-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
+          {% if tx %}
+          <ul class="mb-0">
+            <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
+            <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
+            {% if date_view == "received" %}
+            <li>{% trans "Start Time" %}: {{ tx.received_start_time|default:tx.start_time }}</li>
+            {% else %}
+            <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
+            {% endif %}
+            {% if tx_rfid_details %}
+            <li>
+              {% if tx_rfid_details.display_label %}
+              {{ tx_rfid_details.display_label }}:
+              {% else %}
+              {% trans "RFID" %}:
+              {% endif %}
+              {% if tx_rfid_details.url %}
+              <a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a>
+              {% else %}
+              {{ tx_rfid_details.value }}
+              {% endif %}
+            </li>
+            {% endif %}
+            <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
+          </ul>
+          {% elif not past_session %}
+          <div class="status-empty">
+            <div class="status-empty-icon" aria-hidden="true">🔌</div>
+            <p class="mb-0">{% trans "No active transaction" %}</p>
+          </div>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="status-card card shadow-sm border-0">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Live Power" %}</h2>
+          {% if show_chart %}
+          <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
+          {{ chart_data|json_script:"chart-data" }}
+          {% else %}
+            {% if usage_timeline %}
+            <div class="usage-timeline-card border rounded-3 p-3">
+              <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
+                <h3 class="h6 mb-0">{% trans "Usage (last 48 hours)" %}</h3>
+                {% if usage_timeline_window %}
+                <div class="small text-muted">{{ usage_timeline_window.0 }} &ndash; {{ usage_timeline_window.1 }}</div>
+                {% endif %}
+              </div>
+              <div class="usage-timeline-legend small text-muted mb-3">
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-offline"></span> {% trans "Offline" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-untracked"></span> {% trans "Untracked" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-available"></span> {% trans "Available" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-charging"></span> {% trans "Charging" %}</span>
+              </div>
+              <div class="usage-timeline-list">
+                {% for entry in usage_timeline %}
+                <div class="usage-timeline-entry">
+                  <div class="fw-semibold mb-2">{{ entry.label }}</div>
+                  <div class="usage-timeline-bar" role="list">
+                    {% for segment in entry.segments %}
+                    <span class="usage-timeline-segment usage-{{ segment.status }}" role="listitem" style="flex-grow: {{ segment.duration }};" title="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}" aria-label="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}"></span>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% if usage_timeline_window %}
+              <div class="d-flex justify-content-between small text-muted mt-3">
+                <span>{{ usage_timeline_window.0 }}</span>
+                <span>{{ usage_timeline_window.1 }}</span>
+              </div>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="status-empty">
+              <div class="status-empty-icon" aria-hidden="true">📈</div>
+              <p class="mb-0">{% trans "Live chart data will appear when sessions are active." %}</p>
+            </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  {% if show_connector_overview_cards %}
+  <section class="mb-4">
+    <h2 class="h5">{% trans "Connectors" %}</h2>
+    <div class="row g-3">
+      {% for item in connector_overview %}
+      <div class="col-12 col-lg-6">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold">{{ item.label }}</span>
+            <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
+          </div>
+          {% if item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
+          <div class="mb-2">
+            {% if item.last_error_code %}<p class="mb-1 text-muted"><small>{% trans "Error code" %}: {{ item.last_error_code }}</small></p>{% endif %}
+            {% if item.last_status_timestamp %}<p class="mb-1 text-muted"><small>{% trans "Last status update" %}: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</small></p>{% endif %}
+            {% if item.last_status_vendor_info %}
+              {% if item.last_status_vendor_info.vendorId %}<p class="mb-1 text-muted"><small>{% trans "Vendor" %}: {{ item.last_status_vendor_info.vendorId }}</small></p>{% endif %}
+              {% if item.last_status_vendor_info.info %}<p class="mb-1 text-muted"><small>{% trans "Info" %}: {{ item.last_status_vendor_info.info }}</small></p>{% endif %}
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if item.tx %}
+          <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+          {% if date_view == "received" %}
+          {% with display_start=item.tx.received_start_time|default:item.tx.start_time %}
+          <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ display_start|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+          {% endwith %}
+          {% else %}
+          <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+          {% endif %}
+          {% else %}
+          <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="status-card card shadow-sm border-0 mb-3">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center mb-2">
+        <h2 class="h5 mb-0">{% trans "Sessions" %}</h2>
+        {% if date_toggle_links %}
+        <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
+          {% for link in date_toggle_links %}
+          <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="status-table-wrap">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="status-table-head">
+            <tr>
+              <th>{% trans "Start" %}</th>
+              {% if charger.connector_id is None %}
+              <th>{% trans "Connector" %}</th>
+              {% endif %}
+              <th>{% trans "Stop" %}{% if date_view == "received" %}<span class="d-block small text-muted">{% trans "Received time" %}</span>{% endif %}</th>
+              <th>{% trans "ID" %}</th>
+              <th>{% trans "Stop reason" %}</th>
+              <th>{% trans "Energy (kW)" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+            <tr class="text-body-secondary status-row-subdued">
+              {% if date_view == "received" %}
+              <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
+              {% else %}
+              <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
+              {% endif %}
+              {% if charger.connector_id is None %}
+              <td>{{ tx.charger.connector_label|default:tx.charger.connector_letter|default:tx.charger.connector_id }}</td>
+              {% endif %}
+              {% if date_view == "received" %}<td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% else %}<td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% endif %}
+              <td>
+                {% if can_view_transaction_links %}
+                <a class="link-secondary" href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a>
+                {% else %}
+                {{ tx.id }}
+                {% endif %}
+              </td>
+              <td>{{ tx.stop_reason|default:"-" }}</td>
+              <td>{{ tx.kw|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if charger.connector_id is None %}6{% else %}5{% endif %}">
+                <div class="status-empty py-3">
+                  <div class="status-empty-icon" aria-hidden="true">🧾</div>
+                  <p class="mb-0">{% trans "No sessions found." %}</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="status-card card shadow-sm border-0 mb-3">
+    <div class="card-body">
+      <h2 class="h5 mb-2">{% trans "Events" %}</h2>
+      <div class="status-table-wrap">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="status-table-head">
+            <tr>
+              <th>{% trans "Date" %}</th>
+              <th>{% trans "Severity" %}</th>
+              <th>{% trans "ID" %}</th>
+              <th>{% trans "Event" %}</th>
+              <th>{% trans "Details" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for event in non_transaction_events %}
+            <tr class="text-body-secondary status-row-subdued">
+              <td>{{ event.timestamp|date:"Y-m-d H:i" }}</td>
+              <td>
+                <span class="d-inline-flex align-items-center gap-2">
+                  <span aria-hidden="true" style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background-color: {{ event.severity_color }};"></span>
+                  <span>{{ event.severity_label }}</span>
+                </span>
+              </td>
+              <td>
+                {% if event.event_id %}
+                  {% if can_view_transaction_links %}
+                  <a class="link-secondary" href="{{ transactions_admin_url }}{{ event.event_id }}/change/">{{ event.event_id }}</a>
+                  {% else %}
+                  {{ event.event_id }}
+                  {% endif %}
+                {% else %}
+                -
+                {% endif %}
+              </td>
+              <td>{{ event.event }}</td>
+              <td>{{ event.details }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="status-empty py-3">
+                  <div class="status-empty-icon" aria-hidden="true">📭</div>
+                  <p class="mb-0">{% trans "No events found." %}</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="status-footer-links d-flex align-items-center justify-content-center gap-3">
+    <a href="{{ page_url }}">{% trans "Landing page" %}</a>
+    <a href="{{ search_url }}">{% trans "Search" %}</a>
+    {% if configuration_url %}
+    <a href="{{ configuration_url }}">{% trans "Configuration" %}</a>
+    {% endif %}
+    {% if transactions_admin_url %}
+    <a href="{{ transactions_admin_url }}">{% trans "Transactions" %}</a>
+    {% endif %}
+  </div>
+</div>
+{% if show_chart %}
+<script src="{% static 'core/vendor/chart.umd.min.js' %}" data-chartjs="true"></script>
+<script>
+  let kwChart = null;
+  let chartShouldAnimate = false;
+  const chartData = { labels: [], datasets: [] };
+  let lastChartSignature = null;
+  const COLOR_PALETTE = [
+    { border: 'rgba(255,69,0,1)', background: 'rgba(255,69,0,0.3)' },
+    { border: 'rgba(30,144,255,1)', background: 'rgba(30,144,255,0.3)' },
+    { border: 'rgba(34,139,34,1)', background: 'rgba(34,139,34,0.3)' },
+    { border: 'rgba(147,112,219,1)', background: 'rgba(147,112,219,0.3)' },
+    { border: 'rgba(255,140,0,1)', background: 'rgba(255,140,0,0.3)' }
+  ];
+  const CONNECTOR_COLOR_MAP = {
+    1: COLOR_PALETTE[0],
+    2: COLOR_PALETTE[1],
+  };
+
+  function connectorLetterFromValue(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      const text = String(value).trim();
+      return text ? text : null;
+    }
+    let current = Math.floor(numeric);
+    let result = '';
+    while (current > 0) {
+      current -= 1;
+      result = String.fromCharCode(65 + (current % 26)) + result;
+      current = Math.floor(current / 26);
+    }
+    return result || null;
+  }
+
+  function connectorNumberFromLetterSequence(sequence) {
+    const text = (sequence || '').trim().toUpperCase();
+    if (!text) {
+      return null;
+    }
+    let total = 0;
+    for (const char of text) {
+      if (char < 'A' || char > 'Z') {
+        return null;
+      }
+      total = total * 26 + (char.charCodeAt(0) - 64);
+    }
+    return total;
+  }
+
+  function parseConnectorId(dataset) {
+    if (!dataset) {
+      return null;
+    }
+    if (dataset.connector_id !== undefined && dataset.connector_id !== null) {
+      const numericId = Number(dataset.connector_id);
+      if (!Number.isNaN(numericId)) {
+        return numericId;
+      }
+      const letter = connectorLetterFromValue(numericId);
+      if (letter) {
+        return numericId;
+      }
+    }
+    if (typeof dataset.label === 'string') {
+      const trimmed = dataset.label.trim();
+      const letterMatch = trimmed.match(/connector\s*([A-Za-z]+)/i) || trimmed.match(/^([A-Za-z]+)$/);
+      if (letterMatch) {
+        const numericId = connectorNumberFromLetterSequence(letterMatch[1]);
+        if (numericId !== null) {
+          return numericId;
+        }
+      }
+      const numberMatch = trimmed.match(/connector\s*(\d+)/i) || trimmed.match(/^(\d+)$/);
+      if (numberMatch) {
+        const numericId = Number(numberMatch[1]);
+        if (!Number.isNaN(numericId)) {
+          return numericId;
+        }
+      }
+    }
+    return null;
+  }
+
+  function getPaletteForDataset(dataset, index) {
+    const connectorId = parseConnectorId(dataset);
+    if (
+      connectorId !== null &&
+      Object.prototype.hasOwnProperty.call(CONNECTOR_COLOR_MAP, connectorId)
+    ) {
+      return CONNECTOR_COLOR_MAP[connectorId];
+    }
+    return COLOR_PALETTE[index % COLOR_PALETTE.length];
+  }
+
+  function datasetKey(dataset, index) {
+    if (dataset) {
+      if (dataset.connector_id !== undefined && dataset.connector_id !== null) {
+        const letter = connectorLetterFromValue(dataset.connector_id);
+        if (letter) {
+          return `connector-${letter}`;
+        }
+        return `connector-${dataset.connector_id}`;
+      }
+    }
+    if (dataset && typeof dataset.label === 'string') {
+      const trimmed = dataset.label.trim();
+      if (trimmed) {
+        return trimmed.toLowerCase();
+      }
+    }
+    return `dataset-${index}`;
+  }
+
+  function normalizeValues(values) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+    return values.map((value) => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+      }
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? null : numeric;
+    });
+  }
+
+  function parseChartPayload(root) {
+    if (!root || !root.querySelector) {
+      return null;
+    }
+    const script = root.querySelector('#chart-data');
+    if (!script) {
+      return null;
+    }
+    try {
+      return JSON.parse(script.textContent);
+    } catch (err) {
+      console.error('Failed to parse chart data', err);
+      return null;
+    }
+  }
+
+  function fetchChartPayload(root) {
+    if (!root) {
+      return Promise.resolve(null);
+    }
+    const endpoint = root.getAttribute('data-chart-url');
+    if (!endpoint) {
+      return Promise.resolve(null);
+    }
+    const session = root.getAttribute('data-chart-session');
+    const url = new URL(endpoint, window.location.origin);
+    if (session) {
+      url.searchParams.set('session', session);
+    }
+    return fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          return null;
+        }
+        return resp.json();
+      })
+      .then((payload) => {
+        if (!payload || !Array.isArray(payload.labels) || !Array.isArray(payload.datasets)) {
+          return null;
+        }
+        return payload;
+      })
+      .catch(() => null);
+  }
+
+  function applyChartPayload(payload) {
+    if (!payload) {
+      return false;
+    }
+    const labels = Array.isArray(payload.labels) ? payload.labels : [];
+    const normalizedLabels = labels.map((ts) => {
+      const parsed = new Date(ts);
+      return Number.isNaN(parsed.getTime()) ? ts : parsed.toLocaleTimeString();
+    });
+    const datasetPayloads = Array.isArray(payload.datasets)
+      ? payload.datasets
+      : [];
+    const normalizedDatasets = datasetPayloads.map((dataset, index) => {
+      const palette = getPaletteForDataset(dataset, index);
+      const values = normalizeValues(dataset.values);
+      let label = '';
+      if (typeof dataset.label === 'string' && dataset.label.trim()) {
+        label = dataset.label;
+      } else if (
+        dataset.connector_id !== undefined &&
+        dataset.connector_id !== null
+      ) {
+        const connectorLetter = connectorLetterFromValue(dataset.connector_id);
+        if (connectorLetter) {
+          label = `Connector ${connectorLetter}`;
+        } else {
+          label = `Connector ${dataset.connector_id}`;
+        }
+      } else {
+        label = `Dataset ${index + 1}`;
+      }
+      return {
+        key: datasetKey(dataset, index),
+        label,
+        values,
+        palette,
+      };
+    });
+    const signature = JSON.stringify({
+      labels,
+      datasets: normalizedDatasets.map(({ key, label, values }) => ({
+        key,
+        label,
+        values,
+      })),
+    });
+    if (signature === lastChartSignature) {
+      return false;
+    }
+    lastChartSignature = signature;
+
+    chartData.labels.splice(0, chartData.labels.length, ...normalizedLabels);
+
+    const existingMap = new Map(
+      chartData.datasets.map((dataset) => [dataset._key, dataset])
+    );
+    const nextDatasets = normalizedDatasets.map((entry) => {
+      const existing = existingMap.get(entry.key);
+      if (existing) {
+        existing.label = entry.label;
+        existing.data = entry.values;
+        existing.borderColor = entry.palette.border;
+        existing.backgroundColor = entry.palette.background;
+        existing.fill = true;
+        existing.tension = 0.4;
+        existing.spanGaps = true;
+        existing._key = entry.key;
+        return existing;
+      }
+      return {
+        _key: entry.key,
+        label: entry.label,
+        data: entry.values,
+        borderColor: entry.palette.border,
+        backgroundColor: entry.palette.background,
+        fill: true,
+        tension: 0.4,
+        spanGaps: true,
+      };
+    });
+    chartData.datasets.splice(0, chartData.datasets.length, ...nextDatasets);
+    return true;
+  }
+
+  function renderChart(shouldUpdate = true) {
+    const canvas = document.getElementById('kw-chart');
+    if (!canvas) return;
+    const animationOptions = chartShouldAnimate
+      ? { duration: 700, easing: 'easeOutQuad' }
+      : false;
+    if (!kwChart) {
+      const ctx = canvas.getContext('2d');
+      kwChart = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+          animation: animationOptions,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    } else if (shouldUpdate) {
+      kwChart.data.labels = chartData.labels;
+      kwChart.data.datasets = chartData.datasets;
+      kwChart.options.animation = animationOptions;
+      kwChart.update(chartShouldAnimate ? undefined : 'none');
+    }
+  }
+
+  function highlightChange(el) {
+    el.classList.add('text-update');
+    setTimeout(() => el.classList.remove('text-update'), 1000);
+  }
+
+  /**
+   * Reloads the charger status HTML fragment and updates the chart content.
+   */
+  function reloadStatus() {
+    const current = document.getElementById('status-content');
+    const oldCanvas = current.querySelector('#kw-chart');
+    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(resp => resp.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newContent = doc.getElementById('status-content');
+        if (newContent) {
+          const changedIds = [];
+          newContent.querySelectorAll('[id]').forEach(el => {
+            const oldEl = current.querySelector(`#${el.id}`);
+            if (oldEl && oldEl.textContent !== el.textContent) {
+              changedIds.push(el.id);
+            }
+          });
+          const htmlPayload = parseChartPayload(newContent);
+          const newAnimateAttr = newContent.getAttribute('data-chart-animate');
+          if (newAnimateAttr === null) {
+            current.removeAttribute('data-chart-animate');
+          } else {
+            current.setAttribute('data-chart-animate', newAnimateAttr);
+          }
+          chartShouldAnimate = newAnimateAttr === 'true';
+          const newStatusShouldPollAttr = newContent.getAttribute('data-status-should-poll');
+          STATUS_SHOULD_POLL = newStatusShouldPollAttr === 'true';
+          if (newStatusShouldPollAttr === null) {
+            current.removeAttribute('data-status-should-poll');
+          } else {
+            current.setAttribute('data-status-should-poll', newStatusShouldPollAttr);
+          }
+          current.innerHTML = newContent.innerHTML;
+          if (typeof window.setupRemoteStartForm === 'function') {
+            window.setupRemoteStartForm(current);
+          }
+          if (typeof window.setupChangeConfigurationForm === 'function') {
+            window.setupChangeConfigurationForm(current);
+          }
+          if (oldCanvas) {
+            const placeholder = current.querySelector('#kw-chart');
+            if (placeholder) {
+              placeholder.replaceWith(oldCanvas);
+            }
+          }
+          const applyAndRender = (payload) => {
+            const chartChanged = applyChartPayload(payload);
+            if (kwChart || (payload && chartData.datasets.length)) {
+              renderChart(chartChanged);
+            }
+          };
+          if (htmlPayload && Array.isArray(htmlPayload.datasets) && htmlPayload.datasets.length) {
+            applyAndRender(htmlPayload);
+          } else {
+            fetchChartPayload(current).then((chartPayload) => {
+              applyAndRender(chartPayload || htmlPayload);
+            });
+          }
+          changedIds.forEach(id => {
+            const el = current.querySelector(`#${id}`);
+            if (el) {
+              highlightChange(el);
+            }
+          });
+        }
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const statusRoot = document.getElementById('status-content');
+    if (statusRoot) {
+      const animateAttr = statusRoot.getAttribute('data-chart-animate');
+      chartShouldAnimate = animateAttr === 'true';
+    }
+    const htmlPayload = parseChartPayload(document);
+    if (htmlPayload && Array.isArray(htmlPayload.datasets) && htmlPayload.datasets.length) {
+      const chartChanged = applyChartPayload(htmlPayload);
+      renderChart(chartChanged);
+    } else {
+      fetchChartPayload(statusRoot).then((chartPayload) => {
+        const payload = chartPayload || htmlPayload;
+        const chartChanged = applyChartPayload(payload);
+        renderChart(chartChanged);
+      });
+    }
+    if (STATUS_SHOULD_POLL) {
+      syncStatusPolling();
+    }
+  });
+
+</script>
+{% else %}
+<script>
+  function highlightChange(el) {
+    el.classList.add('text-update');
+    setTimeout(() => el.classList.remove('text-update'), 1000);
+  }
+
+  /**
+   * Reloads the charger status HTML fragment.
+   */
+  function reloadStatus() {
+    const current = document.getElementById('status-content');
+    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(resp => resp.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newContent = doc.getElementById('status-content');
+        if (newContent) {
+          const changedIds = [];
+          newContent.querySelectorAll('[id]').forEach(el => {
+            const oldEl = current.querySelector(`#${el.id}`);
+            if (oldEl && oldEl.textContent !== el.textContent) {
+              changedIds.push(el.id);
+            }
+          });
+          const newStatusShouldPollAttr = newContent.getAttribute('data-status-should-poll');
+          STATUS_SHOULD_POLL = newStatusShouldPollAttr === 'true';
+          if (newStatusShouldPollAttr === null) {
+            current.removeAttribute('data-status-should-poll');
+          } else {
+            current.setAttribute('data-status-should-poll', newStatusShouldPollAttr);
+          }
+          current.innerHTML = newContent.innerHTML;
+          if (typeof window.setupRemoteStartForm === 'function') {
+            window.setupRemoteStartForm(current);
+          }
+          changedIds.forEach(id => {
+            const el = current.querySelector(`#${id}`);
+            if (el) {
+              highlightChange(el);
+            }
+          });
+        }
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (STATUS_SHOULD_POLL) {
+      reloadStatus();
+      syncStatusPolling();
+    }
+  });
+</script>
+{% endif %}
+<script>
+  let STATUS_SHOULD_POLL = {{ status_should_poll|yesno:'true,false,false' }};
+  const STATUS_POLL_INTERVAL_MS = 5000;
+
+  /**
+   * Starts polling only when the tab is visible and focused.
+   */
+  function startStatusPolling() {
+    if (!STATUS_SHOULD_POLL || window.statusPollIntervalId) {
+      return;
+    }
+    window.statusPollIntervalId = window.setInterval(reloadStatus, STATUS_POLL_INTERVAL_MS);
+  }
+
+  /**
+   * Stops polling when the tab loses visibility or focus.
+   */
+  function stopStatusPolling() {
+    if (window.statusPollIntervalId) {
+      window.clearInterval(window.statusPollIntervalId);
+      window.statusPollIntervalId = null;
+    }
+  }
+
+  /**
+   * Keeps polling aligned with the current visibility/focus state.
+   */
+  function syncStatusPolling() {
+    if (!STATUS_SHOULD_POLL) {
+      stopStatusPolling();
+      return;
+    }
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      startStatusPolling();
+    } else {
+      stopStatusPolling();
+    }
+  }
+
+  document.addEventListener('visibilitychange', syncStatusPolling);
+  window.addEventListener('focus', syncStatusPolling);
+  window.addEventListener('blur', syncStatusPolling);
+</script>
+{% if can_remote_start %}
+<script>
+  (function () {
+    function setupRemoteStartForm(root = document) {
+      if (!root || !root.querySelector) {
+        return;
+      }
+      const form = root.querySelector('#remote-start-form');
+      if (!form || form.dataset.remoteStartBound === 'true') {
+        return;
+      }
+
+      const input = form.querySelector('#remote-start-idtag') || root.querySelector('#remote-start-idtag');
+      const feedback = root.querySelector('#remote-start-feedback');
+      const submit = form.querySelector('button[type="submit"]');
+      if (!input || !feedback || !submit) {
+        return;
+      }
+
+      const actionUrl = form.getAttribute('action');
+      const connectorId = form.dataset.connectorId;
+      const messagesEl = root.querySelector('#remote-start-i18n') || document.getElementById('remote-start-i18n');
+      let messages = { required: '', sending: '', success: '', error: '' };
+      if (messagesEl) {
+        try {
+          messages = JSON.parse(messagesEl.textContent);
+        } catch (err) {
+          // Ignore parse errors and fall back to defaults.
+        }
+      }
+
+      form.dataset.remoteStartBound = 'true';
+
+      input.addEventListener('input', () => {
+        if (input.classList.contains('is-invalid') && input.value.trim()) {
+          input.classList.remove('is-invalid');
+          feedback.textContent = '';
+          feedback.className = 'mt-2 small text-muted';
+        }
+      });
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const tag = input.value.trim();
+        if (!tag) {
+          input.focus();
+          input.classList.add('is-invalid');
+          feedback.textContent = messages.required || '';
+          feedback.className = 'mt-2 small text-danger';
+          return;
+        }
+
+        submit.disabled = true;
+        feedback.textContent = messages.sending || '';
+        feedback.className = 'mt-2 small text-muted';
+
+        const payload = { action: 'remote_start', idTag: tag };
+        if (connectorId) {
+          const parsed = Number(connectorId);
+          payload.connectorId = Number.isNaN(parsed) ? connectorId : parsed;
+        }
+
+        fetch(actionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then((response) =>
+            response
+              .json()
+              .catch(() => ({}))
+              .then((data) => ({ ok: response.ok, data }))
+          )
+          .then(({ ok, data }) => {
+            if (ok) {
+              feedback.textContent = messages.success || '';
+              feedback.className = 'mt-2 small text-success';
+              input.value = '';
+              input.classList.remove('is-invalid');
+              if (typeof reloadStatus === 'function') {
+                reloadStatus();
+              }
+              if (typeof syncStatusPolling === 'function') {
+                syncStatusPolling();
+              }
+            } else {
+              const detail = data && typeof data.detail === 'string' ? data.detail : '';
+              feedback.textContent = detail || messages.error || '';
+              feedback.className = 'mt-2 small text-danger';
+            }
+          })
+          .catch(() => {
+            feedback.textContent = messages.error || '';
+            feedback.className = 'mt-2 small text-danger';
+          })
+          .finally(() => {
+            submit.disabled = false;
+          });
+      });
+    }
+
+    window.setupRemoteStartForm = setupRemoteStartForm;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setupRemoteStartForm(document));
+    } else {
+      setupRemoteStartForm(document);
+    }
+  })();
+</script>
+{% endif %}
+{% endblock %}

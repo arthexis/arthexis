@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "summer",
+      "zone": "1D",
+      "contract_type": "domestic",
+      "period": "excess",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "3.2145",
+      "cost_mxn": "3.2145",
+      "notes": "Consumo excedente en zona 1D con cobro sin subsidio, previo a posible migración DAC."
+    }
+  }
+]

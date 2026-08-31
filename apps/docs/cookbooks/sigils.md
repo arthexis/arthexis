@@ -1,0 +1,99 @@
+# Arthexis Sigils Cookbook
+
+Sigils are bracketed tokens such as `[ENV.SMTP_PASSWORD]` that Arthexis expands at runtime. They make it possible to reference configuration secrets, system metadata, or records stored in other apps without duplicating values across the project. This cookbook explains how the system resolves sigils, how to inspect the available prefixes, and how to introduce new ones safely.
+
+- [1. When to use sigils](#1-when-to-use-sigils)
+- [2. Syntax reference](#2-syntax-reference)
+- [3. Built-in prefixes](#3-built-in-prefixes)
+- [4. Managing Sigil Roots](#4-managing-sigil-roots)
+- [5. Portable documents](#5-portable-documents)
+- [6. Troubleshooting and observability](#6-troubleshooting-and-observability)
+
+---
+
+## 1. When to use sigils
+
+Use sigils whenever an integration needs values that already live elsewhere in the platform. Common examples include:
+
+- Expanding environment-specific credentials (`[ENV.SMTP_PASSWORD]`, `[ENV.DATABASE_URL]`).
+- Reusing Django settings in templates or background tasks (`[CONF.DEFAULT_FROM_EMAIL]`).
+- Pulling metadata about the running node (`[SYS.ROLE]`, `[SYS.VERSION]`).
+- Looking up Django model fields by natural keys without additional queries (for example `[USER=username.email]`).
+
+Because sigils resolve just before the data is used, they keep configurations DRY and ensure updates propagate everywhere without editing multiple files.
+
+## 2. Syntax reference
+
+Sigils always start with `[` and end with `]`. The following patterns are supported:
+
+- `[PREFIX.KEY]` &mdash; returns a field or attribute. Hyphens and casing are normalized automatically so `[env.smtp-password]` and `[ENV.SMTP_PASSWORD]` behave the same. If the record or key cannot be resolved, the original token remains in place.
+- `[PREFIX=IDENTIFIER.FIELD]` &mdash; selects a specific record by primary key or any unique field declared as a natural key.
+- `[PREFIX:FIELD=VALUE.ATTRIBUTE]` &mdash; filters by a custom field instead of the primary key.
+- `[PREFIX.FIELD=[OTHER.SIGIL]]` &mdash; nests sigils so the value after `=` resolves before the outer token.
+- `[PREFIX="VALUE.WITH.DOTS"."attribute.name"]` &mdash; wrap selectors or keys in double quotes when they must contain `.` literally instead of acting as sigil separators.
+- `[PREFIX]` &mdash; for entity prefixes, returns the serialized object in JSON; for configuration prefixes, resolves to an empty string when the key is missing.
+- `[FIRST;SECOND]` &mdash; tries fallback branches from left to right. A branch that resolves to a non-empty value wins; if every branch fails, the original token remains visible.
+- `[PREFIX.FIELD ACTION]` or `[ACTION PREFIX.FIELD]` &mdash; shorthand for window-style pipeline actions such as `ALL`, `ANY`, `COUNT`, `FIRST`, `JSON`, `JSONL`, `LAST`, `MAX`, `MIN`, `RANDOM`, `SEP`, `SUM`, or `TOTAL`. For example, `[CP.PORT MAX]` and `[MAX CP.PORT]` both return the maximum `PORT` value when pipeline v2 is enabled.
+- `[PREFIX.FIELD OTHER.FIELD]` &mdash; shorthand fallback between two selector-like operands. It behaves like `[PREFIX.FIELD;OTHER.FIELD]`, so the first non-empty resolved selector wins.
+
+Within sigil identifiers, hyphens and underscores are interchangeable. For example, `[env_alt.smtp-password]` and `[ENV-ALT.SMTP_PASSWORD]` address the same root and key.
+
+Whitespace shorthand is deliberately narrow so older identifiers remain stable.
+It only applies when one sigil branch contains exactly two clean operands with no
+other explicit operators. The resolver checks forms in this order:
+
+1. Existing explicit syntax, including `;`, `|`, `:`, `=`, quoted selectors, and nested sigils.
+2. The most-specific joined identifier form. `[CP.PORT MAX]` first tries the same lookup as `[CP.PORT_MAX]`.
+3. Prefix or suffix action shorthand, when one operand is a supported pipeline action and the action is allowed by policy.
+4. Two-selector fallback shorthand, when neither operand is an action.
+5. Legacy identifier whitespace normalization.
+
+Because of that ordering, `[CP.PORT_MAX]` wins over `[CP.PORT MAX]` action
+expansion when both could exist. Inputs such as `[A -B]`, `[A B C]`,
+`[A:B C]`, or `[A B|C]` do not use the whitespace shorthand.
+
+## 3. Built-in prefixes
+
+Arthexis ships with several prefixes out of the box:
+
+- `ENV` reads environment variables.
+- `CONF` reads Django settings.
+- `SYS` exposes computed system information such as build metadata, the active node role, and runtime versions.
+
+Additional prefixes become available as soon as they are defined as Sigil Roots. Each root maps a short code (for example `ROLE`, `ODOO`, or `USER`) to a Django model and enumerates which fields can be resolved.
+
+## 4. Managing Sigil Roots
+
+The **Sigil Builder** interface lives in the Django admin under **Admin → Sigil Builder** (`/admin/sigil-builder/`). From there you can:
+
+1. Review every registered prefix, the associated Django model, and the fields exposed through sigils.
+2. Use the built-in test console to preview how a token will resolve before adopting it in configuration files.
+3. Add new roots or edit existing ones when a new integration needs additional prefixes.
+
+When adding a root:
+
+- Choose a short, descriptive code so tokens remain readable.
+- Prefer natural keys over numeric primary keys so tokens stay stable across environments.
+- Document the intended usage in the `notes` field so future operators understand the context.
+
+Changes take effect immediately—no service restart is required—so review tokens carefully in the test console before saving.
+
+## 5. Portable documents
+
+Portable suite documents, including Codex skill packages, store sigils as raw
+text and resolve only allowed non-secret sigils when files are materialized on a
+specific device. This lets one package adapt to local paths, node roles, or
+suite metadata without embedding another installation's values.
+
+Do not use portable documents to move secrets or runtime coordination state
+between devices. Secrets must be configured independently on each node, and
+operator-local coordination notes stay local to the device where they are used.
+
+## 6. Troubleshooting and observability
+
+- Unknown prefixes remain in place (for example `[UNKNOWN.VALUE]`) and are logged so you can spot typos quickly.
+- Sigils are intentionally predictable: if the resolved value is empty (for example `None`, `False`, `""`, `[]`, `{}`), Arthexis returns that concrete value; if resolution fails (unknown prefix, missing record, missing field, policy block, or malformed reference), the original sigil token is preserved verbatim so humans can immediately spot broken references.
+- Use `.venv/bin/python manage.py sigil_resolve "[PREFIX.KEY]"` from a shell (when available) or the Sigil Builder test console to verify a token outside of production workflows. This is an intentional `manage.py` exception because `sigil_resolve` is not exposed as a `command.sh` ops entrypoint.
+- Keep secrets in environment variables or encrypted configuration stores and reference them through `ENV` rather than duplicating credentials in plain text.
+
+By centralizing dynamic configuration behind sigils, administrators can keep installations consistent, minimise drift between environments, and grant integrators self-service access to the data they need without exposing sensitive details directly.

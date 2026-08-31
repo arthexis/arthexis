@@ -1,0 +1,267 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ media }}
+  <style>
+    #push-configuration-form ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      columns: 2;
+    }
+    #push-configuration-form li {
+      margin-bottom: 0.35rem;
+    }
+    #push-progress-table th,
+    #push-progress-table td {
+      vertical-align: top;
+      padding: 0.35rem 0.5rem;
+    }
+    #push-progress-table .identifier {
+      display: block;
+      color: var(--body-quiet-color);
+      font-weight: 400;
+      font-size: 0.85rem;
+    }
+    #push-progress-table .status-ok {
+      color: var(--success-quiet-color, #2a7a2a);
+      font-weight: 600;
+    }
+    #push-progress-table .status-error {
+      color: var(--error-fg, #b41f1f);
+      font-weight: 600;
+    }
+    #push-progress-table .restart-column {
+      width: 25%;
+    }
+    #push-progress-table .pending-text {
+      color: var(--body-quiet-color);
+    }
+    #push-progress-table .status-waiting {
+      color: var(--warning-fg, #bf7f00);
+      font-weight: 600;
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+    <a href="{% url 'admin:ocpp_chargerconfiguration_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+    {{ title }}
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="module" id="push-configuration">
+  <h2>{% trans "Select charge points" %}</h2>
+  <form method="post" id="push-configuration-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-row">
+      {{ form.chargers.errors }}
+      {{ form.chargers.label_tag }}
+      {{ form.chargers }}
+      {% if form.chargers.help_text %}
+        <p class="help">{{ form.chargers.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="submit-row">
+      <a href="{% url 'admin:ocpp_chargerconfiguration_change' original.pk %}" class="button cancel-link">{% trans "Cancel" %}</a>
+      <button type="submit" class="button default">{% trans "Apply configuration" %}</button>
+    </div>
+  </form>
+</div>
+
+{% if auto_start and selected_payload %}
+<div class="module" id="push-progress">
+  <h2>{% trans "Configuration progress" %}</h2>
+  <p>{% trans "Each EVCS will be updated sequentially. Results will appear below." %}</p>
+  <table class="admin-table" id="push-progress-table"
+         data-progress-url="{{ progress_url }}"
+         data-restart-url="{{ restart_url }}">
+    <thead>
+      <tr>
+        <th scope="col">{% trans "Charge point" %}</th>
+        <th scope="col">{% trans "Configuration" %}</th>
+        <th scope="col" class="restart-column">{% trans "Restart" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for charger in selected_payload %}
+      <tr data-charger-id="{{ charger.id }}"
+          data-charger-label="{{ charger.label|escape }}">
+        <th scope="row">
+          <span class="cp-label">{{ charger.label }}</span>
+          <span class="identifier">{{ charger.identifier }}</span>
+        </th>
+        <td class="status-cell"><span class="pending-text">{% trans "Pending…" %}</span></td>
+        <td class="restart-cell"><span class="pending-text">{% trans "Waiting" %}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="submit-row restart-actions" style="display: none;">
+    <button type="button" class="button" id="trigger-restart">{% trans "Restart chargers" %}</button>
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  let chargers = [];
+  try {
+    chargers = JSON.parse('{{ selected_payload_json|default:"[]"|escapejs }}');
+  } catch (error) {
+    console.error('Unable to parse charger payload', error);
+    return;
+  }
+  if (!Array.isArray(chargers) || !chargers.length) {
+    return;
+  }
+  const table = document.getElementById('push-progress-table');
+  if (!table) {
+    return;
+  }
+  const progressUrl = table.dataset.progressUrl || '';
+  const restartUrl = table.dataset.restartUrl || '';
+  if (!progressUrl) {
+    return;
+  }
+  const rows = new Map();
+  chargers.forEach((charger) => {
+    const row = table.querySelector('[data-charger-id="' + charger.id + '"]');
+    if (row) {
+      rows.set(String(charger.id), row);
+    }
+  });
+  const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+  const csrfToken = csrfInput ? csrfInput.value : '';
+  const restartButton = document.getElementById('trigger-restart');
+  const restartContainer = document.querySelector('.restart-actions');
+  const autoStart = {{ auto_start|yesno:"true,false" }};
+  const restartTargets = new Set();
+
+  const messages = {
+    inProgress: "{{ _('In progress…')|escapejs }}",
+    completed: "{{ _('Completed.')|escapejs }}",
+    awaitingRestart: "{{ _('Awaiting restart')|escapejs }}",
+    noRestart: "{{ _('No restart required')|escapejs }}",
+    skipped: "{{ _('Skipped')|escapejs }}",
+    restarting: "{{ _('Restarting…')|escapejs }}",
+    restarted: "{{ _('Restarted.')|escapejs }}",
+  };
+
+  function setStatus(row, columnClass, text, statusClass) {
+    const cell = row.querySelector('.' + columnClass);
+    if (!cell) {
+      return;
+    }
+    cell.textContent = '';
+    const span = document.createElement('span');
+    span.textContent = text;
+    if (statusClass) {
+      span.classList.add(statusClass);
+    }
+    cell.appendChild(span);
+  }
+
+  function postJSON(url, payload) {
+    const body = new URLSearchParams(payload || {});
+    const headers = {};
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken;
+    }
+    return fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: body,
+    }).then((response) => {
+      if (!response.ok) {
+        return response.json().catch(() => ({})).then((data) => {
+          const detail = data && data.detail ? data.detail : response.status + ' ' + response.statusText;
+          throw new Error(detail);
+        });
+      }
+      return response.json();
+    });
+  }
+
+  function runConfiguration(index) {
+    if (index >= chargers.length) {
+      if (restartTargets.size && restartContainer) {
+        restartContainer.style.display = '';
+      }
+      return;
+    }
+    const charger = chargers[index];
+    const row = rows.get(String(charger.id));
+    if (!row) {
+      runConfiguration(index + 1);
+      return;
+    }
+    setStatus(row, 'status-cell', messages.inProgress, 'status-waiting');
+    postJSON(progressUrl, {charger: charger.id})
+      .then((data) => {
+        const message = data && data.message ? data.message : messages.completed;
+        setStatus(row, 'status-cell', message, 'status-ok');
+        if (data && data.needs_restart) {
+          restartTargets.add(String(charger.id));
+          setStatus(row, 'restart-cell', messages.awaitingRestart, 'status-waiting');
+        } else {
+          setStatus(row, 'restart-cell', messages.noRestart, 'status-ok');
+        }
+      })
+      .catch((error) => {
+        setStatus(row, 'status-cell', error.message || String(error), 'status-error');
+        setStatus(row, 'restart-cell', messages.skipped, 'status-error');
+      })
+      .finally(() => {
+        runConfiguration(index + 1);
+      });
+  }
+
+  function runRestart(index, targets) {
+    if (index >= targets.length) {
+      return;
+    }
+    const chargerId = targets[index];
+    const row = rows.get(chargerId);
+    if (!row) {
+      runRestart(index + 1, targets);
+      return;
+    }
+    setStatus(row, 'restart-cell', messages.restarting, 'status-waiting');
+    postJSON(restartUrl, {charger: chargerId})
+      .then((data) => {
+        const message = data && data.message ? data.message : messages.restarted;
+        setStatus(row, 'restart-cell', message, 'status-ok');
+      })
+      .catch((error) => {
+        setStatus(row, 'restart-cell', error.message || String(error), 'status-error');
+      })
+      .finally(() => {
+        runRestart(index + 1, targets);
+      });
+  }
+
+  if (restartButton) {
+    restartButton.addEventListener('click', () => {
+      const targets = Array.from(restartTargets);
+      if (!targets.length) {
+        return;
+      }
+      restartButton.disabled = true;
+      runRestart(0, targets);
+    });
+  }
+
+  if (autoStart) {
+    runConfiguration(0);
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+{
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "."
+  ],
+  "reportMissingImports": "error",
+  "reportMissingModuleSource": "error",
+  "exclude": [
+    "**/migrations/**",
+    "**/__pycache__/**",
+    "media/**",
+    "static/**",
+    "node_modules/**",
+    "tests/fixtures/**"
+  ]
+}

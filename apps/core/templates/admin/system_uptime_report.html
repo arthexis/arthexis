@@ -1,0 +1,302 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Uptime Report" %}
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .uptime-report {
+    --uptime-window-bg: #fff;
+    --uptime-window-border: #e5e7eb;
+    --uptime-timeline-bg: #f3f4f6;
+    --uptime-summary-bg: #f9fafb;
+    --uptime-summary-border: #e5e7eb;
+    --uptime-summary-muted: #6b7280;
+    --uptime-metric-up-bg: #ecfdf3;
+    --uptime-metric-up-color: #166534;
+    --uptime-metric-down-bg: #fef2f2;
+    --uptime-metric-down-color: #b91c1c;
+  }
+
+  html[data-theme="dark"] .uptime-report,
+  body.dark-theme .uptime-report {
+    --uptime-window-bg: #0f172a;
+    --uptime-window-border: #1f2937;
+    --uptime-timeline-bg: #1f2937;
+    --uptime-summary-bg: #111827;
+    --uptime-summary-border: #1f2937;
+    --uptime-summary-muted: #9ca3af;
+    --uptime-metric-up-bg: rgba(34, 197, 94, 0.18);
+    --uptime-metric-up-color: #bbf7d0;
+    --uptime-metric-down-bg: rgba(248, 113, 113, 0.18);
+    --uptime-metric-down-color: #fecaca;
+  }
+
+  .uptime-report h2 {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-report-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .uptime-report .uptime-window {
+    border: 1px solid var(--uptime-window-border);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    background: var(--uptime-window-bg);
+  }
+
+  .uptime-report .uptime-window h3 {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-window-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .uptime-report .uptime-window-metrics {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .uptime-report .uptime-metric {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .uptime-report .uptime-metric.up {
+    background: var(--uptime-metric-up-bg);
+    color: var(--uptime-metric-up-color);
+  }
+
+  .uptime-report .uptime-metric.down {
+    background: var(--uptime-metric-down-bg);
+    color: var(--uptime-metric-down-color);
+  }
+
+  .uptime-report .uptime-timeline {
+    display: flex;
+    width: 100%;
+    height: 18px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--uptime-timeline-bg);
+    margin: 0.5rem 0;
+  }
+
+  .uptime-report .uptime-segment {
+    display: block;
+    height: 100%;
+  }
+
+  .uptime-report .uptime-segment.up {
+    background: #22c55e;
+  }
+
+  .uptime-report .uptime-segment.down {
+    background: #ef4444;
+  }
+
+  .uptime-report .uptime-window-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem 1rem;
+    margin: 0.5rem 0 0.75rem;
+  }
+
+  .uptime-report .uptime-window-details dt {
+    font-weight: 600;
+  }
+
+  .uptime-report .uptime-window-details dd {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-downtime-list {
+    margin-top: 0.5rem;
+  }
+
+  .uptime-report .uptime-downtime-list ul {
+    margin: 0.25rem 0 0;
+  }
+
+  .uptime-report .uptime-downtime-list li {
+    margin: 0.1rem 0;
+  }
+
+  .uptime-report .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .uptime-report .uptime-report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .uptime-report .uptime-summary-card {
+    border: 1px solid var(--uptime-summary-border);
+    background: var(--uptime-summary-bg);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .uptime-report .uptime-summary-card h3 {
+    margin: 0 0 0.35rem;
+  }
+
+  .uptime-report .uptime-summary-value {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .uptime-report .uptime-summary-note {
+    margin: 0.25rem 0 0.75rem;
+    color: var(--uptime-summary-muted);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module uptime-report">
+    <div class="uptime-report-header">
+      <h2>{% trans "Uptime Report" %}</h2>
+      <p class="help">
+        {% trans "Visualize node uptime using shutdown history and review how long the suite has been running." %}
+      </p>
+    </div>
+
+    <div class="uptime-report-summary">
+      <section class="uptime-summary-card">
+        <h3>{% trans "Node uptime data" %}</h3>
+        <p class="uptime-summary-value">{{ uptime_report.generated_at|date:"Y-m-d H:i" }}</p>
+        <p class="uptime-summary-note">{% trans "Report generated" %}</p>
+        <p class="help">
+          {% trans "Node uptime percentages come from shutdown events captured on this host." %}
+        </p>
+      </section>
+
+      <section class="uptime-summary-card">
+        <h3>{% trans "Suite uptime" %}</h3>
+        {% if uptime_report.suite.available %}
+          <p class="uptime-summary-value">{{ uptime_report.suite.uptime }}</p>
+          {% if uptime_report.suite.boot_time_label %}
+            <p class="uptime-summary-note">
+              {% blocktrans with boot_time=uptime_report.suite.boot_time_label %}Booted {{ boot_time }}{% endblocktrans %}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="help">{% trans "Suite uptime data is not available on this node." %}</p>
+        {% endif %}
+        <p class="help">
+          {% trans "Reflects how long the Arthexis suite has been running since the last boot." %}
+        </p>
+      </section>
+    </div>
+
+    {% if uptime_report.error %}
+      <p class="errornote">{{ uptime_report.error }}</p>
+    {% endif %}
+
+    {% for window in uptime_report.windows %}
+      <div class="uptime-window">
+        <div class="uptime-window-header">
+          <h3>{{ window.label }}</h3>
+          <div class="uptime-window-metrics">
+            <span class="uptime-metric up">{% trans "Uptime" %}: {{ window.uptime_percent }}%</span>
+            <span class="uptime-metric down">{% trans "Downtime" %}: {{ window.downtime_percent }}%</span>
+          </div>
+        </div>
+
+        <div
+          class="uptime-timeline"
+          role="img"
+          aria-label="{% blocktrans with label=window.label %}Uptime timeline for {{ label }}{% endblocktrans %}"
+        >
+          {% if window.segments %}
+            {% for segment in window.segments %}
+              <span
+                class="uptime-segment {{ segment.status }}"
+                style="flex-basis: {{ segment.width|floatformat:2 }}%"
+                title="{{ segment.label }}"
+              >
+                <span class="visually-hidden">{{ segment.label }}</span>
+              </span>
+            {% endfor %}
+          {% else %}
+            <span class="uptime-segment up" style="flex-basis: 100%"></span>
+          {% endif %}
+        </div>
+
+        <dl class="uptime-window-details">
+          <div>
+            <dt>{% trans "Window start" %}</dt>
+            <dd>{{ window.start|date:"Y-m-d H:i" }}</dd>
+          </div>
+          <div>
+            <dt>{% trans "Window end" %}</dt>
+            <dd>{{ window.end|date:"Y-m-d H:i" }}</dd>
+          </div>
+          <div>
+            <dt>{% trans "Downtime events" %}</dt>
+            <dd>
+              {% if window.downtime_events %}
+                {{ window.downtime_events|length }}
+              {% else %}
+                {% trans "None" %}
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+
+        <div class="uptime-downtime-list">
+          {% if window.downtime_events %}
+            <h4>{% trans "Downtime details" %}</h4>
+            <ul>
+              {% for event in window.downtime_events %}
+                <li>
+                  <strong>{{ event.duration }}</strong>
+                  — {{ event.start }} → {{ event.end }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="help">{% trans "No downtime detected in this window." %}</p>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <p>{% trans "No uptime history is available." %}</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

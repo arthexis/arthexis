@@ -1,0 +1,74 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .charger-quick-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .charger-quick-stats__item {
+      background: var(--body-bg, #fff);
+      border: 1px solid var(--hairline-color, #d9d9d9);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      min-width: 12rem;
+    }
+
+    .charger-quick-stats__label {
+      color: var(--body-quiet-color, #6b6b6b);
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+    }
+
+    .charger-quick-stats__value {
+      color: var(--body-fg, #1d1d1d);
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+  </style>
+{% endblock %}
+
+{% block result_list %}
+  {% if charger_quick_stats %}
+    <div class="charger-quick-stats">
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Total kW" %}</span>
+        <span class="charger-quick-stats__value">{{ charger_quick_stats.total_kw|floatformat:2 }}</span>
+      </div>
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Today kW" %}</span>
+        <span class="charger-quick-stats__value">{{ charger_quick_stats.today_kw|floatformat:2 }}</span>
+      </div>
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Estimated Cost" %}</span>
+        <span class="charger-quick-stats__value">
+          {% if charger_quick_stats.estimated_cost is not None %}
+            ${{ charger_quick_stats.estimated_cost|floatformat:2 }} MXN
+          {% else %}
+            &mdash;
+          {% endif %}
+        </span>
+      </div>
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Availability (24h)" %}</span>
+        <span class="charger-quick-stats__value">
+          {% if charger_quick_stats.availability_percentage is not None %}
+            {{ charger_quick_stats.availability_percentage|floatformat:1 }}%
+          {% else %}
+            &mdash;
+          {% endif %}
+        </span>
+      </div>
+    </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

@@ -1,0 +1,274 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% translate "Export" %}
+  </div>
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'base/admin/export.css' %}" />
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <form method="post" class="module aligned export-form">
+      {% csrf_token %}
+      {% if selected_ids %}
+        {% for selected_id in selected_ids %}
+          <input type="hidden" name="selected" value="{{ selected_id }}" />
+        {% endfor %}
+      {% endif %}
+      <fieldset class="module aligned export-fieldset">
+        <div class="form-row">
+          <label for="id_export_scope_selected">{% trans "Export scope" %}</label>
+          <label>
+            <input
+              id="id_export_scope_selected"
+              type="checkbox"
+              name="export_scope_selected"
+              {% if exporting_selected %}checked{% endif %}
+            />
+            {% trans "Export only selected items" %}
+          </label>
+        </div>
+        <div class="form-row">
+          <label for="id_export_format">{% trans "Export format" %}</label>
+          <select name="format" id="id_export_format" required>
+            {% for export_format in export_formats %}
+              <option value="{{ export_format.value }}">{{ export_format.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="id_include_header">{% trans "Header row" %}</label>
+          <label>
+            <input id="id_include_header" type="checkbox" name="include_header" {% if include_header %}checked{% endif %} />
+            {% trans "Include uppercase header row in CSV/TSV exports" %}
+          </label>
+        </div>
+      </fieldset>
+      <fieldset class="module aligned export-fieldset">
+        <div class="form-row export-summary-row">
+          <p class="export-summary">
+            {% if exporting_selected %}
+              {% if export_count == total_export_count %}
+                {% blocktrans count record_count=export_count %}
+                  You are about to export {{ record_count }} selected record
+                {% plural %}
+                  You are about to export {{ record_count }} selected records
+                {% endblocktrans %}
+              {% else %}
+                {% blocktrans count record_count=export_count with total_count=total_export_count %}
+                  You are about to export {{ record_count }} out of {{ total_count }} record
+                {% plural %}
+                  You are about to export {{ record_count }} out of {{ total_count }} records
+                {% endblocktrans %}
+              {% endif %}
+            {% else %}
+              {% blocktrans count record_count=export_count %}
+                You are about to export {{ record_count }} record
+              {% plural %}
+                You are about to export {{ record_count }} records
+              {% endblocktrans %}
+            {% endif %}
+            {% blocktrans count column_count=export_columns|length %}
+              using {{ column_count }} column.
+            {% plural %}
+              using {{ column_count }} columns.
+            {% endblocktrans %}
+          </p>
+        </div>
+        <div class="form-row">
+          <label>{% trans "Columns to export" %}</label>
+          <input type="hidden" name="export_column_order" id="id_export_column_order" />
+          <ul class="export-columns-list">
+            {% for column in export_columns %}
+              <li data-export-column-name="{{ column.name }}" draggable="true">
+                <label class="export-column-option{% if column.is_import_identifier %} import-identifier{% endif %}">
+                  <button
+                    type="button"
+                    class="button export-column-drag-handle"
+                    aria-label="{% trans 'Drag to reorder column' %}"
+                    title="{% trans 'Drag to reorder column' %}"
+                  >
+                    ↕
+                  </button>
+                  <input type="checkbox" name="export_columns" value="{{ column.name }}" {% if column.selected %}checked{% endif %} />
+                  <span>
+                    {{ column.label }} <span class="quiet export-column-name">({{ column.name }})</span>
+                    {% if column.is_import_identifier %}
+                      <span class="import-identifier-badge">{% trans "Import ID" %}</span>
+                    {% endif %}
+                  </span>
+                </label>
+                <span class="export-column-move-controls">
+                  <button type="button" class="button export-column-move-up" aria-label="{% trans 'Move column up' %}">
+                    ↑
+                  </button>
+                  <button type="button" class="button export-column-move-down" aria-label="{% trans 'Move column down' %}">
+                    ↓
+                  </button>
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+          <p class="help export-column-help">
+            {% trans "Highlighted columns are identifiers commonly used to map rows back onto existing records during import." %}
+          </p>
+        </div>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Export' %}" class="default" />
+        <a href="{{ changelist_url }}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      </div>
+    </form>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+
+      function syncExportScopeParams() {
+        var scopeInput = document.getElementById("id_export_scope_selected");
+        if (!scopeInput) {
+          return;
+        }
+        var selectedInputs = document.querySelectorAll("input[name='selected']");
+        var form = scopeInput.form;
+        if (!form) {
+          return;
+        }
+        var exportSelected = scopeInput.checked && selectedInputs.length > 0;
+        var currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete("export_scope");
+        currentUrl.searchParams.delete("selected");
+        if (exportSelected) {
+          currentUrl.searchParams.set("export_scope", "selected");
+          selectedInputs.forEach(function (input) {
+            currentUrl.searchParams.append("selected", input.value);
+          });
+        }
+        window.location.href = currentUrl.toString();
+      }
+
+      function syncColumnOrderInput() {
+        var orderInput = document.getElementById("id_export_column_order");
+        if (!orderInput) {
+          return;
+        }
+        var names = Array.from(
+          document.querySelectorAll(
+            ".export-columns-list li[data-export-column-name]"
+          )
+        ).map(function (item) {
+          return item.dataset.exportColumnName;
+        });
+        orderInput.value = names.join(",");
+      }
+
+      function wireColumnOrderControls() {
+        var list = document.querySelector(".export-columns-list");
+        if (!list) {
+          return;
+        }
+        var draggedItem = null;
+        var dragEnabledItem = null;
+
+        list.addEventListener("pointerdown", function (event) {
+          var handle = event.target.closest(".export-column-drag-handle");
+          dragEnabledItem = handle
+            ? handle.closest("li[data-export-column-name]")
+            : null;
+        });
+
+        list.addEventListener("dragstart", function (event) {
+          var target = event.target;
+          if (!target) {
+            event.preventDefault();
+            return;
+          }
+          var item = target.closest("li[data-export-column-name]");
+          if (!item || item !== dragEnabledItem) {
+            event.preventDefault();
+            return;
+          }
+          draggedItem = item;
+          if (!draggedItem) {
+            event.preventDefault();
+            return;
+          }
+          draggedItem.classList.add("is-dragging");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", draggedItem.dataset.exportColumnName || "");
+        });
+
+        list.addEventListener("dragover", function (event) {
+          if (!draggedItem) {
+            return;
+          }
+          event.preventDefault();
+          var targetItem = event.target.closest("li[data-export-column-name]");
+          if (!targetItem || targetItem === draggedItem) {
+            return;
+          }
+          var bounds = targetItem.getBoundingClientRect();
+          if (event.clientY < bounds.top + bounds.height / 2) {
+            targetItem.before(draggedItem);
+          } else {
+            targetItem.after(draggedItem);
+          }
+        });
+
+        list.addEventListener("drop", function (event) {
+          if (!draggedItem) {
+            return;
+          }
+          event.preventDefault();
+        });
+
+        list.addEventListener("dragend", function () {
+          if (draggedItem) {
+            draggedItem.classList.remove("is-dragging");
+          }
+          draggedItem = null;
+          dragEnabledItem = null;
+          syncColumnOrderInput();
+        });
+
+        list.addEventListener("click", function (event) {
+          var button = event.target.closest("button");
+          if (!button) {
+            return;
+          }
+          var item = button.closest("li[data-export-column-name]");
+          if (!item) {
+            return;
+          }
+          if (button.classList.contains("export-column-move-up")) {
+            var previous = item.previousElementSibling;
+            if (previous) {
+              previous.before(item);
+            }
+          } else if (button.classList.contains("export-column-move-down")) {
+            var next = item.nextElementSibling;
+            if (next) {
+              item.after(next);
+            }
+          }
+          syncColumnOrderInput();
+        });
+        syncColumnOrderInput();
+      }
+
+      document
+        .getElementById("id_export_scope_selected")
+        ?.addEventListener("change", syncExportScopeParams);
+      wireColumnOrderControls();
+    })();
+  </script>
+{% endblock %}

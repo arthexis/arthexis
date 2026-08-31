@@ -1,0 +1,36 @@
+[
+  {
+    "model": "sensors.thermometer",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Ambient Thermometer",
+      "slug": "ambient-thermometer",
+      "kind": "ambient",
+      "description": "Ambient thermometer sensor reading.",
+      "unit": "C",
+      "report_regex": "temp(?:erature)?\\s*[=:]\\s*(?P<value>-?\\d+(?:\\.\\d+)?)",
+      "report_scale": "1",
+      "display_precision": 1,
+      "sampling_interval_seconds": 300,
+      "is_active": true
+    }
+  },
+  {
+    "model": "sensors.thermometer",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "SoC Temperature",
+      "slug": "soc-temperature",
+      "kind": "soc",
+      "description": "Local board SoC/CPU temperature sensor reading.",
+      "unit": "C",
+      "report_regex": "temp(?:erature)?\\s*[=:]\\s*(?P<value>-?\\d+(?:\\.\\d+)?)",
+      "report_scale": "1",
+      "display_precision": 1,
+      "sampling_interval_seconds": 300,
+      "is_active": true
+    }
+  }
+]

@@ -1,0 +1,136 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Changelog" %}{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <style>
+    .changelog-section {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      background: rgba(15, 23, 42, 0.35);
+      backdrop-filter: blur(8px);
+    }
+
+    html[data-bs-theme='light'] .changelog-section {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(15, 23, 42, 0.1);
+    }
+
+    .changelog-section__title {
+      font-size: 1.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .changelog-section__meta {
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    html[data-bs-theme='light'] .changelog-section__meta {
+      color: rgba(15, 23, 42, 0.6);
+    }
+
+    .changelog-entries {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .changelog-entry__summary {
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .changelog-entry__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    html[data-bs-theme='light'] .changelog-entry__meta {
+      color: rgba(15, 23, 42, 0.65);
+    }
+
+    .changelog-entry__link {
+      text-decoration: none;
+    }
+
+    .changelog-entry__link:hover,
+    .changelog-entry__link:focus {
+      text-decoration: underline;
+    }
+
+    .changelog-entry--empty {
+      font-style: italic;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    html[data-bs-theme='light'] .changelog-entry--empty {
+      color: rgba(15, 23, 42, 0.55);
+    }
+
+    .changelog-sentinel[data-state='error'] {
+      color: var(--bs-danger-text, #f28b82);
+    }
+
+    .changelog-sentinel[data-state='complete'] {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    html[data-bs-theme='light'] .changelog-sentinel[data-state='complete'] {
+      color: rgba(15, 23, 42, 0.55);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <main class="container py-5 changelog-public">
+    <div class="row justify-content-center">
+      <div class="col-12 col-xl-9">
+        <header class="mb-4 text-center text-xl-start">
+          <h1 class="display-5 mb-2">{% trans "Changelog" %}</h1>
+          <p class="lead text-muted">{% trans "Track unreleased changes and published versions as commits land in git." %}</p>
+        </header>
+        {% if error_message %}
+          <div class="alert alert-warning" role="status">{{ error_message }}</div>
+        {% endif %}
+        {% if not initial_sections %}
+          <p class="text-muted fst-italic">{% trans "No changelog information is available yet." %}</p>
+        {% endif %}
+        <div
+          class="changelog-container d-flex flex-column gap-4"
+          data-changelog-container
+          data-changelog-endpoint="{% url 'pages:changelog-data' %}"
+          data-changelog-next-page="{{ next_page|default_if_none:'' }}"
+          data-changelog-has-more="{{ has_more_sections|yesno:'true,false' }}"
+          data-changelog-loading-label="{{ loading_label }}"
+          data-changelog-error-label="{{ error_label }}"
+          data-changelog-complete-label="{{ complete_label }}"
+          data-changelog-offset="{{ initial_section_count }}"
+        >
+          {% include "includes/changelog/section_list.html" with sections=initial_sections variant='public' %}
+        </div>
+        <div
+          class="text-center mt-4 text-muted changelog-sentinel"
+          data-changelog-sentinel
+          data-state="{% if has_more_sections %}idle{% else %}complete{% endif %}"
+        >
+          {% if has_more_sections %}
+            {{ loading_label }}
+          {% else %}
+            {{ complete_label }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </main>
+  {% include "includes/changelog/scroll_script.html" %}
+{% endblock %}

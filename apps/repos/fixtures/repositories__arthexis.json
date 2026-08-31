@@ -1,0 +1,16 @@
+[
+  {
+    "model": "repos.githubrepository",
+    "fields": {
+      "is_seed_data": true,
+      "owner": "arthexis",
+      "name": "arthexis",
+      "description": "Core platform source repository",
+      "is_private": false,
+      "html_url": "https://github.com/arthexis/arthexis",
+      "api_url": "https://api.github.com/repos/arthexis/arthexis",
+      "ssh_url": "git@github.com:arthexis/arthexis.git",
+      "default_branch": "main"
+    }
+  }
+]

@@ -1,0 +1,140 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load static i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .nav-tabs { list-style: none; padding-left: 0; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem; }
+  .nav-tabs li { display: inline-block; margin-right: .5rem; }
+  .nav-tabs a { text-decoration: none; padding: .5rem 1rem; display: inline-block; border: 1px solid var(--border-color); border-bottom: none; background: var(--darkened-bg); color: var(--body-fg); border-radius: 4px 4px 0 0; }
+  .nav-tabs a.active { background: var(--body-bg); font-weight: bold; }
+  .tab-content .tab-pane { display: none; }
+  .tab-content .tab-pane.active { display: block; }
+</style>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const links = document.querySelectorAll('#charger-tabs a');
+    const panes = document.querySelectorAll('#charger-tabs-content .tab-pane');
+    links.forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        links.forEach(l => l.classList.remove('active'));
+        panes.forEach(p => p.classList.remove('active'));
+        link.classList.add('active');
+        document.querySelector(link.getAttribute('href')).classList.add('active');
+      });
+    });
+    if (links.length) {
+      links[0].classList.add('active');
+      panes[0].classList.add('active');
+    }
+  });
+</script>
+{% endblock %}
+
+{% block object-tools-items %}
+  <li><a href="{{ original.get_absolute_url }}" target="_blank">Landing page</a></li>
+  {{ block.super }}
+{% endblock %}
+
+{% block field_sets %}
+<div class="tabbed">
+  <ul class="nav-tabs" id="charger-tabs">
+    <li><a href="#tab-general" class="active">General</a></li>
+  </ul>
+  <div class="tab-content" id="charger-tabs-content">
+    <div id="tab-general" class="tab-pane active">
+      {% for fieldset in adminform %}
+        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=0 %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% if ops_health_overview %}
+<fieldset class="module aligned" style="margin-top: 1.5rem;">
+  <h2>{% trans "Operations & health overview" %}</h2>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Credential posture" %}:</strong> {{ ops_credential_status }}
+    </div>
+  </div>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Active session" %}:</strong>
+      {% if ops_health_overview.active_session %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
+      &nbsp;|&nbsp;
+      <strong>{% trans "Availability" %}:</strong> {{ ops_health_overview.availability_state }}
+      &nbsp;|&nbsp;
+      <strong>{% trans "Last online" %}:</strong> {{ ops_health_overview.last_online_at|default:"-" }}
+    </div>
+  </div>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Last 24h" %}:</strong>
+      {% trans "Rejected sessions" %}: {{ ops_health_overview.rejected_sessions_24h }},
+      {% trans "Failed control ops" %}: {{ ops_health_overview.failed_ops_24h }},
+      {% trans "Security events" %}: {{ ops_health_overview.security_events_24h }}
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="module aligned" style="margin-top: 1rem;">
+  <h2>{% trans "Recent critical control operations" %}</h2>
+  {% if recent_control_operations_for_admin %}
+  <table>
+    <thead>
+      <tr>
+        <th>{% trans "When" %}</th>
+        <th>{% trans "Action" %}</th>
+        <th>{% trans "Status" %}</th>
+        <th>{% trans "Actor" %}</th>
+        <th>{% trans "Detail" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in recent_control_operations_for_admin %}
+      <tr>
+        <td>{{ event.created_at }}</td>
+        <td>{{ event.action }}</td>
+        <td>{{ event.get_status_display }}</td>
+        <td>{{ event.actor|default:"-" }}</td>
+        <td>{{ event.detail|default:"-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{% trans "No control operations recorded yet." %}</p>
+  {% endif %}
+</fieldset>
+
+<fieldset class="module aligned" style="margin-top: 1rem;">
+  <h2>{% trans "Recent sessions and failures" %}</h2>
+  <h3>{% trans "Sessions" %}</h3>
+  {% if recent_transactions_for_admin %}
+  <ul>
+    {% for session in recent_transactions_for_admin %}
+    <li>
+      {{ session.start_time }} →
+      {% if session.stop_time %}{{ session.stop_time }}{% else %}{% trans "open" %}{% endif %}
+      ({{ session.get_authorization_status_display }})
+      {% if session.authorization_reason %}- {{ session.authorization_reason }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>{% trans "No sessions recorded yet." %}</p>
+  {% endif %}
+  <h3>{% trans "Security and event failures" %}</h3>
+  {% if recent_security_events_for_admin %}
+  <ul>
+    {% for sec in recent_security_events_for_admin %}
+    <li>{{ sec.event_timestamp }} — {{ sec.event_type }}{% if sec.trigger %} ({{ sec.trigger }}){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>{% trans "No security/failure events recorded yet." %}</p>
+  {% endif %}
+</fieldset>
+{% endif %}
+{% endblock %}

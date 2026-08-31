@@ -1,0 +1,22 @@
+[
+  {
+    "model": "release.packagerelease",
+    "fields": {
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false,
+      "package": [
+        "arthexis"
+      ],
+      "version": "0.2.3",
+      "revision": "cccd21222206fe5e8a7764f9bb21678a172b8841",
+      "severity": "normal",
+      "pypi_url": "https://pypi.org/project/arthexis/0.2.3/",
+      "github_url": "",
+      "pypi_publish_log": "",
+      "release_on": "2026-02-03T03:55:56.163Z",
+      "scheduled_date": null,
+      "scheduled_time": null
+    }
+  }
+]

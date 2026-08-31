@@ -1,0 +1,111 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+{% if has_permission %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name|capfirst }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Register Local Node" %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% trans "Register Local Node" %}</h1>
+  <p>{% trans "Attempting to register a node running on this computer." %}</p>
+  <p id="result"></p>
+</div>
+<script>
+(async function() {
+    const token = "{{ token|escapejs }}";
+
+    function buildUrlVariants(url, options) {
+        const allowInsecure = options && options.allowInsecure;
+        const variants = [];
+        try {
+            const parsed = new URL(url, window.location.href);
+            if (parsed.protocol === "http:") {
+                const secure = new URL(parsed.href);
+                secure.protocol = "https:";
+                variants.push(secure.href);
+            }
+            if (parsed.protocol === "https:" && allowInsecure) {
+                const insecure = new URL(parsed.href);
+                insecure.protocol = "http:";
+                variants.push(insecure.href);
+            }
+            variants.push(parsed.href);
+        } catch (err) {
+            variants.push(url);
+        }
+        return variants.filter((value, index, self) => self.indexOf(value) === index);
+    }
+
+    async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        let payload;
+        try {
+            payload = JSON.parse(text);
+        } catch (err) {
+            payload = text;
+        }
+        if (!response.ok) {
+            const detail = payload && payload.detail ? payload.detail : text || response.statusText;
+            throw new Error(detail);
+        }
+        return payload;
+    }
+
+    async function fetchJsonWithFallback(urls, options) {
+        const targets = Array.isArray(urls) ? urls : [urls];
+        let lastError = null;
+        for (const target of targets) {
+            try {
+                return await fetchJson(target, options);
+            } catch (error) {
+                const message = error && error.message ? error.message : "";
+                if (error instanceof TypeError || message === "Failed to fetch") {
+                    lastError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastError) {
+            throw lastError;
+        }
+        throw new Error("Request failed");
+    }
+
+    try {
+        const localBase = new URL("/nodes/info/", window.location.protocol + "//localhost:8888");
+        localBase.searchParams.set("token", token);
+        const allowInsecureLocal = window.location.protocol === "http:";
+        const infoTargets = buildUrlVariants(localBase.href, {allowInsecure: allowInsecureLocal});
+        const info = await fetchJsonWithFallback(infoTargets);
+        const resp = await fetch("{{ register_url|escapejs }}", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                hostname: info.hostname,
+                address: info.address,
+                port: info.port,
+                mac_address: info.mac_address,
+                public_key: info.public_key,
+                token: token,
+                signature: info.token_signature
+            })
+        });
+        const result = await resp.json();
+        document.getElementById("result").textContent = result.detail || ("Registered node ID " + result.id);
+    } catch(err) {
+        const message = err && err.message ? err.message : err;
+        document.getElementById("result").textContent = message;
+    }
+})();
+</script>
+{% endblock %}

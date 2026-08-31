@@ -1,0 +1,825 @@
+{% extends "admin/base_site.html" %}
+{% load i18n tz %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:core_clientreport_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Generate report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Consumer Report</h1>
+<form method="post" id="report-form" class="client-report-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="errorlist nonfield">
+      <ul>
+        {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+  <fieldset class="report-section" aria-describedby="id_period-help">
+    <legend class="section-title">Reporting period</legend>
+    <div class="form-group">
+      {{ form.period.label_tag }}
+      <div class="option-list">
+        {{ form.period }}
+      </div>
+      {% if form.period.errors %}
+        <ul class="errorlist">
+          {% for error in form.period.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.period.help_text %}
+        <p class="help-text" id="id_period-help">{{ form.period.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-grid" id="range-fields">
+      <div class="form-group">
+        {{ form.start_date.label_tag }}
+        {{ form.start_date }}
+        {{ form.start_date.errors }}
+        {% if form.start_date.help_text %}
+          <p class="help-text" id="id_start_date-help">{{ form.start_date.help_text }}</p>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.end_date.label_tag }}
+        {{ form.end_date }}
+        {{ form.end_date.errors }}
+        {% if form.end_date.help_text %}
+          <p class="help-text" id="id_end_date-help">{{ form.end_date.help_text }}</p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="form-group" id="week-field">
+      {{ form.week.label_tag }}
+      <div class="week-input-wrapper">
+        {{ form.week }}
+        <button
+          type="button"
+          class="button button-secondary week-shortcut"
+          data-week-target="{{ form.week.id_for_label }}"
+        >
+          {% trans "Last week" %}
+        </button>
+      </div>
+      {% if form.week.errors %}
+        <ul class="errorlist">
+          {% for error in form.week.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.week.help_text %}
+        <p class="help-text" id="id_week-help">{{ form.week.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group" id="month-field">
+      {{ form.month.label_tag }}
+      <div class="month-input-wrapper">
+        {{ form.month }}
+        <div class="month-shortcuts" role="group" aria-label="{% trans "Month shortcuts" %}">
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="-1"
+          >
+            {% trans "Last" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="0"
+          >
+            {% trans "Current" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="1"
+          >
+            {% trans "Next" %}
+          </button>
+        </div>
+      </div>
+      {% if form.month.errors %}
+        <ul class="errorlist">
+          {% for error in form.month.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.month.help_text %}
+        <p class="help-text" id="id_month-help">{{ form.month.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="presentation-help">
+    <legend class="section-title">{% trans "Presentation" %}</legend>
+    <p class="section-description" id="presentation-help">
+      {% trans "Customize the language and heading used when generating the report." %}
+    </p>
+    <div class="form-group">
+      {{ form.view_mode.label_tag }}
+      <div class="option-list">
+        {{ form.view_mode }}
+      </div>
+      {% if form.view_mode.errors %}
+        <ul class="errorlist">
+          {% for error in form.view_mode.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.view_mode.help_text %}
+        <p class="help-text" id="id_view_mode-help">{{ form.view_mode.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.language.label_tag }}
+      {{ form.language }}
+      {% if form.language.errors %}
+        <ul class="errorlist">
+          {% for error in form.language.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.language.help_text %}
+        <p class="help-text" id="id_language-help">{{ form.language.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.title.label_tag }}
+      {{ form.title }}
+      {% if form.title.errors %}
+        <ul class="errorlist">
+          {% for error in form.title.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.title.help_text %}
+        <p class="help-text" id="id_title-help">{{ form.title.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="id_chargers-help">
+    <legend class="section-title">{% trans "Charge points" %}</legend>
+    <div class="form-group">
+      <div class="form-group__header">
+        {{ form.chargers.label_tag }}
+        <button
+          type="button"
+          class="button button-secondary select-all"
+          data-select-all-target="id_chargers"
+        >
+          {% trans "Toggle selection" %}
+        </button>
+      </div>
+      <div class="checkbox-grid" id="id_chargers-wrapper">
+        {{ form.chargers }}
+      </div>
+      {% if form.chargers.errors %}
+        <ul class="errorlist">
+          {% for error in form.chargers.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.chargers.help_text %}
+        <p class="help-text" id="id_chargers-help">{{ form.chargers.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="delivery-help">
+    <legend class="section-title">Delivery and ownership</legend>
+    <p class="section-description" id="delivery-help">
+      Control who receives the report and how it is scheduled for delivery.
+    </p>
+    <div class="form-group">
+      {{ form.email_recipients.label_tag }}
+      {{ form.email_recipients }}
+      {{ form.email_recipients.errors }}
+      {% if form.email_recipients.help_text %}
+        <p class="help-text" id="id_email_recipients-help">{{ form.email_recipients.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.recurrence.label_tag }}
+      {{ form.recurrence }}
+      {% if form.recurrence.errors %}
+        <ul class="errorlist">
+          {% for error in form.recurrence.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.recurrence.help_text %}
+        <p class="help-text" id="id_recurrence-help">{{ form.recurrence.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group checkbox-group">
+      <div class="checkbox-wrapper">
+        {{ form.disable_emails }}
+        {{ form.disable_emails.label_tag }}
+      </div>
+      {{ form.disable_emails.errors }}
+      {% if form.disable_emails.help_text %}
+        <p class="help-text" id="id_disable_emails-help">{{ form.disable_emails.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <div class="form-actions">
+    <button type="submit" class="button button-primary" id="generate-report-button">
+      Generate report
+    </button>
+  </div>
+</form>
+{% if download_url %}
+  <p class="success auto-download-message">
+    {% trans "Consumer report generated. If the download does not start automatically," %}
+    <a href="{{ download_url }}">{% trans "click here to download it." %}</a>
+  </p>
+  <iframe
+    src="{{ download_url }}"
+    title="{% trans "Consumer report download" %}"
+    class="report-download-frame"
+    aria-hidden="true"
+  ></iframe>
+{% endif %}
+{% if report %}
+  <section class="report-results" id="client-report-results">
+    <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>
+    {% with data=report_rows|default:report.rows_for_display %}
+      {% if data.schema == "evcs-session/v1" %}
+        {% if data.evcs %}
+          {% if report_view_mode == "summary" %}
+            {% if report_summary_rows %}
+              <div class="evcs-report__summary-table">
+                <table class="adminlist evcs-report__table evcs-report__table--summary">
+                  <thead>
+                    <tr>
+                      <th scope="col">{% trans "Charge point" %}</th>
+                      <th scope="col">{% trans "Session kW" %}</th>
+                      <th scope="col">{% trans "Session start" %}</th>
+                      <th scope="col">{% trans "Session end" %}</th>
+                      <th scope="col">{% trans "Time" %}</th>
+                      <th scope="col">{% trans "Connector" %}</th>
+                      <th scope="col">{% trans "RFID label" %}</th>
+                      <th scope="col">{% trans "Account" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in report_summary_rows %}
+                      {% with row=item.transaction %}
+                        <tr>
+                          <td data-label="{% trans "Charge point" %}">
+                            <div class="report-charger">
+                              <span class="report-charger__name">{{ item.display_name }}</span>
+                              {% if item.serial_number %}
+                                <span class="report-charger__serial">{% trans "Serial" %}: {{ item.serial_number }}</span>
+                              {% endif %}
+                            </div>
+                          </td>
+                          <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                          <td data-label="{% trans "Session start" %}">
+                            {% if row.start %}
+                              <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Session end" %}">
+                            {% if row.end %}
+                              <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
+                          <td data-label="{% trans "Connector" %}">
+                            {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
+                          <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
+                        </tr>
+                      {% endwith %}
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% for evcs in data.evcs %}
+                {% if not evcs.transactions %}
+                  <p class="quiet evcs-report__empty">
+                    {% blocktrans with name=evcs.display_name %}No charging sessions recorded for {{ name }}.{% endblocktrans %}
+                  </p>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <p class="quiet">{% trans "No charging sessions were recorded for this period." %}</p>
+            {% endif %}
+          {% else %}
+            {% for evcs in data.evcs %}
+              <article class="evcs-report">
+                <header class="evcs-report__header">
+                  <h3 class="evcs-report__title">
+                    {{ evcs.display_name }}
+                    {% if evcs.serial_number %}
+                      <small class="evcs-report__serial">({% trans "Serial" %}: {{ evcs.serial_number }})</small>
+                    {% endif %}
+                  </h3>
+                  <p class="evcs-report__summary">
+                    {% trans "Total kW (all time)" %}: {{ evcs.total_kw|floatformat:2 }} ·
+                    {% trans "Total kW (period)" %}: {{ evcs.total_kw_period|floatformat:2 }}
+                  </p>
+                </header>
+                {% if evcs.transactions %}
+                  <table class="adminlist evcs-report__table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{% trans "Session kW" %}</th>
+                        <th scope="col">{% trans "Session start" %}</th>
+                        <th scope="col">{% trans "Session end" %}</th>
+                        <th scope="col">{% trans "Time" %}</th>
+                        <th scope="col">{% trans "Connector" %}</th>
+                        <th scope="col">{% trans "RFID label" %}</th>
+                        <th scope="col">{% trans "Account" %}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in evcs.transactions %}
+                        <tr>
+                          <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                          <td data-label="{% trans "Session start" %}">
+                            {% if row.start %}
+                              <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Session end" %}">
+                            {% if row.end %}
+                              <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
+                          <td data-label="{% trans "Connector" %}">
+                            {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
+                          <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <p class="quiet evcs-report__empty">{% trans "No charging sessions recorded for this charge point." %}</p>
+                {% endif %}
+              </article>
+            {% endfor %}
+          {% endif %}
+          <footer class="report-results__totals">
+            <p><strong>{% trans "Report totals" %}</strong></p>
+            <p>{% trans "Total kW (all time)" %}: {{ data.totals.total_kw|floatformat:2 }}</p>
+            <p>{% trans "Total kW (period)" %}: {{ data.totals.total_kw_period|floatformat:2 }}</p>
+          </footer>
+        {% else %}
+          <p class="quiet">{% trans "No charging sessions were recorded for this period." %}</p>
+        {% endif %}
+      {% else %}
+        {% with rows=data.rows %}
+          {% if rows %}
+            {% with first=rows|first %}
+              {% if first.start %}
+                <table class="adminlist">
+                  <thead>
+                    <tr>
+                      <th>{% trans "RFID / Account" %}</th>
+                      <th>{% trans "Session start" %}</th>
+                      <th>{% trans "Session end" %}</th>
+                      <th>{% trans "Time" %}</th>
+                      <th>{% trans "Energy (kW)" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in rows %}
+                      <tr>
+                        <td><strong>{{ row.subject }}</strong></td>
+                        <td>
+                          {% if row.start %}
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                          {% else %}{% trans "Unavailable" %}{% endif %}
+                        </td>
+                        <td>
+                          {% if row.end %}
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                          {% else %}{% trans "In progress" %}{% endif %}
+                        </td>
+                        <td>{{ row.duration_minutes|default_if_none:"—" }}</td>
+                        <td>{{ row.kw|floatformat:2 }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="5">{% trans "No data available." %}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% else %}
+                <table class="adminlist">
+                  <thead>
+                    <tr>
+                      <th>{% trans "RFID/Account" %}</th>
+                      <th>{% trans "Sessions" %}</th>
+                      <th>{% trans "Total kW" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in rows %}
+                      <tr>
+                        <td>{{ row.subject }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{{ row.kw|floatformat:2 }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="3">{% trans "No data available." %}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% endif %}
+            {% endwith %}
+          {% else %}
+            <p class="quiet">{% trans "No data available." %}</p>
+          {% endif %}
+        {% endwith %}
+      {% endif %}
+    {% endwith %}
+    {% if schedule %}
+      <p class="success">{% blocktrans with freq=schedule.get_periodicity_display %}Next run scheduled ({{ freq }}){% endblocktrans %}</p>
+    {% endif %}
+  </section>
+{% endif %}
+<script>
+  const periodRadios = document.querySelectorAll('input[name="period"]');
+  const rangeFields = document.getElementById('range-fields');
+  const weekField = document.getElementById('week-field');
+  const monthField = document.getElementById('month-field');
+  function toggleFields() {
+    const checked = document.querySelector('input[name="period"]:checked');
+    const value = checked ? checked.value : 'range';
+    rangeFields.style.display = value === 'range' ? 'grid' : 'none';
+    weekField.style.display = value === 'week' ? 'flex' : 'none';
+    monthField.style.display = value === 'month' ? 'flex' : 'none';
+  }
+  periodRadios.forEach(r => r.addEventListener('change', toggleFields));
+  toggleFields();
+
+  const describedByMap = {
+    id_start_date: 'id_start_date-help',
+    id_end_date: 'id_end_date-help',
+    id_week: 'id_week-help',
+    id_month: 'id_month-help',
+    id_view_mode: 'id_view_mode-help',
+    id_language: 'id_language-help',
+    id_title: 'id_title-help',
+    id_chargers: 'id_chargers-help',
+    id_email_recipients: 'id_email_recipients-help',
+    id_recurrence: 'id_recurrence-help',
+    id_disable_emails: 'id_disable_emails-help',
+  };
+
+  Object.entries(describedByMap).forEach(([fieldId, helpId]) => {
+    const field = document.getElementById(fieldId);
+    const help = document.getElementById(helpId);
+    if (field && help) {
+      field.setAttribute('aria-describedby', helpId);
+    }
+  });
+
+  periodRadios.forEach((radio) => {
+    const help = document.getElementById('id_period-help');
+    if (help) {
+      radio.setAttribute('aria-describedby', 'id_period-help');
+    }
+  });
+
+  function isoWeekString(date) {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+    const year = target.getUTCFullYear();
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  }
+
+  function computeLastWeekValue() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    today.setDate(today.getDate() - 7);
+    return isoWeekString(today);
+  }
+
+  document.querySelectorAll('[data-week-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-week-target');
+    const weekInput = document.getElementById(targetId);
+    if (!weekInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      const lastWeekValue = computeLastWeekValue();
+      weekInput.value = lastWeekValue;
+      weekInput.dispatchEvent(new Event('input', { bubbles: true }));
+      weekInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const weekRadio = document.querySelector('input[name="period"][value="week"]');
+      if (weekRadio && !weekRadio.checked) {
+        weekRadio.checked = true;
+        weekRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      weekInput.focus();
+    });
+  });
+
+  function computeMonthValue(offset) {
+    const today = new Date();
+    today.setDate(1);
+    today.setMonth(today.getMonth() + offset);
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  document.querySelectorAll('[data-month-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-month-target');
+    const offset = parseInt(button.getAttribute('data-month-offset') || '0', 10);
+    const monthInput = document.getElementById(targetId);
+    if (!monthInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      monthInput.value = computeMonthValue(offset);
+      monthInput.dispatchEvent(new Event('input', { bubbles: true }));
+      monthInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const monthRadio = document.querySelector('input[name="period"][value="month"]');
+      if (monthRadio && !monthRadio.checked) {
+        monthRadio.checked = true;
+        monthRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      monthInput.focus();
+    });
+  });
+
+  document.querySelectorAll('[data-select-all-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-select-all-target');
+    const container = document.getElementById(targetId);
+    if (!container) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        if (!checkbox.disabled) {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    });
+  });
+</script>
+<style>
+  .client-report-form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 48rem;
+  }
+
+  .client-report-form fieldset {
+    border: 1px solid var(--hairline-color, rgba(255, 255, 255, 0.2));
+    border-radius: 8px;
+    padding: 0 1.5rem 1.5rem;
+    background-color: var(--darkened-bg, rgba(255, 255, 255, 0.02));
+  }
+
+  .client-report-form .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .client-report-form legend.section-title {
+    display: block;
+    box-sizing: border-box;
+    width: calc(100% + 3rem);
+    margin: 0 -1.5rem 1.25rem;
+    padding: 1.25rem 1.5rem 1rem;
+    background-color: inherit;
+    border-bottom: 1px solid var(--hairline-color, rgba(255, 255, 255, 0.15));
+    border-radius: 8px 8px 0 0;
+  }
+
+  .client-report-form .section-description {
+    margin: 0 0 1.25rem;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .report-section > *:not(legend):not(.section-description) {
+    padding: 0 0 0.75rem;
+  }
+
+  .client-report-form
+    .report-section
+    > *:not(legend):not(.section-description)
+    + *:not(legend):not(.section-description) {
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 0.75rem;
+  }
+
+  .client-report-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .week-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .week-shortcut {
+    margin: 0;
+  }
+
+  .client-report-form .month-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .month-shortcuts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .month-shortcut {
+    margin: 0;
+  }
+
+  .client-report-form .form-group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .checkbox-grid {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .checkbox-grid ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: contents;
+  }
+
+  .client-report-form .checkbox-grid li {
+    margin: 0;
+  }
+
+  .client-report-form .form-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  @media (min-width: 40rem) {
+    .client-report-form .form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .client-report-form .option-list ul,
+  .client-report-form .option-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .auto-download-message {
+    margin-top: 1.5rem;
+  }
+
+  .report-download-frame {
+    display: none;
+  }
+
+  .report-results {
+    margin-top: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+
+  .evcs-report {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background-color: rgba(15, 23, 42, 0.15);
+  }
+
+  .evcs-report__summary {
+    margin: 0.5rem 0 0;
+    color: var(--body-quiet-color, #94a3b8);
+    font-size: 0.95rem;
+  }
+
+  .evcs-report__table {
+    margin-top: 1rem;
+  }
+
+  .evcs-report__summary-table {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background-color: rgba(15, 23, 42, 0.15);
+  }
+
+  .evcs-report__table--summary {
+    margin-top: 0;
+  }
+
+  .report-charger {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .report-charger__name {
+    font-weight: 600;
+  }
+
+  .report-charger__serial {
+    font-size: 0.85rem;
+    color: var(--body-quiet-color, #94a3b8);
+  }
+
+  .report-results__totals {
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 1rem;
+  }
+
+  .client-report-form .help-text {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .checkbox-group {
+    gap: 0.25rem;
+  }
+
+  .client-report-form .checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .form-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  #generate-report-button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 6px;
+  }
+
+  @media (max-width: 40rem) {
+    .client-report-form {
+      gap: 1.5rem;
+    }
+
+    .client-report-form .form-actions {
+      justify-content: stretch;
+    }
+
+    #generate-report-button {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}

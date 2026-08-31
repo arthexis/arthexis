@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "non_summer",
+      "zone": "1C",
+      "contract_type": "domestic",
+      "period": "excess",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "3.2145",
+      "cost_mxn": "3.2145",
+      "notes": "Consumo excedente fuera de verano; al superar el umbral mensual se evalúa migración a tarifa DAC."
+    }
+  }
+]

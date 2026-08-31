@@ -1,0 +1,37 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Suite administrators can disable the feature globally. Satellite nodes accept requests by default; other node roles must set ARTHEXIS_REMOTE_UPGRADE_REQUESTS=1, and any node can set ARTHEXIS_REMOTE_UPGRADE_REQUESTS=0 to reject locally.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:nodes_remoteupgraderequest_changelist"
+      ],
+      "code_locations": [
+        "apps/nodes/services/remote_upgrade.py",
+        "apps/nodes/management/commands/node.py"
+      ],
+      "created_at": "2026-06-05T00:00:00Z",
+      "display": "Remote Upgrade Requests",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "nodes"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No public surface; requests travel through signed node transport.",
+      "public_views": [],
+      "service_requirements": "When the suite feature is disabled, nodes reject incoming remote upgrade requests without triggering upgrade checks. When enabled, Satellite nodes accept by default and other roles require local env opt-in.",
+      "service_views": [
+        "apps.nodes.services.remote_upgrade.receive_remote_upgrade_request"
+      ],
+      "slug": "remote-upgrade-requests",
+      "source": "mainstream",
+      "summary": "Allows Satellite and opted-in downstream nodes to accept signed upstream requests to run their local upgrade check.",
+      "updated_at": "2026-06-05T00:00:00Z"
+    }
+  }
+]

@@ -1,0 +1,80 @@
+name: Create release tag from VERSION
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: release-tag-from-version-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag-from-version:
+    name: Create v* tag from VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Read VERSION
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ -z "$version" ]; then
+            echo "VERSION file is empty." >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create tag when missing
+        id: create_tag
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+
+          tag="v${VERSION}"
+          current_sha="$(git rev-parse HEAD)"
+          git fetch --force --tags origin
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_sha="$(git rev-list -n 1 "refs/tags/${tag}")"
+            if [ "$tag_sha" != "$current_sha" ]; then
+              echo "Release tag ${tag} already exists at ${tag_sha}, but ${GITHUB_REF_NAME} is ${current_sha}." >&2
+              echo "Do not publish the stale tag. Either move ${tag} to the reviewed ${GITHUB_REF_NAME} commit with explicit maintainer approval, or bump VERSION and let this workflow create a new release tag." >&2
+              exit 1
+            fi
+            echo "Tag ${tag} already points at ${current_sha}; dispatching publish workflow."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git tag -a "$tag" -m "Release ${tag}"
+          git push origin "$tag"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "Created tag ${tag} from VERSION=${VERSION}."
+
+      - name: Dispatch publish workflow for release tag
+        if: steps.create_tag.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          tag="v${VERSION}"
+          gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"

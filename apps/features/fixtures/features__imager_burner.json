@@ -1,0 +1,42 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Imager management command exposes durable burn queue, status, and worker operations.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:imager_raspberrypiimageburnjob_changelist"
+      ],
+      "code_locations": [
+        "apps/imager/burner.py",
+        "apps/imager/management/commands/imager.py",
+        "apps/imager/node_features.py",
+        "apps/imager/usb_stability.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Imager Burner",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "imager"
+      ],
+      "metadata": {},
+      "node_feature": [
+        "imager-burner"
+      ],
+      "protocol_coverage": {},
+      "public_requirements": "No public interface; destructive burns remain limited to authenticated operators and service workers.",
+      "public_views": [],
+      "service_requirements": "Requires a Control node, Linux block-device discovery tools, a configured systemd worker for long-running writes, and local USB quieting around destructive burn windows.",
+      "service_views": [
+        "apps.imager.burner.queue_burn_job",
+        "apps.imager.burner.work_loop"
+      ],
+      "slug": "imager-burner",
+      "source": "mainstream",
+      "summary": "Controls durable SD-card burn queueing and worker execution for Control nodes.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

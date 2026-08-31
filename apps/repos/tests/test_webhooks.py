@@ -1,0 +1,218 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import urllib.parse
+
+import pytest
+from django.urls import reverse
+
+from apps.repos.models.events import GitHubEvent
+from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
+from apps.repos.models.repositories import GitHubRepository
+
+
+@pytest.mark.django_db
+def test_github_webhook_form_payload_array_is_preserved(client):
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+
+    url = reverse(
+        "repos:github-webhook-repo", kwargs={"owner": repo.owner, "name": repo.name}
+    )
+    response = client.post(
+        url,
+        data=urllib.parse.urlencode(
+            {"payload": json.dumps([{"action": "opened"}])}
+        ),
+        content_type="application/x-www-form-urlencoded",
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.repository == repo
+    assert event.payload == {"items": [{"action": "opened"}]}
+    assert "payload=" in event.raw_body
+
+
+@pytest.mark.django_db
+def test_github_webhook_header_lookup_is_case_insensitive(client):
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    url = reverse("repos:github-webhook")
+    payload = {"repository": {"owner": {"login": repo.owner}, "name": repo.name}}
+
+    response = client.post(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **{
+            "HTTP_X_GITHUB_EVENT": "push",
+            "HTTP_X_GITHUB_DELIVERY": "delivery-123",
+            "HTTP_X_GITHUB_HOOK_ID": "hook-999",
+            "HTTP_X_HUB_SIGNATURE": "sha1=abc",
+            "HTTP_X_HUB_SIGNATURE_256": "sha256=def",
+            "HTTP_USER_AGENT": "GitHub-Hookshot/1.0",
+        },
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.repository == repo
+    assert event.event_type == "push"
+    assert event.delivery_id == "delivery-123"
+    assert event.hook_id == "hook-999"
+    assert event.signature == "sha1=abc"
+    assert event.signature_256 == "sha256=def"
+    assert event.user_agent == "GitHub-Hookshot/1.0"
+
+
+@pytest.mark.django_db
+def test_github_webhook_app_signature_verifies(client):
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=1234,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
+    url = reverse("repos:github-webhook-app", kwargs={"app_slug": app.webhook_slug})
+    payload = {"action": "opened"}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": signature},
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.payload == payload
+
+
+@pytest.mark.django_db
+def test_github_webhook_app_rejects_invalid_signature(client):
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=5678,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
+    url = reverse("repos:github-webhook-app", kwargs={"app_slug": app.webhook_slug})
+    payload = {"action": "opened"}
+
+    response = client.post(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": "sha256=invalid"},
+    )
+
+    assert response.status_code == 401
+    assert GitHubEvent.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_github_webhook_returns_ok_when_spam_assessment_fails(client, monkeypatch):
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=9999,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
+    url = reverse("repos:github-webhook")
+    payload = {"repository": {"owner": {"login": repo.owner}, "name": repo.name}}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    def raise_assessment_error(event):
+        del event
+        raise RuntimeError("assessment failed")
+
+    monkeypatch.setattr("apps.repos.views.webhooks.assess_github_issue_event", raise_assessment_error)
+
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_HUB_SIGNATURE_256": signature},
+    )
+
+    assert response.status_code == 200
+    assert GitHubEvent.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_github_webhook_verifies_default_route_with_installation_secret(client):
+    app = GitHubApp.objects.create(
+        display_name="Installation App",
+        app_id=9876,
+        webhook_secret="installsecret",
+    )
+    GitHubAppInstall.objects.create(app=app, installation_id=4242)
+
+    GitHubApp.objects.create(
+        display_name="Other App",
+        app_id=9877,
+        webhook_secret="differentsecret",
+    )
+
+    url = reverse("repos:github-webhook")
+    payload = {"installation": {"id": 4242}, "action": "opened"}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": signature},
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.payload == payload
+
+
+@pytest.mark.django_db
+def test_github_webhook_verifies_with_sigil_secret(client, monkeypatch):
+    monkeypatch.setenv("REPOS_WEBHOOK_SECRET", "sigilsecret")
+    app = GitHubApp.objects.create(
+        display_name="Sigil App",
+        app_id=2468,
+        webhook_secret="[ENV.REPOS_WEBHOOK_SECRET]",
+    )
+    url = reverse("repos:github-webhook")
+    payload = {"action": "opened"}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        "sigilsecret".encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{"HTTP_X_HUB_SIGNATURE_256": signature},
+    )
+
+    assert response.status_code == 200
+    event = GitHubEvent.objects.get()
+    assert event.payload == payload
+    assert app.webhook_secret == "sigilsecret"

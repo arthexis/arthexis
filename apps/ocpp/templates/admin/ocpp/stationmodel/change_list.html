@@ -1,0 +1,16 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  <li>
+    <a
+      href="{% url 'admin:ocpp_stationmodel_view_in_site' %}"
+      class="viewlink"
+      target="_blank"
+      rel="noreferrer noopener"
+    >
+      {% translate "View in Site" %}
+    </a>
+  </li>
+{% endblock %}

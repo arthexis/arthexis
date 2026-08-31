@@ -1,0 +1,47 @@
+# Arthexis Documentation
+
+This site aggregates operator guides, architecture notes, and development references for the Arthexis software suite.
+
+Release notes and changelog reporting are available in the built-in Arthexis changelog UI, accessible via the Admin Dashboard.
+
+In Arthexis terminology, the **suite** is the collection of applications, while the **Constellation** is the fleet of nodes running that suite.
+
+## Suite goals
+
+- Keep administrators, staff, and end users on developed and tested functionality instead of recipe-like behaviors that require them to become programmers.
+- Extend the Arthexis suite so integrations are delivered as first-class apps, models, migrations, and user-facing tools rather than disconnected wiring performed by operators.
+- Continue supporting **SIGILS** for field defaults and basic templating without control flow, with predictable behavior: preserve unresolved sigils verbatim for visibility, and return concrete resolved values (including empty values) without coercion modes.
+
+## Quick links
+- [Auto-Upgrade Flow](auto-upgrade.md)
+- [CodeQL Configuration](development/codeql.md)
+- [Cookbook Maintainer Guide](development/cookbook-maintainer-guide.md)
+- Cookbook QA Checklist: `apps/docs/cookbooks/cookbook-qa-checklist.md`
+- [Knowledge Base Overview](knowledge-base-overview.md)
+- [Operator Framework Packages](development/codex-skill-packages.md)
+- [Good Command](operations/good-command.md)
+- [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
+- [Kindle Postbox](services/kindle-postbox.md)
+- [Operators Manual](operators-manual.md)
+- [Agent Card v1 RFID Layout](development/agent-card-v1.md)
+- [AP Portal Recovery](operations/ap-portal.md)
+- [Sigil Script Command](development/sigil-script-command.md)
+- [LCD Screen Hardware](lcd-screen-hardware.md)
+- [App Structure Policy](development/app-structure-policy.md)
+- [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
+- [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
+- [Constellation Network Model](integrations/constellation-network-model.md)
+- [Error Report Package](operations/error-report.md)
+- [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
+- [Odysseus Integration Investigation](integrations/odysseus-integration-investigation.md)
+- OCPP 1.6 coverage artifact: `apps/ocpp/coverage.json`
+- [Ops Command Wrapper](operations/operational-commands.md)
+- [Imager SD-Card Recovery Workflow](operations/imager-sd-card-recovery.md)
+- [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
+- [1.0 Migration Trim Decision Gate](development/1-0-migration-trim-decision.md)
+- [Role-Based Application Profiles](development/role-based-application-profiles.md)
+- [Suite Services Report](suite-services-report.md)
+- [USB Camera Power-Off](usb-camera-power-off.md)
+- [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
+- [Documentation Governance Policy](development/documentation-governance.md)
+- [Language Policy for 1.0.0](development/language-policy.md)

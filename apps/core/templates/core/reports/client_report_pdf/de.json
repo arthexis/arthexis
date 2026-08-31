@@ -1,0 +1,20 @@
+{
+  "title": "Verbrauchsbericht",
+  "period": "Zeitraum: {start} bis {end}",
+  "total_kw_all_time": "Gesamte kW (gesamt)",
+  "total_kw_period": "Gesamte kW (Zeitraum)",
+  "connector": "Stecker",
+  "account": "Konto",
+  "session_kwh": "kW je Sitzung",
+  "session_start": "Sitzungsbeginn",
+  "session_end": "Sitzungsende",
+  "time": "Dauer",
+  "rfid_label": "RFID-Bezeichnung",
+  "no_sessions_period": "Für den ausgewählten Zeitraum wurden keine Ladesitzungen aufgezeichnet.",
+  "no_sessions_point": "Für diesen Ladepunkt wurden keine Ladesitzungen aufgezeichnet.",
+  "no_structured_data": "Für diesen Bericht sind keine strukturierten Daten verfügbar.",
+  "report_totals": "Berichtssummen",
+  "total_kw_period_line": "Gesamte kW während des Zeitraums",
+  "charge_point": "Ladepunkt",
+  "charge_point_serial": "{name} (Seriennummer: {serial})"
+}

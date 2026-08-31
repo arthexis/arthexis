@@ -1,0 +1,404 @@
+{% extends "ocpp/landing_base.html" %}
+{% load i18n static %}
+
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }}{% endblock %}
+
+{% block content %}
+{% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
+<div class="container px-3 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}" data-swipe-prev-url="{{ connector_prev_url }}" data-swipe-next-url="{{ connector_next_url }}">
+  {% if messages %}
+  <div class="mt-3" aria-live="polite" aria-atomic="true">
+    {% for message in messages %}
+    <div class="alert alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'info' }}{% endif %} mb-2" role="alert">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+    {% if connector_switch_links %}
+  <div class="row justify-content-center mt-3">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <nav aria-label="{% trans "Connector navigation" %}">
+        <div class="nav nav-pills nav-fill gap-2" id="connector-switch-links">
+          {% for item in connector_switch_links %}
+          <a
+            class="nav-link{% if item.active %} active{% endif %}"
+            href="{{ item.url }}"
+            {% if item.active %}aria-current="page"{% endif %}
+          >
+            {{ item.label }}
+          </a>
+          {% endfor %}
+        </div>
+      </nav>
+    </div>
+  </div>
+  {% endif %}
+<div class="row justify-content-center mt-2 mt-sm-4">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header">
+          <div class="d-flex flex-column flex-sm-row gap-3 align-items-stretch align-items-sm-start justify-content-between">
+            <div class="flex-grow-1">
+              <h1 class="h4 mb-2 text-break">{{ charger_label }}</h1>
+              <dl class="landing-meta-list">
+                <div>
+                  <dt data-i18n="serial_number_label">{% trans "Serial Number" %}</dt>
+                  <dd class="text-break">{{ charger.charger_id }}</dd>
+                </div>
+                <div>
+                  <dt data-i18n="connector_label">{% trans "Connector" %}</dt>
+                  <dd class="text-break">{{ charger.connector_label }}</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="landing-action-group d-flex flex-column align-items-stretch align-items-sm-end gap-2">
+              <span class="badge landing-status-badge {{ status_badge_class }} text-uppercase fw-semibold px-3 py-2 shadow-sm">{{ state }}</span>
+              {% if request.user.is_authenticated %}
+              <div class="landing-section w-100 w-sm-auto text-sm-end">
+                <p class="landing-section-heading" data-i18n="support_label">{% trans "Support" %}</p>
+                <a class="btn btn-primary w-100 w-sm-auto" href="{{ status_url }}" data-i18n="advanced_view_label">
+                  {% trans "Advanced View" %}
+                </a>
+                {% if account_summary_url %}
+                <a class="btn btn-outline-secondary landing-action-secondary w-100 w-sm-auto" href="{{ account_summary_url }}">
+                  {% trans "Account & Sessions" %}
+                </a>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if charger.last_status or charger_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
+          <div class="landing-section">
+            <p class="landing-section-heading" data-i18n="latest_status_label">{% trans "Latest report" %}</p>
+            <div class="landing-stack-sm text-muted small">
+            {% if charger.last_status %}
+            <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
+            {% endif %}
+            {% if charger_error_code %}
+            <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ charger_error_code }}</p>
+            {% endif %}
+            {% if charger.last_status_timestamp %}
+            <p class="mb-1"><span data-i18n="status_updated_label">{% trans "Last status update" %}</span>: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+            {% endif %}
+            {% if charger.last_status_vendor_info %}
+              {% if charger.last_status_vendor_info.vendorId %}
+              <p class="mb-1"><span data-i18n="status_vendor_label">{% trans "Vendor" %}</span>: {{ charger.last_status_vendor_info.vendorId }}</p>
+              {% endif %}
+              {% if charger.last_status_vendor_info.info %}
+              <p class="mb-1"><span data-i18n="status_info_label">{% trans "Info" %}</span>: {{ charger.last_status_vendor_info.info }}</p>
+              {% endif %}
+            {% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% if charger.resolved_authorization_policy != "open" %}
+          <div class="alert alert-warning" role="alert" data-i18n="authorization_policy_label">
+            {% trans "Authorization policy requires validated RFID/account credentials." %}
+          </div>
+          {% endif %}
+          {% if tx %}
+          <div class="landing-section">
+            <p class="landing-section-heading" data-i18n="charging_label">{% trans "Charging" %}</p>
+            {% now "SHORT_DATETIME_FORMAT" as live_now_timestamp %}
+            <p class="landing-live-now mb-2">
+              <span class="landing-live-now-icon" aria-hidden="true"></span>
+              <span data-i18n="live_now_label">{% trans "Live now" %}</span> · {{ live_now_timestamp }}
+            </p>
+          {% if charger.connector_id is None and active_connector_count %}
+          <p class="small text-muted" data-i18n="connectors_active_message" data-count="{{ active_connector_count }}">
+            {% blocktrans count active=active_connector_count %}{{ active }} connector active{% plural %}{{ active }} connectors active{% endblocktrans %}
+          </p>
+          {% endif %}
+          <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0}}%;"></div>
+          </div>
+          <div class="landing-stat-grid landing-stack-md text-center text-sm-start">
+            <div>
+              <p class="stat-label" data-i18n="energy_label">{% trans "Energy" %}</p>
+              <p class="stat-value">{{ tx.kw|floatformat:2 }} kW</p>
+            </div>
+            <div>
+              <p class="stat-label" data-i18n="started_label">{% trans "Started" %}</p>
+              <p class="stat-value fs-5">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
+            </div>
+          </div>
+          </div>
+          {% if tx_rfid_details %}
+          <div class="landing-section text-center text-sm-start">
+            <p class="stat-label mb-1" data-i18n="rfid_label">
+            {% if tx_rfid_details.display_label %}
+              {{ tx_rfid_details.display_label }}
+            {% else %}
+              {% trans "RFID" %}
+            {% endif %}
+            </p>
+            {% if tx_rfid_details.url %}
+            <p class="mb-0"><a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a></p>
+            {% else %}
+            <p class="mb-0">{{ tx_rfid_details.value }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="landing-section text-center">
+            <p class="lead mb-0" data-i18n="instruction_text">
+              {% if energy_accounts_enabled %}
+                {% trans "Plug in your vehicle and authenticate with your energy account to begin charging." %}
+              {% else %}
+                {% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}
+              {% endif %}
+            </p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if charger.connector_id is None and connector_overview %}
+  <div class="row justify-content-center mt-4">
+    <div class="col-12 col-lg-10">
+      <h2 class="h5 mb-3 text-center text-lg-start" data-i18n="connectors_heading">{% trans "Connectors" %}</h2>
+      <div class="row gy-3">
+        {% for item in connector_overview %}
+        <div class="col-12 col-md-6">
+          <div class="landing-connector-card h-100 position-relative{% if item.slug == connector_slug %} is-selected{% endif %}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold">{{ item.label }}</span>
+              <span class="badge landing-status-badge {{ item.status_badge_class }}">{{ item.status }}</span>
+            </div>
+            {% if item.last_status or item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
+            <div class="landing-stack-sm mb-2 text-muted small">
+              {% if item.last_status %}
+              <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ item.last_status }}</p>
+              {% endif %}
+              {% if item.last_error_code %}
+              <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ item.last_error_code }}</p>
+              {% endif %}
+              {% if item.last_status_timestamp %}
+              <p class="mb-1"><span data-i18n="status_updated_label">{% trans "Last status update" %}</span>: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+              {% endif %}
+              {% if item.last_status_vendor_info %}
+                {% if item.last_status_vendor_info.vendorId %}
+                <p class="mb-1"><span data-i18n="status_vendor_label">{% trans "Vendor" %}</span>: {{ item.last_status_vendor_info.vendorId }}</p>
+                {% endif %}
+                {% if item.last_status_vendor_info.info %}
+                <p class="mb-1"><span data-i18n="status_info_label">{% trans "Info" %}</span>: {{ item.last_status_vendor_info.info }}</p>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if item.tx %}
+            <p class="mb-1"><small><span data-i18n="energy_label">{% trans "Energy" %}</span>: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+            <p class="mb-0 text-muted"><small><span data-i18n="started_label">{% trans "Started" %}</span>: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+            {% if item.rfid_details %}
+              <p class="mb-0"><small><span data-i18n="rfid_label">
+                {% if item.rfid_details.display_label %}
+                  {{ item.rfid_details.display_label }}
+                {% else %}
+                  {% trans "RFID" %}
+                {% endif %}
+              </span>:
+                {% if item.rfid_details.url %}
+                <a href="{{ item.rfid_details.url }}">{{ item.rfid_details.value }}</a>
+                {% else %}
+                {{ item.rfid_details.value }}
+                {% endif %}
+            </small></p>
+            {% endif %}
+            {% else %}
+            <p class="mb-0 text-muted"><small data-i18n="no_active_transaction">{% trans "No active transaction" %}</small></p>
+            {% endif %}
+            <a class="stretched-link" href="{{ item.url }}" aria-label="{{ item.label }}" {% if item.slug == connector_slug %}aria-current="page"{% endif %}></a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{{ landing_translations|json_script:"landing-translations" }}
+<script>
+  (function () {
+    const translationsNode = document.getElementById('landing-translations');
+    const languageContainer = document.querySelector('[data-language-container]');
+    if (!translationsNode || !languageContainer) {
+      return;
+    }
+    let translations;
+    try {
+      translations = JSON.parse(translationsNode.textContent);
+    } catch (error) {
+      console.error('Failed to parse landing page translations', error);
+      return;
+    }
+    const preferredLanguage = (languageContainer.getAttribute('data-preferred-language') || '').trim();
+    const languageOrder = [];
+    if (preferredLanguage && translations[preferredLanguage]) {
+      languageOrder.push(preferredLanguage);
+    }
+    Object.keys(translations).forEach((code) => {
+      if (!languageOrder.includes(code) && translations[code]) {
+        languageOrder.push(code);
+      }
+    });
+    if (!languageOrder.length) {
+      return;
+    }
+    let currentIndex = languageOrder.findIndex((code) => code === document.documentElement.lang);
+    if (currentIndex === -1) {
+      currentIndex = 0;
+    }
+    let currentLang = languageOrder[currentIndex];
+    function applyLanguage(lang) {
+      const catalog = translations[lang];
+      if (!catalog) {
+        return;
+      }
+      document.querySelectorAll('[data-i18n]').forEach((element) => {
+        const key = element.getAttribute('data-i18n');
+        if (!key) {
+          return;
+        }
+        if (key === 'connectors_active_message') {
+          const countValue = Number.parseInt(element.getAttribute('data-count') || '0', 10);
+          const variant = countValue === 1 ? 'connectors_active_singular' : 'connectors_active_plural';
+          const template = catalog[variant];
+          if (template) {
+            element.textContent = template.replace('%(count)s', countValue);
+          }
+          return;
+        }
+        const text = catalog[key];
+        if (typeof text === 'string') {
+          element.textContent = text;
+        }
+      });
+      document.documentElement.setAttribute('lang', lang);
+    }
+    applyLanguage(currentLang);
+    if (languageOrder.length <= 1) {
+      return;
+    }
+    setInterval(() => {
+      const nextIndex = (currentIndex + 1) % languageOrder.length;
+      const nextLang = languageOrder[nextIndex];
+      languageContainer.style.opacity = '0';
+      window.setTimeout(() => {
+        applyLanguage(nextLang);
+        languageContainer.style.opacity = '1';
+      }, 300);
+      currentIndex = nextIndex;
+      currentLang = nextLang;
+    }, 30000);
+  }());
+  (function () {
+    const languageContainer = document.querySelector('[data-language-container]');
+    if (!languageContainer) {
+      return;
+    }
+    const prevUrl = (languageContainer.getAttribute('data-swipe-prev-url') || '').trim();
+    const nextUrl = (languageContainer.getAttribute('data-swipe-next-url') || '').trim();
+    if (!prevUrl && !nextUrl) {
+      return;
+    }
+    let touchStartX = null;
+    let touchStartY = null;
+    const horizontalThreshold = 50;
+    const verticalLimit = 80;
+
+    document.addEventListener(
+      'touchstart',
+      (event) => {
+        if (!event.touches || event.touches.length !== 1) {
+          touchStartX = null;
+          touchStartY = null;
+          return;
+        }
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+      },
+      { passive: true }
+    );
+
+    document.addEventListener(
+      'touchend',
+      (event) => {
+        if (touchStartX === null || touchStartY === null) {
+          return;
+        }
+        const changed = event.changedTouches && event.changedTouches[0];
+        if (!changed) {
+          touchStartX = null;
+          touchStartY = null;
+          return;
+        }
+        const deltaX = changed.clientX - touchStartX;
+        const deltaY = Math.abs(changed.clientY - touchStartY);
+        touchStartX = null;
+        touchStartY = null;
+        if (Math.abs(deltaX) < horizontalThreshold || deltaY > verticalLimit) {
+          return;
+        }
+        if (deltaX < 0 && nextUrl) {
+          window.location.assign(nextUrl);
+        } else if (deltaX > 0 && prevUrl) {
+          window.location.assign(prevUrl);
+        }
+      },
+      { passive: true }
+    );
+  }());
+  (function () {
+    let reloadTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      window.location.reload();
+    }, 5000);
+
+    function stopAutoReload() {
+      if (!reloadTimer) {
+        return;
+      }
+      window.clearInterval(reloadTimer);
+      reloadTimer = null;
+    }
+
+    window.addEventListener('beforeunload', stopAutoReload);
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.visibilityState !== 'visible') {
+          stopAutoReload();
+        }
+      },
+      { passive: true }
+    );
+    document.addEventListener(
+      'click',
+      (event) => {
+        const anchor = event.target.closest('a[href]');
+        if (!anchor) {
+          return;
+        }
+        const href = anchor.getAttribute('href') || '';
+        if (!href || href.trim().charAt(0) === '#') {
+          return;
+        }
+        stopAutoReload();
+      },
+      true
+    );
+  }());
+</script>
+{% endblock %}

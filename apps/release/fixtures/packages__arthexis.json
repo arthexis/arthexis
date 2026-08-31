@@ -1,0 +1,23 @@
+[
+  {
+    "fields": {
+      "author": "Rafael J. Guill\u00e9n-Osorio",
+      "dependencies_path": "",
+      "description": "Energy & Power Infrastructure",
+      "email": "tecnologia@gelectriic.com",
+      "generate_wheels": false,
+      "homepage_url": "https://arthexis.com",
+      "is_active": true,
+      "is_deleted": false,
+      "is_seed_data": true,
+      "license": "",
+      "name": "arthexis",
+      "oidc_publish_enabled": true,
+      "python_requires": ">=3.10",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "test_command": "",
+      "version_path": ""
+    },
+    "model": "release.package"
+  }
+]

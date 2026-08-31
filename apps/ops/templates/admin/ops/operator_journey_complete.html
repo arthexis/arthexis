@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="module aligned">
+    <h1>{% translate "Operator journey complete" %}</h1>
+    <p>{% translate "Great work. You are caught up on all currently required operator tasks." %}</p>
+    <p>
+      <a class="button default" href="{% url 'admin:index' %}">{% translate "Return to admin dashboard" %}</a>
+    </p>
+  </div>
+{% endblock %}

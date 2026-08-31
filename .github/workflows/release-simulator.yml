@@ -1,0 +1,1246 @@
+name: Release Simulator
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+      security-events: read
+    outputs:
+      should_run: ${{ steps.evaluate.outputs.should_run }}
+      skip_reason: ${{ steps.evaluate.outputs.skip_reason }}
+      can_simulate: ${{ steps.evaluate.outputs.can_simulate }}
+      blockers_json: ${{ steps.evaluate.outputs.blockers_json }}
+      default_branch: ${{ steps.evaluate.outputs.default_branch }}
+      default_branch_version: ${{ steps.evaluate.outputs.default_branch_version }}
+      latest_release_tag: ${{ steps.evaluate.outputs.latest_release_tag }}
+      release_threads_json: ${{ steps.evaluate.outputs.release_threads_json }}
+      future_release_issues_json: ${{ steps.evaluate.outputs.future_release_issues_json }}
+      upgrade_replay_summary: ${{ steps.evaluate.outputs.upgrade_replay_summary }}
+    steps:
+      - name: Evaluate release blockers from install/upgrade pipeline state
+        id: evaluate
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const releaseReadinessReportTitle = 'Release Readiness Report';
+            const releaseReadinessReportMarker = '<!-- release-readiness-report -->';
+            const retiredInstallHealthIssueTitle = 'Install health check is failing';
+            const retiredInstallHealthIssueMarker = '<!-- install-health-check-failure -->';
+            const futureReleaseMarker = '<!-- release-readiness-future-release -->';
+            const abandonedReleasePrMarker = '<!-- abandoned-release-pr -->';
+            const legacyCodeScanningTrackerTitle = 'Open GitHub code scanning security findings';
+            const legacyCodeScanningTrackerMarker = '<!-- code-scanning-security-findings -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const defaultBranch = context.payload.repository.default_branch;
+            const blockers = [];
+            const fullDayMillis = 24 * 60 * 60 * 1000;
+            const releaseCutoffMillis = 3 * fullDayMillis;
+            const minimumMainCooldownMillis = 10 * 60 * 1000;
+            const blockingIssueLabel = "enhancement";
+            let shouldRun = true;
+            let skipReason = '';
+            let latestReleaseTag = '';
+            let defaultBranchVersion = '';
+            let closedReleasePullRequests = [];
+            let openPullRequests = [];
+            let upgradeReplaySummary = '- Status: `not evaluated`. Release readiness did not inspect the current default-branch head.';
+
+            function formatFileList(paths) {
+              if (!paths.length) {
+                return 'none detected';
+              }
+              const preview = paths.slice(0, 8).map((path) => `\`${path}\``).join(', ');
+              const remaining = paths.length - 8;
+              return remaining > 0 ? `${preview}, and ${remaining} more` : preview;
+            }
+
+            function matchesCodeqlPath(path) {
+              return (
+                path.endsWith('.py') ||
+                path.endsWith('.sh') ||
+                /(^|\/)requirements[^/]*\.txt$/.test(path) ||
+                /(^|\/)pyproject\.toml$/.test(path) ||
+                /(^|\/)Pipfile$/.test(path) ||
+                /(^|\/)Pipfile\.lock$/.test(path) ||
+                path === '.github/workflows/codeql.yml' ||
+                path === '.github/workflows/security-scan.yml' ||
+                path.startsWith('.github/codeql/') ||
+                path.startsWith('.github/actions/')
+              );
+            }
+
+            const availableIssueLabels = async (labelNames) => {
+              const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+              });
+              const availableNames = new Set(repoLabels.map((label) => label.name));
+              const availableLabels = labelNames.filter((label) => availableNames.has(label));
+              const missingLabels = labelNames.filter((label) => !availableNames.has(label));
+              if (missingLabels.length) {
+                core.info(`Configured labels not present in repository: ${missingLabels.join(', ')}`);
+              }
+              return availableLabels;
+            };
+
+            const existingIssueLabelNames = (issue) => new Set(
+              (issue?.labels || [])
+                .map((label) => label?.name || label)
+                .filter(Boolean)
+            );
+
+            function normalizeReleaseVersion(version) {
+              const value = String(version || '').trim().replace(/^v/i, '');
+              const match = value.match(/(?<version>\d+[.]\d+[.]\d+(?:[-+][0-9A-Za-z.-]+)?)/);
+              return match?.groups?.version || '';
+            }
+
+            function targetReleaseMatchesCurrentVersion(targetRelease, currentVersion) {
+              const normalizedTarget = normalizeReleaseVersion(targetRelease);
+              const normalizedCurrent = normalizeReleaseVersion(currentVersion);
+              return Boolean(normalizedTarget && normalizedCurrent && normalizedTarget === normalizedCurrent);
+            }
+
+            async function readDefaultBranchVersion(ref) {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: 'VERSION',
+                ref,
+              });
+              if (Array.isArray(data)) {
+                throw new Error('VERSION path resolved to a directory.');
+              }
+              const content = data.encoding === 'base64'
+                ? Buffer.from(data.content || '', 'base64').toString('utf8')
+                : String(data.content || '');
+              return content.trim();
+            }
+
+            function futureReleaseDeferral(issue, currentVersion = '') {
+              const body = String(issue?.body || '');
+              if (!body.includes(futureReleaseMarker)) {
+                return null;
+              }
+
+              const labels = new Set(
+                [...existingIssueLabelNames(issue)].map((label) => String(label).toLowerCase())
+              );
+              const milestoneTitle = String(issue?.milestone?.title || '').trim();
+              const currentReleaseLabel = currentReleaseIssueLabel(issue);
+              if (currentReleaseLabel) {
+                core.warning(`Issue #${issue.number} includes ${futureReleaseMarker} but also has current-release label ${currentReleaseLabel}; keeping it as a release blocker.`);
+                return null;
+              }
+              const hasTrustedDeferralAuthority = [
+                'future-release',
+                'future release',
+                'deferred',
+              ].some((label) => labels.has(label));
+              if (!hasTrustedDeferralAuthority) {
+                core.warning(`Issue #${issue.number} includes ${futureReleaseMarker} without a maintainer-controlled deferral label; keeping it as a release blocker.`);
+                return null;
+              }
+
+              const targetMatch = body.match(/(?:Target release|Future release):\s*([^\n\r]+)/i);
+              const targetRelease = String(
+                milestoneTitle ||
+                targetMatch?.[1] ||
+                'future release'
+              ).trim();
+              if (targetReleaseMatchesCurrentVersion(targetRelease, currentVersion)) {
+                core.warning(`Issue #${issue.number} is targeted to current VERSION ${targetRelease}; keeping it as a release blocker until the requirement is complete.`);
+                return null;
+              }
+              return {
+                number: issue.number,
+                title: issue.title || '',
+                targetRelease,
+                url: issue.html_url || '',
+              };
+            }
+
+            function currentReleaseIssueLabel(issue) {
+              const labels = new Set(
+                [...existingIssueLabelNames(issue)].map((label) => String(label).toLowerCase())
+              );
+              return [
+                'bug',
+                'priority: critical',
+                'priority: high',
+              ].find((label) => labels.has(label)) || null;
+            }
+
+            const addAvailableLabels = async (issueNumber, labelNames, existingIssue) => {
+              const availableLabels = await availableIssueLabels(labelNames);
+              const existingLabels = existingIssueLabelNames(existingIssue);
+              const labelsToAdd = availableLabels.filter((label) => !existingLabels.has(label));
+              if (!labelsToAdd.length) {
+                core.info(`Issue #${issueNumber} already has the available stable labels.`);
+                return;
+              }
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: labelsToAdd,
+              });
+            };
+
+            function parseAbortedReleasePull(pull) {
+              const title = String(pull.title || '');
+              const match = title.match(/^Release v(?<major>\d+)[.](?<minor>\d+)[.](?<patch>\d+)$/);
+              if (!match?.groups) {
+                return null;
+              }
+
+              if (!String(pull.body || '').includes(abandonedReleasePrMarker)) {
+                return null;
+              }
+
+              const version = `${match.groups.major}.${match.groups.minor}.${match.groups.patch}`;
+              const headRef = pull.head?.ref || '';
+              if (headRef !== `release/prepare-v${version}`) {
+                return null;
+              }
+
+              const repositoryName = String(context.payload.repository.full_name || '').toLowerCase();
+              const headRepositoryName = String(pull.head?.repo?.full_name || '').toLowerCase();
+              if (!headRepositoryName || headRepositoryName !== repositoryName) {
+                return null;
+              }
+
+              return {
+                number: pull.number,
+                title,
+                version,
+                headRefName: headRef,
+                url: pull.html_url || '',
+              };
+            }
+
+            async function collectCurrentHeadFiles(defaultBranchSha) {
+              const { data: commit } = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: defaultBranchSha,
+              });
+              const commitFiles = Array.isArray(commit.files)
+                ? commit.files.map((file) => file.filename).filter(Boolean)
+                : [];
+              if (commitFiles.length || !commit.parents?.[0]?.sha) {
+                return commitFiles;
+              }
+
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: commit.parents[0].sha,
+                head: defaultBranchSha,
+              });
+              return Array.isArray(comparison.files)
+                ? comparison.files.map((file) => file.filename).filter(Boolean)
+                : [];
+            }
+
+            function safeArtifactRef(ref) {
+              return String(ref || '').replace(/[^A-Za-z0-9._-]/g, '-');
+            }
+
+            function isReleaseUpgradeReplayRun(run) {
+              const replayWorkflowPath = '.github/workflows/release-upgrade-replay.yml';
+              const runPath = String(run.path || '').split('@')[0];
+              const runName = String(run.name || '');
+              return (
+                runPath === replayWorkflowPath ||
+                runPath.endsWith(`/${replayWorkflowPath}`) ||
+                runName === 'Release Upgrade Replay' ||
+                runName.startsWith('Release Upgrade Replay (')
+              );
+            }
+
+            async function findReleaseUpgradeReplayEvidence(defaultBranchSha, latestReleaseTag, ciRuns) {
+              if (!latestReleaseTag) {
+                return {
+                  blockingMessage: '',
+                  summary: '- Status: `not required`; no published release tag exists yet.',
+                };
+              }
+
+              const expectedArtifactName = `release-upgrade-replay-result-${defaultBranchSha}-${safeArtifactRef(latestReleaseTag)}`;
+              const replayRuns = ciRuns
+                .filter((run) => isReleaseUpgradeReplayRun(run) && run.head_sha === defaultBranchSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              if (!replayRuns.length) {
+                return {
+                  blockingMessage: `Release Upgrade Replay has not run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
+                  summary: [
+                    `- Status: \`missing\` for current ${defaultBranch} commit \`${defaultBranchSha}\`.`,
+                    `- Required base: \`${latestReleaseTag}\`.`,
+                    `- Expected artifact marker: \`${expectedArtifactName}\`.`,
+                  ].join('\n'),
+                };
+              }
+
+              let latestCompletedRun = null;
+              for (const run of replayRuns) {
+                if (run.status !== 'completed') {
+                  return {
+                    blockingMessage: `Release Upgrade Replay for current ${defaultBranch} commit ${defaultBranchSha} is ${run.status}: ${run.html_url}`,
+                    summary: [
+                      `- Status: \`${run.status || 'unknown'}\`.`,
+                      `- Workflow run: ${run.html_url}`,
+                      `- Required base: \`${latestReleaseTag}\`.`,
+                      `- Candidate commit: \`${defaultBranchSha}\`.`,
+                    ].join('\n'),
+                  };
+                }
+
+                if (run.conclusion !== 'success') {
+                  return {
+                    blockingMessage: `Latest Release Upgrade Replay for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag} completed with ${run.conclusion || 'unknown'}: ${run.html_url}`,
+                    summary: [
+                      `- Status: \`${run.conclusion || 'unknown'}\`.`,
+                      `- Latest workflow run: ${run.html_url}`,
+                      `- Required base: \`${latestReleaseTag}\`.`,
+                      `- Candidate commit: \`${defaultBranchSha}\`.`,
+                      `- Expected artifact marker: \`${expectedArtifactName}\`.`,
+                    ].join('\n'),
+                  };
+                }
+
+                latestCompletedRun ||= run;
+                let artifacts = [];
+                try {
+                  artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: run.id,
+                    per_page: 100,
+                  });
+                } catch (error) {
+                  return {
+                    blockingMessage: `Unable to inspect Release Upgrade Replay artifacts for ${defaultBranchSha}: ${error.message}`,
+                    summary: [
+                      '- Status: `artifact-check-failed`.',
+                      `- Workflow run: ${run.html_url}`,
+                      `- Required base: \`${latestReleaseTag}\`.`,
+                    ].join('\n'),
+                  };
+                }
+
+                const markerArtifact = artifacts.find((artifact) => (
+                  artifact.name === expectedArtifactName && !artifact.expired
+                ));
+                if (markerArtifact) {
+                  return {
+                    blockingMessage: '',
+                    summary: [
+                      '- Status: `success`.',
+                      `- Workflow run: ${run.html_url}`,
+                      `- Required base: \`${latestReleaseTag}\`.`,
+                      `- Candidate commit: \`${defaultBranchSha}\`.`,
+                      `- Evidence artifact: \`${expectedArtifactName}\`.`,
+                    ].join('\n'),
+                  };
+                }
+              }
+
+              const completedState = latestCompletedRun
+                ? (latestCompletedRun.conclusion || latestCompletedRun.status || 'unknown')
+                : 'unknown';
+              const completedUrl = latestCompletedRun?.html_url || replayRuns[0].html_url;
+              return {
+                blockingMessage: `Release Upgrade Replay has no successful run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
+                summary: [
+                  `- Status: \`${completedState}\`.`,
+                  `- Latest workflow run: ${completedUrl}`,
+                  `- Required base: \`${latestReleaseTag}\`.`,
+                  `- Candidate commit: \`${defaultBranchSha}\`.`,
+                  `- Expected artifact marker: \`${expectedArtifactName}\`.`,
+                ].join('\n'),
+              };
+            }
+
+            try {
+              const { data: latestRelease } = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              latestReleaseTag = latestRelease.tag_name || '';
+
+              const releaseCompletedAt = latestRelease.published_at || latestRelease.created_at;
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: latestRelease.tag_name,
+                head: defaultBranch,
+              });
+
+              if (!comparison.ahead_by) {
+                const ageMillis = releaseCompletedAt
+                  ? Date.now() - Date.parse(releaseCompletedAt)
+                  : 0;
+
+                if (releaseCompletedAt && ageMillis >= releaseCutoffMillis) {
+                  shouldRun = false;
+                  skipReason = `Latest release ${latestRelease.tag_name} is at least three full days old and there are no new commits on ${defaultBranch}.`;
+                } else {
+                  shouldRun = false;
+                  skipReason = `No new commits on ${defaultBranch} since ${latestRelease.tag_name}; a new release is not currently needed.`;
+                }
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                core.info('No releases exist yet; continuing with release readiness checks.');
+              } else {
+                throw error;
+              }
+            }
+
+            openPullRequests = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            closedReleasePullRequests = openPullRequests
+              .map(parseAbortedReleasePull)
+              .filter(Boolean);
+            for (const pull of closedReleasePullRequests) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pull.number,
+                body: [
+                  `Closing abandoned release PR #${pull.number} (Release v${pull.version}) during release readiness.`,
+                  '',
+                  'A fresh Release Readiness check is running and this explicitly abandoned release candidate should not block or alter the next patch calculation.',
+                  `Source workflow: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                ].join('\n'),
+              });
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pull.number,
+                state: 'closed',
+              });
+              core.info(`Closed abandoned release PR #${pull.number} (Release v${pull.version}).`);
+            }
+
+            let codeScanningAlerts = null;
+            let futureReleaseDeferredIssues = [];
+            try {
+              codeScanningAlerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+              });
+            } catch (error) {
+              const message = `Unable to verify GitHub code scanning alerts before release readiness: ${error.message}`;
+              if (shouldRun) {
+                blockers.push(message);
+              } else {
+                core.warning(message);
+              }
+            }
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const openIssues = issues.filter((issue) => issue.state === 'open');
+
+            const legacyCodeScanningTrackerIssues = issues.filter((issue) => (
+              !issue.pull_request &&
+              issue.title === legacyCodeScanningTrackerTitle &&
+              issue.body?.includes(legacyCodeScanningTrackerMarker)
+            ));
+            const legacyCodeScanningTrackerNumbers = new Set(
+              legacyCodeScanningTrackerIssues.map((issue) => issue.number)
+            );
+            for (const issue of legacyCodeScanningTrackerIssues) {
+              try {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  body: [
+                    legacyCodeScanningTrackerMarker,
+                    '',
+                    'This legacy automation tracker has been redacted and closed. GitHub code scanning alert details are intentionally kept inside GitHub code scanning.',
+                    '',
+                    `- Workflow run: ${runUrl}`,
+                    `- Checked commit: ${context.sha}`,
+                  ].join('\n'),
+                });
+                core.info(`Closed and redacted legacy code scanning tracker issue #${issue.number}.`);
+              } catch (error) {
+                blockers.push(`Unable to redact legacy GitHub code scanning tracker issue #${issue.number}: ${error.message}`);
+              }
+            }
+
+            if (shouldRun) {
+              try {
+                defaultBranchVersion = await readDefaultBranchVersion(defaultBranch);
+                core.info(`Default branch VERSION is ${defaultBranchVersion || 'empty'}.`);
+              } catch (error) {
+                blockers.push(`Unable to read default branch VERSION before future-release deferral checks: ${error.message}`);
+              }
+
+              const openBlockingIssues = openIssues.filter((issue) => {
+                if (issue.pull_request) {
+                  return false;
+                }
+                if (issue.title === releaseReadinessReportTitle && issue.body?.includes(releaseReadinessReportMarker)) {
+                  return false;
+                }
+                if (legacyCodeScanningTrackerNumbers.has(issue.number)) {
+                  return false;
+                }
+                if (
+                  issue.title === retiredInstallHealthIssueTitle &&
+                  issue.body?.includes(retiredInstallHealthIssueMarker)
+                ) {
+                  return false;
+                }
+                const futureReleaseIssue = futureReleaseDeferral(issue, defaultBranchVersion);
+                if (futureReleaseIssue) {
+                  futureReleaseDeferredIssues.push(futureReleaseIssue);
+                  return false;
+                }
+                const currentReleaseLabel = currentReleaseIssueLabel(issue);
+                if (currentReleaseLabel) {
+                  return true;
+                }
+                const labels = Array.isArray(issue.labels) ? issue.labels : [];
+                return !labels.some((label) => (label?.name || '').toLowerCase() === blockingIssueLabel);
+              });
+              if (openBlockingIssues.length) {
+                const issueList = openBlockingIssues
+                  .slice(0, 10)
+                  .map((issue) => `#${issue.number}`)
+                  .join(', ');
+                const moreCount = openBlockingIssues.length - 10;
+                const moreSuffix = moreCount > 0 ? `, and ${moreCount} more` : '';
+                blockers.push(`Open non-enhancement issues: ${issueList}${moreSuffix}.`);
+              }
+
+              const closedReleasePullRequestNumbers = new Set(
+                closedReleasePullRequests.map((pull) => pull.number)
+              );
+              const blockingPullRequests = openPullRequests.filter(
+                (pull) => !closedReleasePullRequestNumbers.has(pull.number)
+              );
+              if (blockingPullRequests.length) {
+                const pullList = blockingPullRequests
+                  .slice(0, 10)
+                  .map((pull) => `#${pull.number}`)
+                  .join(', ');
+                const moreCount = blockingPullRequests.length - 10;
+                const moreSuffix = moreCount > 0 ? `, and ${moreCount} more` : '';
+                blockers.push(`Open pull requests: ${pullList}${moreSuffix}.`);
+              }
+
+              const { data: defaultBranchData } = await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: defaultBranch,
+              });
+              const defaultBranchSha = defaultBranchData?.commit?.sha || context.sha;
+              const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: defaultBranch,
+                per_page: 100,
+              });
+
+              const defaultBranchHeadObservationRuns = ciRuns
+                .filter((run) => run.head_sha === defaultBranchSha && run.created_at && run.id !== context.runId)
+                .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+              const defaultBranchAdvancedAt = defaultBranchHeadObservationRuns[0]?.created_at;
+
+              if (defaultBranchAdvancedAt) {
+                const advancedTime = Date.parse(defaultBranchAdvancedAt);
+                const minimumReadyAt = new Date(advancedTime + minimumMainCooldownMillis);
+                const mainAgeMillis = Date.now() - advancedTime;
+                if (mainAgeMillis < minimumMainCooldownMillis) {
+                  blockers.push(`Minimum release-readiness cooldown has not elapsed since ${defaultBranch} advanced to commit ${defaultBranchSha}; wait until ${minimumReadyAt.toISOString()} before trusting security scan evidence.`);
+                }
+              } else {
+                blockers.push(`Unable to verify when ${defaultBranch} advanced to commit ${defaultBranchSha} before security scan readiness.`);
+              }
+
+              let codeqlRelevantFiles = [];
+              try {
+                const changedFiles = await collectCurrentHeadFiles(defaultBranchSha);
+                codeqlRelevantFiles = changedFiles.filter(matchesCodeqlPath);
+                core.info(`Changed files on current ${defaultBranch} head: ${formatFileList(changedFiles)}`);
+                if (codeqlRelevantFiles.length) {
+                  core.info(`CodeQL-relevant files on current ${defaultBranch} head: ${formatFileList(codeqlRelevantFiles)}`);
+                } else {
+                  core.info(`No CodeQL-relevant files changed on current ${defaultBranch} head; CodeQL head evidence is not required.`);
+                }
+              } catch (error) {
+                blockers.push(`Unable to determine whether current ${defaultBranch} commit ${defaultBranchSha} requires CodeQL evidence: ${error.message}`);
+              }
+
+              const codeqlRunsForHead = ciRuns
+                .filter((run) => run.name === 'CodeQL' && run.head_sha === defaultBranchSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              const latestCodeqlRun = codeqlRunsForHead[0];
+              const requiresCodeqlEvidence = codeqlRelevantFiles.length > 0 || Boolean(latestCodeqlRun);
+
+              if (requiresCodeqlEvidence) {
+                if (!latestCodeqlRun) {
+                  blockers.push(`CodeQL has not run for current ${defaultBranch} commit ${defaultBranchSha} after CodeQL-relevant changes: ${formatFileList(codeqlRelevantFiles)}.`);
+                } else if (latestCodeqlRun.status !== 'completed') {
+                  blockers.push(`CodeQL for current ${defaultBranch} commit ${defaultBranchSha} is ${latestCodeqlRun.status}: ${latestCodeqlRun.html_url}`);
+                } else if (latestCodeqlRun.conclusion !== 'success') {
+                  blockers.push(`CodeQL for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestCodeqlRun.conclusion}: ${latestCodeqlRun.html_url}`);
+                } else {
+                  try {
+                    const analyses = await github.paginate(github.rest.codeScanning.listRecentAnalyses, {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: `refs/heads/${defaultBranch}`,
+                      per_page: 100,
+                    });
+                    const codeqlAnalysis = analyses.find((analysis) => (
+                      analysis.commit_sha === defaultBranchSha &&
+                      analysis.tool?.name === 'CodeQL' &&
+                      !analysis.error
+                    ));
+                    if (!codeqlAnalysis) {
+                      blockers.push(`CodeQL workflow succeeded for current ${defaultBranch} commit ${defaultBranchSha}, but GitHub code scanning has not exposed the matching analysis yet: ${latestCodeqlRun.html_url}`);
+                    }
+                  } catch (error) {
+                    blockers.push(`Unable to verify CodeQL analysis upload for current ${defaultBranch} commit ${defaultBranchSha}: ${error.message}`);
+                  }
+                }
+              }
+
+              if (codeScanningAlerts?.length) {
+                blockers.push(`Open GitHub code scanning security findings: ${codeScanningAlerts.length}. Review them in GitHub code scanning.`);
+              }
+
+              const upgradeReplayEvidence = await findReleaseUpgradeReplayEvidence(
+                defaultBranchSha,
+                latestReleaseTag,
+                ciRuns
+              );
+              upgradeReplaySummary = upgradeReplayEvidence.summary;
+              if (upgradeReplayEvidence.blockingMessage) {
+                blockers.push(upgradeReplayEvidence.blockingMessage);
+              }
+
+              const installHealthRunsForHead = ciRuns
+                .filter((run) => run.name === 'Install Health Check' && run.head_sha === defaultBranchSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              const latestInstallHealthRun = installHealthRunsForHead[0];
+
+              if (!latestInstallHealthRun) {
+                blockers.push(`Install Health Check has not run for current ${defaultBranch} commit ${defaultBranchSha}.`);
+              } else if (latestInstallHealthRun.status !== 'completed') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} is ${latestInstallHealthRun.status}: ${latestInstallHealthRun.html_url}`);
+              } else if (latestInstallHealthRun.conclusion !== 'success') {
+                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestInstallHealthRun.conclusion}: ${latestInstallHealthRun.html_url}`);
+              }
+
+              const latestCiRun = ciRuns
+                .filter((run) => run.name === 'Upgrade Gate')
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+              if (latestCiRun && latestCiRun.conclusion === 'failure') {
+                let upgradeFailed = false;
+                try {
+                  const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: latestCiRun.id,
+                    per_page: 100,
+                  });
+                  upgradeFailed = jobsData.jobs.some((job) => (job.name || '').toLowerCase().includes('upgrade') && job.conclusion === 'failure');
+                } catch (error) {
+                  core.warning(`Unable to inspect CI jobs for run ${latestCiRun.id}: ${error.message}`);
+                }
+
+                if (upgradeFailed) {
+                  blockers.push(`Latest CI upgrade gate failed: ${latestCiRun.html_url}`);
+                }
+              }
+
+            } else {
+              core.info(`Skipping release readiness check: ${skipReason}`);
+            }
+
+            const canSimulate = shouldRun && blockers.length === 0;
+            core.setOutput('should_run', shouldRun ? 'true' : 'false');
+            core.setOutput('skip_reason', skipReason);
+            core.setOutput('can_simulate', canSimulate ? 'true' : 'false');
+            core.setOutput('blockers_json', JSON.stringify(blockers));
+            core.setOutput('default_branch', defaultBranch);
+            core.setOutput('default_branch_version', defaultBranchVersion);
+            core.setOutput('latest_release_tag', latestReleaseTag);
+            core.setOutput('release_threads_json', JSON.stringify(closedReleasePullRequests));
+            core.setOutput('future_release_issues_json', JSON.stringify(futureReleaseDeferredIssues));
+            core.setOutput('upgrade_replay_summary', upgradeReplaySummary);
+
+  simulate_release:
+    if: ${{ needs.evaluate.outputs.should_run == 'true' }}
+    needs:
+      - evaluate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
+      summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Resolve simulation version against PyPI
+        id: resolve_simulation_version
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        env:
+          BASE_REF: ${{ needs.evaluate.outputs.latest_release_tag }}
+          SIM_ERROR_FILE: release-simulation-error.md
+        run: |
+          set -o pipefail
+          log_file="$(mktemp)"
+          plan_output="$(mktemp)"
+          args=(
+            --root .
+            --package-name arthexis
+            --version-file VERSION
+            --head-ref HEAD
+            --bump-level auto
+            --write-version
+            --github-output "$plan_output"
+            --summary-file release-version-plan.md
+          )
+          if [ -n "$BASE_REF" ]; then
+            args+=(--base-ref "$BASE_REF")
+          fi
+
+          if python -m scripts.release.plan_version "${args[@]}" >"$log_file" 2>&1; then
+            cat "$log_file"
+            cat "$plan_output" >> "$GITHUB_OUTPUT"
+            rm -f "$SIM_ERROR_FILE" "$log_file" "$plan_output"
+            exit 0
+          else
+            status=$?
+          fi
+
+          cat "$log_file"
+          {
+            echo '#### Failure detail'
+            echo "- Command: \`python -m scripts.release.plan_version\`"
+            if [ -n "$BASE_REF" ]; then
+              echo "- Base ref: \`$BASE_REF\`"
+              if ! git rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null; then
+                echo "- Hint: base ref \`$BASE_REF\` is not present in the simulator checkout. Fetch release tags and full history before planning the simulated version."
+              fi
+            else
+              echo '- Base ref: none'
+            fi
+            echo ''
+            echo 'Last output:'
+            echo '```text'
+            tail -n 40 "$log_file"
+            echo '```'
+          } > "$SIM_ERROR_FILE"
+          rm -f "$log_file" "$plan_output"
+          exit "$status"
+      - name: Validate release tag version gate (simulated)
+        id: validate_version_gate
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          root = Path('.')
+          expected_version = (root / 'VERSION').read_text(encoding='utf-8').strip()
+          pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+          dynamic_version_files = (
+              pyproject.get('tool', {})
+              .get('setuptools', {})
+              .get('dynamic', {})
+              .get('version', {})
+              .get('file', [])
+          )
+          if isinstance(dynamic_version_files, str):
+              dynamic_version_files = [dynamic_version_files]
+
+          if dynamic_version_files:
+              dynamic_path = root / dynamic_version_files[0]
+              dynamic_version = dynamic_path.read_text(encoding='utf-8').strip()
+              if dynamic_version != expected_version:
+                  raise SystemExit(
+                      'Release simulation blocked: VERSION and setuptools dynamic version file differ. '
+                      f'VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.'
+                  )
+
+          print(f'Simulated tag/version gate passed for VERSION={expected_version!r}.')
+          PY
+      - name: Preflight PyPI version availability (simulated)
+        id: preflight_pypi
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = 'arthexis'
+          package_version = Path('VERSION').read_text(encoding='utf-8').strip()
+          pypi_url = f'https://pypi.org/pypi/{package_name}/json'
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {'releases': {}}
+              else:
+                  raise SystemExit(
+                      'Release simulation blocked: unable to verify existing PyPI versions '
+                      f'(HTTP {exc.code} from {pypi_url}).'
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  'Release simulation blocked: network failure while checking PyPI for an existing release '
+                  f'({exc.reason}).'
+              ) from exc
+
+          releases = payload.get('releases', {})
+          if package_version in releases:
+              raise SystemExit(
+                  f'Release simulation blocked: {package_name} {package_version} is still available on PyPI '
+                  'after simulated version advancement. Please rerun manually.'
+              )
+
+          print(f'Simulated PyPI preflight passed for {package_name} {package_version}.')
+          PY
+      - name: Install build backend
+        id: install_build_backend
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      - name: Build sdist and wheel (simulated)
+        id: build_package
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m build
+      - name: Validate package metadata (simulated)
+        id: validate_metadata
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m twine check dist/*
+      - name: Stop before authorization-required publish step
+        id: authorization_boundary
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          echo "Release simulator intentionally stopped before PyPI trusted-publisher authorization/publish."
+      - name: Generate release simulation summary
+        id: finalize
+        if: ${{ always() }}
+        run: |
+          if [ "${{ needs.evaluate.outputs.can_simulate }}" = "true" ]; then
+            if [ "${{ job.status }}" = "success" ]; then
+              VERSION_BUMPED="${{ steps.resolve_simulation_version.outputs.version_bumped }}"
+              SIMULATED_VERSION="${{ steps.resolve_simulation_version.outputs.simulated_version }}"
+              PREVIOUS_VERSION="${{ steps.resolve_simulation_version.outputs.previous_version }}"
+              BUMP_LEVEL="${{ steps.resolve_simulation_version.outputs.bump_level }}"
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo "- INFO Version policy selected a \`$BUMP_LEVEL\` bump with simulated VERSION \`$SIMULATED_VERSION\`."
+                echo '- OK Release simulation reached the authorization boundary successfully.'
+                if [ "$VERSION_BUMPED" = "true" ]; then
+                  echo "- INFO Simulation version advanced from \`$PREVIOUS_VERSION\` to \`$SIMULATED_VERSION\`."
+                fi
+                echo '- INFO Publish to PyPI was intentionally skipped because authorization is required.'
+                echo '- OK Recommendation: release is ready if maintainers approve and trigger a real publish.'
+                echo 'EOF'
+                echo 'simulated_ok=true'
+              } >> "$GITHUB_OUTPUT"
+            else
+              FAILED_STEP='the simulation pipeline'
+              if [ "${{ steps.resolve_simulation_version.outcome }}" = "failure" ]; then
+                FAILED_STEP='resolve_simulation_version'
+              elif [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_version_gate'
+              elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
+                FAILED_STEP='preflight_pypi'
+              elif [ "${{ steps.install_build_backend.outcome }}" = "failure" ]; then
+                FAILED_STEP='install_build_backend'
+              elif [ "${{ steps.build_package.outcome }}" = "failure" ]; then
+                FAILED_STEP='build_package'
+              elif [ "${{ steps.validate_metadata.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_metadata'
+              elif [ "${{ steps.authorization_boundary.outcome }}" = "failure" ]; then
+                FAILED_STEP='authorization_boundary'
+              fi
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo '- ❌ Release simulation failed before reaching the authorization boundary.'
+                echo "- ❌ First failing step: \`$FAILED_STEP\`."
+                if [ -s release-simulation-error.md ]; then
+                  cat release-simulation-error.md
+                else
+                  echo '- Detail: no structured failure detail was captured for this step. Inspect the workflow run logs.'
+                fi
+                echo "- 🔎 Inspect this workflow run for detailed logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                echo 'EOF'
+                echo 'simulated_ok=false'
+              } >> "$GITHUB_OUTPUT"
+            fi
+          else
+            {
+              echo 'summary_markdown<<EOF'
+              echo '### Simulation result'
+              echo ''
+              echo '- ⏭️ Release simulation was skipped because release readiness blockers are open.'
+              echo 'EOF'
+              echo 'simulated_ok=false'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+  report:
+    if: ${{ always() && needs.evaluate.outputs.should_run == 'true' }}
+    needs:
+      - evaluate
+      - simulate_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Create or update release readiness report issue
+        uses: actions/github-script@v9
+        env:
+          BLOCKERS_JSON: ${{ needs.evaluate.outputs.blockers_json }}
+          CAN_SIMULATE: ${{ needs.evaluate.outputs.can_simulate }}
+          SIMULATED_OK: ${{ needs.simulate_release.outputs.simulated_ok }}
+          SIM_SUMMARY: ${{ needs.simulate_release.outputs.summary_markdown }}
+          DEFAULT_BRANCH: ${{ needs.evaluate.outputs.default_branch }}
+          DEFAULT_BRANCH_VERSION: ${{ needs.evaluate.outputs.default_branch_version }}
+          FUTURE_RELEASE_ISSUES_JSON: ${{ needs.evaluate.outputs.future_release_issues_json }}
+          UPGRADE_REPLAY_SUMMARY: ${{ needs.evaluate.outputs.upgrade_replay_summary }}
+        with:
+          script: |
+            const title = 'Release Readiness Report';
+            const marker = '<!-- release-readiness-report -->';
+            const crypto = require('crypto');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const desiredReportLabels = ['automation', 'upgrade'];
+            const blockers = JSON.parse(process.env.BLOCKERS_JSON || '[]');
+            const futureReleaseIssues = JSON.parse(process.env.FUTURE_RELEASE_ISSUES_JSON || '[]');
+            const canSimulate = process.env.CAN_SIMULATE === 'true';
+            const simulatedOk = process.env.SIMULATED_OK === 'true';
+            const defaultBranchVersion = process.env.DEFAULT_BRANCH_VERSION || '';
+            const simulationSummary = process.env.SIM_SUMMARY || [
+              '### Simulation result',
+              '',
+              '- ❌ Release simulation failed before producing a summary. Check the workflow run logs.'
+            ].join('\n');
+            const defaultBranch = process.env.DEFAULT_BRANCH || context.payload.repository?.default_branch;
+
+            const upgradeReplaySummary = process.env.UPGRADE_REPLAY_SUMMARY || [
+              '- Status: unavailable.',
+              '- Blocking: yes. Release readiness requires a successful latest-release-to-candidate replay for this commit.'
+            ].join('\n');
+
+            const availableIssueLabels = async (labelNames) => {
+              const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+              });
+              const availableNames = new Set(repoLabels.map((label) => label.name));
+              const availableLabels = labelNames.filter((label) => availableNames.has(label));
+              const missingLabels = labelNames.filter((label) => !availableNames.has(label));
+              if (missingLabels.length) {
+                core.info(`Configured labels not present in repository: ${missingLabels.join(', ')}`);
+              }
+              return availableLabels;
+            };
+
+            const existingIssueLabelNames = (issue) => new Set(
+              (issue?.labels || [])
+                .map((label) => label?.name || label)
+                .filter(Boolean)
+            );
+
+            const addAvailableLabels = async (issueNumber, labelNames, existingIssue) => {
+              const availableLabels = await availableIssueLabels(labelNames);
+              const existingLabels = existingIssueLabelNames(existingIssue);
+              const labelsToAdd = availableLabels.filter((label) => !existingLabels.has(label));
+              if (!labelsToAdd.length) {
+                core.info(`Issue #${issueNumber} already has the available stable labels.`);
+                return;
+              }
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: labelsToAdd,
+              });
+            };
+
+            async function collectChangeLines() {
+              const maxEntries = 25;
+              try {
+                const latestRelease = await github.rest.repos.getLatestRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                });
+                const tagName = latestRelease.data?.tag_name;
+                if (!tagName) {
+                  return {
+                    heading: '## Changes since last release',
+                    lines: ['- Unable to determine the latest release tag.'],
+                  };
+                }
+
+                const comparison = await github.rest.repos.compareCommits({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  base: tagName,
+                  head: defaultBranch,
+                });
+                const commits = comparison.data?.commits || [];
+                const totalCommits = comparison.data?.total_commits ?? commits.length;
+                if (!commits.length) {
+                  return {
+                    heading: `## Changes since last release (${tagName} → ${defaultBranch})`,
+                    lines: ['- No unreleased commits detected.'],
+                  };
+                }
+
+                const lines = commits.slice(-maxEntries).reverse().map((commit) => {
+                  const shortSha = (commit.sha || '').slice(0, 7);
+                  const message = String(commit.commit?.message || '').split('\n')[0].trim();
+                  const author = commit.commit?.author?.name || commit.author?.login || 'unknown author';
+                  const url = commit.html_url || `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${commit.sha}`;
+                  return `- [${shortSha}](${url}) ${message} — ${author}`;
+                });
+                if (totalCommits > lines.length) {
+                  lines.push(`- _And ${totalCommits - lines.length} more commit(s)._`);
+                }
+                return {
+                  heading: `## Changes since last release (${tagName} → ${defaultBranch})`,
+                  lines,
+                };
+              } catch (error) {
+                if (error?.status === 404) {
+                  return {
+                    heading: '## Changes since last release',
+                    lines: ['- No published release found yet.'],
+                  };
+                }
+                core.warning(`Unable to collect changes since last release: ${error?.message || error}`);
+                return {
+                  heading: '## Changes since last release',
+                  lines: ['- Unable to collect change list for this run. Check workflow logs.'],
+                };
+              }
+            }
+
+            const changesSinceRelease = await collectChangeLines();
+
+            const blockerSection = blockers.length
+              ? blockers.map((blocker) => `- ${blocker}`).join('\n')
+              : '- None detected.';
+            const deferredFutureIssueSection = futureReleaseIssues.length
+              ? futureReleaseIssues.map((issue) => (
+                `- #${issue.number} targeted to \`${issue.targetRelease || 'future release'}\`: ${issue.title} (${issue.url})`
+              )).join('\n')
+              : '- None detected.';
+            const recommendation = blockers.length
+              ? '❌ Do not release yet. Resolve blockers and wait for the next simulator run.'
+              : simulatedOk
+                ? '✅ Recommendation: release can proceed once maintainers approve authorization.'
+                : '⚠️ No release readiness blockers were found, but release simulation did not complete.';
+
+            const reportFingerprint = crypto
+              .createHash('sha256')
+              .update(JSON.stringify({
+                blockers,
+                canSimulate,
+                commit: context.sha,
+                defaultBranchVersion,
+                recommendation,
+                ref: context.ref,
+                simulatedOk,
+                simulationSummary,
+                upgradeReplaySummary,
+                changesSinceRelease,
+                futureReleaseIssues,
+              }))
+              .digest('hex');
+            const fingerprintMarker = `<!-- release-readiness-fingerprint:${reportFingerprint} -->`;
+
+            const body = [
+              marker,
+              fingerprintMarker,
+              '',
+              'Manual release readiness report. Run this workflow only when an operator requests release evidence; it proceeds after the default branch has observed the minimum 10-minute cooldown and required security evidence is available.',
+              '',
+              `- Workflow run: ${runUrl}`,
+              `- Ref: ${context.ref}`,
+              `- Commit: ${context.sha}`,
+              `- VERSION: ${defaultBranchVersion || 'unknown'}`,
+              `- Event: ${context.eventName}`,
+              '',
+              '## Release readiness blockers',
+              blockerSection,
+              '',
+              '## Deferred future-release issues',
+              deferredFutureIssueSection,
+              '',
+              'Future-release issues targeted to the current VERSION are treated as current release blockers.',
+              '',
+              canSimulate ? '## Release simulation' : '## Release simulation',
+              canSimulate ? simulationSummary : '- Skipped because release readiness blockers are currently open.',
+              '',
+              '## Release upgrade replay',
+              upgradeReplaySummary,
+              '',
+              changesSinceRelease.heading,
+              ...changesSinceRelease.lines,
+              '',
+              '## Recommendation',
+              recommendation,
+            ].join('\n');
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
+            if (existing) {
+              await addAvailableLabels(existing.number, desiredReportLabels, existing);
+              const reportUnchanged = existing.body?.includes(fingerprintMarker);
+              if (reportUnchanged) {
+                core.info(`Release readiness report #${existing.number} already has unchanged content; skipping refresh comment.`);
+                return;
+              }
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  'Release readiness report refreshed.',
+                  '',
+                  `- Workflow run: ${runUrl}`,
+                  `- Recommendation: ${recommendation}`,
+                ].join('\n'),
+              });
+              core.info(`Updated existing issue #${existing.number}.`);
+              return;
+            }
+
+            const createIssueLabels = await availableIssueLabels(desiredReportLabels);
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              ...(createIssueLabels.length ? { labels: createIssueLabels } : {}),
+            });
+            core.info(`Created issue #${created.data.number}.`);
+
+  close_report_when_not_needed:
+    if: ${{ needs.evaluate.outputs.should_run != 'true' }}
+    needs:
+      - evaluate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Close open release readiness report when checks are not needed
+        uses: actions/github-script@v9
+        env:
+          SKIP_REASON: ${{ needs.evaluate.outputs.skip_reason }}
+        with:
+          script: |
+            const title = 'Release Readiness Report';
+            const marker = '<!-- release-readiness-report -->';
+            const skipReason = process.env.SKIP_REASON || 'Release readiness check skipped by policy.';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
+            if (!existing) {
+              core.info('No open release readiness report issue found to close.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              body: [
+                'Closing this report because release readiness checks are currently not needed.',
+                '',
+                `- Reason: ${skipReason}`,
+                `- Workflow run: ${runUrl}`,
+              ].join('\n'),
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              state: 'closed',
+            });

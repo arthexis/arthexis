@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <h1>{% translate "Prepare next release" %}</h1>
+  <form method="post">
+    {% csrf_token %}
+    <p>
+      {% blocktranslate with package_name=original.name %}
+        Prepare the next release for {{ package_name }}?
+      {% endblocktranslate %}
+    </p>
+    <div class="submit-row">
+      <input type="submit" value="{% translate 'Prepare next release' %}" class="default">
+      <a href="{{ cancel_url }}">{% translate "Cancel" %}</a>
+    </div>
+  </form>
+{% endblock %}

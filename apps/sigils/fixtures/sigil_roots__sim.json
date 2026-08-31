@@ -1,0 +1,15 @@
+[
+  {
+    "model": "sigils.sigilroot",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "prefix": "SIM",
+      "context_type": "entity",
+      "content_type": [
+        "ocpp",
+        "simulator"
+      ]
+    }
+  }
+]

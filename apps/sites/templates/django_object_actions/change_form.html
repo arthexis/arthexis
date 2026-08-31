@@ -1,0 +1,15 @@
+{% extends "admin/user_datum_change_form.html" %}
+
+{% block object-tools-items %}
+  {% for tool in objectactions %}
+    <li class="objectaction-item" data-tool-name="{{ tool.name }}">
+      <button form="{{ opts.model_name }}_form" type="submit" name="_action" value="{{ tool.name }}"
+        title="{{ tool.standard_attrs.title }}"
+        {% for k, v in tool.custom_attrs.items %}
+          {{ k }}="{{ v }}"
+        {% endfor %}
+        class="{{ tool.standard_attrs.class }}">{{ tool.label|capfirst }}</button>
+    </li>
+  {% endfor %}
+  {{ block.super }}
+{% endblock %}

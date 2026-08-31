@@ -1,0 +1,89 @@
+.export-summary {
+  margin: 0;
+}
+
+.export-columns-list {
+  margin: 0.5rem 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.export-columns-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing, 0.5rem);
+  justify-content: space-between;
+  margin-bottom: calc(var(--spacing, 0.5rem) * 0.5);
+}
+
+.export-column-option {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing, 0.5rem) * 0.8);
+}
+
+.export-column-drag-handle {
+  cursor: grab;
+  min-height: calc(var(--height, 2rem) * 0.9);
+  min-width: calc(var(--height, 2rem) * 0.9);
+  padding: calc(var(--spacing, 0.5rem) * 0.25) calc(var(--spacing, 0.5rem) * 0.5);
+}
+
+.export-columns-list li.is-dragging .export-column-drag-handle {
+  cursor: grabbing;
+}
+
+.export-column-name {
+  text-transform: uppercase;
+}
+
+.export-column-option input[type="checkbox"] {
+  margin: 0;
+}
+
+.import-identifier {
+  color: var(--default-button-bg, #0c4b33);
+  font-weight: 600;
+}
+
+.import-identifier-badge {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--link-fg, #417690);
+}
+
+.export-column-help {
+  margin-top: 0.65rem;
+  color: var(--body-quiet-color, #666);
+  font-size: 0.92em;
+}
+
+.export-column-move-controls {
+  display: inline-flex;
+  gap: calc(var(--spacing, 0.5rem) * 0.5);
+}
+
+.export-column-move-controls .button {
+  min-height: calc(var(--height, 2rem) * 0.9);
+  min-width: calc(var(--height, 2rem) * 0.9);
+  padding: calc(var(--spacing, 0.5rem) * 0.25) calc(var(--spacing, 0.5rem) * 0.5);
+}
+
+
+.export-form .export-fieldset .form-row {
+  padding: calc(var(--spacing, 0.5rem) * 0.75) var(--spacing, 0.5rem);
+}
+
+.export-form .export-fieldset .form-row.export-summary-row {
+  padding: calc(var(--spacing, 0.5rem) * 0.35) var(--spacing, 0.5rem);
+}
+
+.export-form .submit-row {
+  padding: calc(var(--spacing, 0.5rem) * 0.75) var(--spacing, 0.5rem);
+}
+
+.export-form .submit-row .default,
+.export-form .submit-row .button {
+  min-height: calc(var(--height, 2rem) * 1.05);
+  padding: calc(var(--spacing, 0.5rem) * 0.8) calc(var(--spacing, 0.5rem) * 1.5);
+}

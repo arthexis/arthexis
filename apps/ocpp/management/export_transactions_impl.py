@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Iterable
+from datetime import datetime, time
+
+from django.core.management.base import CommandError
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
+
+from apps.ocpp.transactions_io import export_transactions
+
+
+def parse_datetime_option(value: str) -> datetime:
+    """Parse CLI date/datetime values into aware datetimes."""
+    parsed_datetime = parse_datetime(value)
+    if parsed_datetime is None:
+        parsed_date = parse_date(value)
+        if parsed_date is None:
+            raise CommandError(f"Invalid date/datetime: {value}")
+        parsed_datetime = datetime.combine(parsed_date, time.min)
+    if timezone.is_naive(parsed_datetime):
+        parsed_datetime = timezone.make_aware(parsed_datetime)
+    return parsed_datetime
+
+
+def run_export_transactions(
+    *,
+    output_path: str,
+    start: str | None,
+    end: str | None,
+    chargers: Iterable[str] | None,
+    all_chargers: bool = False,
+) -> int:
+    """Export OCPP transactions to the given output JSON file."""
+    start_dt = parse_datetime_option(start) if start else None
+    end_dt = parse_datetime_option(end) if end else None
+    data = export_transactions(
+        start=start_dt,
+        end=end_dt,
+        chargers=None if all_chargers else chargers,
+    )
+    with open(output_path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, ensure_ascii=False)
+    return len(data["transactions"])

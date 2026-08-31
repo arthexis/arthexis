@@ -1,0 +1,12 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "media",
+      "description": "Media storage, processing, and delivery services.",
+      "importance": "critical"
+    }
+  }
+]

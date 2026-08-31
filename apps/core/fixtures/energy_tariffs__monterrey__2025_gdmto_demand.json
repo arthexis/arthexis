@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "annual",
+      "zone": "1C",
+      "contract_type": "gdmto",
+      "period": "demand",
+      "unit": "kw",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "170.0000",
+      "cost_mxn": "170.0000",
+      "notes": "Cargo por demanda contratada en media tensión ordinaria; se factura cada kW máximo del mes."
+    }
+  }
+]

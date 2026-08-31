@@ -1,0 +1,1339 @@
+from __future__ import annotations
+
+import errno
+import logging
+import sys
+from datetime import datetime
+from datetime import timezone as datetime_timezone
+from types import ModuleType, SimpleNamespace
+
+import pytest
+
+from apps.cards import classic_layout, command_layout, reader, reader_mifare
+from apps.cards.models import RFID
+
+
+class _FakeReader:
+    MI_OK = 0
+    MI_ERR = 1
+    PICC_REQIDL = 2
+    PICC_AUTHENT1A = 3
+    PICC_AUTHENT1B = 4
+
+    def __init__(
+        self,
+        *,
+        request_status=0,
+        anticoll_status=0,
+        uid=None,
+        select_result=True,
+        read_blocks=None,
+        read_returns_tuple=True,
+        write_status=0,
+    ):
+        self.request_status = request_status
+        self.anticoll_status = anticoll_status
+        self.uid = uid or []
+        self.select_result = select_result
+        self.read_blocks = read_blocks or {}
+        self.read_returns_tuple = read_returns_tuple
+        self.write_status = write_status
+        self.writes = []
+        self.read_calls = []
+        self.stop_calls = 0
+
+    def MFRC522_Request(self, _mode):
+        return self.request_status, None
+
+    def MFRC522_Anticoll(self):
+        return self.anticoll_status, list(self.uid)
+
+    def MFRC522_SelectTag(self, uid):
+        self.selected_uid = list(uid)
+        return self.select_result
+
+    def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+        return self.MI_OK if block in self.read_blocks else self.MI_ERR
+
+    def MFRC522_Read(self, block):
+        self.read_calls.append(block)
+        data = self.read_blocks.get(block)
+        if data is None:
+            return self.MI_ERR, None
+        if not self.read_returns_tuple:
+            return list(data)
+        return self.MI_OK, list(data)
+
+    def MFRC522_Write(self, block, data):
+        self.writes.append((block, list(data)))
+        if self.write_status in (self.MI_OK, None):
+            self.read_blocks[block] = list(data)
+        return self.write_status
+
+    def MFRC522_StopCrypto1(self):
+        self.stop_calls += 1
+
+
+@pytest.mark.parametrize(
+    ("uid_bytes", "expected_rfid", "expected_kind"),
+    [
+        ([0x0A, 0xBC, 0x01, 0xFF], "0ABC01FF", RFID.CLASSIC),
+        ([1, 2, 3, 4, 5, 6, 7], "01020304050607", RFID.NTAG215),
+    ],
+)
+def test_decode_scanned_rfid_normalizes_uid_payload(
+    uid_bytes, expected_rfid, expected_kind
+):
+    payload = reader._decode_scanned_rfid(uid_bytes)
+
+    assert payload == {"uid": uid_bytes, "rfid": expected_rfid, "kind": expected_kind}
+
+
+def test_reader_mifare_helpers_keep_reader_compatibility_aliases():
+    assert reader.COMMON_MIFARE_CLASSIC_KEYS is reader_mifare.COMMON_MIFARE_CLASSIC_KEYS
+    assert reader._ExpectedMifareAuthFailureFilter is (
+        reader_mifare.ExpectedMifareAuthFailureFilter
+    )
+    assert reader._suppress_expected_mifare_auth_logs is (
+        reader_mifare.suppress_expected_mifare_auth_logs
+    )
+    assert reader._normalize_key is reader_mifare.normalize_key
+    assert reader._key_to_bytes is reader_mifare.key_to_bytes
+    assert reader._read_block is reader_mifare.read_block
+    assert reader._is_sector_trailer_block is reader_mifare.is_sector_trailer_block
+    assert reader._write_block is reader_mifare.write_block
+
+
+def test_initialize_reader_strategy_wraps_provided_reader():
+    fake_reader = object()
+
+    strategy, failure = reader._initialize_reader_strategy(fake_reader, cleanup=False)
+
+    assert failure is None
+    assert strategy == reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+
+
+def test_default_reader_strategy_suppresses_gpio_warnings(monkeypatch):
+    events: list[tuple[str, object]] = []
+
+    gpio_module = ModuleType("RPi.GPIO")
+
+    def _setwarnings(value):
+        events.append(("setwarnings", value))
+
+    gpio_module.setwarnings = _setwarnings
+
+    rpi_module = ModuleType("RPi")
+    rpi_module.GPIO = gpio_module
+
+    class _DefaultReader:
+        def __init__(self, **kwargs):
+            events.append(("reader", kwargs))
+
+    mfrc522_module = ModuleType("mfrc522")
+    mfrc522_module.MFRC522 = _DefaultReader
+
+    monkeypatch.setitem(sys.modules, "RPi", rpi_module)
+    monkeypatch.setitem(sys.modules, "RPi.GPIO", gpio_module)
+    monkeypatch.setitem(sys.modules, "mfrc522", mfrc522_module)
+    monkeypatch.setattr(reader, "resolve_spi_bus_device", lambda: (0, 0))
+
+    strategy, failure = reader._init_default_reader_strategy(cleanup=False)
+
+    assert failure is None
+    assert strategy is not None
+    assert strategy.source == "default"
+    assert events[0] == ("setwarnings", False)
+    assert events[1] == (
+        "reader",
+        {
+            "bus": 0,
+            "device": 0,
+            "pin_mode": reader.GPIO_PIN_MODE_BCM,
+            "pin_rst": reader.DEFAULT_RST_PIN,
+        },
+    )
+
+
+def test_read_rfid_returns_initialization_failure(monkeypatch):
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (None, {"error": "reader unavailable"}),
+    )
+
+    result = reader.read_rfid()
+
+    assert result == {"error": "reader unavailable"}
+
+
+def test_read_block_accepts_direct_data_list():
+    fake_reader = _FakeReader(read_blocks={1: [3] * 16}, read_returns_tuple=False)
+
+    result = reader._read_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+    )
+
+    assert result == [3] * 16
+
+
+def test_write_block_accepts_status_ok():
+    fake_reader = _FakeReader(read_blocks={1: [0] * 16}, write_status=_FakeReader.MI_OK)
+    data = [1] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(1, data)]
+
+
+def test_write_block_accepts_none_when_readback_matches():
+    fake_reader = _FakeReader(read_blocks={1: [0] * 16}, write_status=None)
+    data = [2] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=1,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(1, data)]
+    assert fake_reader.read_calls == [1]
+
+
+def test_write_block_accepts_none_for_sector_trailer_without_readback():
+    fake_reader = _FakeReader(read_blocks={15: [0] * 16}, write_status=None)
+    data = [3] * 16
+
+    assert reader._write_block(
+        fake_reader,
+        block=15,
+        key_type="A",
+        key_bytes=[0xFF] * 6,
+        uid=[1, 2, 3, 4],
+        data=data,
+    )
+    assert fake_reader.writes == [(15, data)]
+    assert fake_reader.read_calls == []
+
+
+def test_read_rfid_returns_empty_payload_when_polling_times_out(monkeypatch):
+    fake_reader = _FakeReader(request_status=_FakeReader.MI_ERR)
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    times = iter([100.0, 101.0])
+    monkeypatch.setattr(reader.time, "time", lambda: next(times))
+
+    result = reader.read_rfid(timeout=0.5, poll_interval=None)
+
+    assert result == {"rfid": None, "label_id": None}
+
+
+def test_read_rfid_uses_decoded_uid_payload(monkeypatch):
+    fake_reader = _FakeReader(uid=[0xDE, 0xAD, 0xBE, 0xEF])
+    basic_result = {"rfid": "DEADBEEF", "label_id": 10}
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+
+    captured = {}
+
+    def _fake_read_basic_tag_data(decoded_card):
+        captured["decoded_card"] = decoded_card
+        return SimpleNamespace(kind=RFID.CLASSIC), False, dict(basic_result)
+
+    monkeypatch.setattr(reader, "_read_basic_tag_data", _fake_read_basic_tag_data)
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert captured["decoded_card"] == {
+        "uid": [0xDE, 0xAD, 0xBE, 0xEF],
+        "rfid": "DEADBEEF",
+        "kind": RFID.CLASSIC,
+    }
+    assert result == basic_result
+
+
+def test_read_rfid_adds_transport_command_card_name(monkeypatch):
+    metadata = command_layout.encode_command_metadata(command_block_count=1)
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): reader.encode_card_name("Door Ready"),
+            reader.sector_block(0, 2): metadata,
+        },
+    )
+    tag = SimpleNamespace(kind=RFID.CLASSIC, lcd_label="", traits={})
+    tag.save = lambda *, update_fields: None
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (tag, False, {"rfid": "DEADBEEF", "label_id": 10}),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["card_name"] == "Door Ready"
+    assert result["lcd_label"] == "Door Ready"
+    assert result["command_metadata"]["command_block_count"] == 1
+
+
+def test_read_rfid_imports_transport_writer_metadata(monkeypatch):
+    metadata = command_layout.encode_command_metadata(command_block_count=1)
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): reader.encode_card_name("Door Ready"),
+            reader.sector_block(0, 2): metadata,
+            reader.sector_block(classic_layout.WRITER_SECTOR, 1): (
+                classic_layout.encode_writer_id("NODE-1")
+            ),
+            reader.sector_block(classic_layout.WRITER_SECTOR, 2): (
+                classic_layout.encode_writer_date(written_at)
+            ),
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="",
+        writer_id="",
+        writer_written_at=None,
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (tag, False, {"rfid": "DEADBEEF", "label_id": 10}),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["writer"] == {
+        "id": "NODE-1",
+        "written_at": "20260530T123456Z",
+    }
+    assert tag.writer_id == "NODE-1"
+    assert tag.writer_written_at == written_at
+    assert saved_fields == [["lcd_label", "writer_id", "writer_written_at"]]
+
+
+def test_read_rfid_clears_blank_transport_metadata(monkeypatch):
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): [0] * 16,
+            reader.sector_block(0, 2): [0] * 16,
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        traits={},
+        command_card_name="Old Command",
+        command_card_metadata={"valid": True},
+        command_payload_digest="1" * 64,
+        command_provenance_key="AABBCCDDEEFF0011",
+        command_result_digest="0" * 64,
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (
+            tag,
+            False,
+            {
+                "rfid": "DEADBEEF",
+                "label_id": 10,
+                "lcd_label": "Old label",
+                "writer": {"id": "OLD-WRITER"},
+                "card_name": "Old Command",
+                "command_metadata": {"valid": True},
+                "command_provenance_key": "AABBCCDDEEFF0011",
+            },
+        ),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["lcd_label"] == ""
+    assert result["card_name"] == ""
+    assert "command_metadata" not in result
+    assert "command_provenance_key" not in result
+    assert tag.lcd_label == ""
+    assert tag.command_card_name == ""
+    assert tag.command_card_metadata == {}
+    assert tag.command_payload_digest == ""
+    assert tag.command_provenance_key == ""
+    assert tag.command_result_digest == ""
+    assert tag.writer_id == "OLD-WRITER"
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert saved_fields == [
+        [
+            "command_card_metadata",
+            "command_card_name",
+            "command_payload_digest",
+            "command_provenance_key",
+            "command_result_digest",
+            "lcd_label",
+        ]
+    ]
+
+
+def test_read_rfid_preserves_legacy_card_name_without_command_metadata(monkeypatch):
+    encoded = classic_layout.encode_lcd_label("Front Desk\nScan OK")
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): encoded[:16],
+            reader.sector_block(0, 2): encoded[16:32],
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="",
+        writer_id="",
+        writer_written_at=None,
+        traits={},
+        command_card_name="",
+        command_card_metadata={"valid": True},
+        command_payload_digest="1" * 64,
+        command_provenance_key="AABBCCDDEEFF0011",
+        command_result_digest="0" * 64,
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (tag, False, {"rfid": "DEADBEEF", "label_id": 10}),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["card_name"] == "Front Desk"
+    assert result["lcd_label"] == "Front Desk\nScan OK"
+    assert "command_metadata" not in result
+    assert tag.command_card_name == "Front Desk"
+    assert tag.lcd_label == "Front Desk\nScan OK"
+    assert tag.command_card_metadata == {}
+    assert tag.command_payload_digest == ""
+    assert tag.command_provenance_key == ""
+    assert tag.command_result_digest == ""
+    assert saved_fields == [
+        [
+            "command_card_metadata",
+            "command_card_name",
+            "command_payload_digest",
+            "command_provenance_key",
+            "command_result_digest",
+            "lcd_label",
+        ]
+    ]
+
+
+def test_read_rfid_ignores_partial_blank_transport_metadata(monkeypatch):
+    fake_reader = _FakeReader(
+        uid=[0xDE, 0xAD, 0xBE, 0xEF],
+        read_blocks={
+            reader.sector_block(0, 1): [0] * 16,
+        },
+    )
+    tag = SimpleNamespace(
+        kind=RFID.CLASSIC,
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reader,
+        "_read_basic_tag_data",
+        lambda decoded_card: (
+            tag,
+            False,
+            {"rfid": "DEADBEEF", "label_id": 10, "lcd_label": "Old label"},
+        ),
+    )
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result["lcd_label"] == "Old label"
+    assert tag.lcd_label == "Old label"
+    assert tag.writer_id == "OLD-WRITER"
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert saved_fields == []
+
+
+def test_read_rfid_returns_error_and_notifies_on_processing_failure(monkeypatch):
+    fake_reader = _FakeReader(uid=[0xAA, 0xBB, 0xCC, 0xDD])
+    strategy = reader.ReaderStrategy(
+        mfrc=fake_reader,
+        cleanup_gpio=False,
+        source="provided",
+    )
+    monkeypatch.setattr(
+        reader,
+        "_initialize_reader_strategy",
+        lambda mfrc=None, *, cleanup=True: (strategy, None),
+    )
+    monkeypatch.setattr(
+        reader, "_finalize_reader_session", lambda *args, **kwargs: None
+    )
+
+    notifications: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        reader,
+        "notify_async",
+        lambda title, body: notifications.append((title, body)),
+    )
+
+    def _boom(_decoded_card):
+        raise RuntimeError("decode failed")
+
+    monkeypatch.setattr(reader, "_read_basic_tag_data", _boom)
+
+    result = reader.read_rfid(timeout=0.1, poll_interval=None)
+
+    assert result == {"error": "RFID scanner unavailable"}
+    assert notifications == [("RFID AABBCCDD", "Read failed")]
+
+
+def test_build_error_payload_preserves_busy_signal_without_raw_message():
+    result = reader._build_error_payload(RuntimeError("Device or resource busy"))
+
+    assert result == {
+        "error": "RFID scanner unavailable",
+        "busy": True,
+        "reason": "RFID scanner busy",
+    }
+
+
+def test_build_error_payload_preserves_busy_errno():
+    error = OSError()
+    error.errno = errno.EBUSY
+
+    result = reader._build_error_payload(error)
+
+    assert result == {
+        "error": "RFID scanner unavailable",
+        "errno": errno.EBUSY,
+        "busy": True,
+        "reason": "RFID scanner busy",
+    }
+
+
+def test_read_deep_classic_tag_data_logs_and_skips_block_errors(monkeypatch):
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+            return self.MI_OK if block == 0 else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            if block == 0:
+                raise RuntimeError("read failed")
+            return self.MI_ERR, None
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=False,
+        key_b="",
+        key_b_verified=False,
+        data=None,
+    )
+    saves: list[list[str]] = []
+    tag.save = lambda *, update_fields: saves.append(list(update_fields))
+
+    debug_messages: list[tuple[str, int, str]] = []
+    monkeypatch.setattr(
+        reader.logger,
+        "debug",
+        lambda message, block, exc: debug_messages.append((message, block, str(exc))),
+    )
+
+    result = reader._read_deep_classic_tag_data(
+        _DeepReadReader(),
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "01020304"},
+    )
+
+    assert result["dump"] == []
+    assert saves == [["data"]]
+    assert debug_messages == [
+        ("Failed to read block %d for classic tag: %s", 0, "read failed")
+    ]
+
+
+def test_transport_layout_suppresses_expected_mifare_auth_logs(caplog):
+    class _AuthFailingReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+
+        def MFRC522_Auth(self, _auth_mode, _block, _key_bytes, _uid):
+            logging.getLogger("mfrc522Logger").error("AUTH ERROR!!")
+            logging.getLogger("mfrc522Logger").error(
+                "AUTH ERROR(status2reg & 0x08) != 0"
+            )
+            logging.getLogger("mfrc522Logger").error("CARD WIRING ERROR")
+            return self.MI_ERR
+
+    caplog.set_level(logging.ERROR)
+
+    result = reader._read_transport_layout(_AuthFailingReader(), [1, 2, 3, 4])
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert result == {}
+    assert messages
+    assert set(messages) == {"CARD WIRING ERROR"}
+
+
+def test_deep_classic_read_suppresses_expected_mifare_auth_logs(caplog, monkeypatch):
+    class _AuthFailingReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def MFRC522_Auth(self, _auth_mode, _block, _key_bytes, _uid):
+            logging.getLogger("mfrc522Logger").error("AUTH ERROR!!")
+            logging.getLogger("mfrc522Logger").error(
+                "AUTH ERROR(status2reg & 0x08) != 0"
+            )
+            return self.MI_ERR
+
+        def MFRC522_Read(self, _block):
+            return self.MI_ERR, None
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=False,
+        key_b="",
+        key_b_verified=False,
+        data=None,
+        sector_keys={},
+        traits={},
+    )
+    tag.save = lambda *, update_fields: None
+    monkeypatch.setattr(reader, "scan_block_count", lambda: 1)
+    caplog.set_level(logging.ERROR)
+
+    result = reader._read_deep_classic_tag_data(
+        _AuthFailingReader(),
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "01020304"},
+    )
+
+    assert result["dump"] == []
+    assert caplog.records == []
+
+
+def test_deep_classic_read_ignores_partial_blank_transport_metadata():
+    transport_block = reader.sector_block(0, 1)
+
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+            return self.MI_OK if block == transport_block else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            return self.MI_OK, [0] * 16
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=True,
+        key_b="",
+        key_b_verified=False,
+        data=[],
+        lcd_label="Old label",
+        writer_id="OLD-WRITER",
+        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        sector_keys={},
+        traits={},
+    )
+    saved_fields: list[list[str]] = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    result = reader._read_deep_classic_tag_data(
+        _DeepReadReader(),
+        tag,
+        [1, 2, 3, 4],
+        {
+            "rfid": "DEADBEEF",
+            "lcd_label": "Old label",
+            "writer": {"id": "OLD-WRITER"},
+        },
+    )
+
+    assert result["lcd_label"] == "Old label"
+    assert tag.lcd_label == "Old label"
+    assert tag.writer_id == "OLD-WRITER"
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert saved_fields == [["data"]]
+
+
+def test_deep_classic_read_skips_legacy_traits_for_command_card(monkeypatch):
+    blocks, _metadata = command_layout.build_command_card_blocks(
+        name="Suite Upgrade",
+        command="LOG",
+        params={"channel": "stable"},
+    )
+    blocks[reader.sector_block(3, 0)] = classic_layout.encode_fixed_ascii("door", 16)
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=True,
+        key_b="",
+        key_b_verified=False,
+        data=[],
+        sector_keys={},
+        traits={"door": {"value": "open"}},
+        command_card_name="",
+        command_card_metadata={},
+        command_payload_digest="",
+        command_provenance_key="",
+    )
+    saved_fields: list[list[str]] = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    monkeypatch.setattr(reader, "scan_block_count", lambda: reader.sector_block(3, 1))
+
+    result = reader._read_deep_classic_tag_data(
+        _FakeReader(read_blocks=blocks),
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "DEADBEEF"},
+    )
+
+    assert result["command_card"]["name"] == "Suite Upgrade"
+    assert "traits" not in result
+    assert tag.traits == {"door": {"value": "open"}}
+    assert tag.command_card_name == ""
+    assert tag.command_card_metadata == {}
+    assert tag.command_payload_digest == ""
+    assert tag.command_provenance_key == ""
+
+
+def test_deep_classic_read_stops_after_complete_command_blocks(monkeypatch):
+    blocks, metadata = command_layout.build_command_card_blocks(
+        name="Suite Upgrade",
+        command="LOG",
+        params={"message": "x" * 80},
+    )
+    extra_block = command_layout.command_data_blocks()[metadata.command_block_count]
+    fake_reader = _FakeReader(read_blocks=blocks)
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=True,
+        key_b="",
+        key_b_verified=False,
+        data=[],
+        lcd_label="",
+        writer_id="",
+        writer_written_at=None,
+        sector_keys={},
+        traits={},
+        command_result_digest="",
+    )
+    tag.save = lambda *, update_fields: None
+
+    result = reader._read_deep_classic_tag_data(
+        fake_reader,
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "DEADBEEF"},
+    )
+
+    assert result["command_card"]["command"] == "LOG"
+    assert result["command_card"]["metadata"]["command_block_count"] == (
+        metadata.command_block_count
+    )
+    assert extra_block not in fake_reader.read_calls
+    assert command_layout.command_payload_blocks_complete(result["dump"])
+
+
+def test_deep_classic_read_keeps_result_blocks_for_expected_digest():
+    blocks, metadata = command_layout.build_command_card_blocks(
+        name="Suite Upgrade",
+        command="LOG",
+        params={},
+    )
+    result_blocks = command_layout.result_data_blocks(metadata.command_block_count)
+    fake_reader = _FakeReader(read_blocks=blocks)
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=True,
+        key_b="",
+        key_b_verified=False,
+        data=[],
+        lcd_label="",
+        writer_id="",
+        writer_written_at=None,
+        sector_keys={},
+        traits={},
+        command_result_digest="expected",
+    )
+    tag.save = lambda *, update_fields: None
+
+    result = reader._read_deep_classic_tag_data(
+        fake_reader,
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "DEADBEEF"},
+    )
+
+    assert result_blocks[-1] in fake_reader.read_calls
+    assert command_layout.command_payload_blocks_complete(result["dump"])
+    assert command_layout.command_result_blocks_complete(result["dump"])
+
+
+def test_write_writer_metadata_persists_to_card_before_db_update(monkeypatch):
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
+    tag = SimpleNamespace(writer_id="", writer_written_at=None)
+    writes = {}
+
+    def _write_block(_mfrc, _tag, _uid, block, data):
+        writes[block] = list(data)
+        return True, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result, updates = reader._write_writer_metadata(
+        object(),
+        tag,
+        [1, 2, 3, 4],
+        writer_id="NODE-1",
+        written_at=written_at,
+    )
+
+    assert result["errors"] == []
+    assert result["writer_id"] == "NODE-1"
+    assert tag.writer_id == "NODE-1"
+    assert tag.writer_written_at == written_at
+    assert updates == {"writer_id", "writer_written_at"}
+    assert writes[reader.sector_block(classic_layout.WRITER_SECTOR, 1)] == (
+        classic_layout.encode_writer_id("NODE-1")
+    )
+    assert writes[reader.sector_block(classic_layout.WRITER_SECTOR, 2)] == (
+        classic_layout.encode_writer_date(written_at)
+    )
+
+
+def test_write_writer_metadata_failure_does_not_update_db_fields(monkeypatch):
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
+    old_written_at = datetime(2026, 5, 1, tzinfo=datetime_timezone.utc)
+    tag = SimpleNamespace(writer_id="OLD", writer_written_at=old_written_at)
+
+    def _write_block(_mfrc, _tag, _uid, block, _data):
+        return block != reader.sector_block(classic_layout.WRITER_SECTOR, 2), None
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result, updates = reader._write_writer_metadata(
+        object(),
+        tag,
+        [1, 2, 3, 4],
+        writer_id="NODE-1",
+        written_at=written_at,
+    )
+
+    assert result["errors"] == [
+        f"block {reader.sector_block(classic_layout.WRITER_SECTOR, 2)}"
+    ]
+    assert tag.writer_id == "OLD"
+    assert tag.writer_written_at == old_written_at
+    assert updates == set()
+
+
+def test_write_current_card_lcd_label_preserves_second_line(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        lcd_label="",
+        command_card_name="",
+        command_card_metadata={"stale": True},
+        command_payload_digest="old",
+        command_template=object(),
+        command_provenance_key="ABCDEF",
+        command_result_digest="old",
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    writes = {}
+
+    monkeypatch.setattr(reader.RFID, "register_scan", lambda rfid, kind: (tag, False))
+    monkeypatch.setattr(
+        reader,
+        "_with_detected_rfid_card",
+        lambda timeout, callback: callback(object(), [1, 2, 3, 4], "01020304"),
+    )
+    monkeypatch.setattr(
+        reader,
+        "_write_writer_metadata",
+        lambda *args, **kwargs: ({"writer_id": "NODE-1", "errors": []}, set()),
+    )
+
+    def _write_block(_mfrc, _tag, _uid, block, data):
+        writes[block] = list(data)
+        return True, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader.write_current_card_lcd_label(label="Front Desk\nScan OK")
+
+    encoded = classic_layout.encode_lcd_label("Front Desk\nScan OK")
+    assert result["card_name"] == "Front Desk"
+    assert result["lcd_label"] == "Front Desk\nScan OK"
+    assert writes[reader.sector_block(0, 1)] == encoded[:16]
+    assert writes[reader.sector_block(0, 2)] == encoded[16:32]
+    assert tag.lcd_label == "Front Desk\nScan OK"
+    assert tag.command_card_name == "Front Desk"
+    assert tag.command_card_metadata == {}
+    assert tag.command_payload_digest == ""
+    assert tag.command_template is None
+    assert tag.command_provenance_key == ""
+    assert tag.command_result_digest == ""
+    assert saved_fields == [
+        [
+            "command_card_metadata",
+            "command_card_name",
+            "command_payload_digest",
+            "command_provenance_key",
+            "command_result_digest",
+            "command_template",
+            "lcd_label",
+        ]
+    ]
+
+
+def test_write_current_card_command_persists_payload_digest(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        lcd_label="",
+        command_card_name="",
+        command_card_metadata={},
+        command_payload_digest="",
+        command_template=object(),
+        command_provenance_key="",
+        command_result_digest="",
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    writes = {}
+
+    monkeypatch.setattr(reader.RFID, "register_scan", lambda rfid, kind: (tag, False))
+    monkeypatch.setattr(
+        reader,
+        "_with_detected_rfid_card",
+        lambda timeout, callback: callback(object(), [1, 2, 3, 4], "01020304"),
+    )
+    monkeypatch.setattr(
+        reader,
+        "_write_writer_metadata",
+        lambda *args, **kwargs: ({"writer_id": "NODE-1", "errors": []}, set()),
+    )
+
+    def _write_block(_mfrc, _tag, _uid, block, data):
+        writes[block] = list(data)
+        return True, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader.write_current_card_command(
+        name="Suite Upgrade",
+        command="LOG",
+        params={"channel": "stable"},
+        provenance_key="AABBCCDDEEFF0011",
+        lifecycle_mode=command_layout.COMMAND_LIFECYCLE_READER_HELD,
+    )
+
+    expected_digest = command_layout.command_payload_digest(
+        name="Suite Upgrade",
+        command="LOG",
+        params={"channel": "stable"},
+    )
+    assert result["card_name"] == "Suite Upgrade"
+    assert result["command_payload_digest"] == expected_digest
+    assert result["metadata"]["lifecycle_mode"] == (
+        command_layout.COMMAND_LIFECYCLE_READER_HELD
+    )
+    assert tag.command_payload_digest == expected_digest
+    assert tag.command_card_name == "Suite Upgrade"
+    assert tag.command_template is None
+    assert tag.command_provenance_key == "AABBCCDDEEFF0011"
+    assert writes[reader.sector_block(0, 1)] == reader.encode_card_name("Suite Upgrade")
+    assert saved_fields == [
+        [
+            "command_card_metadata",
+            "command_card_name",
+            "command_payload_digest",
+            "command_provenance_key",
+            "command_result_digest",
+            "command_template",
+            "lcd_label",
+        ]
+    ]
+
+
+def test_write_current_card_command_suppresses_layout_exception_details(
+    monkeypatch,
+    caplog,
+):
+    def fail_build_command_card_blocks(**_kwargs):
+        raise classic_layout.CardLayoutError(
+            "Traceback (most recent call last): /secret/path"
+        )
+
+    monkeypatch.setattr(
+        reader,
+        "build_command_card_blocks",
+        fail_build_command_card_blocks,
+    )
+
+    with caplog.at_level(logging.WARNING, logger=reader.logger.name):
+        result = reader.write_current_card_command(
+            name="Suite Upgrade",
+            command="LOG",
+        )
+
+    assert result == {"error": "Invalid RFID command card payload"}
+    assert "Traceback" not in result["error"]
+    assert "/secret/path" not in result["error"]
+    assert "RFID command-card payload build failed" in caplog.text
+
+
+def test_initialize_detected_card_requires_all_managed_sectors(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        sector_keys={},
+        initialized_on=None,
+        traits={"door": {"value": "open", "sector": 3, "sectors": [3, 4]}},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    monkeypatch.setattr(
+        reader, "_write_writer_metadata", lambda *args, **kwargs: ({}, set())
+    )
+    monkeypatch.setattr(reader, "managed_sector_numbers", lambda: [3, 4])
+    monkeypatch.setattr(reader, "sector_data_blocks", lambda sector: [sector * 4])
+    monkeypatch.setattr(reader, "sector_trailer_block", lambda sector: (sector * 4) + 3)
+    monkeypatch.setattr(reader, "build_sector_trailer", lambda _a, _b: [0] * 16)
+
+    def _write_block(_mfrc, _tag, _uid, block, _data):
+        return block != 19, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader._initialize_detected_card(
+        object(), [1, 2, 3, 4], "01020304", tag=tag
+    )
+
+    assert result["initialized"] is False
+    assert result["initialized_sectors"] == [3]
+    assert result["errors"] == [{"sector": 4, "errors": ["trailer 19"]}]
+    assert tag.initialized_on is None
+    assert tag.traits == {}
+    assert "initialized_on" not in saved_fields[0]
+    assert saved_fields == [["sector_keys", "traits"]]
+
+
+def test_initialize_detected_card_skips_trailer_after_data_failure(monkeypatch):
+    tag = SimpleNamespace(
+        pk=17,
+        sector_keys={},
+        initialized_on=None,
+        traits={},
+    )
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+
+    monkeypatch.setattr(
+        reader, "_write_writer_metadata", lambda *args, **kwargs: ({}, set())
+    )
+    monkeypatch.setattr(reader, "managed_sector_numbers", lambda: [4])
+    monkeypatch.setattr(reader, "sector_data_blocks", lambda sector: [16, 17])
+    monkeypatch.setattr(reader, "sector_trailer_block", lambda sector: 19)
+    monkeypatch.setattr(
+        reader,
+        "build_sector_trailer",
+        lambda _a, _b: pytest.fail("trailer should not be built after data failure"),
+    )
+    attempted_blocks = []
+
+    def _write_block(_mfrc, _tag, _uid, block, _data):
+        attempted_blocks.append(block)
+        return block != 16, "FFFFFFFFFFFF"
+
+    monkeypatch.setattr(reader, "_write_block_with_candidates", _write_block)
+
+    result = reader._initialize_detected_card(
+        object(), [1, 2, 3, 4], "01020304", tag=tag
+    )
+
+    assert result["initialized"] is False
+    assert result["initialized_sectors"] == []
+    assert result["errors"] == [{"sector": 4, "errors": ["block 16"]}]
+    assert attempted_blocks == [16, 17]
+    assert saved_fields == []
+
+
+def test_set_current_card_trait_aborts_when_auto_initialization_fails(monkeypatch):
+    tag = SimpleNamespace(initialized_on=None, traits={})
+    refreshed = []
+
+    def _refresh_from_db():
+        refreshed.append(True)
+
+    tag.refresh_from_db = _refresh_from_db
+    monkeypatch.setattr(reader.RFID, "register_scan", lambda rfid, kind: (tag, False))
+    monkeypatch.setattr(
+        reader,
+        "_initialize_detected_card",
+        lambda *args, **kwargs: {
+            "initialized": False,
+            "errors": [{"sector": 4, "errors": ["trailer 19"]}],
+        },
+    )
+    monkeypatch.setattr(
+        reader,
+        "_with_detected_rfid_card",
+        lambda timeout, callback: callback(object(), [1, 2, 3, 4], "01020304"),
+    )
+    monkeypatch.setattr(
+        reader,
+        "_write_writer_metadata",
+        lambda *args, **kwargs: pytest.fail("trait write should not continue"),
+    )
+
+    result = reader.set_current_card_trait(key="door", value="open")
+
+    assert result["error"] == "Unable to initialize RFID card before writing trait"
+    assert result["initialization"]["errors"] == [
+        {"sector": 4, "errors": ["trailer 19"]}
+    ]
+    assert refreshed == []
+
+
+def _full_trait_dump(blocks=None):
+    blocks = blocks or {}
+    dump = []
+    for start_sector, continuation_sector in classic_layout.trait_sector_pairs():
+        for sector in (start_sector, continuation_sector):
+            for block in classic_layout.sector_data_blocks(sector):
+                dump.append({"block": block, "data": blocks.get(block, [0] * 16)})
+    return dump
+
+
+def test_save_tag_traits_from_dump_clears_stale_traits_when_none_decoded():
+    tag = SimpleNamespace(traits={"door": {"value": "open"}})
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    result = {"traits": {"door": "open"}, "trait_sigils": {"SIGIL_DOOR": "open"}}
+
+    reader._save_tag_traits_from_dump(tag, _full_trait_dump(), result)
+
+    assert tag.traits == {}
+    assert saved_fields == [["traits"]]
+    assert "traits" not in result
+    assert "trait_sigils" not in result
+
+
+def test_save_tag_traits_from_dump_skips_partial_trait_dump():
+    tag = SimpleNamespace(traits={"door": {"value": "open"}})
+    saved_fields = []
+    tag.save = lambda *, update_fields: saved_fields.append(list(update_fields))
+    result = {"traits": {"door": "open"}, "trait_sigils": {"SIGIL_DOOR": "open"}}
+    partial_dump = [
+        {
+            "block": classic_layout.sector_block(3, 0),
+            "data": classic_layout.encode_trait_key("badge"),
+        }
+    ]
+
+    reader._save_tag_traits_from_dump(tag, partial_dump, result)
+
+    assert tag.traits == {"door": {"value": "open"}}
+    assert saved_fields == []
+    assert result == {
+        "traits": {"door": "open"},
+        "trait_sigils": {"SIGIL_DOOR": "open"},
+    }
+
+
+def test_deep_classic_read_reuses_and_promotes_sector_key_candidates(monkeypatch):
+    good_key = [1, 2, 3, 4, 5, 6]
+    bad_key = [6, 5, 4, 3, 2, 1]
+
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def __init__(self):
+            self.attempts = []
+
+        def MFRC522_Auth(self, auth_mode, block, key_bytes, _uid):
+            self.attempts.append((auth_mode, block, list(key_bytes)))
+            return self.MI_OK if list(key_bytes) == good_key else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            return self.MI_OK, [block] * 16
+
+    build_calls = []
+
+    def _build_candidates(_tag, sector, key_type):
+        build_calls.append((sector, key_type))
+        if key_type == "A":
+            return [("BADBADBADBAD", bad_key), ("010203040506", good_key)]
+        return []
+
+    monkeypatch.setattr(reader, "scan_block_count", lambda: 2)
+    monkeypatch.setattr(reader, "_build_sector_key_candidates", _build_candidates)
+
+    tag = SimpleNamespace(
+        key_a="",
+        key_a_verified=False,
+        key_b="",
+        key_b_verified=False,
+        data=None,
+        sector_keys={},
+        traits={},
+    )
+    saves: list[list[str]] = []
+    tag.save = lambda *, update_fields: saves.append(list(update_fields))
+    deep_reader = _DeepReadReader()
+
+    result = reader._read_deep_classic_tag_data(
+        deep_reader,
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "01020304"},
+    )
+
+    assert build_calls == [(0, "A"), (0, "B")]
+    assert deep_reader.attempts == [
+        (_DeepReadReader.PICC_AUTHENT1A, 0, bad_key),
+        (_DeepReadReader.PICC_AUTHENT1A, 0, good_key),
+        (_DeepReadReader.PICC_AUTHENT1A, 1, good_key),
+    ]
+    assert [entry["block"] for entry in result["dump"]] == [0, 1]

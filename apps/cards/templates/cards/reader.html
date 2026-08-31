@@ -1,0 +1,6 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+{% block content %}
+<h1>{% trans "Identity Validator" %}</h1>
+{% include "cards/scanner.html" with scan_url=scan_url deep_read_url=deep_read_url table_mode=table_mode toggle_url=toggle_url toggle_label=toggle_label show_release_info=show_release_info default_endianness=default_endianness %}
+{% endblock %}

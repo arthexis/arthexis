@@ -1,0 +1,270 @@
+{% load admin_extras i18n site_footer static %}
+{% with template=site_template %}
+<!doctype html>
+<html
+  lang="{{ LANGUAGE_CODE }}"
+  data-bs-theme="dark"
+  data-site-primary="{{ template.primary_color|default:'#0d6efd' }}"
+  data-site-primary-strong="{{ template.primary_color_emphasis|default:'#0b5ed7' }}"
+  data-site-primary-rgb="{{ template.primary_rgb|default:'13, 110, 253' }}"
+  data-site-accent="{{ template.accent_color|default:'#facc15' }}"
+  data-site-accent-strong="{{ template.accent_color_emphasis|default:'#fb923c' }}"
+  data-site-accent-rgb="{{ template.accent_rgb|default:'250, 204, 21' }}"
+  data-site-support="{{ template.support_color|default:'#15803d' }}"
+  data-site-support-strong="{{ template.support_color_emphasis|default:'#34d399' }}"
+  data-site-support-rgb="{{ template.support_rgb|default:'21, 128, 61' }}"
+  data-site-support-text="{{ template.support_text_color|default:'#f0fdf4' }}"
+>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="{{ favicon_url }}">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="anonymous">
+    <title>{% block title %}{{ badge_site_name|default:"Arthexis" }} {% trans "Constellation" %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="{% static 'pages/css/base.css' %}">
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body class="p-3 pb-0 d-flex flex-column min-vh-100">
+    <div class="container flex-grow-1 mb-5">
+      {% if not operator_interface_mode %}
+      {% block page_nav %}
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 m-0">
+        <div class="container-fluid">
+          <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false">
+            <span class="navbar-toggler-icon"></span>
+            <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav navbar-nav-wrap me-auto mb-2 mb-lg-0" data-module-pill-list>
+              {% if nav_modules %}
+                {% for module in nav_modules %}
+                  {% with landings=module.enabled_landings %}
+                    {% if landings|length == 1 %}
+                      {% if module.enabled_landings_all_invalid %}
+                        <li class="nav-item dropdown">
+                          <a class="nav-link" href="#" role="button">
+                            {{ module.menu_label|upper }}
+                            {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
+                          </a>
+                          <ul class="dropdown-menu">
+                            {% for landing in landings %}
+                              <li>
+                                <a class="dropdown-item disabled text-decoration-line-through" href="#" aria-disabled="true">
+                                  <span class="d-flex align-items-center justify-content-between gap-2 w-100">
+                                    <span class="text-decoration-line-through">{{ landing.label }}</span>
+                                    {% if landing.nav_is_locked %}
+                                      <span class="d-inline-flex align-items-center gap-1">
+                                        <svg aria-hidden="true" class="dropdown-lock-icon opacity-75">
+                                          <use href="#icon-lock"></use>
+                                        </svg>
+                                        <span class="visually-hidden">
+                                          {% if landing.nav_lock_reason == "login" %}
+                                            {% trans "Login required" %}
+                                          {% else %}
+                                            {% trans "Permission required" %}
+                                          {% endif %}
+                                        </span>
+                                      </span>
+                                    {% endif %}
+                                  </span>
+                                  {% include "pages/_agent_notes.html" with notes=landing.agent_notes role="landing" %}
+                                </a>
+                                {% if landing.description %}
+                                  <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
+                                {% endif %}
+                              </li>
+                            {% endfor %}
+                          </ul>
+                        </li>
+	                      {% else %}
+	                        <li class="nav-item">
+	                          <a class="nav-link" href="{{ landings.0.path }}">
+	                            {{ module.menu_label|upper }}
+	                            {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
+	                            {% include "pages/_agent_notes.html" with notes=landings.0.agent_notes role="landing" %}
+                          </a>
+                        </li>
+                      {% endif %}
+                    {% else %}
+                      <li class="nav-item dropdown">
+                        <a class="nav-link" href="#" role="button">
+                          {{ module.menu_label|upper }}
+                          {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
+                        </a>
+	                        <ul class="dropdown-menu">
+	                          {% for landing in landings %}
+	                            <li>
+	                              {% if landing.nav_is_invalid %}
+	                                <a class="dropdown-item disabled text-decoration-line-through" href="#" aria-disabled="true">
+	                              {% else %}
+	                                <a class="dropdown-item" href="{{ landing.path }}">
+	                              {% endif %}
+	                                <span class="d-flex align-items-center justify-content-between gap-2 w-100">
+	                                  <span class="{% if landing.nav_is_invalid %}text-decoration-line-through{% endif %}">{{ landing.label }}</span>
+	                                  {% if landing.nav_is_locked %}
+                                    <span class="d-inline-flex align-items-center gap-1">
+                                      <svg aria-hidden="true" class="dropdown-lock-icon opacity-75">
+                                        <use href="#icon-lock"></use>
+                                      </svg>
+                                      <span class="visually-hidden">
+                                        {% if landing.nav_lock_reason == "login" %}
+                                          {% trans "Login required" %}
+                                        {% else %}
+                                          {% trans "Permission required" %}
+                                        {% endif %}
+                                      </span>
+                                    </span>
+                                  {% endif %}
+                                </span>
+                                {% include "pages/_agent_notes.html" with notes=landing.agent_notes role="landing" %}
+                              </a>
+                              {% if landing.description %}
+                                <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
+                              {% endif %}
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </li>
+                    {% endif %}
+                  {% endwith %}
+                {% endfor %}
+              {% endif %}
+              {% if header_references %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link" href="#" role="button">
+                    {% trans "Consoles" as consoles_label %}
+                    {{ consoles_label|upper }}
+                  </a>
+                  <ul class="dropdown-menu">
+                    {% for reference in header_references %}
+                      <li>
+                        <a class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="{{ reference.value }}" target="_blank" rel="noopener noreferrer">
+                          <span>{{ reference.alt_text }}</span>
+                          <svg aria-hidden="true" class="opacity-75 external-link-icon">
+                            <use href="#icon-external"></use>
+                          </svg>
+                          <span class="visually-hidden">{% trans "Opens in a new tab" %}</span>
+                        </a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </li>
+              {% endif %}
+            </ul>
+            <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
+              <button
+                id="theme-toggle"
+                class="btn btn-sm btn-outline-light me-2"
+                data-light-label="{% trans 'Light Mode' %}"
+                data-dark-label="{% trans 'Dark Mode' %}"
+                aria-label="{% trans 'Light Mode' %}"
+              >
+                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                  <use href="#icon-sun"></use>
+                </svg>
+                <span class="visually-hidden">{% trans "Light Mode" %}</span>
+              </button>
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_staff %}{% url 'admin:index' %}{% elif request.user.is_authenticated %}#{% else %}{{ login_url }}{% endif %}">
+                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                  <use href="#icon-person"></use>
+                </svg>
+                <span class="visually-hidden">
+                  {% if request.user.is_staff %}
+                    {% trans "Admin" %}
+                  {% elif request.user.is_authenticated %}
+                    {% trans "User Profile" %}
+                  {% else %}
+                    {% trans "Login" %}
+                  {% endif %}
+                </span>
+                {% if request.user.is_authenticated %}
+                <div class="user-info-tooltip">
+                  {{ request.user.username }}{% if request.user.is_staff %} - {% trans "Staff" %}{% endif %}
+                </div>
+                {% endif %}
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+      {% endblock %}
+      {% endif %}
+      {% block funding_banner %}
+        {% include "pages/includes/funding_banner.html" with funding_banner=funding_banner funding_banner_classes="mt-3" only %}
+      {% endblock %}
+      {% if site_highlight %}
+        <div
+          id="site-highlight"
+          class="site-highlight mt-3"
+          data-highlight-cache-key="site-highlight-dismissed-{{ site_highlight.pk }}-{{ site_highlight.updated_at|date:'U' }}"
+        >
+          <div class="site-highlight__header">
+            <strong class="site-highlight__title">{{ site_highlight.title }}</strong>
+            <button type="button" class="site-highlight__close" data-highlight-close="true">{% trans "[X] Close" %}</button>
+          </div>
+          <div class="site-highlight__date">{{ site_highlight.highlight_date|date:"F j, Y" }}</div>
+          <p class="site-highlight__story mb-0">{{ site_highlight.story|urlize|linebreaksbr }}</p>
+        </div>
+      {% endif %}
+      {% if messages %}
+        <div class="mt-3" aria-live="polite" aria-atomic="true">
+          {% for message in messages %}
+            <div class="alert alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'info' }}{% endif %} mb-2" role="alert">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+    {% include "pages/includes/public_feedback_widget.html" %}
+    {% url 'pages:footer-fragment' as footer_fragment_url %}
+    {% if not hide_default_footer and footer_fragment_url %}
+      <div
+        id="footer-placeholder"
+        class="footer-placeholder container mt-5 border-top pt-3"
+        hx-get="{{ footer_fragment_url }}{% if force_footer %}?force=1{% endif %}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML"
+      >
+        <div class="text-center text-muted py-4">
+          <div
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-label="{% trans 'Loading footer' %}"
+          ></div>
+          <span class="ms-2">{% trans "Loading footer..." %}</span>
+        </div>
+      </div>
+      <noscript>
+        {% render_footer %}
+      </noscript>
+    {% endif %}
+    <script src="{% static 'htmx/htmx.min.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="{% static 'pages/js/base.js' %}" defer></script>
+    {% if feedback_ingestion_enabled %}
+    <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
+    {% endif %}
+    <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-moon"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-sun"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-person"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-share"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-external"><path d="M0 0h24v24H0z" fill="none"/><path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zm-2 4v2H5v10h10v-7h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h7z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-lock"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 17a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3a2 2 0 0 0 2 2zm6-8h-1V7a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zm-3 0H9V7a3 3 0 0 1 6 0v2z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-star"><path d="M0 0h24v24H0z" fill="none"/><path d="m12 17.27 5.18 3.11-1.64-5.92L20.5 9.5l-6.09-.52L12 3l-2.41 5.98-6.09.52 4.96 4.96-1.64 5.92z"/></symbol>
+    </svg>
+    {% if request.user.is_authenticated %}
+      {% if version_check_allowed %}
+        {% include "core/version_check.html" %}
+      {% endif %}
+    {% endif %}
+
+
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>
+{% endwith %}

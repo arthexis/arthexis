@@ -1,0 +1,92 @@
+name: Linux CI
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+  ARTHEXIS_DB_BACKEND: sqlite
+  OCPP_STATE_REDIS_URL: redis://localhost:6379
+  REDIS_HOST: 127.0.0.1
+  REDIS_PORT: '6379'
+  ARTHEXIS_SKIP_SANITY_APT: '1'
+
+concurrency:
+  group: linux-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - "**/*.py"
+      - "**/*.json"
+      - "**/*.toml"
+      - "**/*.txt"
+      - ".python-version"
+      - ".github/workflows/ci.yml"
+      - "apps/**"
+      - "config/**"
+      - "docs/development/ci.md"
+      - "requirements*.txt"
+      - "scripts/**"
+      - "tests/**"
+      - "manage.py"
+      - "configure.sh"
+      - "env-refresh.sh"
+      - "install.sh"
+      - "start.sh"
+      - "stop.sh"
+      - "upgrade.sh"
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.python-version'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'docs/development/ci.md'
+      - 'requirements*.txt'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
+  workflow_dispatch:
+
+jobs:
+  sanity:
+    name: Linux sanity
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: true
+
+      - name: Clean workspace
+        run: |
+          git clean -ffdx
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Run Linux sanity checks
+        run: |
+          ./scripts/ci/linux-sanity.sh

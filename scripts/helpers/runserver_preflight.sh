@@ -1,0 +1,568 @@
+# shellcheck shell=bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+if [ -z "${BASE_DIR:-}" ]; then
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
+LOCK_DIR="${LOCK_DIR:-${BASE_DIR}/.locks}"
+LOCK_DIR="$(normalize_path "$LOCK_DIR")"
+
+MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
+MIGRATIONS_META_FILE="${LOCK_DIR}/migrations.meta"
+PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
+MIGRATIONS_VERIFIED_STATE_FILE="${LOCK_DIR}/migrations.verified.json"
+
+# Default behavior: Satellite/Watchtower nodes run in check-only mode, while all
+# other roles default to apply. Set ARTHEXIS_MIGRATION_POLICY explicitly to avoid
+# role-based defaults when deterministic behavior is required in automation.
+default_migration_policy() {
+  local role="${NODE_ROLE:-}"
+
+  if [ -z "$role" ] && [ -n "${LOCK_DIR:-}" ] && [ -f "${LOCK_DIR}/role.lck" ]; then
+    role="$(cat "${LOCK_DIR}/role.lck")"
+  fi
+
+  role="${role//[[:space:]]/}"
+
+  case "${role,,}" in
+    satellite|watchtower)
+      echo "check"
+      ;;
+    *)
+      echo "apply"
+      ;;
+  esac
+}
+
+resolve_migration_policy() {
+  local configured_policy="${ARTHEXIS_MIGRATION_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    default_migration_policy
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_MIGRATION_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
+
+compute_migration_fingerprint() {
+  local base_dir
+  local python_bin
+  base_dir="${1:-${BASE_DIR:-$(pwd)}}"
+  base_dir="$(normalize_path "$base_dir")"
+  if [ -z "$base_dir" ]; then
+    echo "" >&2
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+base = pathlib.Path(sys.argv[1])
+paths = sorted(base.glob("apps/**/migrations/*.py"))
+
+hasher = hashlib.sha256()
+for path in paths:
+    if not path.is_file():
+        continue
+    hasher.update(str(path.relative_to(base)).encode())
+    hasher.update(path.read_bytes())
+
+print(hasher.hexdigest())
+PY
+}
+
+compute_migration_metadata_snapshot() {
+  local base_dir
+  local python_bin
+  base_dir="${1:-${BASE_DIR:-$(pwd)}}"
+  base_dir="$(normalize_path "$base_dir")"
+  if [ -z "$base_dir" ]; then
+    echo "" >&2
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
+import json
+import pathlib
+import sys
+
+base = pathlib.Path(sys.argv[1])
+paths = sorted(base.glob("apps/**/migrations/*.py"))
+
+entries = []
+for path in paths:
+    if not path.is_file():
+        continue
+    stat = path.stat()
+    entries.append([str(path.relative_to(base)), stat.st_mtime_ns, stat.st_size])
+
+print(json.dumps({"version": 1, "entries": entries}, sort_keys=True, separators=(",", ":")))
+PY
+}
+
+compute_database_identity() {
+  local base_dir
+  local python_bin
+  base_dir="${1:-${BASE_DIR:-$(pwd)}}"
+  base_dir="$(normalize_path "$base_dir")"
+  if [ -z "$base_dir" ]; then
+    echo "" >&2
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+
+base_dir = pathlib.Path(sys.argv[1])
+backend = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
+
+if backend not in {"postgres", "sqlite"}:
+    backend = "sqlite"
+
+database_url = os.environ.get("DATABASE_URL", "").strip()
+if database_url:
+    raw_identity = f"dsn:{database_url}"
+elif backend == "postgres":
+    raw_identity = (
+        "postgres:"
+        f"engine=django.db.backends.postgresql;"
+        f"name={os.environ.get('POSTGRES_DB', 'postgres')};"
+        f"host={os.environ.get('POSTGRES_HOST', 'localhost')};"
+        f"port={os.environ.get('POSTGRES_PORT', '5432')};"
+        f"user={os.environ.get('POSTGRES_USER', 'postgres')};"
+        f"password={os.environ.get('POSTGRES_PASSWORD', '')}"
+    )
+else:
+    sqlite_path = os.environ.get("ARTHEXIS_SQLITE_PATH", "").strip()
+    if sqlite_path:
+        resolved = pathlib.Path(sqlite_path)
+        if not resolved.is_absolute():
+            resolved = base_dir / resolved
+    else:
+        resolved = base_dir / "db.sqlite3"
+    raw_identity = f"sqlite:engine=django.db.backends.sqlite3;name={resolved}"
+
+fingerprint = hashlib.sha256(raw_identity.encode("utf-8")).hexdigest()
+print(fingerprint)
+PY
+}
+
+read_migration_metadata_snapshot() {
+  local metadata_file="${1:-$MIGRATIONS_META_FILE}"
+  local python_bin
+
+  if [ ! -f "$metadata_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$metadata_file" <<'PY'
+import json
+import pathlib
+import sys
+
+metadata_file = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(metadata_file.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("version") != 1:
+    raise SystemExit(1)
+
+entries = payload.get("entries")
+if not isinstance(entries, list):
+    raise SystemExit(1)
+
+for entry in entries:
+    if not isinstance(entry, list) or len(entry) != 3:
+        raise SystemExit(1)
+    relative_path, mtime_ns, size = entry
+    if not isinstance(relative_path, str):
+        raise SystemExit(1)
+    if not isinstance(mtime_ns, int):
+        raise SystemExit(1)
+    if not isinstance(size, int):
+        raise SystemExit(1)
+
+print(json.dumps({"version": 1, "entries": entries}, sort_keys=True, separators=(",", ":")))
+PY
+}
+
+read_predeploy_marker_fingerprint() {
+  local marker_file="${1:-$PREDEPLOY_MIGRATIONS_MARKER_FILE}"
+  local python_bin
+
+  if [ ! -f "$marker_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$marker_file" <<'PY'
+import json
+import pathlib
+import sys
+
+marker = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("status") != "success":
+    raise SystemExit(1)
+
+fingerprint = payload.get("fingerprint")
+if not isinstance(fingerprint, str) or not fingerprint:
+    raise SystemExit(1)
+
+print(fingerprint)
+PY
+}
+
+read_verified_state() {
+  local state_file="${1:-$MIGRATIONS_VERIFIED_STATE_FILE}"
+  local python_bin
+
+  if [ ! -f "$state_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$state_file" <<'PY'
+import json
+import pathlib
+import sys
+
+state_file = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(state_file.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("version") != 1:
+    raise SystemExit(1)
+
+fingerprint = payload.get("fingerprint")
+db_identity = payload.get("db_identity")
+status = payload.get("status")
+verified_at = payload.get("verified_at")
+
+if not isinstance(fingerprint, str) or not fingerprint:
+    raise SystemExit(1)
+if not isinstance(db_identity, str) or not db_identity:
+    raise SystemExit(1)
+if status not in {"success", "failed"}:
+    raise SystemExit(1)
+if not isinstance(verified_at, int):
+    raise SystemExit(1)
+
+print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+PY
+}
+
+run_runserver_preflight() {
+  if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
+    return 0
+  fi
+
+  local python_bin
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  local migration_policy
+  if ! migration_policy="$(resolve_migration_policy)"; then
+    return 1
+  fi
+
+  write_migration_fingerprint() {
+    local value="$1"
+
+    if ! printf '%s\n' "$value" > "$MIGRATIONS_SHA_FILE"; then
+      echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
+  write_migration_metadata() {
+    local value="$1"
+
+    if ! printf '%s\n' "$value" > "$MIGRATIONS_META_FILE"; then
+      echo "Failed to write migrations metadata cache '$MIGRATIONS_META_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
+  write_verified_state() {
+    local fingerprint_value="$1"
+    local db_identity_value="$2"
+    local status_value="$3"
+    local python_bin_write
+
+    if ! python_bin_write="$(arthexis_python_bin)"; then
+      echo "python3 or python not available" >&2
+      return 1
+    fi
+
+    if ! "$python_bin_write" - "$MIGRATIONS_VERIFIED_STATE_FILE" "$fingerprint_value" "$db_identity_value" "$status_value" <<'PY'; then
+import json
+import pathlib
+import sys
+import time
+
+state_file = pathlib.Path(sys.argv[1])
+payload = {
+    "version": 1,
+    "fingerprint": sys.argv[2],
+    "db_identity": sys.argv[3],
+    "status": sys.argv[4],
+    "verified_at": int(time.time()),
+}
+
+state_file.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+PY
+      echo "Failed to write migration verified-state cache '$MIGRATIONS_VERIFIED_STATE_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
+  if [ "$migration_policy" = "skip" ]; then
+    echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
+    RUNSERVER_PREFLIGHT_DONE=true
+    return 0
+  fi
+
+  if ! mkdir -p "$LOCK_DIR"; then
+    echo "Failed to create lock directory '$LOCK_DIR'." >&2
+    return 1
+  fi
+
+  local metadata_snapshot=""
+  if ! metadata_snapshot=$(compute_migration_metadata_snapshot); then
+    echo "Failed to compute migration metadata snapshot." >&2
+    return 1
+  fi
+
+  local db_identity=""
+  if ! db_identity=$(compute_database_identity); then
+    echo "Failed to compute database identity." >&2
+    return 1
+  fi
+
+  local fingerprint=""
+  local fingerprint_from_cache=false
+  local stored_fingerprint=""
+  local stored_metadata_snapshot=""
+  if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" = true ]; then
+    echo "Forcing migration preflight refresh..."
+    rm -f "$MIGRATIONS_SHA_FILE" "$MIGRATIONS_META_FILE"
+  elif [ -f "$MIGRATIONS_SHA_FILE" ]; then
+    stored_fingerprint=$(cat "$MIGRATIONS_SHA_FILE")
+    if stored_metadata_snapshot=$(read_migration_metadata_snapshot); then
+      if [ -n "$stored_fingerprint" ] && [ "$stored_metadata_snapshot" = "$metadata_snapshot" ]; then
+        fingerprint="$stored_fingerprint"
+        fingerprint_from_cache=true
+        echo "Migrations metadata unchanged; reusing cached fingerprint."
+      fi
+    fi
+  elif [ -f "$MIGRATIONS_META_FILE" ]; then
+    stored_metadata_snapshot=$(read_migration_metadata_snapshot || true)
+  fi
+
+  if [ "$fingerprint_from_cache" != true ]; then
+    if ! fingerprint=$(compute_migration_fingerprint); then
+      echo "Failed to compute migration fingerprint" >&2
+      return 1
+    fi
+  fi
+
+  if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
+    local verified_state=""
+    if verified_state=$(read_verified_state); then
+      local verified_fingerprint=""
+      local verified_db_identity=""
+      local verified_status=""
+      read -r verified_fingerprint verified_db_identity verified_status < <(
+        printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; payload=json.loads(sys.stdin.read()); print(payload.get("fingerprint", ""), payload.get("db_identity", ""), payload.get("status", ""))'
+      )
+
+      if [ "$verified_status" = "success" ] \
+        && [ "$verified_fingerprint" = "$fingerprint" ] \
+        && [ "$verified_db_identity" = "$db_identity" ]; then
+        echo "Migrations and database identity unchanged since last verified preflight; verifying migration state..."
+        if "$python_bin" manage.py migrate --check; then
+          echo "Verified-state cache confirmed against database; skipping migration apply fallback."
+          if ! write_migration_fingerprint "$fingerprint"; then
+            return 1
+          fi
+          if ! write_migration_metadata "$metadata_snapshot"; then
+            return 1
+          fi
+          if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
+            return 1
+          fi
+          RUNSERVER_PREFLIGHT_DONE=true
+          export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+          RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+          return 0
+        fi
+
+        echo "Verified-state cache did not validate cleanly; running fallback migration preflight..."
+      fi
+    fi
+  fi
+
+  local marker_fingerprint=""
+  if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ] && marker_fingerprint=$(read_predeploy_marker_fingerprint); then
+    if [ "$marker_fingerprint" = "$fingerprint" ]; then
+      echo "Found successful pre-deploy migration marker; verifying migration state..."
+      if "$python_bin" manage.py migrate --check; then
+        echo "Pre-deploy migration marker verified; skipping migration apply fallback."
+        if ! write_migration_fingerprint "$fingerprint"; then
+          return 1
+        fi
+        if ! write_migration_metadata "$metadata_snapshot"; then
+          return 1
+        fi
+        if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
+          return 1
+        fi
+        RUNSERVER_PREFLIGHT_DONE=true
+        export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+        RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+        return 0
+      fi
+
+      echo "Pre-deploy migration marker did not verify cleanly; running fallback migration preflight..."
+    fi
+  fi
+
+  if [ "$stored_fingerprint" = "$fingerprint" ] && [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
+    echo "Migrations unchanged since last successful preflight; verifying database state..."
+    if "$python_bin" manage.py migrate --check; then
+      echo "Database matches cached migrations fingerprint; skipping migration checks."
+      if ! write_migration_fingerprint "$fingerprint"; then
+        return 1
+      fi
+      if ! write_migration_metadata "$metadata_snapshot"; then
+        return 1
+      fi
+      if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
+        return 1
+      fi
+      RUNSERVER_PREFLIGHT_DONE=true
+      export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+      RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+      return 0
+    fi
+
+    echo "Cached migration fingerprint is stale; rerunning migration preflight..."
+  fi
+
+  local migrate_check_output=""
+  local migrate_check_status=0
+
+  run_migrate_check() {
+    if migrate_check_output=$("$python_bin" manage.py migrate --check 2>&1); then
+      migrate_check_status=0
+    else
+      migrate_check_status=$?
+    fi
+
+    if [ "$migrate_check_status" -eq 0 ]; then
+      return 0
+    fi
+
+    return 10
+  }
+
+  echo "Checking for unapplied migrations before runserver..."
+  if run_migrate_check; then
+    echo "No pending migrations detected; skipping migrate."
+  else
+    migrate_check_status=$?
+    if [ "$migrate_check_status" -ne 10 ]; then
+      return 1
+    fi
+
+    if [ "$migration_policy" = "check" ]; then
+      echo "Migration preflight failed: pending migrations detected and policy is check-only." >&2
+      printf '%s\n' "$migrate_check_output" >&2
+      return 1
+    fi
+
+    echo "Pending migrations detected; applying migrations..."
+    if ! "$python_bin" manage.py migrate --noinput; then
+      echo "Migration preflight failed while applying migrations." >&2
+      return 1
+    fi
+
+    echo "Verifying migration state after applying migrations..."
+    if ! "$python_bin" manage.py migrate --check; then
+      echo "Migration preflight failed: migrations are still pending after apply." >&2
+      return 1
+    fi
+  fi
+
+  if ! write_migration_fingerprint "$fingerprint"; then
+    return 1
+  fi
+  if ! write_migration_metadata "$metadata_snapshot"; then
+    return 1
+  fi
+  if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
+    return 1
+  fi
+  RUNSERVER_PREFLIGHT_DONE=true
+  export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+  RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+  return 0
+}

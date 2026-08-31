@@ -1,0 +1,208 @@
+{% extends "ocpp/landing_base.html" %}
+{% load i18n %}
+
+{% block title %}{{ page.display_title }}{% endblock %}
+
+{% block content %}
+<div class="container px-3 px-sm-4">
+  <div class="row justify-content-center mt-2 mt-sm-4">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header">
+          <div class="d-flex flex-column flex-sm-row gap-3 align-items-stretch align-items-sm-start justify-content-between">
+            <div class="flex-grow-1">
+              <h1 class="h4 mb-2 text-break">{{ page.display_title }}</h1>
+              <dl class="landing-meta-list">
+                <div>
+                  <dt>{% trans "Serial Number" %}</dt>
+                  <dd class="text-break">{{ charger.charger_id }}</dd>
+                </div>
+                <div>
+                  <dt>{% trans "Connector" %}</dt>
+                  <dd class="text-break">{{ charger.connector_label }}</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="d-flex flex-column align-items-stretch align-items-sm-end gap-2">
+              <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if energy_accounts_enabled and not request.user.is_authenticated %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title mb-2">{% trans "Authenticate to Charge" %}</p>
+            <p class="text-muted small mb-3">
+              {% if energy_credits_required %}
+                {% trans "Create or log in to an energy account to authorize charging. Credits are required for authorization." %}
+              {% else %}
+                {% trans "Create or log in to an energy account to authorize charging. Credits are optional right now and usage will be tallied for later billing." %}
+              {% endif %}
+            </p>
+            <div class="onboarding-card border rounded-3 p-3 p-sm-4 bg-light-subtle">
+              <div class="onboarding-steps d-grid gap-2 mb-3">
+                <span class="badge rounded-pill text-bg-primary-subtle text-primary-emphasis fw-semibold py-2 px-3 text-start">
+                  {% trans "1. Create account" %}
+                </span>
+                <span class="badge rounded-pill text-bg-secondary-subtle text-secondary-emphasis fw-semibold py-2 px-3 text-start">
+                  {% trans "2. Authenticate" %}
+                </span>
+                <span class="badge rounded-pill text-bg-secondary-subtle text-secondary-emphasis fw-semibold py-2 px-3 text-start">
+                  {% trans "3. Start charging" %}
+                </span>
+              </div>
+              <form method="post" action="{% url 'ocpp:public-connector-page-create-account' page.slug %}" class="row g-2 mt-1">
+                {% csrf_token %}
+                <div class="col-12">
+                  <label class="visually-hidden" for="create-account-username">{% trans "Username" %}</label>
+                  <input id="create-account-username" class="form-control" type="text" name="username" required placeholder="{% trans 'Username' %}" maxlength="150" autocomplete="username" pattern="[\w.@+-]+">
+                  <div class="invalid-feedback">{% trans "Enter a valid username." %}</div>
+                </div>
+                <div class="col-12">
+                  <label class="visually-hidden" for="create-account-email">{% trans "Email (optional)" %}</label>
+                  <input id="create-account-email" class="form-control" type="email" name="email" placeholder="{% trans 'Email (optional)' %}" autocomplete="email">
+                  <div class="invalid-feedback">{% trans "Enter a valid email address or leave this field blank." %}</div>
+                </div>
+                <div class="col-12">
+                  <label class="visually-hidden" for="create-account-password">{% trans "Password" %}</label>
+                  <input id="create-account-password" class="form-control" type="password" name="password" required placeholder="{% trans 'Password' %}" autocomplete="new-password" minlength="8">
+                  {% if account_create_form.password.help_text %}
+                  <div class="form-text">{{ account_create_form.password.help_text|safe }}</div>
+                  {% endif %}
+                  <div class="invalid-feedback">{% trans "Choose a valid password." %}</div>
+                </div>
+                <div class="col-12 d-grid gap-2 d-sm-flex mt-2">
+                  <button type="submit" class="btn btn-primary">{% trans "Create Account" %}</button>
+                  <a class="btn btn-outline-primary" href="{% url 'pages:login' %}?next={{ next_url|urlencode }}">{% trans "Log In" %}</a>
+                </div>
+                <div class="col-12">
+                  <div class="trust-row d-grid gap-2 gap-sm-3 mt-2">
+                    <span class="trust-item"><span class="me-1" aria-hidden="true">🔒</span>{% trans "Secure account setup" %}</span>
+                    <span class="trust-item"><span class="me-1" aria-hidden="true">🛡️</span>{% trans "Privacy-safe scan logging" %}</span>
+                    <span class="trust-item"><span class="me-1" aria-hidden="true">💬</span>{% trans "Support is available when needed" %}</span>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          {% endif %}
+          {% if charger.last_status or charger_error_code or charger.last_status_timestamp %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title mb-1">{% trans "Latest report" %}</p>
+            <div class="text-muted small">
+            {% if charger.last_status %}
+            <p class="mb-1"><span>{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
+            {% endif %}
+            {% if charger_error_code %}
+            <p class="mb-1"><span>{% trans "Error code" %}</span>: {{ charger_error_code }}</p>
+            {% endif %}
+            {% if charger.last_status_timestamp %}
+            <p class="mb-1"><span>{% trans "Last status update" %}</span>: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+            {% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% if instructions_html %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "How to charge" %}</p>
+            <div class="markdown-body">{{ instructions_html|safe }}</div>
+          </div>
+          {% endif %}
+          {% if rules_html %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Site rules" %}</p>
+            <div class="markdown-body">{{ rules_html|safe }}</div>
+          </div>
+          {% endif %}
+          {% if page.support_phone or page.support_whatsapp or page.support_email or page.support_url %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Support" %}</p>
+            <ul class="list-unstyled mb-0 d-grid gap-2">
+              {% if page.support_phone %}
+              <li>
+                <a class="support-action-link" href="tel:{{ page.support_phone }}">
+                  <span class="support-icon" aria-hidden="true">📞</span>
+                  <span><strong>{% trans "Phone" %}</strong><span class="d-block small text-muted">{{ page.support_phone }}</span></span>
+                </a>
+              </li>
+              {% endif %}
+              {% if page.support_whatsapp %}
+              <li>
+                <a class="support-action-link" href="https://wa.me/{{ page.support_whatsapp|cut:'+' }}">
+                  <span class="support-icon" aria-hidden="true">💬</span>
+                  <span><strong>{% trans "WhatsApp" %}</strong><span class="d-block small text-muted">{{ page.support_whatsapp }}</span></span>
+                </a>
+              </li>
+              {% endif %}
+              {% if page.support_email %}
+              <li>
+                <a class="support-action-link" href="mailto:{{ page.support_email }}">
+                  <span class="support-icon" aria-hidden="true">✉️</span>
+                  <span><strong>{% trans "Email" %}</strong><span class="d-block small text-muted">{{ page.support_email }}</span></span>
+                </a>
+              </li>
+              {% endif %}
+              {% if page.support_url %}
+              <li>
+                <a class="support-action-link" href="{{ page.support_url }}" rel="noopener" target="_blank">
+                  <span class="support-icon" aria-hidden="true">🌐</span>
+                  <span><strong>{% trans "Website" %}</strong><span class="d-block small text-muted">{{ page.support_url }}</span></span>
+                </a>
+              </li>
+              {% endif %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .markdown-body > :first-child {
+    margin-top: 0;
+  }
+  .markdown-body ul,
+  .markdown-body ol {
+    padding-left: 1.25rem;
+  }
+  .support-action-link {
+    align-items: center;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    color: inherit;
+    display: flex;
+    gap: .75rem;
+    padding: .625rem .75rem;
+    text-decoration: none;
+    transition: background-color .2s ease, border-color .2s ease;
+  }
+  .support-action-link:hover {
+    background-color: rgba(var(--bs-primary-rgb), .05);
+    border-color: rgba(var(--bs-primary-rgb), .3);
+  }
+  .support-icon {
+    align-items: center;
+    background: rgba(var(--bs-primary-rgb), .1);
+    border-radius: 50%;
+    display: inline-flex;
+    font-size: 1rem;
+    height: 2rem;
+    justify-content: center;
+    width: 2rem;
+  }
+  .trust-item {
+    color: var(--bs-secondary-color);
+    font-size: .85rem;
+    line-height: 1.3;
+  }
+  @media (min-width: 576px) {
+    .trust-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+</style>
+{% endblock %}

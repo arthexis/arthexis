@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Readiness Publish"
+  short_description: "Check and perform gated releases"
+  default_prompt: "Use release-readiness-publish to verify Arthexis release gates and prepare tag-triggered publishing."

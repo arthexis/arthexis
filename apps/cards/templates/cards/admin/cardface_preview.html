@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="cardface-preview">
+  <h1>{% blocktrans %}Preview Card Face: {{ card_face }}{% endblocktrans %}</h1>
+  <form method="get" id="preview-form" class="module aligned">
+    <fieldset>
+      <legend>{% trans "Overlays" %}</legend>
+      <div class="form-row">{{ form.overlay_one_text.label_tag }} {{ form.overlay_one_text }}</div>
+      <div class="form-row">{{ form.overlay_one_font.label_tag }} {{ form.overlay_one_font }}</div>
+      <div class="form-row">{{ form.overlay_one_font_size.label_tag }} {{ form.overlay_one_font_size }}</div>
+      <div class="form-row">{{ form.overlay_one_x.label_tag }} {{ form.overlay_one_x }} {{ form.overlay_one_y.label_tag }} {{ form.overlay_one_y }}</div>
+      <hr>
+      <div class="form-row">{{ form.overlay_two_text.label_tag }} {{ form.overlay_two_text }}</div>
+      <div class="form-row">{{ form.overlay_two_font.label_tag }} {{ form.overlay_two_font }}</div>
+      <div class="form-row">{{ form.overlay_two_font_size.label_tag }} {{ form.overlay_two_font_size }}</div>
+      <div class="form-row">{{ form.overlay_two_x.label_tag }} {{ form.overlay_two_x }} {{ form.overlay_two_y.label_tag }} {{ form.overlay_two_y }}</div>
+    </fieldset>
+
+    {% if sigil_fields %}
+    <fieldset>
+      <legend>{% trans "Sigil values" %}</legend>
+      {% for sigil in sigil_fields %}
+        <div class="form-row">
+          <label for="id_{{ sigil.field_name }}">[{{ sigil.token }}]</label>
+          {{ sigil.field }}
+        </div>
+      {% endfor %}
+    </fieldset>
+    {% endif %}
+
+    <div class="submit-row">
+      <input type="submit" value="{% trans "Update preview" %}" class="default" />
+    </div>
+  </form>
+
+  <div class="preview-output">
+    {% if preview_image %}
+    <h2>{% trans "Rendered preview" %}</h2>
+    <img id="cardface-preview-image" src="data:image/png;base64,{{ preview_image }}" alt="{% trans "Card preview" %}" style="max-width:100%;border:1px solid #ddd;" />
+    {% else %}
+    <p class="help">{% trans "Upload a printable background to preview this card face." %}</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+  (function() {
+    const form = document.getElementById('preview-form');
+    if (!form) { return; }
+    form.querySelectorAll('[data-autosubmit="true"]').forEach((el) => {
+      const trigger = () => form.requestSubmit();
+      el.addEventListener('change', trigger);
+      el.addEventListener('input', trigger);
+    });
+  })();
+</script>
+{% endblock %}

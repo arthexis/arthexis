@@ -1,0 +1,1315 @@
+import json
+import re
+import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
+from datetime import timezone as dt_timezone
+from decimal import Decimal, InvalidOperation
+from functools import lru_cache
+from types import SimpleNamespace
+from urllib.parse import urljoin
+
+from asgiref.sync import async_to_sync
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
+from django.db.models import (
+    ExpressionWrapper,
+    F,
+    FloatField,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Coalesce
+from django.db.utils import OperationalError, ProgrammingError
+from django.http import Http404, HttpResponse, JsonResponse
+from django.http.request import split_domain_port
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.template.loader import render_to_string
+from django.urls import NoReverseMatch, reverse
+from django.utils import formats, timezone
+from django.utils.dateparse import parse_datetime
+from django.utils.encoding import force_str
+from django.utils.text import slugify
+from django.utils.translation import gettext, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import csrf_exempt
+
+from apps.cards.models import RFID as CoreRFID
+from apps.nodes.models import NetMessage, Node
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+from apps.sites.utils import landing, user_in_site_operator_group
+from utils.api import api_login_required
+
+from .. import store
+from ..models import (
+    Charger,
+    ChargerLogRequest,
+    ChargingProfile,
+    CPFirmware,
+    CPFirmwareDeployment,
+    CPReservation,
+    DataTransferMessage,
+    Transaction,
+    annotate_transaction_energy_bounds,
+)
+from ..status_display import ERROR_OK_VALUES, STATUS_BADGE_MAP
+from ..status_resets import clear_stale_cached_statuses
+from .actions.common import (
+    CALL_ACTION_LABELS,
+    CALL_EXPECTED_STATUSES,
+    ActionCall,
+    ActionContext,
+    _ensure_charger_access,
+    _evaluate_pending_call_result,
+    _format_details,
+    _get_or_create_charger,
+    _normalize_connector_slug,
+    _parse_request_body,
+)
+
+_PREFIXED_STATUS_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
+)
+LOG_TIMESTAMP_PREFIX_LENGTH = 24
+SEVERITY_ERROR = ("error", "#dc3545", "Error")
+SEVERITY_INFO = ("info", "#0d6efd", "Info")
+SEVERITY_WARNING = ("warning", "#ffc107", "Warning")
+
+
+def _status_badge_class(state: str | None, color: str | None) -> str:
+    """Return the semantic badge class used by landing pages."""
+
+    normalized_state = slugify(force_str(state or "")).replace("-", "")
+    if normalized_state in {"available", "preparing", "reserved"}:
+        return "status-available"
+    if normalized_state in {
+        "charging",
+        "finishing",
+        "occupied",
+        "suspendedev",
+        "suspendedevse",
+    }:
+        return "status-charging"
+    if normalized_state in {"faulted"}:
+        return "status-faulted"
+    if normalized_state in {"offline", "disconnected", "outofservice", "unavailable"}:
+        return "status-offline"
+
+    normalized_color = force_str(color or "").strip().casefold()
+    if normalized_color in {"#0d6efd", "blue", "#6f42c1"}:
+        return "status-available"
+    if normalized_color in {"#198754", "green", "#fd7e14", "#20c997", "#0dcaf0"}:
+        return "status-charging"
+    if normalized_color in {"#dc3545", "red", "#ffc107", "yellow"}:
+        return "status-faulted"
+    if normalized_color in {"grey", "gray", "#6c757d"}:
+        return "status-offline"
+
+    return "status-unknown"
+
+
+@dataclass(frozen=True)
+class EventFeedConfig:
+    """Configuration for building non-transaction event rows from log lines."""
+
+    error_statuses: frozenset[str]
+    excluded_prefixes: tuple[str, ...]
+    important_prefixes: tuple[str, ...]
+    status_prefix: str
+    warning_statuses: frozenset[str]
+
+
+@dataclass(frozen=True)
+class EventRow:
+    """Typed status-page row before template serialization."""
+
+    details: str
+    event: str
+    event_id: int | None
+    severity: str
+    severity_color: str
+    severity_label: str
+    timestamp: datetime
+
+    def to_dict(self) -> dict[str, str | int | datetime | None]:
+        """Serialize row for template rendering."""
+
+        return {
+            "timestamp": self.timestamp,
+            "event": self.event,
+            "details": self.details,
+            "severity": self.severity,
+            "severity_color": self.severity_color,
+            "severity_label": self.severity_label,
+            "event_id": self.event_id,
+        }
+
+
+def classify_event_severity(
+    event_name: str,
+    details: str,
+    config: EventFeedConfig,
+) -> tuple[str, str, str]:
+    """Return severity metadata for a normalized event row."""
+
+    text = f"{event_name} {details}".casefold()
+    if "status" in event_name.casefold():
+        status_token = details.casefold().strip()
+        if status_token in config.error_statuses:
+            return SEVERITY_ERROR
+        if status_token in config.warning_statuses:
+            return SEVERITY_WARNING
+    if any(token in text for token in {"error", "fault", "rejected", "closed"}):
+        return SEVERITY_ERROR
+    if any(token in text for token in {"unavailable", "timeout", "retry"}):
+        return SEVERITY_WARNING
+    return SEVERITY_INFO
+
+
+def _transaction_id_from_payload(payload: dict[str, object]) -> int | None:
+    """Extract a transaction identifier from log payloads when present."""
+
+    for key in ("transactionId", "transaction_id", "txId", "tx_id"):
+        value = payload.get(key)
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError):
+            continue
+        if normalized > 0:
+            return normalized
+    return None
+
+
+def _row_identity_for_dedupe(
+    source_key: str,
+    payload: dict[str, object] | None = None,
+) -> str | int | None:
+    """Return connector identity component used for event deduplication."""
+
+    if payload is not None:
+        connector_value = payload.get("connectorId")
+        try:
+            return int(connector_value)
+        except (TypeError, ValueError):
+            pass
+    if store.IDENTITY_SEPARATOR in source_key:
+        _, slug = source_key.split(store.IDENTITY_SEPARATOR, 1)
+        if slug in {store.AGGREGATE_SLUG, store.PENDING_SLUG}:
+            return None
+        try:
+            return int(slug)
+        except (TypeError, ValueError):
+            return slug
+    return None
+
+
+def _event_dedupe_key(
+    row: EventRow,
+    identity: str | int | None,
+) -> tuple[str, str, int | None, str | int | None, datetime | None]:
+    """Return a stable dedupe key for non-transaction event rows."""
+
+    if row.event == "Status":
+        return row.event, row.details, row.event_id, identity, None
+    return row.event, row.details, row.event_id, identity, row.timestamp
+
+
+def iter_candidate_log_entries(
+    keys: list[str],
+    config: EventFeedConfig,
+) -> Iterator[tuple[str, store.LogEntry, str]]:
+    """Yield normalized candidate log lines with their source key and entry."""
+
+    for source_key in keys:
+        for entry in store.iter_log_entries(source_key, log_type="charger"):
+            if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
+                continue
+            message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
+            prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
+            if prefixed_match is not None:
+                message = message[prefixed_match.start(1) :]
+            if message.startswith(config.excluded_prefixes):
+                continue
+            yield source_key, entry, message
+
+
+def parse_event_row(
+    source_key: str,
+    entry: store.LogEntry,
+    message: str,
+    config: EventFeedConfig,
+) -> tuple[EventRow | None, str | int | None]:
+    """Parse one normalized message into an event row and dedupe identity."""
+
+    dedupe_identity = _row_identity_for_dedupe(source_key)
+
+    if message.startswith(config.status_prefix):
+        payload_text = message.split(":", 1)[1].strip()
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            return None, dedupe_identity
+        dedupe_identity = _row_identity_for_dedupe(source_key, payload)
+        status_value = str(payload.get("status") or "").strip()
+        if not status_value:
+            return None, dedupe_identity
+        severity, severity_color, severity_label = classify_event_severity(
+            "Status",
+            status_value,
+            config,
+        )
+        return (
+            EventRow(
+                timestamp=entry.timestamp,
+                event="Status",
+                details=status_value,
+                severity=severity,
+                severity_color=severity_color,
+                severity_label=severity_label,
+                event_id=_transaction_id_from_payload(payload),
+            ),
+            dedupe_identity,
+        )
+
+    if message.startswith(config.important_prefixes):
+        event_name, _, detail_text = message.partition(":")
+        details = detail_text.strip() or "-"
+        severity, severity_color, severity_label = classify_event_severity(
+            event_name,
+            details,
+            config,
+        )
+        return (
+            EventRow(
+                timestamp=entry.timestamp,
+                event=event_name.strip(),
+                details=details,
+                severity=severity,
+                severity_color=severity_color,
+                severity_label=severity_label,
+                event_id=None,
+            ),
+            dedupe_identity,
+        )
+
+    return None, dedupe_identity
+
+
+def dedupe_event_rows(
+    rows: list[tuple[EventRow, str | int | None]],
+) -> list[EventRow]:
+    """Dedupe rows while preserving newer rows when keys collide."""
+
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ] = {}
+    for row, identity in rows:
+        _update_deduped_event_rows(deduped_rows, row, identity)
+    return list(deduped_rows.values())
+
+
+def _update_deduped_event_rows(
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ],
+    row: EventRow,
+    identity: str | int | None,
+) -> None:
+    """Update dedupe map with newer row for a matching dedupe key."""
+
+    dedupe_key = _event_dedupe_key(row, identity)
+    existing = deduped_rows.get(dedupe_key)
+    if existing is None or row.timestamp > existing.timestamp:
+        deduped_rows[dedupe_key] = row
+
+
+def _clear_stale_statuses_for_view() -> None:
+    """Reset cached charger state when data has gone stale."""
+
+    clear_stale_cached_statuses()
+
+
+def _reverse_connector_url(name: str, serial: str, connector_slug: str) -> str:
+    """Return URL name for connector-aware routes."""
+
+    target = f"ocpp:{name}-connector"
+    if connector_slug == Charger.AGGREGATE_CONNECTOR_SLUG:
+        try:
+            return reverse(target, args=[serial, connector_slug])
+        except NoReverseMatch:
+            return reverse(f"ocpp:{name}", args=[serial])
+    return reverse(target, args=[serial, connector_slug])
+
+
+def _get_charger(serial: str, connector_slug: str | None) -> tuple[Charger, str]:
+    """Return charger for the requested identity, creating if necessary."""
+
+    try:
+        serial = Charger.validate_serial(serial)
+    except ValidationError as exc:
+        raise Http404("Charger not found") from exc
+    connector_value, normalized_slug = _normalize_connector_slug(connector_slug)
+    if connector_value is None:
+        charger = (
+            Charger.objects.filter(charger_id=serial, connector_id=None)
+            .order_by("pk")
+            .first()
+        )
+        if charger is None:
+            charger = (
+                Charger.objects.filter(charger_id=serial, connector_id__isnull=False)
+                .order_by("connector_id", "pk")
+                .first()
+            )
+        if charger is None:
+            raise Http404("Charger not found")
+    else:
+        charger, _ = Charger.objects.get_or_create(
+            charger_id=serial,
+            connector_id=connector_value,
+        )
+    return charger, normalized_slug
+
+
+def _connector_set(charger: Charger) -> list[Charger]:
+    """Return chargers sharing the same serial ordered for navigation."""
+
+    siblings = list(Charger.objects.filter(charger_id=charger.charger_id))
+    siblings.sort(key=lambda c: (c.connector_id is not None, c.connector_id or 0))
+    return siblings
+
+
+def _visible_error_code(value: str | None) -> str | None:
+    """Return ``value`` when it represents a real error code."""
+
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    if normalized.lower() in ERROR_OK_VALUES:
+        return None
+    return normalized
+
+
+def _visible_chargers(user):
+    """Return chargers visible to ``user`` on public dashboards."""
+
+    return Charger.visible_for_user(user).prefetch_related(
+        "owner_users", "owner_groups"
+    )
+
+
+def _landing_requires_chargers(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when at least one charger exists for this user."""
+
+    return _visible_chargers(request.user).exists()
+
+
+def _landing_visibility_params(*, request, landing) -> dict[str, object]:
+    """Return cache parameters used for landing visibility checks."""
+
+    user = getattr(request, "user", None)
+    return {"user_id": getattr(user, "pk", "anon") or "anon"}
+
+
+def _landing_requires_site_operator_or_staff(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when the user is a site operator or a staff member."""
+
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    try:
+        return user_in_site_operator_group(user)
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def _charger_last_seen(charger: Charger | object):
+    """Return the last activity timestamp for ``charger`` safely.
+
+    Some environments may serve an older charger model that lacks the
+    ``last_seen`` helper property. Access the field defensively and fall back to
+    known status fields so the dashboard rendering does not crash.
+    """
+
+    try:
+        last_seen = getattr(charger, "last_seen")
+    except AttributeError:
+        last_seen = None
+    if last_seen is None:
+        last_seen = getattr(charger, "last_status_timestamp", None) or getattr(
+            charger, "last_heartbeat", None
+        )
+    return last_seen
+
+
+def _transaction_rfid_details(
+    tx_obj, *, cache: dict[str, dict[str, str | None]] | None = None
+) -> dict[str, str | None] | None:
+    """Return normalized RFID metadata for a transaction-like object."""
+
+    if not tx_obj:
+        return None
+    rfid_value = getattr(tx_obj, "rfid", None)
+    normalized = str(rfid_value or "").strip().upper()
+    cache_key = normalized
+    if normalized:
+        if cache is not None and cache_key in cache:
+            return cache[cache_key]
+        tag = (
+            CoreRFID.matching_queryset(normalized)
+            .only("pk", "label_id", "custom_label")
+            .first()
+        )
+        rfid_url = None
+        label_value = None
+        canonical_value = normalized
+        if tag:
+            try:
+                rfid_url = reverse("admin:cards_rfid_change", args=[tag.pk])
+            except NoReverseMatch:  # pragma: no cover - admin may be disabled
+                rfid_url = None
+            custom_label = (tag.custom_label or "").strip()
+            if custom_label:
+                label_value = custom_label
+            elif tag.label_id is not None:
+                label_value = str(tag.label_id)
+            canonical_value = tag.rfid or canonical_value
+        display_value = label_value or canonical_value
+        details = {
+            "value": display_value,
+            "url": rfid_url,
+            "uid": canonical_value,
+            "type": "rfid",
+            "display_label": gettext("RFID"),
+        }
+        if label_value:
+            details["label"] = label_value
+        if cache is not None:
+            cache[cache_key] = details
+        return details
+
+    identifier_value = getattr(tx_obj, "vehicle_identifier", None)
+    normalized_identifier = str(identifier_value or "").strip()
+    if not normalized_identifier:
+        vid_value = getattr(tx_obj, "vid", None)
+        vin_value = getattr(tx_obj, "vin", None)
+        normalized_identifier = str(vid_value or vin_value or "").strip()
+    if not normalized_identifier:
+        return None
+    source = getattr(tx_obj, "vehicle_identifier_source", "") or "vid"
+    if source not in {"vid", "vin"}:
+        vid_raw = getattr(tx_obj, "vid", None)
+        vin_raw = getattr(tx_obj, "vin", None)
+        if str(vid_raw or "").strip():
+            source = "vid"
+        elif str(vin_raw or "").strip():
+            source = "vin"
+        else:
+            source = "vid"
+    cache_key = f"{source}:{normalized_identifier}"
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+    label = gettext("VID") if source == "vid" else gettext("VIN")
+    details = {
+        "value": normalized_identifier,
+        "url": None,
+        "uid": None,
+        "type": source,
+        "display_label": label,
+    }
+    if cache is not None:
+        cache[cache_key] = details
+    return details
+
+
+def _connector_overview(
+    charger: Charger,
+    user=None,
+    *,
+    connectors: list[Charger] | None = None,
+    rfid_cache: dict[str, dict[str, str | None]] | None = None,
+) -> list[dict]:
+    """Return connector metadata used for navigation and summaries."""
+
+    overview: list[dict] = []
+    sibling_connectors = (
+        connectors if connectors is not None else _connector_set(charger)
+    )
+    for sibling in sibling_connectors:
+        if user is not None and not sibling.is_visible_to(user):
+            continue
+        tx_obj = _active_transaction_for_charger(sibling)
+        state, color = _charger_state(sibling, tx_obj)
+        overview.append(
+            {
+                "charger": sibling,
+                "slug": sibling.connector_slug,
+                "label": sibling.connector_label,
+                "url": _reverse_connector_url(
+                    "charger-page", sibling.charger_id, sibling.connector_slug
+                ),
+                "status": state,
+                "color": color,
+                "last_status": sibling.last_status,
+                "last_error_code": _visible_error_code(sibling.last_error_code),
+                "last_status_timestamp": sibling.last_status_timestamp,
+                "last_status_vendor_info": sibling.last_status_vendor_info,
+                "tx": tx_obj,
+                "rfid_details": _transaction_rfid_details(tx_obj, cache=rfid_cache),
+                "connected": store.is_connected(
+                    sibling.charger_id, sibling.connector_id
+                ),
+                "status_badge_class": _status_badge_class(state, color),
+            }
+        )
+    return overview
+
+
+def _normalize_timeline_status(value: str | None) -> str | None:
+    """Normalize raw charger status strings into timeline buckets."""
+
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
+    charging_states = {
+        "charging",
+        "finishing",
+        "suspendedev",
+        "suspendedevse",
+        "occupied",
+    }
+    available_states = {"available", "preparing", "reserved"}
+    offline_states = {"faulted", "unavailable", "outofservice"}
+    if normalized in charging_states:
+        return "charging"
+    if normalized in offline_states:
+        return "offline"
+    if normalized in available_states:
+        return "available"
+    # Treat other states as available for the initial implementation.
+    return "available"
+
+
+def _timeline_labels() -> dict[str, str]:
+    """Return translated labels for timeline statuses."""
+
+    return {
+        "offline": gettext("Offline"),
+        "untracked": gettext("Untracked"),
+        "available": gettext("Available"),
+        "charging": gettext("Charging"),
+    }
+
+
+def _remote_node_active_delta() -> timedelta:
+    """Return the grace period for considering a remote node online."""
+
+    value = getattr(settings, "NODE_LAST_SEEN_ACTIVE_DELTA", None)
+    if isinstance(value, timedelta):
+        return value
+    if value is None:
+        return timedelta(minutes=10)
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return timedelta(minutes=10)
+    return timedelta(seconds=seconds)
+
+
+def _is_untracked_origin(
+    connector: Charger,
+    local_node: Node | None,
+    reference_time: datetime,
+    active_delta: timedelta,
+) -> bool:
+    """Return ``True`` when the connector's node origin appears offline."""
+
+    origin = getattr(connector, "node_origin", None)
+    if origin is None:
+        return False
+    local_pk = getattr(local_node, "pk", None)
+    if local_pk is not None and origin.pk == local_pk:
+        return False
+    last_seen = getattr(origin, "last_seen", None) or getattr(
+        origin, "last_updated", None
+    )
+    if last_seen is None:
+        return True
+    if timezone.is_naive(last_seen):
+        last_seen = timezone.make_aware(last_seen, timezone.get_current_timezone())
+    return reference_time - last_seen > active_delta
+
+
+def _format_segment_range(start: datetime, end: datetime) -> tuple[str, str]:
+    """Return localized display values for a timeline range."""
+
+    start_display = formats.date_format(
+        timezone.localtime(start), "SHORT_DATETIME_FORMAT"
+    )
+    end_display = formats.date_format(timezone.localtime(end), "SHORT_DATETIME_FORMAT")
+    return start_display, end_display
+
+
+def _collect_status_events(
+    charger: Charger,
+    connector: Charger,
+    window_start: datetime,
+    window_end: datetime,
+) -> tuple[list[tuple[datetime, str]], tuple[datetime, str] | None]:
+    """Parse log entries into ordered status events for the connector."""
+
+    connector_id = connector.connector_id
+    serial = connector.charger_id
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+        keys.append(store.pending_key(serial))
+    else:
+        keys.append(store.identity_key(serial, connector_id))
+        keys.append(store.identity_key(serial, None))
+        keys.append(store.pending_key(serial))
+
+    events: list[tuple[datetime, str]] = []
+    latest_before_window: tuple[datetime, str] | None = None
+
+    for entry in store.iter_log_entries(keys, log_type="charger", since=window_start):
+        if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
+            continue
+        message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
+        log_timestamp = entry.timestamp
+
+        event_time = log_timestamp
+        status_bucket: str | None = None
+
+        if message.startswith("StatusNotification processed:"):
+            payload_text = message.split(":", 1)[1].strip()
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                continue
+            target_id = payload.get("connectorId")
+            if connector_id is not None:
+                try:
+                    normalized_target = int(target_id)
+                except (TypeError, ValueError):
+                    normalized_target = None
+                if normalized_target not in {connector_id, None}:
+                    continue
+            raw_status = payload.get("status")
+            status_bucket = _normalize_timeline_status(
+                raw_status if isinstance(raw_status, str) else None
+            )
+            payload_timestamp = payload.get("timestamp")
+            if isinstance(payload_timestamp, str):
+                parsed = parse_datetime(payload_timestamp)
+                if parsed is not None:
+                    if timezone.is_naive(parsed):
+                        parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
+                    event_time = parsed
+        elif message.startswith("Connected"):
+            status_bucket = "available"
+        elif message.startswith("Closed"):
+            status_bucket = "offline"
+
+        if not status_bucket:
+            continue
+
+        if event_time < window_start:
+            if latest_before_window is None or event_time > latest_before_window[0]:
+                latest_before_window = (event_time, status_bucket)
+            break
+        if event_time > window_end:
+            continue
+        events.append((event_time, status_bucket))
+
+    events.sort(key=lambda item: item[0])
+
+    deduped_events: list[tuple[datetime, str]] = []
+    for event_time, state in events:
+        if deduped_events and deduped_events[-1][1] == state:
+            continue
+        deduped_events.append((event_time, state))
+
+    return deduped_events, latest_before_window
+
+
+def _important_non_transaction_events(
+    charger: Charger,
+    connector: Charger,
+    *,
+    limit: int = 5,
+    include_sensitive: bool = True,
+) -> list[dict[str, str | int | datetime | None]]:
+    """Return recent notable non-transaction events for the status page."""
+
+    connector_id = connector.connector_id
+    serial = charger.charger_id
+    keys: list[str] = []
+    if connector_id is None:
+        keys.append(store.identity_key(serial, None))
+        connector_ids = (
+            Charger.objects.filter(charger_id=serial)
+            .exclude(connector_id__isnull=True)
+            .values_list("connector_id", flat=True)
+        )
+        keys.extend(
+            store.identity_key(serial, sibling_connector_id)
+            for sibling_connector_id in connector_ids
+        )
+        keys.append(store.pending_key(serial))
+    else:
+        keys.append(store.identity_key(serial, connector_id))
+        keys.append(store.identity_key(serial, None))
+        keys.append(store.pending_key(serial))
+
+    important_prefixes = (
+        "Authorize",
+        "BootNotification",
+        "Closed",
+        "Connected",
+        "Heartbeat",
+    )
+    if include_sensitive:
+        important_prefixes += (
+            "DiagnosticsStatusNotification",
+            "FirmwareStatusNotification",
+            "SecurityEventNotification",
+        )
+    config = EventFeedConfig(
+        error_statuses=frozenset({"closed", "error", "offline", "rejected"}),
+        excluded_prefixes=(
+            "TransactionEvent received:",
+            "StartTransaction processed:",
+            "StopTransaction processed:",
+            "MeterValues processed:",
+            "MeterValues queued:",
+            "MeterValues received:",
+        ),
+        important_prefixes=important_prefixes,
+        status_prefix="StatusNotification processed:",
+        warning_statuses=frozenset(
+            {"faulted", "suspendedev", "suspendedevse", "unavailable"}
+        ),
+    )
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ] = {}
+    for source_key, entry, message in iter_candidate_log_entries(keys, config):
+        row, dedupe_identity = parse_event_row(source_key, entry, message, config)
+        if row is not None:
+            _update_deduped_event_rows(deduped_rows, row, dedupe_identity)
+
+    deduped = list(deduped_rows.values())
+    serialized = [row.to_dict() for row in deduped]
+    return sorted(serialized, key=lambda item: item["timestamp"], reverse=True)[:limit]
+
+
+def _usage_timeline(
+    charger: Charger,
+    connector_overview: list[dict],
+    *,
+    now: datetime | None = None,
+) -> tuple[list[dict], tuple[str, str] | None]:
+    """Build usage timeline data for inactive chargers."""
+
+    if now is None:
+        now = timezone.now()
+    window_end = now
+    window_start = now - timedelta(hours=48)
+    local_node = Node.get_local()
+    active_delta = _remote_node_active_delta()
+
+    if charger.connector_id is not None:
+        connectors = [charger]
+    else:
+        connectors = [
+            item["charger"]
+            for item in connector_overview
+            if item.get("charger") and item["charger"].connector_id is not None
+        ]
+        if not connectors:
+            connectors = [
+                sibling
+                for sibling in _connector_set(charger)
+                if sibling.connector_id is not None
+            ]
+
+    seen_ids: set[int] = set()
+    labels = _timeline_labels()
+    timeline_entries: list[dict] = []
+    window_display: tuple[str, str] | None = None
+
+    if window_start < window_end:
+        window_display = _format_segment_range(window_start, window_end)
+
+    for connector in connectors:
+        if connector.connector_id is None:
+            continue
+        if connector.connector_id in seen_ids:
+            continue
+        seen_ids.add(connector.connector_id)
+
+        events, prior_event = _collect_status_events(
+            charger, connector, window_start, window_end
+        )
+        fallback_state = _normalize_timeline_status(connector.last_status)
+        fallback_source = "status"
+        if fallback_state is None:
+            fallback_source = "connection"
+            fallback_state = (
+                "available"
+                if store.is_connected(connector.charger_id, connector.connector_id)
+                else "offline"
+            )
+        if (
+            fallback_state == "offline"
+            and fallback_source == "connection"
+            and _is_untracked_origin(connector, local_node, window_end, active_delta)
+        ):
+            fallback_state = "untracked"
+        current_state = fallback_state
+        if prior_event is not None:
+            current_state = prior_event[1]
+        segments: list[dict] = []
+        previous_time = window_start
+        total_seconds = (window_end - window_start).total_seconds()
+
+        for event_time, state in events:
+            if event_time <= window_start:
+                current_state = state
+                continue
+            if event_time > window_end:
+                break
+            if state == current_state:
+                continue
+            segment_start = max(previous_time, window_start)
+            segment_end = min(event_time, window_end)
+            if segment_end > segment_start:
+                duration = (segment_end - segment_start).total_seconds()
+                start_display, end_display = _format_segment_range(
+                    segment_start, segment_end
+                )
+                segments.append(
+                    {
+                        "status": current_state,
+                        "label": labels.get(current_state, current_state.title()),
+                        "start_display": start_display,
+                        "end_display": end_display,
+                        "duration": max(duration, 1.0),
+                    }
+                )
+            current_state = state
+            previous_time = max(event_time, window_start)
+
+        if previous_time < window_end:
+            segment_start = max(previous_time, window_start)
+            segment_end = window_end
+            if segment_end > segment_start:
+                duration = (segment_end - segment_start).total_seconds()
+                start_display, end_display = _format_segment_range(
+                    segment_start, segment_end
+                )
+                segments.append(
+                    {
+                        "status": current_state,
+                        "label": labels.get(current_state, current_state.title()),
+                        "start_display": start_display,
+                        "end_display": end_display,
+                        "duration": max(duration, 1.0),
+                    }
+                )
+
+        if not segments and total_seconds > 0:
+            start_display, end_display = _format_segment_range(window_start, window_end)
+            segments.append(
+                {
+                    "status": current_state,
+                    "label": labels.get(current_state, current_state.title()),
+                    "start_display": start_display,
+                    "end_display": end_display,
+                    "duration": max(total_seconds, 1.0),
+                }
+            )
+
+        if segments:
+            timeline_entries.append(
+                {
+                    "label": connector.connector_label,
+                    "segments": segments,
+                }
+            )
+
+    return timeline_entries, window_display
+
+
+def _live_sessions(
+    charger: Charger, *, connectors: list[Charger] | None = None
+) -> list[tuple[Charger, Transaction]]:
+    """Return active sessions grouped by connector for the charger."""
+
+    siblings = connectors if connectors is not None else _connector_set(charger)
+    ordered = [c for c in siblings if c.connector_id is not None] + [
+        c for c in siblings if c.connector_id is None
+    ]
+    sessions: list[tuple[Charger, Transaction]] = []
+    seen: set[int] = set()
+    for sibling in ordered:
+        tx_obj = _active_transaction_for_charger(sibling)
+        if not tx_obj:
+            continue
+        if tx_obj.pk and tx_obj.pk in seen:
+            continue
+        if tx_obj.pk:
+            seen.add(tx_obj.pk)
+        sessions.append((sibling, tx_obj))
+    return sessions
+
+
+@lru_cache(maxsize=1)
+def _landing_page_translations() -> dict[str, dict[str, str]]:
+    """Return static English labels used by the charger public landing page."""
+
+    return {
+        "en": {
+            "serial_number_label": gettext("Serial Number"),
+            "connector_label": gettext("Connector"),
+            "advanced_view_label": gettext("Advanced View"),
+            "live_now_label": gettext("Live now"),
+            "authorization_policy_label": gettext(
+                "Authorization policy requires validated RFID/account credentials."
+            ),
+            "charging_label": gettext("Charging"),
+            "energy_label": gettext("Energy"),
+            "started_label": gettext("Started"),
+            "rfid_label": gettext("RFID"),
+            "instruction_text": gettext(
+                "Plug in your vehicle and slide your RFID card over the reader to begin charging."
+            ),
+            "connectors_heading": gettext("Connectors"),
+            "no_active_transaction": gettext("No active transaction"),
+            "connectors_active_singular": ngettext(
+                "%(count)s connector active",
+                "%(count)s connectors active",
+                1,
+            ),
+            "connectors_active_plural": ngettext(
+                "%(count)s connector active",
+                "%(count)s connectors active",
+                2,
+            ),
+            "status_reported_label": gettext("Reported status"),
+            "status_error_label": gettext("Error code"),
+            "status_updated_label": gettext("Last status update"),
+            "status_vendor_label": gettext("Vendor"),
+            "status_info_label": gettext("Info"),
+            "latest_status_label": gettext("Latest report"),
+            "support_label": gettext("Support"),
+        }
+    }
+
+
+def _has_active_session(tx_obj) -> bool:
+    """Return whether the provided transaction-like object is active."""
+
+    if isinstance(tx_obj, (list, tuple, set)):
+        return any(_has_active_session(item) for item in tx_obj)
+    if not tx_obj:
+        return False
+    if isinstance(tx_obj, dict):
+        return tx_obj.get("stop_time") is None
+    stop_time = getattr(tx_obj, "stop_time", None)
+    return stop_time is None
+
+
+def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
+    """Return an active transaction from cache or persistence."""
+
+    tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
+    if not isinstance(tx_obj, Transaction):
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .order_by("-start_time")
+            .first()
+        )
+    if _is_superseded_open_transaction(charger, tx_obj):
+        tx_obj = (
+            Transaction.objects.filter(charger=charger, stop_time__isnull=True)
+            .exclude(pk=getattr(tx_obj, "pk", None))
+            .order_by("-start_time")
+            .first()
+        )
+        if _is_superseded_open_transaction(charger, tx_obj):
+            return None
+    return tx_obj
+
+
+def _is_superseded_open_transaction(
+    charger: Charger, tx_obj: Transaction | None
+) -> bool:
+    """Return whether ``tx_obj`` was superseded by a newer transaction.
+
+    Some chargers fail to send ``StopTransaction`` and leave an old row with
+    ``stop_time`` set to ``NULL``. When newer sessions already exist for the
+    same connector, that stale row should not be treated as active.
+    """
+
+    if not isinstance(tx_obj, Transaction):
+        return False
+    if tx_obj.stop_time is not None:
+        return False
+
+    sibling_transactions = Transaction.objects.filter(charger=charger)
+    if tx_obj.pk:
+        sibling_transactions = sibling_transactions.exclude(pk=tx_obj.pk)
+
+    conditions = Q()
+    if tx_obj.start_time:
+        conditions |= Q(start_time__gt=tx_obj.start_time)
+    if tx_obj.received_start_time:
+        conditions |= Q(received_start_time__gt=tx_obj.received_start_time)
+
+    if not conditions:
+        return False
+
+    return sibling_transactions.filter(conditions).exists()
+
+
+def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
+    """Return an aggregate badge for the charger when summarising connectors."""
+
+    if charger.connector_id is not None:
+        return None
+
+    siblings = (
+        Charger.objects.filter(charger_id=charger.charger_id)
+        .exclude(pk=charger.pk)
+        .exclude(connector_id__isnull=True)
+    )
+    statuses: list[str] = []
+    has_connection_data = store.is_connected(charger.charger_id)
+    for sibling in siblings:
+        connected = store.is_connected(sibling.charger_id, sibling.connector_id)
+        if not connected and has_connection_data:
+            statuses.append("offline")
+            continue
+        tx_obj = _active_transaction_for_charger(sibling)
+        has_session = _has_active_session(tx_obj)
+        status_value = (sibling.last_status or "").strip()
+        normalized_status = status_value.casefold() if status_value else ""
+        error_code_lower = (sibling.last_error_code or "").strip().lower()
+        if has_session:
+            statuses.append("charging")
+            continue
+        if (
+            normalized_status in {"charging", "finishing"}
+            and error_code_lower in ERROR_OK_VALUES
+        ):
+            statuses.append("available")
+            continue
+        if normalized_status:
+            statuses.append(normalized_status)
+            continue
+        if connected:
+            statuses.append("available")
+
+    if not statuses:
+        return None
+
+    if any(status == "available" for status in statuses):
+        return STATUS_BADGE_MAP["available"]
+
+    if all(status == "charging" for status in statuses):
+        return STATUS_BADGE_MAP["charging"]
+
+    if all(status == "offline" for status in statuses):
+        return _("Offline"), "grey"
+
+    return None
+
+
+def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
+    """Return human readable state and color for a charger."""
+
+    status_value = (charger.last_status or "").strip()
+    normalized_status = status_value.casefold() if status_value else ""
+
+    aggregate_state = _aggregate_dashboard_state(charger)
+    if aggregate_state is not None and normalized_status in {
+        "",
+        "available",
+        "charging",
+    }:
+        return aggregate_state
+
+    has_session = _has_active_session(tx_obj)
+    if status_value:
+        key = normalized_status
+        label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
+        error_code = (charger.last_error_code or "").strip()
+        error_code_lower = error_code.lower()
+        if (
+            has_session
+            and error_code_lower in ERROR_OK_VALUES
+            and (key not in STATUS_BADGE_MAP or key == "available")
+        ):
+            # Some stations continue reporting "Available" (or an unknown status)
+            # while a session is active. Override the badge so the user can see
+            # the charger is actually busy.
+            label, color = STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
+        elif (
+            not has_session
+            and key in {"charging", "finishing"}
+            and error_code_lower in ERROR_OK_VALUES
+        ):
+            # Some chargers continue reporting "Charging" after a session ends.
+            # When no active transaction exists, surface the state as available
+            # so the UI reflects the actual behaviour at the site.
+            label, color = STATUS_BADGE_MAP.get(
+                "available", (_("Available"), "#0d6efd")
+            )
+        elif error_code and error_code_lower not in ERROR_OK_VALUES:
+            label = _("%(status)s (%(error)s)") % {
+                "status": label,
+                "error": error_code,
+            }
+            color = "#dc3545"
+        return label, color
+
+    cid = charger.charger_id
+    connected = store.is_connected(cid, charger.connector_id)
+    if connected and has_session:
+        return _("Charging"), "green"
+    if connected:
+        return _("Available"), "blue"
+    last_seen = _charger_last_seen(charger)
+    if last_seen:
+        if timezone.is_naive(last_seen):
+            last_seen = timezone.make_aware(last_seen, timezone.get_current_timezone())
+        if timezone.now() - last_seen <= _remote_node_active_delta():
+            if has_session:
+                return STATUS_BADGE_MAP["charging"]
+            return STATUS_BADGE_MAP["available"]
+    return _("Offline"), "grey"
+
+
+def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
+    """Return diagnostics metadata for API responses."""
+
+    timestamp = (
+        charger.diagnostics_timestamp.isoformat()
+        if charger.diagnostics_timestamp
+        else None
+    )
+    status = charger.diagnostics_status or None
+    location = charger.diagnostics_location or None
+    return {
+        "diagnosticsStatus": status,
+        "diagnosticsTimestamp": timestamp,
+        "diagnosticsLocation": location,
+    }
+
+
+def _charging_limit_details(charger: Charger) -> dict[str, object] | None:
+    """Return structured charging limit details for dashboard views."""
+
+    payload = charger.last_charging_limit or {}
+    limit_data = payload.get("chargingLimit") if isinstance(payload, dict) else {}
+    if not isinstance(limit_data, dict):
+        limit_data = {}
+    source = (charger.last_charging_limit_source or "").strip() or (
+        str(limit_data.get("chargingLimitSource") or "").strip()
+    )
+    grid_critical = charger.last_charging_limit_is_grid_critical
+    if grid_critical is None:
+        flag = limit_data.get("isGridCritical")
+        grid_critical = bool(flag) if flag is not None else None
+
+    evse_value = None
+    if isinstance(payload, dict):
+        evse_value = payload.get("evseId")
+    try:
+        evse_id = int(evse_value) if evse_value is not None else None
+    except (TypeError, ValueError):
+        evse_id = None
+
+    raw_schedules = []
+    if isinstance(payload, dict):
+        raw_schedules = payload.get("chargingSchedule") or []
+    schedules = raw_schedules if isinstance(raw_schedules, list) else []
+
+    if not (source or schedules or grid_critical or evse_id is not None):
+        return None
+
+    summaries: list[str] = []
+    for schedule in schedules:
+        if not isinstance(schedule, dict):
+            continue
+        unit = schedule.get("chargingRateUnit") or ""
+        periods = schedule.get("chargingSchedulePeriod") or []
+        limit_value: Decimal | None = None
+        for period in periods:
+            if not isinstance(period, dict):
+                continue
+            try:
+                limit_value = Decimal(str(period.get("limit")))
+                break
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+        parts: list[str] = []
+        if limit_value is not None:
+            parts.append(f"{limit_value.normalize()} {unit}".strip())
+        elif unit:
+            parts.append(unit)
+        duration = schedule.get("duration")
+        if duration:
+            parts.append(_("duration %(seconds)s s") % {"seconds": duration})
+        if not parts:
+            parts.append(_("charging schedule"))
+        summaries.append(", ".join(parts))
+
+    label_parts: list[str] = []
+    if source:
+        label_parts.append(source)
+    if grid_critical is True:
+        label_parts.append(_("grid critical"))
+    elif grid_critical is False:
+        label_parts.append(_("grid stable"))
+    if summaries:
+        label_parts.append(summaries[0])
+    elif evse_id is not None:
+        label_parts.append(_("EVSE %(evse)s") % {"evse": evse_id})
+
+    label = ", ".join(str(part) for part in label_parts) if label_parts else None
+
+    return {
+        "source": source or None,
+        "evse_id": evse_id,
+        "is_grid_critical": grid_critical,
+        "schedules": summaries,
+        "schedule_count": len(summaries),
+        "label": label,
+        "timestamp": charger.last_charging_limit_at,
+    }

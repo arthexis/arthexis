@@ -1,0 +1,32 @@
+body.model-noderole .form-row.field-nodes .selector {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+body.model-noderole .form-row.field-nodes .selector-available,
+body.model-noderole .form-row.field-nodes .selector-chosen {
+  float: none;
+  width: auto;
+}
+
+body.model-noderole .form-row.field-nodes .selector-available h2,
+body.model-noderole .form-row.field-nodes .selector-chosen h2 {
+  margin: 0 0 0.35rem;
+  text-align: left;
+}
+
+body.model-noderole .form-row.field-nodes .selector-chooser {
+  align-self: center;
+}
+
+body.model-noderole .form-row.field-nodes .selector-available select,
+body.model-noderole .form-row.field-nodes .selector-chosen select {
+  width: 100%;
+  min-height: 260px;
+}
+
+body.model-noderole .form-row.field-nodes .selector .selector-filter {
+  margin: 0;
+}

@@ -1,0 +1,134 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <style>
+    .rfid-public-qr-page {
+      max-width: 44rem;
+    }
+
+    .rfid-public-qr-card {
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--border-color, #ddd);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin: 1rem 0;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .rfid-public-qr-code canvas,
+    .rfid-public-qr-code img {
+      height: 240px;
+      image-rendering: pixelated;
+      width: 240px;
+    }
+
+    .rfid-public-qr-url {
+      overflow-wrap: anywhere;
+    }
+
+    @media print {
+      #header,
+      .breadcrumbs,
+      .submit-row,
+      .rfid-public-qr-help,
+      .rfid-public-qr-url {
+        display: none !important;
+      }
+
+      #content {
+        margin: 0;
+      }
+
+      .rfid-public-qr-card {
+        border: 0;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:cards_rfid_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">{{ tag.display_label }}</a>
+  &rsaquo; {% trans "Public usage QR" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="rfid-public-qr-page">
+  <h1>{{ title }}</h1>
+  <p class="rfid-public-qr-help">
+    {% trans "Print this QR code for cardholders. The encoded URL uses the revocable public token, not the RFID UID." %}
+  </p>
+
+  <section class="rfid-public-qr-card" aria-label="{% trans 'Public RFID usage QR code' %}">
+    <h2>{{ tag.display_label }}</h2>
+    <div
+      class="rfid-public-qr-code"
+      id="rfid-public-qr-code"
+      data-url="{{ public_url }}"
+    ></div>
+    <p class="rfid-public-qr-url">{{ public_url }}</p>
+  </section>
+
+  <div class="submit-row">
+    <button type="button" class="default" onclick="window.print()">{% trans "Print" %}</button>
+    <a
+      class="button"
+      download="{{ download_filename }}"
+      href="#"
+      id="rfid-public-qr-download"
+      aria-disabled="true"
+    >
+      {% trans "Download PNG" %}
+    </a>
+    <a class="button" href="{{ change_url }}">{% trans "Back to RFID" %}</a>
+  </div>
+</div>
+
+<script src="{% static 'docs/js/qrcode.min.js' %}"></script>
+<script>
+  (function () {
+    const qrContainer = document.getElementById("rfid-public-qr-code");
+    const downloadLink = document.getElementById("rfid-public-qr-download");
+    const qrUrl = (qrContainer && qrContainer.dataset.url) || "";
+
+    if (!qrContainer || !qrUrl || typeof window.QRCode === "undefined") {
+      return;
+    }
+
+    new QRCode(qrContainer, {
+      text: qrUrl,
+      width: 240,
+      height: 240,
+      colorDark: "#0a0a0a",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+
+    window.setTimeout(function () {
+      const canvas = qrContainer.querySelector("canvas");
+      const image = qrContainer.querySelector("img");
+      let dataUrl = "";
+
+      if (canvas && typeof canvas.toDataURL === "function") {
+        dataUrl = canvas.toDataURL("image/png");
+      } else if (image && image.src) {
+        dataUrl = image.src;
+      }
+
+      if (dataUrl && downloadLink) {
+        downloadLink.href = dataUrl;
+        downloadLink.removeAttribute("aria-disabled");
+      }
+    }, 0);
+  }());
+</script>
+{% endblock %}

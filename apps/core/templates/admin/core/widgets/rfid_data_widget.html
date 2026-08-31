@@ -1,0 +1,138 @@
+{% load i18n %}
+<div class="rfid-data-widget">
+  <div class="rfid-data-widget__grid">
+    {% if widget.sectors %}
+      {% for sector in widget.sectors %}
+        <div class="rfid-data-widget__sector-wrapper">
+          <table class="rfid-data-widget__sector" aria-label="{% blocktrans %}Sector {{ sector.sector }}{% endblocktrans %}">
+            <caption class="rfid-data-widget__sector-title">
+              {% blocktrans with number=sector.sector %}Sector {{ number }}{% endblocktrans %}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{% translate "Block" %}</th>
+                <th scope="col">{% translate "Key" %}</th>
+                {% for header in widget.byte_headers %}
+                  <th scope="col">{{ header }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for block in sector.blocks %}
+                <tr class="rfid-data-widget__block{% if block.is_trailer %} rfid-data-widget__block--trailer{% endif %}" data-block="{{ block.block }}">
+                  <th scope="row">{{ block.block }}</th>
+                  <td class="rfid-data-widget__key">
+                    <button
+                      type="button"
+                      class="rfid-data-widget__value"
+                      data-edit-block="{{ block.block }}"
+                      data-edit-key="true"
+                    >
+                      {{ block.key|default:"—" }}
+                    </button>
+                  </td>
+                  {% for byte in block.bytes %}
+                    <td data-byte-index="{{ forloop.counter0 }}">
+                      <button
+                        type="button"
+                        class="rfid-data-widget__value"
+                        data-edit-block="{{ block.block }}"
+                      >
+                        {{ byte }}
+                      </button>
+                    </td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <table class="rfid-data-widget__text" aria-label="{% blocktrans %}Sector {{ sector.sector }} text register{% endblocktrans %}">
+            <caption class="rfid-data-widget__sector-title">
+              {% blocktrans with number=sector.sector %}Sector {{ number }} text{% endblocktrans %}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{% translate "Block" %}</th>
+                <th scope="col">{% translate "Text" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for block in sector.blocks %}
+                <tr>
+                  <th scope="row">{{ block.block }}</th>
+                  <td>
+                    <button
+                      type="button"
+                      class="rfid-data-widget__value rfid-data-widget__value--text"
+                      data-edit-block="{{ block.block }}"
+                    >
+                      {% firstof block.text_value '················' %}
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="rfid-data-widget__empty{% if widget.has_parse_error %} rfid-data-widget__empty--error{% endif %}">
+        {% if widget.has_parse_error %}
+          {% translate "Unable to display block data. Showing raw JSON below." %}
+        {% else %}
+          {% translate "No block data available." %}
+        {% endif %}
+      </p>
+    {% endif %}
+  </div>
+  <details class="rfid-data-widget__raw"{% if widget.has_parse_error %} open{% endif %}>
+    <summary>{% translate "Raw data" %}</summary>
+    <textarea name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>{{ widget.value|default_if_none:'' }}</textarea>
+  </details>
+  {% with title_slug=widget.attrs.id|default:widget.name|slugify %}
+    <div
+      class="rfid-data-widget__modal"
+      data-rfid-modal
+      data-sector-label="{% translate 'Sector' %}"
+      data-block-label="{% translate 'Block' %}"
+      data-offset-label="{% translate 'Offset' %}"
+      hidden
+    >
+      <div class="rfid-data-widget__modal-backdrop" data-rfid-modal-dismiss></div>
+      <div class="rfid-data-widget__modal-dialog" role="dialog" aria-modal="true" aria-labelledby="{{ title_slug }}-editor-title">
+        <div class="rfid-data-widget__modal-header">
+          <h2 id="{{ title_slug }}-editor-title" class="rfid-data-widget__modal-title">
+            {% translate "Edit block" %}
+            <span data-rfid-modal-block></span>
+          </h2>
+          <p class="rfid-data-widget__modal-meta" data-rfid-modal-meta></p>
+          <p class="rfid-data-widget__modal-subtitle">{% translate "Update the selected block using hexadecimal or text format." %}</p>
+        </div>
+        <div class="rfid-data-widget__modal-field" data-rfid-modal-key-container>
+          <label class="rfid-data-widget__modal-label">
+            {% translate "Key" %}
+            <input type="text" class="rfid-data-widget__modal-input" data-rfid-modal-key spellcheck="false">
+          </label>
+        </div>
+        <div class="rfid-data-widget__modal-field">
+          <label class="rfid-data-widget__modal-label">
+            {% translate "Hex bytes" %}
+            <textarea class="rfid-data-widget__modal-input" data-rfid-modal-hex rows="3" spellcheck="false"></textarea>
+          </label>
+          <p class="rfid-data-widget__modal-help">{% translate "Enter sixteen hexadecimal byte values separated by spaces." %}</p>
+        </div>
+        <div class="rfid-data-widget__modal-field">
+          <label class="rfid-data-widget__modal-label">
+            {% translate "Text" %}
+            <input type="text" class="rfid-data-widget__modal-input" data-rfid-modal-text maxlength="16" spellcheck="false">
+          </label>
+          <p class="rfid-data-widget__modal-help">{% translate "Characters outside the printable range will be replaced with middot placeholders." %}</p>
+        </div>
+        <div class="rfid-data-widget__modal-actions">
+          <button type="button" class="button default" data-rfid-modal-save>{% translate "Update" %}</button>
+          <button type="button" class="button" data-rfid-modal-dismiss>{% translate "Cancel" %}</button>
+        </div>
+      </div>
+    </div>
+  {% endwith %}
+</div>

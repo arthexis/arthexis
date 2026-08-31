@@ -1,0 +1,1 @@
+{% include "admin/favicon.txt" %}

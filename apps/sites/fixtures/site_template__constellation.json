@@ -1,0 +1,17 @@
+[
+  {
+    "model": "pages.sitetemplate",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Constellation",
+      "primary_color": "#0d6efd",
+      "primary_color_emphasis": "#0b5ed7",
+      "accent_color": "#facc15",
+      "accent_color_emphasis": "#fb923c",
+      "support_color": "#15803d",
+      "support_color_emphasis": "#34d399",
+      "support_text_color": "#f0fdf4"
+    }
+  }
+]

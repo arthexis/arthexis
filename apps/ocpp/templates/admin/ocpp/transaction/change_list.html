@@ -1,0 +1,6 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% block object-tools-items %}
+{{ block.super }}
+<li><a href="{% url 'admin:ocpp_transaction_export' %}">Export transactions</a></li>
+<li><a href="{% url 'admin:ocpp_transaction_import' %}">Import transactions</a></li>
+{% endblock %}

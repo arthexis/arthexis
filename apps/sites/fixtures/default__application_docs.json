@@ -1,0 +1,12 @@
+[
+  {
+    "model": "app.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "docs",
+      "description": "Public application documentation viewer.",
+      "importance": "baseline"
+    }
+  }
+]

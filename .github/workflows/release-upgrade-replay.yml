@@ -1,0 +1,307 @@
+name: Release Upgrade Replay
+
+run-name: Release Upgrade Replay (${{ inputs.base_ref || 'latest release' }} → ${{ inputs.candidate_ref || github.sha }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: 'Published release tag to upgrade from. Defaults to the latest published release.'
+        required: false
+        type: string
+      candidate_ref:
+        description: 'Candidate ref or SHA to upgrade to. Defaults to the workflow ref/SHA.'
+        required: false
+        type: string
+
+concurrency:
+  group: release-upgrade-replay-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ARTHEXIS_DB_BACKEND: sqlite
+  NODE_OPTIONS: '--no-deprecation'
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTEST_WORKERS: 'auto'
+  UPGRADE_GATE_MARKER: gate_upgrade
+
+jobs:
+  replay:
+    name: Latest release to candidate replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install base system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl git python3-venv \
+            libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
+            libpangocairo-1.0-0 shared-mime-info
+
+      - name: Start native Redis
+        run: |
+          ./scripts/ci/start-native-redis.sh
+
+      - name: Resolve replay refs
+        id: refs
+        env:
+          BASE_REF_INPUT: ${{ inputs.base_ref }}
+          CANDIDATE_REF_INPUT: ${{ inputs.candidate_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --force --tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+          base_ref="${BASE_REF_INPUT}"
+          if [ -z "$base_ref" ]; then
+            base_ref="$(gh release view --json tagName --jq '.tagName')"
+          fi
+          if [ -z "$base_ref" ]; then
+            echo 'Release upgrade replay requires a published release tag or a manual base_ref release tag override.' >&2
+            exit 1
+          fi
+          if [[ "$base_ref" == refs/tags/* ]]; then
+            echo 'Release upgrade replay base_ref must be a published release tag name, not a full ref.' >&2
+            exit 1
+          fi
+
+          published_base_tag="$(gh release view "$base_ref" --json tagName --jq '.tagName')"
+          if [ "$published_base_tag" != "$base_ref" ]; then
+            echo "Release upgrade replay base_ref must exactly match a published release tag: $base_ref" >&2
+            exit 1
+          fi
+          git fetch --force origin "+refs/tags/${published_base_tag}:refs/tags/${published_base_tag}"
+
+          candidate_ref="${CANDIDATE_REF_INPUT}"
+          if [ -z "$candidate_ref" ]; then
+            candidate_ref="${GITHUB_SHA}"
+          fi
+
+          resolve_commit() {
+            local ref="$1"
+            if git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
+              git rev-parse "${ref}^{commit}"
+              return
+            fi
+            if git rev-parse --verify --quiet "origin/${ref}^{commit}" >/dev/null; then
+              git rev-parse "origin/${ref}^{commit}"
+              return
+            fi
+            git fetch --force origin "$ref"
+            git rev-parse 'FETCH_HEAD^{commit}'
+          }
+
+          base_sha="$(git rev-parse --verify "refs/tags/${published_base_tag}^{commit}")"
+          candidate_sha="$(resolve_commit "$candidate_ref")"
+          safe_base_ref="$(printf '%s' "$base_ref" | tr -c 'A-Za-z0-9._-' '-')"
+          artifact_name="release-upgrade-replay-result-${candidate_sha}-${safe_base_ref}"
+
+          {
+            echo "base_ref=${base_ref}"
+            echo "base_sha=${base_sha}"
+            echo "candidate_ref=${candidate_ref}"
+            echo "candidate_sha=${candidate_sha}"
+            echo "artifact_name=${artifact_name}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out latest published release
+        run: |
+          set -Eeuo pipefail
+          git checkout --force "${{ steps.refs.outputs.base_sha }}"
+          git clean -ffdX
+
+      - name: Install suite from release tag
+        run: |
+          ./install.sh --no-start
+
+      - name: Create representative release-era state
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          echo "::add-mask::${DOCS_ADMIN_PASSWORD}"
+          if [ -f scripts/check_migration_conflicts.py ]; then
+            python scripts/check_migration_conflicts.py
+          fi
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+          if python manage.py help create_docs_admin >/dev/null 2>&1; then
+            python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+          fi
+
+      - name: Snapshot release database before upgrade
+        run: |
+          set -Eeuo pipefail
+          mkdir -p replay-artifacts
+          if [ -f db.sqlite3 ]; then
+            cp db.sqlite3 replay-artifacts/db-before-upgrade.sqlite3
+          fi
+
+      - name: Switch working tree to candidate
+        run: |
+          set -Eeuo pipefail
+          git clean -ffd -e replay-artifacts/
+          git checkout --force "${{ steps.refs.outputs.candidate_sha }}"
+          git clean -ffd -e replay-artifacts/
+          chmod +x install.sh env-refresh.sh upgrade.sh || true
+
+      - name: Run real local upgrade path
+        run: |
+          set -Eeuo pipefail
+          ./upgrade.sh --local --no-restart 2>&1 | tee replay-artifacts/upgrade.log
+
+      - name: Install CI dependencies
+        env:
+          PIP_DEFAULT_TIMEOUT: '60'
+          PIP_RETRIES: '5'
+        run: |
+          ./scripts/preflight-env.sh
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+          ./scripts/preflight-env.sh --pytest
+
+      - name: Validate upgraded candidate state
+        run: |
+          set -Eeuo pipefail
+          ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+          if python manage.py help create_docs_admin >/dev/null 2>&1; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+            echo "::add-mask::${DOCS_ADMIN_PASSWORD}"
+            python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+          fi
+          if [ -f scripts/check_editable_install_import.py ]; then
+            python scripts/check_editable_install_import.py
+          fi
+          if [ -f scripts/check_import_resolution.py ]; then
+            python scripts/check_import_resolution.py
+          fi
+
+      - name: Capture migration benchmark report
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          mkdir -p replay-artifacts
+          if [ ! -f .venv/bin/activate ]; then
+            cat > replay-artifacts/migration-benchmark.json <<'JSON'
+          {
+            "status": "unavailable",
+            "reason": ".venv was not available before migration benchmark capture"
+          }
+          JSON
+            exit 0
+          fi
+
+          source .venv/bin/activate
+          if python manage.py migrations benchmark --help >/dev/null 2>&1; then
+            set +e
+            python manage.py migrations benchmark \
+              --json \
+              --output replay-artifacts/migration-benchmark.json \
+              | tee replay-artifacts/migration-benchmark.stdout.json
+            benchmark_status="${PIPESTATUS[0]}"
+            set -e
+            if [ "${benchmark_status}" -ne 0 ]; then
+              cat > replay-artifacts/migration-benchmark.json <<JSON
+          {
+            "status": "failed",
+            "exit_code": ${benchmark_status},
+            "reason": "python manage.py migrations benchmark --json failed"
+          }
+          JSON
+              exit "${benchmark_status}"
+            fi
+          else
+            cat > replay-artifacts/migration-benchmark.json <<'JSON'
+          {
+            "status": "unavailable",
+            "reason": "manage.py migrations benchmark is not available on the replay candidate"
+          }
+          JSON
+          fi
+
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(python -m pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo 'PYTEST_XDIST_ARGS=' >> "${GITHUB_ENV}"
+          fi
+
+      - name: Run release upgrade regression tests
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          python -m pytest "${xdist_args[@]}" -m "${UPGRADE_GATE_MARKER}" --maxfail=1 --disable-warnings -q --timeout=180 | tee replay-artifacts/pytest-gate-upgrade.log
+
+      - name: Write replay result marker
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          mkdir -p replay-artifacts
+          if [ -f db.sqlite3 ]; then
+            cp db.sqlite3 replay-artifacts/db-after-upgrade.sqlite3
+          fi
+          cat > replay-artifacts/replay-result.json <<JSON
+          {
+            "base_ref": "${{ steps.refs.outputs.base_ref }}",
+            "base_sha": "${{ steps.refs.outputs.base_sha }}",
+            "candidate_ref": "${{ steps.refs.outputs.candidate_ref }}",
+            "candidate_sha": "${{ steps.refs.outputs.candidate_sha }}",
+            "database_backend": "${{ env.ARTHEXIS_DB_BACKEND }}",
+            "validation_scope": "sqlite latest-release-to-candidate replay with native Redis",
+            "postgresql_scope": "staged split: PostgreSQL migration coverage remains in install-health shards, not this replay job",
+            "gway_control_scope": "GWAY-like Control validation is evidence-only and must not perform physical hardware mutation in CI",
+            "migration_benchmark_artifact": "migration-benchmark.json",
+            "workflow_run_id": "${{ github.run_id }}",
+            "workflow_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          JSON
+          cat > replay-artifacts/replay-summary.md <<EOF
+          ## Release upgrade replay
+
+          - Base ref: \`${{ steps.refs.outputs.base_ref }}\`
+          - Base SHA: \`${{ steps.refs.outputs.base_sha }}\`
+          - Candidate ref: \`${{ steps.refs.outputs.candidate_ref }}\`
+          - Candidate SHA: \`${{ steps.refs.outputs.candidate_sha }}\`
+          - Database backend: \`${{ env.ARTHEXIS_DB_BACKEND }}\`
+          - Replay scope: SQLite latest-release-to-candidate upgrade with native Redis.
+          - PostgreSQL scope: staged split; PostgreSQL migration coverage remains in install-health shards.
+          - GWAY Control scope: evidence-only; CI must not perform physical hardware mutation.
+          - Migration benchmark: see \`migration-benchmark.json\` when available.
+          - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+
+      - name: Upload replay artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.refs.outputs.artifact_name }}
+          path: replay-artifacts/
+          if-no-files-found: warn
+          retention-days: 14

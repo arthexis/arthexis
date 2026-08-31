@@ -1,0 +1,75 @@
+name: CodeQL
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
+      - '.github/actions/**'
+      - '**/*.sh'
+  schedule:
+    - cron: '32 5 * * 1'
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
+      - '.github/actions/**'
+      - '**/*.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze
+    if: ${{ !github.event.repository.private || vars.CODEQL_ENABLED_ON_PRIVATE == 'true' }}
+    runs-on: ubuntu-latest
+    # Runtime expectations:
+    # - Runs on relevant code, dependency, workflow, and script changes on trusted refs.
+    # - Pull requests and weekly baselines keep security analysis automatic.
+    # - Private repositories must opt in with CODEQL_ENABLED_ON_PRIVATE once code scanning is available.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Upgrade pip tooling for dependency detection
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pyyaml
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4

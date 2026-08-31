@@ -1,0 +1,16 @@
+[
+  {
+    "model": "counters.dashboardrule",
+    "fields": {
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false,
+      "name": "Charger Heartbeat",
+      "content_type": ["ocpp", "charger"],
+      "implementation": "python",
+      "function_name": "evaluate_evcs_heartbeat_rules",
+      "success_message": "All rules met.",
+      "failure_message": ""
+    }
+  }
+]

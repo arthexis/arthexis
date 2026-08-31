@@ -1,0 +1,359 @@
+# AGENTS.md
+
+Static developer guidance for the Arthexis suite repository.
+These instructions apply to coding sessions and automated tooling operating on
+suite source code.
+
+Local node operation uses a generated AGENTS file instead of the repository root
+file. The suite writes that node-specific context to `work/codex/AGENTS.md`
+during startup maintenance and upgrade transforms; it can also be refreshed with
+`.venv/bin/python manage.py codex_agents write`. That generated file is built
+from the local Node Role plus enabled Suite Features and Node Features, and
+Node Role context has priority over more general context.
+
+In suite terminology, an OPERATOR is the human using an LLM-assisted coding or
+operations session. Do not model OPERATOR and AGENT as separate suite actors, and
+do not use AGENT as a personality or coordination role. The `skills.Agent` model
+is for AGENTS.md context blocks selected by node role and enabled features.
+
+Agents must prioritize **clarity, correctness, and harmony with the existing codebase** over speculative improvements.
+
+---
+
+# Core Principles
+
+* Focus on **solving the problem at hand**, not speculative futureproofing.
+* Integrate changes **harmoniously with the existing codebase**.
+* Avoid unnecessary complexity.
+* Prefer **clarity and maintainability** over cleverness.
+* Prefer **modern, idiomatic Python** patterns that improve readability and consistency with contemporary Django and Python practices.
+* The application suite should remain **flexible and powerful**, especially for administrators.
+* Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
+* Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
+* When using or extending Arthexis for a user request, agents must also contribute to the project's health with appropriate adjacent improvements, such as tidying tests, removing obsolete cruft, cleaning docs, polishing minor glitches, and addressing security issues when they are found.
+
+Agents must **not overprotect admins** or artificially restrict capabilities unless there is a clear security concern.
+
+# GitHub Interaction
+
+When retrieving GitHub metadata (issues, PRs, discussions, etc.):
+
+* Prefer using **`curl` against the GitHub API** instead of specialized tooling.
+* Only use repository content from the git checkout for code inspection.
+
+Example:
+
+```bash
+curl https://api.github.com/repos/<org>/<repo>/issues
+```
+
+---
+
+# Code Changes
+
+## General Rules
+
+* Avoid code duplication whenever possible.
+* Prefer **modifying existing components** when appropriate.
+* Prefer **creating new apps** rather than overloading the core app unless:
+
+  * a clearly appropriate app already exists, or
+  * the user explicitly specifies otherwise.
+* Prefer integration work that extends the suite's role as the system pivot, including Django models and migrations that represent external APIs, workflows, and business processes when that is the clearest fit.
+
+When new apps are created:
+
+* Always create the **admin configuration** for the app using suite commands.
+* Prefer short application names, ideally a single word whenever possible.
+* Use the canonical scaffold commands:
+
+  * `.venv/bin/python manage.py create app <app_name>`
+  * `.venv/bin/python manage.py create app <app_name> --backend-only`
+* Every new app must include `manifest.py`.
+* Backend-only apps that intentionally omit `views.py`, `urls.py`, and `routes.py` must include this marker comment:
+
+  * `# APP_STRUCTURE: backend-only (intentionally omits views.py, urls.py, and routes.py)`
+* Web-capable apps should include `views.py`, `urls.py`, and `routes.py` unless they are intentionally backend-only.
+* Follow and keep this policy aligned with:
+
+  * `docs/development/create-local-app.md`
+  * `docs/development/app-structure-policy.md`
+
+## Removal Requests And Retired Apps
+
+When a developer asks to remove something, perform an actual removal by default.
+Do not archive, deprecate, or soft-retire the target unless explicitly asked.
+
+The 1.0 migration baseline no longer uses `apps/_legacy/*_migration_only`
+packages for retired app history. Do not add new migration-only shims for
+fresh-install compatibility unless the operator explicitly asks for a reviewed
+pre-1.0 upgrade bridge. Prefer explicit export/import or reconciliation
+commands for old database recovery.
+
+---
+
+## Exceptions
+
+* Prefer **specific exceptions** rather than generic ones.
+
+Good:
+
+```python
+raise ValidationError("Invalid token")
+```
+
+Avoid:
+
+```python
+raise Exception("Something went wrong")
+```
+
+---
+
+## Imports
+
+Whenever imports or `__all__` lists appear unordered:
+
+* Arrange them **alphabetically**.
+
+---
+
+## Documentation
+
+Keep implementation code lean. Prefer comments only when they capture something important that should not drift over time, such as:
+
+* unconventional decisions or constraints
+* behavior that is easy to accidentally change back and forth
+* docstrings or metadata that feed user-facing help text or generated documentation
+
+Do not add routine inline comments or blanket docstrings for obvious code. Add docstrings to functions, classes, commands, and modules when they materially improve discoverability, clarify non-obvious behavior, or supply user-facing/generated help text.
+
+Code within test modules is exempt unless a comment or docstring is needed to clarify non-obvious behavior.
+
+---
+
+## UI Design Notes
+
+When implementing UI updates for Arthexis:
+
+* Avoid hardcoded values (for example `rem` or `px`) for UI styling, especially touch target sizing.
+* Prefer shared CSS variables (design tokens) from the admin UI framework to keep sizing and spacing consistent across the suite.
+* Keep design choices aligned with Arthexis admin usability and consistency needs, prioritizing cohesive behavior across apps over one-off local styling.
+* Prioritize clarity over conciseness for UI labels; prefer descriptive labels over ambiguous short toggles when possible.
+
+---
+
+# Testing Policy
+
+Agents must run relevant tests after code changes.
+
+### Test Execution
+
+* Execute tests and **fix errors introduced by changes**.
+* Prefer validated repository entrypoints over ad-hoc interpreter calls. When `.venv` is missing, run the platform install entrypoint first (`./install.sh` on Linux/macOS, `install.bat` on Windows); the install scripts create `.venv`. Use `./env-refresh.sh --deps-only` or `env-refresh.bat` only after `.venv` already exists and dependencies need refreshing.
+* Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
+* Use the canonical app-test command for this repository: `.venv/bin/python manage.py test run -- <target>`.
+* Use direct `pytest` only where this repository already requires it:
+  * CI workflow internals under `.github/workflows/`.
+  * pytest-backed command/helper implementation code (for example `apps/tests/management/commands/test.py` and `utils/devtools/test_server.py`).
+* Use `.venv/bin/python manage.py ...` for development and test workflows; use `./command.sh ...` only for operator-facing runtime actions when applicable.
+* If `.venv/bin/python` is unavailable, use the repository's validated wrapper or management entrypoint.
+* Avoid creating tests for **micro-behaviors** unless:
+
+  * they are security-relevant, or
+  * they protect critical logic.
+
+### Test Creation Guidelines
+
+* Each **feature should have a test**.
+* Prefer **quality over quantity** of tests.
+* Do **not create tests solely to validate styling**.
+* Do **not create tests solely to confirm removed features are gone**.
+
+### Regression Handling
+
+If a test fails **multiple times across runs**, it must be:
+
+* marked as a **regression**
+* documented accordingly.
+
+---
+
+## Plan Generation for Agents
+
+When generating execution plans, agents must assume that downstream task runs may not include full planning-chat context.
+
+### Plan Task Card Format
+
+Every generated task must include:
+
+1. Intent
+2. Scope (apps/files)
+3. Constraints
+4. Acceptance Criteria
+5. Verification Commands
+6. Out of Scope
+
+### Arthexis Planning Guardrails
+
+Generated plans must:
+
+* Prefer extending existing Arthexis apps over detached side systems.
+* Model external processes via Django models and migrations when appropriate.
+* Preserve admin power unless there is a clear security concern.
+* Avoid speculative futureproofing and overengineering.
+* Include adjacent health improvements when touching related areas (tests/docs/cruft/security).
+
+### Model-Change Requirements in Plans
+
+If a task changes models, that task must explicitly include:
+
+* migration creation/update
+* migration validation command(s)
+* relevant test updates/additions
+
+### Verification Requirements
+
+Every generated task must include explicit verification commands, preferring repository entrypoints such as:
+
+* `.venv/bin/python manage.py migrations check`
+* `.venv/bin/python manage.py test run -- <target>`
+
+### Context Carry-Forward Rule
+
+Do not assume execution steps inherit planning-chat context.
+Each generated task must restate non-obvious constraints needed for correct implementation.
+
+### Task Dependency Annotation
+
+Each generated task must declare:
+
+* Depends on: `<task ids or none>`
+* Blocks: `<task ids or none>`
+* Parallel-safe: `yes/no`
+
+### Risk and Rollback
+
+For non-trivial tasks, include:
+
+* Risk level (low/med/high)
+* Primary failure mode
+* Rollback approach
+
+### Plan Quality Checklist
+
+A plan is valid only if:
+
+* Every task includes Intent/Scope/Constraints/Acceptance Criteria/Verification Commands/Out of Scope.
+* App/file targets are explicit.
+* Tests and migrations are covered when applicable.
+* No task relies on implicit chat memory.
+
+### Task Template
+
+Use this template when drafting plan tasks:
+
+```md
+### Task <ID>: <Short Title>
+
+* Intent:
+* Scope:
+* Constraints:
+* Acceptance Criteria:
+* Verification Commands:
+* Out of Scope:
+* Depends on:
+* Blocks:
+* Parallel-safe:
+* Risk/Rollback:
+```
+
+---
+
+### Fixture Changes
+
+Any modification to database models must include appropriate migrations.
+
+---
+
+# Repository Workflow
+
+Pull request operations, review loops, patchwork ownership, and local merge
+procedures are operator-device workflow concerns. Keep those procedures in the
+operator console, local Codex skills, or device-local helper tools rather than
+in this repository's static source guidance.
+
+---
+
+# Repository Documentation
+
+Agents must **not modify primary README files** unless:
+
+1. explicitly requested, and
+2. validated by the end user.
+
+---
+
+# Special Terminology
+
+## Glossary
+
+### Model
+
+Create or reuse one or more Django Models to model a business process and its interfaces. Add Django commands to model views and create UI admin wizard tool views for the entire process.
+
+---
+
+### Refactor
+
+In general, to reduce complexity and duplication, improve accessibility, and remove old unused cruft, plus any other specific goals, that targets a set or class of code.
+
+---
+
+### Cleave
+
+Remove **all words contained in parentheses**.
+
+Example:
+
+```
+Example text (remove this)
+```
+
+Becomes:
+
+```
+Example text
+```
+
+---
+
+### Triage
+
+The triage process consists of:
+
+1. Re-running failing tests
+2. Fixing issues with an eye on priorities.
+3. Marking and documenting persistent failures
+
+---
+
+# Development Philosophy
+
+Agents must avoid overengineering.
+
+Do **not attempt excessive futureproofing**.
+
+Focus on:
+
+* solving the immediate problem
+* preserving consistency with the codebase
+* maintaining developer flexibility
+* enabling powerful administrative capabilities
+* extending Arthexis so it can integrate cleanly with the systems around it
+
+If multiple solutions are possible, choose the one that:
+
+* minimizes disruption
+* reduces duplication
+* aligns best with the existing architecture.

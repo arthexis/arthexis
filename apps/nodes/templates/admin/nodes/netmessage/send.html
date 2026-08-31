@@ -1,0 +1,155 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ media }}
+  <style>
+    .send-net-message-fields {
+      max-width: 72rem;
+      margin: 0 auto;
+    }
+
+    .send-net-message-fields .module {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .filters-fieldset .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 0.5rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .filters-fieldset .filters-grid__label {
+      font-weight: 600;
+      color: var(--body-fg);
+      margin-bottom: 0;
+    }
+
+    .filters-fieldset .filters-grid__field .related-widget-wrapper,
+    .filters-fieldset .filters-grid__field select {
+      width: 100%;
+    }
+
+    .filters-fieldset .filters-grid__field .help {
+      margin-top: 0.25rem;
+    }
+
+    .send-net-message-fields .module .form-row {
+      align-items: center;
+    }
+
+    .send-net-message-fields .module .form-row .flex-container {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+    }
+
+    .send-net-message-fields .module .form-row .flex-container:not(.checkbox-row) > label {
+      min-width: 12rem;
+      flex: 0 0 12rem;
+    }
+
+    .send-net-message-fields .module .form-row .flex-container:not(.checkbox-row) > *:not(label) {
+      flex: 1 1 18rem;
+      min-width: 12rem;
+    }
+
+    .send-net-message-fields .module .form-row input[type="number"],
+    .send-net-message-fields .module .form-row input[name$="installed_version"],
+    .send-net-message-fields .module .form-row input[name$="installed_revision"] {
+      max-width: 14rem;
+    }
+
+    .send-net-message-submit {
+      padding: 0.75rem 2.5rem;
+      font-size: 1rem;
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+    <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+    {% trans 'Send Message' %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <form method="post" action="">
+    {% csrf_token %}
+    {{ adminform.form.non_field_errors }}
+    <div class="send-net-message-fields">
+      {% for fieldset in adminform %}
+        {% if 'filter_node' in fieldset.fields %}
+          <fieldset class="module aligned filters-fieldset {{ fieldset.classes }}">
+            <h2>{{ fieldset.name }}</h2>
+            {% if fieldset.description %}
+              <div class="description">{{ fieldset.description|safe }}</div>
+            {% endif %}
+            <div class="filters-grid">
+              <div class="filters-grid__label">{{ adminform.form.filter_node.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_node_feature.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_node_role.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_current_relation.label_tag }}</div>
+
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node.errors }}
+                {{ adminform.form.filter_node }}
+                {% if adminform.form.filter_node.help_text %}
+                  <div class="help">{{ adminform.form.filter_node.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node_feature.errors }}
+                {{ adminform.form.filter_node_feature }}
+                {% if adminform.form.filter_node_feature.help_text %}
+                  <div class="help">{{ adminform.form.filter_node_feature.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node_role.errors }}
+                {{ adminform.form.filter_node_role }}
+                {% if adminform.form.filter_node_role.help_text %}
+                  <div class="help">{{ adminform.form.filter_node_role.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_current_relation.errors }}
+                {{ adminform.form.filter_current_relation }}
+                {% if adminform.form.filter_current_relation.help_text %}
+                  <div class="help">{{ adminform.form.filter_current_relation.help_text|safe }}</div>
+                {% endif %}
+              </div>
+            </div>
+
+            {% for field in adminform.form %}
+              {% if field.name == 'filter_installed_version' or field.name == 'filter_installed_revision' %}
+                <div class="form-row {{ field.name }}{% if field.is_checkbox %} checkbox-row{% endif %}">
+                  <div class="field-box{% if field.errors %} errors{% endif %}">
+                    {{ field.errors }}
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                      <div class="help">{{ field.help_text|safe }}</div>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </fieldset>
+        {% else %}
+          {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="submit-row">
+      <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      <button type="submit" class="button default send-net-message-submit">{% trans 'Send Message' %}</button>
+    </div>
+  </form>
+{% endblock %}

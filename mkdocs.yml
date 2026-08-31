@@ -1,0 +1,82 @@
+site_name: Arthexis Documentation
+site_description: Operator and contributor references for the Arthexis constellation.
+docs_dir: docs
+nav:
+  - Overview:
+      - Documentation Index: index.md
+      - Knowledge Base Overview: knowledge-base-overview.md
+      - Operators Manual: operators-manual.md
+  - Operations:
+      - Auto-Upgrade Flow: auto-upgrade.md
+      - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
+      - AP Portal Recovery: operations/ap-portal.md
+      - Charger Cutover Runbook: operations/charger-cutover-runbook.md
+      - Error Report Package: operations/error-report.md
+      - Good Command: operations/good-command.md
+      - Imager SD-Card Recovery Workflow: operations/imager-sd-card-recovery.md
+      - Raspberry Pi Image Burn Runbook: operations/rpi-image-burn.md
+      - Operational Commands: operations/operational-commands.md
+      - Reinstall + Data Import Runbook: operations/reinstall-data-import-runbook.md
+  - Integrations:
+      - Integration Onboarding Tracks: integrations/onboarding-tracks.md
+      - Endpoint Inventory: integrations/endpoint-inventory.md
+      - Documentation Completeness Checklist: integrations/documentation-completeness-checklist.md
+      - Token Lifecycle: integrations/token-lifecycle.md
+      - WhatsApp Web CLI: integrations/whatsapp-web-cli.md
+  - Architecture:
+      - Routing Conventions: routing.md
+      - Security Model: security-model.md
+      - Logging Domain: logging-domain.md
+      - Startup Sequence: startup-sequence.md
+  - Charging Protocols:
+      - CP Statuses and Transitions: ocpp_cp_statuses.md
+      - OCPP Application Study Guide: development/ocpp-application-study-guide.md
+      - OCPP 1.6 User Manual: development/ocpp-user-manual.md
+      - Charger Switchover Upgrade Plan: development/charger-switchover-upgrade-plan.md
+  - Services:
+      - Suite Service: services/suite-service.md
+      - Celery Worker: services/celery-worker.md
+      - Celery Beat: services/celery-beat.md
+      - LCD Screen Service: services/lcd-screen.md
+      - RFID Scanner Service: services/rfid-scanner-service.md
+      - LLM LCD Summary: services/llm-lcd-summary.md
+      - Kindle Postbox: services/kindle-postbox.md
+      - USB Inventory: services/usb-inventory.md
+      - Suite Services Report: suite-services-report.md
+  - Hardware & Field Guides:
+      - Agent Card v1 RFID Layout: development/agent-card-v1.md
+      - LCD Screen Hardware: lcd-screen-hardware.md
+      - RFID Card Layout: development/rfid-card-layout.md
+      - USB Camera Power-Off: usb-camera-power-off.md
+  - Engineering Reference:
+      - Upgrade Error Handling: upgrade-error-handling.md
+  - Development:
+      - App Structure Policy: development/app-structure-policy.md
+      - Admin UI Framework: development/admin-ui-framework.md
+      - Bluetooth Assistant Sidecar Plan: development/bluetooth-assistant-sidecar-plan.md
+      - Codex Skill Packages: development/codex-skill-packages.md
+      - Command Matrix: development/command-matrix.md
+      - Cookbook Maintainer Guide: development/cookbook-maintainer-guide.md
+      - Create Local App: development/create-local-app.md
+      - Dependency Management: development/dependency-management.md
+      - Developer Devtools Entrypoints: development/devtools-entrypoints.md
+      - Documentation Governance Policy: development/documentation-governance.md
+      - External App Plugins: development/external-app-plugins.md
+      - Gallery Content Sample Integration: development/gallery-content-sample-integration.md
+      - Health Checks: development/health-checks.md
+      - Marker Governance Policy: development/marker-governance-policy.md
+      - Nodes Admin Package Reference: development/nodes-admin-package-reference.md
+      - Package Release Process: development/package-release-process.md
+      - PR Oversee: development/pr-oversee.md
+      - Release Package Options: development/release-package-options.md
+      - Role-Based Application Profiles: development/role-based-application-profiles.md
+      - Secret Scanning: development/secret-scanning.md
+      - Sigil Script Command: development/sigil-script-command.md
+      - Test Suite Notes: development/testing/test-suite-notes.md
+      - Typing Conventions: development/typing-conventions.md
+      - UI Style Contract: development/ui-style-contract.md
+      - UI Style Index: development/ui-style-index.md
+      - Versioning Maturity Policy: development/versioning-maturity-policy.md
+      - Watchtower Attack Simulation: development/watchtower-attack-simulation.md
+      - CodeQL Configuration: development/codeql.md
+      - CI Troubleshooting: development/ci-troubleshooting.md

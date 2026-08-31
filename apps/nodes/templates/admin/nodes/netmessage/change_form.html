@@ -1,0 +1,19 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+  {% if resend_url %}
+    <li>
+      <form method="post" action="{{ resend_url }}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="historylink">{% trans "Resend Message" %}</button>
+      </form>
+    </li>
+  {% endif %}
+  {% if original %}
+    <li>
+      <a class="addlink" href="{% url opts|admin_urlname:'add' %}?reply_to={{ original.pk }}">{% trans "Reply Message" %}</a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

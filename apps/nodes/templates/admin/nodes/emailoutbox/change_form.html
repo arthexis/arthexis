@@ -1,0 +1,9 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if test_url %}
+        <li><a href="{{ test_url }}">{% trans "Test Outbox" %}</a></li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

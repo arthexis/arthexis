@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{% trans "Test logs" %}</h1>
+<p>{% trans "Tests failed. Logs saved to" %} {{ log_path }}</p>
+<textarea id="log" rows="25" cols="120" readonly>{{ log }}</textarea>
+<p><button type="button" id="copy-btn">{% trans "Copy logs" %}</button></p>
+<script>
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    const text = document.getElementById('log').value;
+    navigator.clipboard.writeText(text);
+  });
+</script>
+{% endblock %}

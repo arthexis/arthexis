@@ -1,0 +1,82 @@
+[
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "Site Operator",
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Site Operator",
+      "app": "",
+      "parent": null,
+      "site_template": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "Network Operator",
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Network Operator",
+      "app": "",
+      "parent": null,
+      "site_template": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "Product Developer",
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Product Developer",
+      "app": "",
+      "parent": null,
+      "site_template": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "Release Manager",
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Release Manager",
+      "app": "",
+      "parent": null,
+      "site_template": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "fields": {
+      "name": "External Agent",
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "External Agent",
+      "app": "",
+      "parent": null,
+      "site_template": null
+    }
+  }
+]

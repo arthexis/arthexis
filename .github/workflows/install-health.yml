@@ -1,0 +1,219 @@
+name: Install Health Check
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+  PYTEST_WORKERS: 'auto'
+
+concurrency:
+  group: install-health-check-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: install (${{ matrix.os_flavor }}, py${{ matrix.python_version }}, ${{ matrix.db_backend }}, ${{ matrix.test_shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_flavor: ubuntu
+            python_version: '3.12'
+            python_cache_version: python3.12
+            db_backend: sqlite
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
+          - os_flavor: ubuntu
+            python_version: '3.12'
+            python_cache_version: python3.12
+            db_backend: postgres
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
+          - os_flavor: ubuntu
+            python_version: '3.11'
+            python_cache_version: python3.11
+            db_backend: sqlite
+            test_shard: ocpp
+            pytest_args: apps/ocpp/tests
+            full_pytest: true
+          - os_flavor: ubuntu
+            python_version: '3.11'
+            python_cache_version: python3.11
+            db_backend: sqlite
+            test_shard: rest
+            pytest_args: --ignore=apps/ocpp/tests
+            full_pytest: true
+          - os_flavor: ubuntu
+            python_version: '3.11'
+            python_cache_version: python3.11
+            db_backend: postgres
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
+    permissions:
+      contents: read
+    env:
+      ARTHEXIS_DB_BACKEND: ${{ matrix.db_backend }}
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+      POSTGRES_DB: arthexis
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install base system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl git sudo python3 python3-venv \
+            libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
+            libpangocairo-1.0-0 shared-mime-info
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          clean: true
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        id: setup-python
+        with:
+          python-version: ${{ matrix.python_version }}
+      - name: Start native Redis
+        run: |
+          ./scripts/ci/start-native-redis.sh
+      - name: Start native PostgreSQL
+        if: ${{ matrix.db_backend == 'postgres' }}
+        run: |
+          ./scripts/ci/start-native-postgres.sh
+      - name: Select Python runtime
+        run: |
+          python_bin='${{ steps.setup-python.outputs.python-path }}'
+          echo "ARTHEXIS_PYTHON_BIN=${python_bin}" >> "${GITHUB_ENV}"
+          echo "$(dirname "${python_bin}")" >> "${GITHUB_PATH}"
+          "${python_bin}" --version
+          if command -v python >/dev/null 2>&1; then
+            python --version
+          fi
+          python3 --version
+      - name: Cache pip
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-
+            pip-${{ runner.os }}-${{ matrix.os_flavor }}-
+      - name: Cache virtualenv
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-
+      - name: Validate pyproject dependency ordering
+        run: |
+          "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+      - name: Validate generated requirements
+        run: |
+          "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+      - name: Install suite from repository
+        run: |
+          ./install.sh --embedded --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh
+      - name: Install CI dependencies
+        env:
+          PIP_DEFAULT_TIMEOUT: "60"
+          PIP_RETRIES: "5"
+        run: |
+          ./scripts/preflight-env.sh
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+      - name: Verify editable install import
+        run: |
+          source .venv/bin/activate
+          python scripts/check_editable_install_import.py
+      - name: Validate migrations
+        run: |
+          ./scripts/preflight-env.sh
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+      - name: Create docs admin user
+        env:
+          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
+            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+          fi
+          echo "::add-mask::${DOCS_ADMIN_PASSWORD}"
+          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
+      - name: Check import resolution
+        run: |
+          source .venv/bin/activate
+          python scripts/check_import_resolution.py
+      - name: Validate installed app manifests
+        run: |
+          ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
+          manifest_test_file="tests/test_installed_apps_manifests.py"
+          if [[ -f "$manifest_test_file" ]]; then
+            python -m pytest "$manifest_test_file" -q
+          else
+            echo "Manifest test file $manifest_test_file not found; skipping manifest app validation."
+          fi
+      - name: Run Ruff
+        run: |
+          source .venv/bin/activate
+          ruff check --select E9,F823 .
+      - name: Run import contracts
+        run: |
+          source .venv/bin/activate
+          lint-imports
+      - name: Detect pytest xdist arguments
+        if: ${{ matrix.full_pytest }}
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(python -m pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
+      - name: Run install pytest shard
+        if: ${{ matrix.full_pytest }}
+        run: |
+          set -Eeuo pipefail
+          ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          target_args=()
+          if [[ -n "${{ matrix.pytest_args }}" ]]; then
+            read -r -a target_args <<< "${{ matrix.pytest_args }}"
+          fi
+          python -m pytest "${target_args[@]}" "${xdist_args[@]}" --maxfail=1 --disable-warnings --durations=25 -q --timeout=300 --junitxml=pytest-junit.xml | tee pytest.log
+      - name: Upload pytest log
+        if: ${{ always() && matrix.full_pytest }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: install-health-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.test_shard }}
+          path: |
+            pytest.log
+            pytest-junit.xml
+          if-no-files-found: warn

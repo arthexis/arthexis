@@ -1,0 +1,14 @@
+[
+  {
+    "model": "nodes.upgradepolicy",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Regular",
+      "description": "Regular/normal upgrades: patch and minor daily, major weekly.",
+      "channel": "regular",
+      "interval_minutes": 1440,
+      "requires_pypi_packages": true
+    }
+  }
+]

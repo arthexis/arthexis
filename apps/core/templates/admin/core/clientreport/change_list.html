@@ -1,0 +1,5 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% block object-tools-items %}
+{{ block.super }}
+<li><a href="{% url 'admin:core_clientreport_generate' %}">Configure New Report</a></li>
+{% endblock %}

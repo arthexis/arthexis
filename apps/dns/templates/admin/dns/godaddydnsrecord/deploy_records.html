@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<p>
+  {% blocktrans count total=queryset|length %}
+  Deploy {{ total }} DNS record using the selected DNS credentials.
+  {% plural %}
+  Deploy {{ total }} DNS records using the selected DNS credentials.
+  {% endblocktrans %}
+</p>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <table>
+    {{ form.as_table }}
+  </table>
+  <div class="submit-row">
+    <button type="submit" class="default" name="apply">{% trans "Deploy" %}</button>
+  </div>
+</form>
+<h2>{% trans "Selected records" %}</h2>
+<ul>
+  {% for record in queryset %}
+    <li>{{ record }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}

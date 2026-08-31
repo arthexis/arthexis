@@ -1,0 +1,119 @@
+from django.urls import include, path
+
+from apps.energy import views as energy_views
+from apps.media import views as media_views
+
+from . import views
+
+app_name = "ocpp"
+
+urlpatterns = [
+    path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
+    path(
+        "kiosk/live-connection/",
+        views.kiosk_live_connection,
+        name="kiosk-live-connection",
+    ),
+    path("reports/energy/", views.energy_reports, name="energy-reports"),
+    path("charging-map/", views.charging_station_map, name="charging-station-map"),
+    path(
+        "charge-point-models/",
+        views.supported_chargers,
+        name="supported-chargers",
+    ),
+    path(
+        "charge-point-models/<int:station_model_id>/",
+        views.supported_charger_detail,
+        name="supported-charger-detail",
+    ),
+    path(
+        "c/<uuid:slug>/",
+        energy_views.public_connector_page,
+        name="public-connector-page",
+    ),
+    path(
+        "c/<uuid:slug>/create-account/",
+        energy_views.public_connector_page_create_account,
+        name="public-connector-page-create-account",
+    ),
+    path(
+        "firmware/<int:deployment_id>/<slug:token>/",
+        views.firmware_download,
+        name="cp-firmware-download",
+    ),
+    path("chargers/", views.charger_list, name="charger-list"),
+    path("chargers/<str:cid>/", views.charger_detail, name="charger-detail"),
+    path(
+        "chargers/<str:cid>/connector/<slug:connector>/",
+        views.charger_detail,
+        name="charger-detail-connector",
+    ),
+    path("chargers/<str:cid>/action/", views.dispatch_action, name="charger-action"),
+    path(
+        "chargers/<str:cid>/connector/<slug:connector>/action/",
+        views.dispatch_action,
+        name="charger-action-connector",
+    ),
+    path("c/<str:cid>/", views.charger_page, name="charger-page"),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/",
+        views.charger_page,
+        name="charger-page-connector",
+    ),
+    path(
+        "c/<str:cid>/sessions/",
+        views.charger_session_search,
+        name="charger-session-search",
+    ),
+    path(
+        "c/<str:cid>/account/",
+        energy_views.charger_account_summary,
+        name="charger-account-summary",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/account/",
+        energy_views.charger_account_summary,
+        name="charger-account-summary-connector",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/sessions/",
+        views.charger_session_search,
+        name="charger-session-search-connector",
+    ),
+    path("log/<str:cid>/", views.charger_log_page, name="charger-log"),
+    path(
+        "log/<str:cid>/connector/<slug:connector>/",
+        views.charger_log_page,
+        name="charger-log-connector",
+    ),
+    path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
+    path(
+        "c/<str:cid>/status/chart/",
+        views.charger_status_chart,
+        name="charger-status-chart",
+    ),
+    path(
+        "charger/<str:cid>/status/", views.charger_status, name="charger-status-legacy"
+    ),
+    path(
+        "charger/<str:cid>/connector/<slug:connector>/status/",
+        views.charger_status,
+        name="charger-status-connector-legacy",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/status/",
+        views.charger_status,
+        name="charger-status-connector",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/status/chart/",
+        views.charger_status_chart,
+        name="charger-status-chart-connector",
+    ),
+    path("rfid/validator/", include("apps.cards.urls")),
+    path(
+        "media/<slug:slug>/",
+        media_views.media_bucket_upload,
+        name="media-bucket-upload",
+    ),
+]

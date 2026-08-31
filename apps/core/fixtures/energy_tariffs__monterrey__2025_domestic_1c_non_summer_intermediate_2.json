@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "non_summer",
+      "zone": "1C",
+      "contract_type": "domestic",
+      "period": "intermediate_2",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "1.2078",
+      "cost_mxn": "1.2078",
+      "notes": "Segundo bloque intermedio fuera de temporada de verano con menor ventana de consumo subsidiado."
+    }
+  }
+]

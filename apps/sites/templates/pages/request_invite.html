@@ -1,0 +1,63 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Request invitation" %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center">
+  <div class="card p-4" style="max-width: 400px; width: 100%;">
+    <h1 class="text-center mb-4">{% trans "Request email invitation" %}</h1>
+    {% if sent %}
+      <div class="alert alert-info" role="alert">
+        {% trans "If the email exists, an invitation has been sent." %}
+      </div>
+    {% else %}
+      <form method="post">
+        {% csrf_token %}{# ensure CSRF token is included for POST submissions #}
+        {{ form.non_field_errors }}
+        <div class="visually-hidden" aria-hidden="true" style="position: absolute; left: -10000px;">
+          <label for="{{ form.honeypot.id_for_label }}">{{ form.honeypot.label }}</label>
+          <input
+            type="text"
+            name="{{ form.honeypot.name }}"
+            id="{{ form.honeypot.id_for_label }}"
+            value="{{ form.honeypot.value|default_if_none:'' }}"
+            autocomplete="off"
+          >
+        </div>
+        {{ form.timestamp }}
+        <div class="mb-3">
+          <label for="{{ form.email.id_for_label }}" class="form-label">{% trans "Email" %}</label>
+          <input
+            type="email"
+            name="{{ form.email.name }}"
+            class="form-control{% if form.email.errors %} is-invalid{% endif %}"
+            id="{{ form.email.id_for_label }}"
+            value="{{ form.email.value|default_if_none:'' }}"
+            required
+          >
+          {% if form.email.errors %}
+            {% for error in form.email.errors %}
+              <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+          {% endif %}
+        </div>
+        <div class="mb-3">
+          <label for="{{ form.comment.id_for_label }}" class="form-label">{% trans "Comment" %}</label>
+          <textarea
+            name="{{ form.comment.name }}"
+            class="form-control{% if form.comment.errors %} is-invalid{% endif %}"
+            id="{{ form.comment.id_for_label }}"
+          >{{ form.comment.value|default_if_none:'' }}</textarea>
+          {% if form.comment.errors %}
+            {% for error in form.comment.errors %}
+              <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+          {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary w-100">{% trans "Send invitation" %}</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

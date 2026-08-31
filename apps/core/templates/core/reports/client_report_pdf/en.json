@@ -1,0 +1,20 @@
+{
+  "title": "Consumer Report",
+  "period": "Period: {start} to {end}",
+  "total_kw_all_time": "Total kW (all time)",
+  "total_kw_period": "Total kW (period)",
+  "connector": "Connector",
+  "account": "Account",
+  "session_kwh": "Session kW",
+  "session_start": "Session start",
+  "session_end": "Session end",
+  "time": "Time",
+  "rfid_label": "RFID label",
+  "no_sessions_period": "No charging sessions recorded for the selected period.",
+  "no_sessions_point": "No charging sessions recorded for this charge point.",
+  "no_structured_data": "No structured data is available for this report.",
+  "report_totals": "Report totals",
+  "total_kw_period_line": "Total kW during period",
+  "charge_point": "Charge Point",
+  "charge_point_serial": "{name} (Serial: {serial})"
+}

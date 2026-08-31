@@ -1,0 +1,85 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "RFID Command Card Burner" %}{% endblock %}
+
+{% block content %}
+<section class="py-3">
+  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+    <div>
+      <p class="text-uppercase text-secondary mb-1">{% trans "RFID" %}</p>
+      <h1 class="h2 mb-2">{% trans "Command Card Burner" %}</h1>
+      {% if source_rfid %}
+        <p class="mb-0">
+          {% blocktrans with label=source_label template=source_template.display_title %}
+            Default source: {{ label }} using {{ template }}.
+          {% endblocktrans %}
+        </p>
+      {% else %}
+        <p class="mb-0">{% trans "Default source: previous scanned command card." %}</p>
+      {% endif %}
+    </div>
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
+      {% csrf_token %}
+      <input type="hidden" name="timeout" value="{{ default_timeout }}">
+      <button type="submit" class="btn btn-primary">{% trans "Copy Previous Card" %}</button>
+    </form>
+  </div>
+</section>
+
+{% if error %}
+  <section class="py-3">
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+  </section>
+{% endif %}
+
+{% if result and not error %}
+  <section class="py-3">
+    <div class="alert alert-success" role="status">
+      {% blocktrans with template=result.template card=result.card_name|default:result.rfid %}
+        Wrote {{ template }} to {{ card }}.
+      {% endblocktrans %}
+    </div>
+  </section>
+{% endif %}
+
+<section class="py-3 border-top">
+  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center mb-3">
+    <h2 class="h4 mb-0">{% trans "Available Templates" %}</h2>
+    <span class="text-secondary">{{ templates|length }} {% trans "active" %}</span>
+  </div>
+  <div class="row g-3">
+    {% for template in templates %}
+      <div class="col-md-6 col-xl-4">
+        <article class="border rounded p-3 h-100 d-flex flex-column gap-2">
+          <div>
+            <p class="text-uppercase text-secondary small mb-1">{{ template.name }}</p>
+            <h3 class="h5 mb-1">{{ template.display_title }}</h3>
+            {% if template.description %}
+              <p class="mb-2">{{ template.description }}</p>
+            {% endif %}
+          </div>
+          <dl class="row small mb-2">
+            <dt class="col-4">{% trans "Command" %}</dt>
+            <dd class="col-8"><code>{{ template.command_name }}</code></dd>
+            <dt class="col-4">{% trans "Source" %}</dt>
+            <dd class="col-8">{{ template.get_source_display }}</dd>
+          </dl>
+          <form method="post" class="mt-auto">
+            {% csrf_token %}
+            <input type="hidden" name="template" value="{{ template.slug }}">
+            <input type="hidden" name="timeout" value="{{ default_timeout }}">
+            <button type="submit" class="btn btn-outline-primary w-100">
+              {% blocktrans with title=template.display_title %}Burn {{ title }}{% endblocktrans %}
+            </button>
+          </form>
+        </article>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <p>{% trans "No active RFID command templates are available." %}</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

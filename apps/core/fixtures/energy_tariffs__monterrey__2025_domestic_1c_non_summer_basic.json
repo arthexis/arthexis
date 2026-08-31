@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "non_summer",
+      "zone": "1C",
+      "contract_type": "domestic",
+      "period": "basic",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "0.8062",
+      "cost_mxn": "0.8062",
+      "notes": "Bloque básico fuera de verano con límites de kWh subsidiados más bajos definidos por CFE."
+    }
+  }
+]

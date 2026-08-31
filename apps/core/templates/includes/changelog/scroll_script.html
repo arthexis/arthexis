@@ -1,0 +1,90 @@
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const container = document.querySelector('[data-changelog-container]');
+    const sentinel = document.querySelector('[data-changelog-sentinel]');
+    if (!container || !sentinel) {
+      return;
+    }
+
+    const endpoint = container.dataset.changelogEndpoint;
+    let nextPage = parseInt(container.dataset.changelogNextPage || '', 10);
+    const hasMoreInitial = container.dataset.changelogHasMore === 'true';
+    const offset = parseInt(container.dataset.changelogOffset || '0', 10);
+    const loadingLabel = container.dataset.changelogLoadingLabel || 'Loading…';
+    const errorLabel = container.dataset.changelogErrorLabel || 'Unable to load changes.';
+    const completeLabel = container.dataset.changelogCompleteLabel || 'No more changes.';
+
+    if (!endpoint) {
+      return;
+    }
+
+    let hasMore = hasMoreInitial;
+    let loading = false;
+
+    const updateSentinel = (label, state) => {
+      sentinel.textContent = label;
+      sentinel.dataset.state = state;
+    };
+
+    if (!hasMore) {
+      updateSentinel(completeLabel, 'complete');
+      return;
+    }
+
+    updateSentinel(loadingLabel, 'idle');
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          fetchNext();
+        }
+      });
+    }, { rootMargin: '200px 0px' });
+
+    observer.observe(sentinel);
+
+    function fetchNext() {
+      if (!hasMore || loading || !nextPage) {
+        return;
+      }
+
+      loading = true;
+      updateSentinel(loadingLabel, 'loading');
+
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set('page', String(nextPage));
+      url.searchParams.set('offset', String(offset));
+
+      fetch(url.toString(), {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Request failed');
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data.html) {
+            container.insertAdjacentHTML('beforeend', data.html);
+          }
+          hasMore = Boolean(data.has_more);
+          nextPage = data.next_page;
+          if (!hasMore || !nextPage) {
+            updateSentinel(completeLabel, 'complete');
+            observer.unobserve(sentinel);
+          } else {
+            updateSentinel(loadingLabel, 'idle');
+          }
+        })
+        .catch(() => {
+          updateSentinel(errorLabel, 'error');
+        })
+        .finally(() => {
+          loading = false;
+        });
+    }
+  });
+</script>

@@ -1,0 +1,613 @@
+{% extends "admin/base.html" %}
+{% load i18n static admin_extras %}
+{% block dark-mode-vars %}
+  <link rel="stylesheet" href="{% static "admin/css/dark_mode.css" %}">
+  <script>
+    (function () {
+      const defaultTheme = 'dark';
+      let theme = defaultTheme;
+
+      try {
+        const storage = window.localStorage;
+        const storedTheme = storage.getItem('theme');
+        const validThemes = ['light', 'dark', 'auto'];
+
+        if (storedTheme === null) {
+          storage.setItem('theme', defaultTheme);
+        } else if (validThemes.indexOf(storedTheme) !== -1) {
+          theme = storedTheme;
+        } else {
+          storage.setItem('theme', defaultTheme);
+        }
+      } catch (error) {
+        theme = defaultTheme;
+      }
+
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <script src="{% static "admin/js/theme.js" %}"></script>
+{% endblock %}
+{% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block extrahead %}
+{{ block.super }}
+<script>
+  (function loadHtmxWithFallbacks() {
+    const head = document.head;
+
+    function loadScript(src, onload) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.referrerPolicy = 'no-referrer';
+      script.onload = function (event) {
+        if (onload) {
+          onload(false, event);
+        }
+      };
+      script.onerror = function (event) {
+        if (onload) {
+          onload(true, event);
+        }
+      };
+
+      head.appendChild(script);
+    }
+
+    function loadLocalHtmx(afterLoad) {
+      // Load the bundled htmx copy to avoid cross-origin requests to the CDN.
+      loadScript('{% static "htmx/htmx.min.js" %}', function (hadError) {
+        if (hadError || !window.htmx) {
+          console.error('Failed to load local htmx');
+          return;
+        }
+
+        if (document.readyState !== 'loading') {
+          window.htmx.process(document.body);
+        }
+
+        if (afterLoad) {
+          afterLoad();
+        }
+      });
+    }
+
+    function loadHtmxExtensions() {
+      if (!window.htmx) {
+        return;
+      }
+
+      loadScript('{% static "htmx/reveal.js" %}');
+      loadScript('{% static "htmx/intersect.js" %}');
+    }
+
+    loadLocalHtmx(loadHtmxExtensions);
+  })();
+</script>
+<script>
+  (function registerAdminServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+      return;
+    }
+
+    const precacheUrls = [
+      '{% static "core/vendor/chart.umd.min.js" %}',
+      '{% static "htmx/htmx.min.js" %}',
+      '{% static "htmx/intersect.js" %}',
+      '{% static "htmx/reveal.js" %}',
+      '{% static "admin/css/base.css" %}',
+      '{% static "admin/css/nav_sidebar.css" %}',
+      '{% static "admin/css/dark_mode.css" %}',
+      '{% static "admin/js/core.js" %}',
+      '{% static "admin/js/nav_sidebar.js" %}',
+      '{% static "admin/js/theme.js" %}',
+    ];
+
+    const precacheParam = encodeURIComponent(precacheUrls.join(','));
+    const serviceWorkerUrl = `{% url "admin-service-worker" %}?precache=${precacheParam}`;
+    navigator.serviceWorker.register(serviceWorkerUrl);
+  })();
+</script>
+{% if badge_role %}
+  {% if badge_role.name == "Control" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
+  {% elif badge_role.name == "Watchtower" or badge_role.name == "Constellation" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_watchtower.txt' %}">
+  {% elif badge_role.name == "Satellite" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_satellite.txt' %}">
+  {% else %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
+  {% endif %}
+{% elif current_site_domain == "arthexis.com" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_arthexis.txt' %}">
+{% else %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
+{% endif %}
+<script id="admin-filter-empty-groups">
+document.addEventListener('DOMContentLoaded', function () {
+    const nav = document.getElementById('nav-filter');
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!nav || !sidebar) {
+        return;
+    }
+
+    const modules = Array.from(sidebar.querySelectorAll('.module'));
+    const storage = (function resolveStorage() {
+        try {
+            return window.localStorage;
+        } catch (error) {
+            return null;
+        }
+    })();
+    const storagePrefix = [
+        'arthexis',
+        'admin',
+        'sidebar',
+        '{{ current_site_domain|default:"default-site"|escapejs }}',
+        '{{ request.user.pk|default:"anonymous"|escapejs }}',
+    ].join('.');
+    const keys = {
+        filter: `${storagePrefix}.filter`,
+        collapsed: `${storagePrefix}.collapsed`,
+        recentTargets: `${storagePrefix}.recent_targets`,
+    };
+    const writeTimers = {};
+    const pendingWrites = {};
+    const recentTargetLimit = 12;
+
+    function readJson(key, fallback) {
+        if (!storage) {
+            return fallback;
+        }
+        try {
+            const value = storage.getItem(key);
+            return value ? JSON.parse(value) : fallback;
+        } catch (error) {
+            return fallback;
+        }
+    }
+
+    function writeStorageNow(key, value) {
+        if (!storage) {
+            return;
+        }
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+            delete writeTimers[key];
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+            delete pendingWrites[key];
+        }
+        try {
+            storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        } catch (error) {
+            // Ignore storage quota and serialization errors.
+        }
+    }
+
+    function flushPendingStorageWrites() {
+        Object.keys(writeTimers).forEach(function (key) {
+            if (writeTimers[key]) {
+                window.clearTimeout(writeTimers[key]);
+                delete writeTimers[key];
+            }
+            if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+                writeStorageNow(key, pendingWrites[key]);
+                delete pendingWrites[key];
+            }
+        });
+    }
+
+    function writeStorageDebounced(key, value) {
+        if (!storage) {
+            return;
+        }
+
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+        }
+
+        pendingWrites[key] = value;
+        writeTimers[key] = window.setTimeout(function () {
+            writeStorageNow(key, pendingWrites[key]);
+            delete pendingWrites[key];
+            delete writeTimers[key];
+        }, 150);
+    }
+
+    function getAppLabel(module) {
+        if (module.dataset && module.dataset.appLabel) {
+            return module.dataset.appLabel;
+        }
+        const appClass = Array.from(module.classList).find(function (token) {
+            return token.indexOf('app-') === 0;
+        });
+        return appClass ? appClass.replace('app-', '') : null;
+    }
+
+    function getCollapsedMap() {
+        const value = readJson(keys.collapsed, {});
+        return value && typeof value === 'object' ? value : {};
+    }
+
+    function applyCollapsedMap(collapsedMap) {
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            if (collapsedMap[appLabel]) {
+                module.classList.add('collapsed');
+            } else {
+                module.classList.remove('collapsed');
+            }
+        });
+    }
+
+    function persistCollapsedState(immediate) {
+        const collapsedMap = {};
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            collapsedMap[appLabel] = module.classList.contains('collapsed');
+        });
+        if (immediate) {
+            writeStorageNow(keys.collapsed, collapsedMap);
+            return;
+        }
+        writeStorageDebounced(keys.collapsed, collapsedMap);
+    }
+
+    function toggleEmptyGroups() {
+        const query = nav.value.trim().toLowerCase();
+        const visibleModules = [];
+
+        modules.forEach(function (module) {
+            const hasVisibleRows = Array.from(module.querySelectorAll('tr')).some(function (row) {
+                return row.style.display !== 'none' && row.querySelector('th[scope="row"]');
+            });
+
+            if (hasVisibleRows) {
+                module.style.display = '';
+                visibleModules.push(module);
+            } else {
+                module.style.display = 'none';
+            }
+        });
+
+        if (query) {
+            visibleModules.forEach(function (module) {
+                module.classList.remove('collapsed');
+            });
+        } else {
+            applyCollapsedMap(getCollapsedMap());
+        }
+    }
+
+    function persistFilterValue() {
+        writeStorageDebounced(keys.filter, nav.value);
+    }
+
+    function normalizeRecentTargets(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value
+            .filter(function (target) {
+                return typeof target === 'string' && target.length > 0;
+            })
+            .slice(0, recentTargetLimit);
+    }
+
+    function persistRecentTarget(url, immediate) {
+        if (!url) {
+            return;
+        }
+        const dedupedTargets = normalizeRecentTargets(readJson(keys.recentTargets, []))
+            .filter(function (target) {
+                return target !== url;
+            });
+        dedupedTargets.unshift(url);
+        if (immediate) {
+            writeStorageNow(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+            return;
+        }
+        writeStorageDebounced(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+    }
+
+    function prefetchRecentTargets() {
+        const targets = normalizeRecentTargets(readJson(keys.recentTargets, []));
+        window.__adminRecentAppTargets = targets;
+        targets.slice(0, 4).forEach(function (url) {
+            const prefetch = document.createElement('link');
+            prefetch.rel = 'prefetch';
+            prefetch.href = url;
+            prefetch.as = 'document';
+            document.head.appendChild(prefetch);
+        });
+    }
+
+    const restoredFilter = storage ? storage.getItem(keys.filter) : '';
+    const shouldReapplyFilter = typeof restoredFilter === 'string' && Boolean(restoredFilter.trim());
+    if (typeof restoredFilter === 'string') {
+        nav.value = restoredFilter;
+    }
+    applyCollapsedMap(getCollapsedMap());
+    prefetchRecentTargets();
+
+    nav.addEventListener('change', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
+    nav.addEventListener('input', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
+    nav.addEventListener('keyup', toggleEmptyGroups);
+
+    sidebar.addEventListener('click', function (event) {
+        const link = event.target.closest('a[href]');
+        const toggleButton = event.target.closest('.app-collapse-toggle');
+
+        if (link && sidebar.contains(link)) {
+            persistRecentTarget(link.href, true);
+            persistCollapsedState(true);
+            return;
+        }
+
+        if (!toggleButton || !sidebar.contains(toggleButton)) {
+            return;
+        }
+
+        window.setTimeout(function () {
+            persistCollapsedState(true);
+        }, 0);
+    });
+
+    const observer = new MutationObserver(function (records) {
+        if (!nav.value.trim()) {
+            return;
+        }
+        records.forEach(function (record) {
+            if (
+                record.type === 'attributes'
+                && record.attributeName === 'class'
+                && record.target.classList.contains('collapsed')
+            ) {
+                record.target.classList.remove('collapsed');
+            }
+        });
+    });
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'], subtree: true });
+
+    if (storage) {
+        window.addEventListener('pagehide', flushPendingStorageWrites);
+        window.addEventListener('beforeunload', flushPendingStorageWrites);
+    }
+
+    if (shouldReapplyFilter) {
+        nav.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+        toggleEmptyGroups();
+    }
+});
+</script>
+<script id="admin-sidebar-collapse-toggle-visibility">
+document.addEventListener('DOMContentLoaded', function () {
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!sidebar) {
+        return;
+    }
+
+    const toggles = sidebar.querySelectorAll('.app-collapse-toggle');
+    if (!toggles.length) {
+        return;
+    }
+
+    toggles.forEach(function (button) {
+        button.hidden = true;
+        button.setAttribute('aria-hidden', 'true');
+        button.setAttribute('tabindex', '-1');
+    });
+});
+</script>
+{% now "c" as current_time %}
+{% now "T" as current_tz %}
+<script id="admin-server-clock">
+document.addEventListener('DOMContentLoaded', function () {
+    const clock = document.getElementById('server-clock');
+    if (!clock) {
+        return;
+    }
+    const serverStart = Date.parse("{{ current_time|escapejs }}");
+    const clientStart = Date.now();
+    const tz = "{{ TIME_ZONE|escapejs }}";
+    function pad(n) {
+        return String(n).padStart(2, '0');
+    }
+    function update() {
+        const now = new Date(serverStart + (Date.now() - clientStart));
+        const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        clock.textContent = `${formatted} {{ current_tz|escapejs }}`;
+        const dateFull = new Intl.DateTimeFormat([], { timeZone: tz, year: 'numeric', month: 'long', day: 'numeric' }).format(now);
+        const weekday = new Intl.DateTimeFormat([], { timeZone: tz, weekday: 'long' }).format(now);
+        const tzName = new Intl.DateTimeFormat([], { timeZone: tz, timeZoneName: 'long' })
+            .formatToParts(now)
+            .find(part => part.type === 'timeZoneName').value;
+        clock.title = `${dateFull}\n${weekday}\n${tzName}`;
+    }
+    update();
+    setInterval(update, 1000);
+});
+</script>
+{% if request.user.is_authenticated and request.user.is_staff %}
+{% include "core/version_check.html" %}
+{% endif %}
+<script id="admin-breadcrumb-copy">
+document.addEventListener('DOMContentLoaded', function () {
+    const breadcrumbs = document.querySelector('.breadcrumbs');
+    if (!breadcrumbs || breadcrumbs.dataset.copyEnhanced === '1') {
+        return;
+    }
+
+    const breadcrumbText = breadcrumbs.textContent.replace(/\s+/g, ' ').trim();
+    if (!breadcrumbText) {
+        return;
+    }
+
+    const copyLabel = '{% translate "Copy" %}';
+    const copiedLabel = '{% translate "Copied!" %}';
+    const copyErrorLabel = '{% translate "Copy failed" %}';
+
+    function copyText(value) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(value);
+        }
+
+        return new Promise(function (resolve, reject) {
+            const textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            const selection = document.getSelection();
+            const selected = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            textarea.select();
+
+            try {
+                document.execCommand('copy');
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+
+            document.body.removeChild(textarea);
+
+            if (selected && selection) {
+                selection.removeAllRanges();
+                selection.addRange(selected);
+            }
+        });
+    }
+
+    function getBreadcrumbCopyValue() {
+        const breadcrumbLabel = breadcrumbs.dataset.breadcrumbText || breadcrumbText;
+        return `In ${breadcrumbLabel} (\`${window.location.href}\`)`;
+    }
+
+    function focusNavFilter() {
+        const navFilter = document.getElementById('nav-filter');
+        if (navFilter) {
+            navFilter.focus();
+            if (typeof navFilter.select === 'function') {
+                navFilter.select();
+            }
+        }
+    }
+
+    function handleBreadcrumbCopy() {
+        const copyValue = getBreadcrumbCopyValue();
+        return copyText(copyValue)
+            .then(function () {
+                setStatus(copiedLabel);
+            })
+            .catch(function () {
+                setStatus(copyErrorLabel);
+            });
+    }
+
+    function setStatus(label) {
+        breadcrumbsCopyLink.textContent = label;
+        window.setTimeout(function () {
+            breadcrumbsCopyLink.textContent = copyLabel;
+        }, 1500);
+    }
+
+    const breadcrumbsCopyLink = document.createElement('a');
+    breadcrumbsCopyLink.href = '#';
+    breadcrumbsCopyLink.className = 'breadcrumbs__copy-link';
+    breadcrumbsCopyLink.textContent = copyLabel;
+    breadcrumbsCopyLink.dataset.breadcrumbCopy = '1';
+    breadcrumbsCopyLink.setAttribute('role', 'button');
+    breadcrumbsCopyLink.setAttribute('aria-label', '{% translate "Copy breadcrumb to clipboard" %}');
+
+    breadcrumbs.dataset.copyEnhanced = '1';
+    breadcrumbs.dataset.breadcrumbText = breadcrumbText;
+    breadcrumbs.appendChild(breadcrumbsCopyLink);
+
+    breadcrumbsCopyLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        handleBreadcrumbCopy();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            handleBreadcrumbCopy().finally(function () {
+                focusNavFilter();
+            });
+        }
+    });
+});
+</script>
+{% endblock %}
+{% block extrastyle %}
+{{ block.super }}
+{% render_admin_stylesheets %}
+
+{% endblock %}
+{% block branding %}
+{% if not request.resolver_match or request.resolver_match.url_name != "login" %}
+  <h1 id="site-name">
+    <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
+  </h1>
+  <div id="site-badges">
+    {% for admin_badge in admin_badges %}
+      <span class="badge {% if not admin_badge.is_present %}badge-unknown{% endif %}" style="background-color: {{ admin_badge.color }};">
+        {% for badge_part in admin_badge.order %}
+          {% if badge_part == 'label' %}
+            <span class="badge-link">{{ admin_badge.label }}:</span>
+          {% else %}
+            {% if admin_badge.value_url %}
+              <a class="badge-link badge-link-value" href="{{ admin_badge.value_url }}">{{ admin_badge.value }}</a>
+            {% else %}
+              <span class="badge-link badge-link-value">{{ admin_badge.value }}</span>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+      </span>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}
+{% block userlinks %}
+  {% include "admin/includes/user_tools.html" %}
+{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}
+  <button class="sticky toggle-nav-sidebar" id="toggle-nav-sidebar" aria-label="{% translate 'Toggle navigation' %}"></button>
+  <nav class="sticky" id="nav-sidebar" aria-label="{% translate 'Sidebar' %}">
+    <input type="search" id="nav-filter"
+           placeholder="{% translate 'Start typing to filter…' %}"
+           aria-label="{% translate 'Filter navigation items' %}">
+    {% include 'admin/app_list.html' with app_list=available_apps %}
+  </nav>
+{% endblock %}
+{% block messages %}
+  {% include "admin/includes/messages.html" %}
+{% endblock %}
+{% block footer %}
+  {{ block.super }}
+  {% include_if_exists "admin/ops/active_operation_banner.html" %}
+
+
+  {% if feedback_ingestion_enabled %}
+    {% if not request.resolver_match or request.resolver_match.url_name != "login" %}
+      {% include "admin/includes/user_story_feedback.html" %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

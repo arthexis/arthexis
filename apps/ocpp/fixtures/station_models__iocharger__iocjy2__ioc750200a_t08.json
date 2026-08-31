@@ -1,0 +1,16 @@
+[
+  {
+    "model": "ocpp.stationmodel",
+    "fields": {
+      "vendor": "IOCHARGER",
+      "model_family": "IOCJY2",
+      "model": "IOC750200A-T08",
+      "integration_rating": 5,
+      "max_power_kw": "120.00",
+      "max_voltage_v": 1000,
+      "connector_type": "Dual CCS Type 2",
+      "notes": "Updated to reflect field-validated dual-connector DC fast charger behavior for IOC750200A-T08.",
+      "is_seed_data": true
+    }
+  }
+]

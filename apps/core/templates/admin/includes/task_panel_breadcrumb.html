@@ -1,0 +1,7 @@
+{% load i18n %}
+
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'Task Panels' %}</a>
+  &rsaquo; {% trans page_title %}
+</div>

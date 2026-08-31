@@ -1,0 +1,114 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo;
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo;
+    <a href="{% url 'admin:nodes_node_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo;
+    {% if operation == 'export' %}
+        {% trans 'Export RFID results' %}
+    {% elif operation == 'fetch' %}
+        {% trans 'Fetch RFID results' %}
+    {% else %}
+        {% trans 'Import RFID results' %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module" id="rfid-sync-results">
+    <h2>
+        {% if operation == 'export' %}
+            {% trans 'Export RFID results' %}
+        {% elif operation == 'fetch' %}
+            {% trans 'Fetch RFID results' %}
+        {% else %}
+            {% trans 'Import RFID results' %}
+        {% endif %}
+    </h2>
+    {% if setup_error %}
+    <div class="messagelist">
+        <div class="error">{{ setup_error }}</div>
+    </div>
+    {% endif %}
+    {% if summary.total %}
+    <p class="summary">
+        {% blocktrans with processed=summary.processed created=summary.created updated=summary.updated linked=summary.linked_accounts %}
+        Processed {{ processed }} node(s). {{ created }} RFID(s) created, {{ updated }} updated, {{ linked }} energy account link(s) applied.
+        {% endblocktrans %}
+    </p>
+    {% else %}
+    <p>{% trans "No node results to display." %}</p>
+    {% endif %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th scope="col">{% trans "Node" %}</th>
+                <th scope="col">{% trans "Status" %}</th>
+                <th scope="col">{% trans "Created" %}</th>
+                <th scope="col">{% trans "Updated" %}</th>
+                <th scope="col">{% trans "Linked accounts" %}</th>
+                <th scope="col">{% trans "Missing accounts" %}</th>
+                <th scope="col">{% trans "Messages" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in results %}
+            <tr class="rfid-sync-result rfid-sync-result--{{ result.status }}">
+                <th scope="row">{{ result.node }}</th>
+                <td class="status">
+                    {% if result.status == 'success' %}
+                        {% trans "Success" %}
+                    {% elif result.status == 'partial' %}
+                        {% trans "Partial" %}
+                    {% elif result.status == 'skipped' %}
+                        {% trans "Skipped" %}
+                    {% else %}
+                        {% trans "Error" %}
+                    {% endif %}
+                </td>
+                <td>{{ result.created }}</td>
+                <td>{{ result.updated }}</td>
+                <td>{{ result.linked_accounts }}</td>
+                <td>
+                    {% if result.missing_accounts %}
+                        <ul>
+                        {% for account in result.missing_accounts %}
+                            <li>{{ account }}</li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        &mdash;
+                    {% endif %}
+                </td>
+                <td>
+                    {% if result.message %}
+                        <p>{{ result.message }}</p>
+                    {% endif %}
+                    {% if result.errors %}
+                        <ul>
+                        {% for error in result.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                        </ul>
+                    {% elif not result.message %}
+                        &mdash;
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">{% trans "No results available." %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="submit-row">
+        <a class="button" href="{{ back_url }}">{% trans "Back to node list" %}</a>
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans "Configure" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="content">
+    <p>
+      {% blocktrans %}
+        Use this wizard to configure deterministic LCD log summaries.
+      {% endblocktrans %}
+    </p>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        {% for field in form %}
+          <div class="form-row{% if field.errors %} errors{% endif %}">
+            {{ field.errors }}
+            <div>
+              <label{% if field.field.required %} class="required"{% endif %} for="{{ field.id_for_label }}">
+                {{ field.label }}
+              </label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="help">{{ field.help_text }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+
+      <fieldset class="module">
+        <h2>{% trans "Current configuration" %}</h2>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Mode" %}:</strong> {% trans "Deterministic" %}
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Output target" %}:</strong> {{ config.get_output_target_display }}
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Output file format" %}:</strong> {{ config.get_output_file_format_display }}
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Last output file" %}:</strong> {{ config.last_output_file_path|default:_("Never") }}
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <strong>{% trans "Last run" %}:</strong>
+            {{ config.last_run_at|default:_("Never") }}
+          </div>
+        </div>
+      </fieldset>
+
+
+      <fieldset class="module">
+        <h2>{% trans "Environment checklist" %}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>{% trans "Step" %}</th>
+              <th>{% trans "Status" %}</th>
+              <th>{% trans "Guidance" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in checks %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td>{{ item.status }}</td>
+                <td>{{ item.detail }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </fieldset>
+
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Save settings' %}" class="default">
+        <a href="{{ change_url }}" class="button">{% trans "Back to config" %}</a>
+        <a href="{{ changelist_url }}" class="button">{% trans "Back to list" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if perms.core.add_user %}
+    <li>
+      <a href="{% url 'admin:core_user_login_as_guest_user' %}?next={{ request.get_full_path|urlencode }}">
+        {% translate "Login as Guest" %}
+      </a>
+    </li>
+  {% endif %}
+  {% if request.session.core_admin_impersonator_user_id %}
+    <li>
+      <form action="{% url 'stop-impersonation' %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit">{% translate "Stop impersonation" %}</button>
+      </form>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

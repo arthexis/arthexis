@@ -1,0 +1,868 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+{% if has_permission %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name|capfirst }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Register Visitor" %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <style>
+    #content-main {
+      color-scheme: light;
+      --registration-card-bg: #fff;
+      --registration-card-border: #ddd;
+      --registration-card-color: inherit;
+      --registration-field-help: #555;
+      --registration-input-bg: #fff;
+      --registration-input-border: #ced4da;
+      --registration-placeholder: #6c757d;
+      --registration-status-info: rgba(11, 105, 193, 0.12);
+      --registration-status-success: rgba(25, 135, 84, 0.15);
+      --registration-status-error: rgba(220, 53, 69, 0.15);
+      --registration-status-warning: rgba(255, 193, 7, 0.15);
+      --registration-indicator-success-border: rgba(25, 135, 84, 0.45);
+      --registration-indicator-success-bg: rgba(25, 135, 84, 0.15);
+      --registration-indicator-success-color: #198754;
+      --registration-indicator-error-border: rgba(220, 53, 69, 0.45);
+      --registration-indicator-error-bg: rgba(220, 53, 69, 0.2);
+      --registration-indicator-error-color: #dc3545;
+      --registration-indicator-warning-border: rgba(255, 193, 7, 0.55);
+      --registration-indicator-warning-bg: rgba(255, 193, 7, 0.15);
+      --registration-indicator-warning-color: #d59a00;
+    }
+
+    #content-main .registration-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin: 1rem 0 1.5rem;
+    }
+
+    #content-main .registration-card {
+      padding: 1rem;
+      border: 1px solid var(--registration-card-border);
+      border-radius: 0.5rem;
+      background: var(--registration-card-bg);
+      color: var(--registration-card-color);
+    }
+
+    #content-main .registration-card h2 {
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      font-size: 1.05rem;
+    }
+
+    #content-main .field-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    #content-main .field-row label {
+      min-width: 4rem;
+      font-weight: 600;
+    }
+
+    #content-main .field-row input[type="text"],
+    #content-main .field-row input[type="number"] {
+      flex: 1 1 8rem;
+      max-width: 14rem;
+      padding: 0.35rem 0.5rem;
+      background: var(--registration-input-bg);
+      border-color: var(--registration-input-border);
+      color: var(--registration-card-color);
+    }
+
+    #content-main .field-row input::placeholder {
+      color: var(--registration-placeholder);
+    }
+
+    #content-main .field-help {
+      color: var(--registration-field-help);
+      margin: 0.25rem 0 0;
+      font-size: 0.9rem;
+    }
+
+    #content-main .start-actions {
+      margin: 1.25rem 0 1rem;
+    }
+
+    #content-main #registration-log[hidden] {
+      display: none;
+    }
+
+    #content-main .status-list {
+      list-style: none;
+      margin: 1.5rem 0;
+      padding: 0;
+    }
+
+    #content-main .status-item,
+    #content-main .status-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    #content-main .status-item {
+      margin-bottom: 1rem;
+    }
+
+    #content-main .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    #content-main .status-item.errornote {
+      display: flex;
+    }
+
+    #content-main .status-indicator {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 999px;
+      border: 2px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    #content-main .status-indicator.is-pending {
+      border-color: currentColor;
+      border-top-color: transparent;
+      animation: registration-spin 0.8s linear infinite;
+      opacity: 0.7;
+    }
+
+    #content-main .status-indicator.is-success {
+      border-color: var(--registration-indicator-success-border);
+      background-color: var(--registration-indicator-success-bg);
+      color: var(--registration-indicator-success-color);
+    }
+
+    #content-main .status-indicator.is-error {
+      border-color: var(--registration-indicator-error-border);
+      background-color: var(--registration-indicator-error-bg);
+      color: var(--registration-indicator-error-color);
+    }
+
+    #content-main .status-indicator.is-warning {
+      border-color: var(--registration-indicator-warning-border);
+      background-color: var(--registration-indicator-warning-bg);
+      color: var(--registration-indicator-warning-color);
+    }
+
+    #content-main .status-text {
+      flex: 1 1 auto;
+    }
+
+    #content-main .status-banner {
+      margin: 1.5rem 0 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      background: var(--registration-status-info);
+      color: inherit;
+    }
+
+    #content-main .status-banner[data-status="success"] {
+      background: var(--registration-status-success);
+    }
+
+    #content-main .status-banner[data-status="error"] {
+      background: var(--registration-status-error);
+    }
+
+    #content-main .status-banner[data-status="warning"] {
+      background: var(--registration-status-warning);
+    }
+
+    @keyframes registration-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #content-main .status-indicator.is-pending {
+        animation: none;
+        border-top-color: currentColor;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #content-main {
+        color-scheme: light dark;
+        --registration-card-bg: #0f172a;
+        --registration-card-border: rgba(226, 232, 240, 0.25);
+        --registration-card-color: #e2e8f0;
+        --registration-field-help: #cbd5e1;
+        --registration-input-bg: #0b1222;
+        --registration-input-border: rgba(226, 232, 240, 0.35);
+        --registration-placeholder: #94a3b8;
+        --registration-status-info: rgba(93, 156, 236, 0.2);
+        --registration-status-success: rgba(34, 197, 94, 0.18);
+        --registration-status-error: rgba(248, 113, 113, 0.2);
+        --registration-status-warning: rgba(251, 191, 36, 0.18);
+        --registration-indicator-success-border: rgba(74, 222, 128, 0.8);
+        --registration-indicator-success-bg: rgba(34, 197, 94, 0.2);
+        --registration-indicator-success-color: #34d399;
+        --registration-indicator-error-border: rgba(248, 113, 113, 0.85);
+        --registration-indicator-error-bg: rgba(239, 68, 68, 0.25);
+        --registration-indicator-error-color: #f87171;
+        --registration-indicator-warning-border: rgba(251, 191, 36, 0.85);
+        --registration-indicator-warning-bg: rgba(251, 191, 36, 0.2);
+        --registration-indicator-warning-color: #fbbf24;
+      }
+
+      #content-main .registration-card {
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.3);
+      }
+
+      #content-main .field-row input[type="text"],
+      #content-main .field-row input[type="number"] {
+        border-color: var(--registration-input-border);
+      }
+    }
+  </style>
+  <p>{% trans "Confirm details before starting registration." %}</p>
+  <form id="registration-form" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="registration-grid">
+      <div class="registration-card" aria-label="{% trans 'Local node information' %}">
+        <h2>{% trans "Local confirmation node" %}</h2>
+        <div class="field-row">
+          <label>{% trans "Host" %}</label>
+          <span>{{ local_node.hostname|default:"—" }}</span>
+        </div>
+        <div class="field-row">
+          <label>{% trans "Address" %}</label>
+          <span>{{ local_node.address|default:"—" }}</span>
+        </div>
+        <div class="field-row">
+          <label>{% trans "Port" %}</label>
+          <span>{{ local_node.port|default:"—" }}</span>
+        </div>
+      </div>
+      <div class="registration-card" aria-label="{% trans 'Visitor node target' %}">
+        <h2>{% trans "Visitor node" %}</h2>
+        <div class="field-row">
+          <label for="visitor-host">{% trans "Host" %}</label>
+          <input id="visitor-host" name="visitor_host" type="text" value="{{ visitor_host|default:visitor_info_url|default:'127.0.0.1'|cut:'/nodes/info/' }}" placeholder="{% trans '127.0.0.1' %}">
+        </div>
+        <div class="field-row">
+          <label for="visitor-port">{% trans "Port" %}</label>
+          <input id="visitor-port" name="visitor_port" type="number" min="1" max="65535" value="{{ visitor_port|default:8888 }}">
+        </div>
+        <p class="field-help">{% trans "Use port 8888 unless the visitor node is configured to listen on a different port." %}</p>
+        <p class="field-help">{% trans "Reminder: To complete the registration handshake, open the visitor node in another browser tab using its https:// address (for example https://host:8888)." %}</p>
+        <noscript>
+          <p class="field-help">{% trans "JavaScript is disabled. Submitting this form will run the server-side registration flow and refresh this page with the results." %}</p>
+        </noscript>
+      </div>
+    </div>
+    <div class="start-actions">
+      <button id="start-registration" class="button button-default" type="submit">{% trans "Start registration" %}</button>
+    </div>
+  </form>
+  {% if https_warnings %}
+    <div class="status-banner" role="status" aria-live="polite" data-status="warning">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span class="status-text">
+            <strong>{% trans "HTTPS required" %}</strong>
+            <ul>
+              {% for warning in https_warnings %}
+                <li>{{ warning }}</li>
+              {% endfor %}
+            </ul>
+        </span>
+    </div>
+  {% endif %}
+  <div id="registration-log" {% if not log_visible %}hidden{% endif %}>
+    <div id="result" class="status-banner{% if server_summary and server_summary.status == 'error' %} errornote{% endif %}" role="status" aria-live="polite" aria-busy="false" data-status="{{ server_summary.status|default:'pending' }}">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span class="status-text">{{ server_summary.message|default:_("Waiting to start registration.") }}</span>
+    </div>
+    <ul class="status-list">
+        <li id="host-result" class="status-item{% if server_host and server_host.status == 'error' %} errornote{% endif %}" data-status="{{ server_host.status|default:'idle' }}" {% if server_host.id %}data-id="{{ server_host.id }}"{% endif %}>
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-text">{{ server_host.message|default:_("Ready to register the visiting node on this server.") }}</span>
+        </li>
+        <li id="visitor-result" class="status-item{% if server_visitor and server_visitor.status == 'error' %} errornote{% endif %}" data-status="{{ server_visitor.status|default:'idle' }}" {% if server_visitor.id %}data-id="{{ server_visitor.id }}"{% endif %}>
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-text">{{ server_visitor.message|default:_("Ready to register this server on the visiting node.") }}</span>
+        </li>
+    </ul>
+  </div>
+</div>
+<script>
+(function() {
+    const token = "{{ token|escapejs }}";
+    const hostInfoUrl = "{{ info_url|escapejs }}?token=" + token;
+    const hostRegisterUrl = "{{ register_url|escapejs }}";
+    const telemetryUrl = "{{ telemetry_url|escapejs }}";
+    const visitorProxyUrl = "{{ visitor_proxy_url|escapejs }}";
+    const visitorScheme = "{{ visitor_scheme|default:'https'|escapejs }}";
+    const changeUrlTemplate = "{{ change_url_template|escapejs }}";
+    const hostResult = document.getElementById("host-result");
+    const visitorResult = document.getElementById("visitor-result");
+    const summary = document.getElementById("result");
+    const startButton = document.getElementById("start-registration");
+    const registrationForm = document.getElementById("registration-form");
+    const logSection = document.getElementById("registration-log");
+    const visitorHostInput = document.getElementById("visitor-host");
+    const visitorPortInput = document.getElementById("visitor-port");
+    const requestTimeoutMs = 45000;
+    let visitorConfirmationSkipped = false;
+    const messages = {
+        hostRegistered: "{{ _('Visitor node registered with this server.')|escapejs }}",
+        visitorRegistered: "{{ _('Host node registered with visitor.')|escapejs }}",
+        success: "{{ _('Both nodes registered successfully.')|escapejs }}",
+        visitorUnreachable: "{{ _('Visitor registered locally. Unable to notify visitor (node may be behind NAT).')|escapejs }}",
+        visitorUnreachableSummary: "{{ _('Visitor registered locally; remote confirmation skipped.')|escapejs }}",
+        partial: "{{ _('One or more registrations failed.')|escapejs }}",
+        aborted: "{{ _('Registration aborted.')|escapejs }}",
+        partialWarning: "{{ _('Registration may have completed, but browser confirmation failed. Please verify connectivity or check logs.')|escapejs }}",
+        visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
+        hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
+        fetchAdvice: "{{ _('Browser could not reach the visiting node. Check the address/port from this browser, ensure TLS certificates are trusted, and confirm connectivity. If server logs show the registration succeeded, no further action is required.')|escapejs }}",
+        visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
+        idle: "{{ _('Waiting to start registration.')|escapejs }}",
+    };
+
+    function updateIndicator(indicator, state) {
+        if (!indicator) {
+            return;
+        }
+        indicator.classList.remove("is-pending", "is-success", "is-error", "is-warning");
+        indicator.textContent = "";
+        if (state === "pending") {
+            indicator.classList.add("is-pending");
+            return;
+        }
+        if (state === "error") {
+            indicator.classList.add("is-error");
+            indicator.textContent = "!";
+            return;
+        }
+        if (state === "warning") {
+            indicator.classList.add("is-warning");
+            indicator.textContent = "!";
+            return;
+        }
+        indicator.classList.add("is-success");
+        indicator.textContent = "\u2713";
+    }
+
+    function setStatus(element, message, status = "success") {
+        if (!element) {
+            return;
+        }
+        const textTarget = element.querySelector(".status-text");
+        if (textTarget) {
+            textTarget.textContent = message;
+        } else {
+            element.textContent = message;
+        }
+        const level = status === true ? "error" : status === false ? "success" : status;
+        if (level === "error") {
+            element.classList.add("errornote");
+        } else {
+            element.classList.remove("errornote");
+        }
+        if (element.dataset) {
+            element.dataset.status = level;
+        }
+        if (element.hasAttribute("aria-busy")) {
+            element.setAttribute("aria-busy", "false");
+        }
+        updateIndicator(element.querySelector(".status-indicator"), level);
+    }
+
+    function setPending(element, message) {
+        if (!element) {
+            return;
+        }
+        if (element.dataset) {
+            element.dataset.status = "pending";
+        }
+        const textTarget = element.querySelector(".status-text");
+        if (textTarget) {
+            textTarget.textContent = message;
+        }
+        if (element.hasAttribute("aria-busy")) {
+            element.setAttribute("aria-busy", "true");
+        }
+        updateIndicator(element.querySelector(".status-indicator"), "pending");
+        element.classList.remove("errornote");
+    }
+
+    function getCookie(name) {
+        const cookieString = document.cookie || "";
+        const cookies = cookieString.split(";");
+        for (const cookie of cookies) {
+            const [key, value] = cookie.trim().split("=");
+            if (key === name) {
+                return decodeURIComponent(value || "");
+            }
+        }
+        return "";
+    }
+
+    async function loadJson(url, options, timeoutMs = requestTimeoutMs) {
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const mergedOptions = {
+            ...options,
+            ...(controller ? {signal: controller.signal} : {}),
+        };
+        const timer = controller && timeoutMs > 0
+            ? setTimeout(() => controller.abort(), timeoutMs)
+            : null;
+        try {
+            const response = await fetch(url, mergedOptions);
+            const text = await response.text();
+            let payload;
+            try {
+                payload = JSON.parse(text);
+            } catch (err) {
+                payload = text;
+            }
+            if (!response.ok) {
+                const detail = payload && payload.detail ? payload.detail : text || response.statusText;
+                const error = new Error(detail);
+                error.status = response.status;
+                error.statusText = response.statusText;
+                error.responseText = text;
+                throw error;
+            }
+            return payload;
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                throw new Error("Request timed out");
+            }
+            throw error;
+        } finally {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        }
+    }
+
+    function buildUrlVariants(url) {
+        const variants = [];
+        const seen = new Set();
+
+        function push(value) {
+            if (value && !seen.has(value)) {
+                seen.add(value);
+                variants.push(value);
+            }
+        }
+
+        try {
+            const parsed = new URL(url, window.location.href);
+            const baseVariants = [];
+            baseVariants.push(parsed);
+
+            const normalizedHost = parsed.hostname || "";
+            const hostKey = normalizedHost.replace(/^[\[]|[\]]$/g, "");
+            const hostAlternatives = [normalizedHost];
+
+            if (hostKey === "localhost") {
+                hostAlternatives.push("127.0.0.1", "::1");
+            } else if (hostKey === "127.0.0.1") {
+                hostAlternatives.push("localhost", "::1");
+            } else if (hostKey === "::1") {
+                hostAlternatives.push("localhost", "127.0.0.1");
+            }
+
+            const uniqueHosts = hostAlternatives.filter(
+                (value, index, self) => value && self.indexOf(value) === index
+            );
+
+            for (const base of baseVariants) {
+                push(base.href);
+                for (const host of uniqueHosts) {
+                    if (host === base.hostname) {
+                        continue;
+                    }
+                    const candidate = new URL(base.href);
+                    candidate.hostname = host;
+                    push(candidate.href);
+                }
+            }
+        } catch (err) {
+            push(url);
+        }
+
+        return variants;
+    }
+
+    function sendTelemetry(stage, target, message, extra = {}) {
+        if (!telemetryUrl) {
+            return;
+        }
+        const payload = {
+            token,
+            stage: stage || "unspecified",
+            target: target || "",
+            message: message || "",
+            ...extra,
+        };
+        try {
+            const body = JSON.stringify(payload);
+            if (navigator.sendBeacon) {
+                const blob = new Blob([body], {type: "application/json"});
+                navigator.sendBeacon(telemetryUrl, blob);
+                return;
+            }
+            fetch(telemetryUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                credentials: "same-origin",
+                keepalive: true,
+                body,
+            });
+        } catch (err) {
+            console.error("Unable to log registration telemetry", err);
+        }
+    }
+
+    async function requestWithFallback(urls, options) {
+        const targets = Array.isArray(urls) ? urls : [urls];
+        let lastError = null;
+        for (const target of targets) {
+            try {
+                return await loadJson(target, options);
+            } catch (error) {
+                const message = error && error.message ? error.message : "";
+                const status = typeof error?.status === "number" ? error.status : null;
+                const isHttpError = status && status >= 400;
+
+                if (
+                    error instanceof TypeError ||
+                    message === "Failed to fetch" ||
+                    isHttpError
+                ) {
+                    lastError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastError) {
+            throw lastError;
+        }
+        throw new Error("Request failed");
+    }
+
+    function formatError(error) {
+        let message = "";
+        if (error && typeof error.message === "string") {
+            message = error.message;
+        } else if (typeof error === "string") {
+            message = error;
+        } else if (error) {
+            message = String(error);
+        }
+        if (message === "Failed to fetch") {
+            return `${message} — ${messages.fetchAdvice}`;
+        }
+        return message || messages.partial;
+    }
+
+    function cleanRole(info) {
+        if (!info || typeof info !== "object") {
+            return "";
+        }
+        const roleSources = [info.role, info.role_name];
+        for (const value of roleSources) {
+            if (typeof value !== "string") {
+                continue;
+            }
+            const cleaned = value.trim();
+            if (cleaned) {
+                return cleaned;
+            }
+        }
+        return "";
+    }
+
+    function buildPayload(info, relation) {
+        const payload = {
+            hostname: info.hostname,
+            address: info.address,
+            port: info.port,
+            mac_address: info.mac_address,
+            public_key: info.public_key,
+            features: info.features || [],
+        };
+        payload.trusted = true;
+        if (typeof info.base_site_domain === "string" && info.base_site_domain.trim()) {
+            payload.base_site_domain = info.base_site_domain.trim();
+        }
+        const relationValue = relation || info.current_relation;
+        if (relationValue) {
+            payload.current_relation = relationValue;
+        }
+        const roleValue = cleanRole(info);
+        if (roleValue) {
+            payload.role = roleValue;
+        }
+        return payload;
+    }
+
+    function addSignature(payload, info) {
+        if (info.token_signature) {
+            payload.token = token;
+            payload.signature = info.token_signature;
+        }
+    }
+
+    async function runProxyFlow(visitorInfoUrl, visitorRegisterUrl) {
+        try {
+            const response = await loadJson(visitorProxyUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                    token,
+                    visitor_info_url: visitorInfoUrl,
+                    visitor_register_url: visitorRegisterUrl,
+                }),
+            });
+
+            const host = response && typeof response === "object" ? response.host : null;
+            const visitor = response && typeof response === "object" ? response.visitor : null;
+
+            if (!host || !host.id) {
+                throw new Error((host && host.detail) || messages.partial);
+            }
+            setStatus(hostResult, host.detail || messages.hostRegistered, "success");
+
+            if (!visitor || !visitor.id) {
+                throw new Error((visitor && visitor.detail) || messages.partial);
+            }
+            setStatus(visitorResult, visitor.detail || messages.visitorRegistered, "success");
+            setStatus(summary, messages.success, "success");
+            sendTelemetry("proxy-success", visitorProxyUrl, "ok");
+        } catch (error) {
+            const formatted = formatError(error);
+            setStatus(summary, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
+            setStatus(hostResult, messages.aborted, "error");
+            setStatus(visitorResult, formatted, "error");
+            sendTelemetry("proxy", visitorProxyUrl, formatted);
+        }
+    }
+
+    function resetForRun() {
+        logSection.hidden = false;
+        setPending(summary, messages.idle);
+        setPending(hostResult, "{{ _('Registering the visiting node on this server…')|escapejs }}");
+        setPending(visitorResult, "{{ _('Registering this server on the visiting node…')|escapejs }}");
+    }
+
+    function buildVisitorBase() {
+        const hostValue = (visitorHostInput?.value || "").trim();
+        const portValue = Number(visitorPortInput?.value || "") || 8888;
+        if (!hostValue) {
+            setStatus(summary, messages.visitorMissing, "error");
+            setStatus(hostResult, messages.aborted, "error");
+            setStatus(visitorResult, messages.visitorMissing, "error");
+            logSection.hidden = false;
+            return "";
+        }
+        let candidate = hostValue;
+        if (!candidate.includes("://")) {
+            const normalizedScheme = (visitorScheme || "http").replace(/:$/u, "");
+            candidate = `${normalizedScheme}://${candidate}`;
+        }
+        try {
+            const parsed = new URL(candidate, window.location.href);
+            parsed.port = portValue ? String(portValue) : parsed.port;
+            const portSuffix = parsed.port ? `:${parsed.port}` : "";
+            return `${parsed.protocol}//${parsed.hostname}${portSuffix}`;
+        } catch (error) {
+            setStatus(summary, messages.visitorMissing, "error");
+            logSection.hidden = false;
+            return "";
+        }
+    }
+
+    async function executeRegistration(visitorInfoUrl, visitorRegisterUrl) {
+        try {
+            const visitorInfoTargets = buildUrlVariants(visitorInfoUrl + "?token=" + token);
+            const visitorInfoPromise = requestWithFallback(visitorInfoTargets).catch(
+                (error) => {
+                    sendTelemetry(
+                        "visitor-info",
+                        visitorInfoUrl,
+                        formatError(error),
+                        {targets: visitorInfoTargets},
+                    );
+                    throw error;
+                },
+            );
+            const hostInfoPromise = loadJson(hostInfoUrl).catch((error) => {
+                sendTelemetry("host-info", hostInfoUrl, formatError(error));
+                throw error;
+            });
+            const [visitorInfo, hostInfo] = await Promise.all([
+                visitorInfoPromise,
+                hostInfoPromise,
+            ]);
+
+            if (!visitorInfo || typeof visitorInfo !== "object") {
+                throw new Error(messages.visitorInfoError);
+            }
+            if (!hostInfo || typeof hostInfo !== "object") {
+                throw new Error(messages.hostInfoError);
+            }
+
+            const hostPayload = buildPayload(visitorInfo, "Downstream");
+            addSignature(hostPayload, visitorInfo);
+            try {
+                const result = await loadJson(hostRegisterUrl, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    credentials: "same-origin",
+                    body: JSON.stringify(hostPayload),
+                });
+                const detail = result && typeof result === "object" ? result.detail : "";
+                if (!result || typeof result !== "object" || !result.id) {
+                    const errorMessage = detail || messages.partial;
+                    throw new Error(errorMessage);
+                }
+                setStatus(hostResult, detail || messages.hostRegistered, "success");
+            } catch (error) {
+                const formatted = formatError(error);
+                setStatus(hostResult, formatted, "error");
+                sendTelemetry("host-register", hostRegisterUrl, formatted, {
+                    payload: hostPayload,
+                });
+            }
+
+            const visitorPayload = buildPayload(hostInfo, "Upstream");
+            addSignature(visitorPayload, hostInfo);
+            try {
+                const visitorRegisterTargets = buildUrlVariants(visitorRegisterUrl);
+                const result = await requestWithFallback(visitorRegisterTargets, {
+                    method: "POST",
+                    credentials: "include",
+                    body: JSON.stringify(visitorPayload),
+                });
+                const detail = result && typeof result === "object" ? result.detail : "";
+                const identifier = result && typeof result === "object" ? result.id : null;
+                if (!identifier) {
+                    const errorMessage = detail || messages.partial;
+                    throw new Error(errorMessage);
+                }
+                setStatus(visitorResult, detail || messages.visitorRegistered, "success");
+            } catch (error) {
+                const formatted = formatError(error);
+                const isNetworkIssue =
+                    error instanceof TypeError ||
+                    formatted === "Failed to fetch" ||
+                    formatted.toLowerCase().includes("timed out") ||
+                    formatted.toLowerCase().includes("network") ||
+                    formatted.includes(messages.fetchAdvice);
+
+                if (isNetworkIssue) {
+                    visitorConfirmationSkipped = true;
+                    setStatus(visitorResult, messages.visitorUnreachable, "warning");
+                } else {
+                    setStatus(visitorResult, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
+                }
+                sendTelemetry("visitor-register", visitorRegisterUrl, formatted, {
+                    targets: visitorRegisterTargets,
+                    networkIssue: Boolean(isNetworkIssue),
+                });
+            }
+
+            const hostFailed = hostResult.classList.contains("errornote");
+            const visitorFailed = visitorResult.classList.contains("errornote");
+
+            if (!hostFailed && !visitorFailed) {
+                const summaryMessage = visitorConfirmationSkipped ? messages.visitorUnreachableSummary : messages.success;
+                setStatus(summary, summaryMessage, visitorConfirmationSkipped ? "warning" : "success");
+                sendTelemetry("summary", window.location.href, summaryMessage, {
+                    hostStatus: hostResult?.dataset?.status || "",
+                    visitorStatus: visitorResult?.dataset?.status || "",
+                    visitorConfirmationSkipped,
+                });
+            } else {
+                setStatus(summary, messages.partial, "error");
+                sendTelemetry("summary", window.location.href, messages.partial, {
+                    hostStatus: hostResult?.dataset?.status || "",
+                    visitorStatus: visitorResult?.dataset?.status || "",
+                    visitorConfirmationSkipped,
+                });
+            }
+        } catch (error) {
+            const message = formatError(error);
+            const isFetchFailure = message.includes(messages.fetchAdvice);
+            setStatus(summary, isFetchFailure ? messages.partialWarning : message, isFetchFailure ? "warning" : "error");
+            if (!hostResult.classList.contains("errornote")) {
+                setStatus(hostResult, isFetchFailure ? messages.partialWarning : messages.aborted, isFetchFailure ? "warning" : "error");
+            }
+            if (!visitorResult.classList.contains("errornote")) {
+                setStatus(visitorResult, isFetchFailure ? messages.visitorUnreachable : messages.aborted, isFetchFailure ? "warning" : "error");
+            }
+            sendTelemetry("fatal", window.location.href, message, {
+                hostStatus: hostResult?.dataset?.status || "",
+                visitorStatus: visitorResult?.dataset?.status || "",
+            });
+        }
+    }
+
+    function attachDetailLinks() {
+        const nodes = [hostResult, visitorResult];
+        nodes.forEach((node) => {
+            const changeId = node?.dataset?.id;
+            const textTarget = node?.querySelector?.(".status-text");
+            if (changeId && textTarget && changeUrlTemplate) {
+                const anchor = document.createElement("a");
+                anchor.href = changeUrlTemplate.replace("0", changeId);
+                anchor.textContent = textTarget.textContent || "";
+                textTarget.textContent = "";
+                textTarget.appendChild(anchor);
+            }
+        });
+    }
+
+    registrationForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const base = buildVisitorBase();
+        if (!base) {
+            return;
+        }
+        resetForRun();
+        startButton.disabled = true;
+        const visitorInfoUrl = `${base}/nodes/info/`;
+        const visitorRegisterUrl = `${base}/nodes/register/`;
+        try {
+            await executeRegistration(visitorInfoUrl, visitorRegisterUrl);
+            attachDetailLinks();
+        } finally {
+            startButton.disabled = false;
+        }
+    });
+})();
+</script>
+{% endblock %}

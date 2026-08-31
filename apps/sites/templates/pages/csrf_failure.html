@@ -1,0 +1,14 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="container mt-5">
+    <div class="alert alert-warning text-center" role="alert">
+      {% trans "Unable to complete the request." %}<br>
+      {% trans "You will be redirected to the home page shortly." %}
+    </div>
+  </div>
+  <script>
+    setTimeout(function(){ window.location.href = "/"; }, 3000);
+  </script>
+{% endblock %}

@@ -1,0 +1,137 @@
+# Constellation
+
+[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-health.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-health.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/)
+
+
+## Purpose
+
+Arthexis Constellation is a Django-based software suite that centralizes tools for managing electric vehicle charging infrastructure and orchestrating energy-related products and services.
+
+Visit our [Changelog Report](https://arthexis.com/changelog/) to browse release history and operational updates.
+
+For release confidence and version lifecycle expectations, see the [Versioning and Maturity Policy](https://github.com/arthexis/arthexis/blob/main/docs/development/versioning-maturity-policy.md).
+
+## Suite Features
+
+- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by default, while allowing Charging Stations to upgrade to newer protocols if they support them.
+
+  **Charge point → CSMS**
+
+  | Action | 1.6 | 2.0.1 | 2.1 | What we do |
+  | --- | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | ✅ | Validate RFID or token authorization requests before a session starts. |
+  | `BootNotification` | ✅ | ✅ | ✅ | Register the charge point and update identity, firmware, and status details. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Accept vendor-specific payloads and record the results. |
+  | `DiagnosticsStatusNotification` | ✅ | — | — | Track the progress of diagnostic uploads kicked off from the back office. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | ✅ | Track firmware update lifecycle events from charge points. |
+  | `Heartbeat` | ✅ | ✅ | ✅ | Keep the websocket session alive and update last-seen timestamps. |
+  | `LogStatusNotification` | — | ✅ | ✅ | Report log upload progress from the charge point for diagnostics oversight. |
+  | `MeterValues` | ✅ | ✅ | ✅ | Persist periodic energy and power readings while a transaction is active. |
+  | `SecurityEventNotification` | — | ✅ | ✅ | Record charge point security events for audit trails. |
+  | `StartTransaction` | ✅ | — | — | Create charging sessions with initial meter values and identification data. |
+  | `StatusNotification` | ✅ | ✅ | ✅ | Reflect connector availability and fault states in real time. |
+  | `StopTransaction` | ✅ | — | — | Close charging sessions, capturing closing meter values and stop reasons. |
+
+  **CSMS → Charge point**
+
+  | Action | 1.6 | 2.0.1 | 2.1 | What we do |
+  | --- | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | ✅ | Withdraw pending reservations and release connectors directly from the control center. |
+  | `ChangeAvailability` | ✅ | ✅ | ✅ | Switch connectors or the whole station between operative and inoperative states. |
+  | `ChangeConfiguration` | ✅ | — | — | Update supported charger settings and persist applied values in the control center. |
+  | `ClearCache` | ✅ | ✅ | ✅ | Flush local authorization caches to force fresh lookups from the CSMS. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Send vendor-specific commands and log the charge point response. |
+  | `GetConfiguration` | ✅ | — | — | Poll the device for the current values of tracked configuration keys. |
+  | `GetDiagnostics` | ✅ | — | — | Request a diagnostics archive upload to a signed URL for troubleshooting. |
+  | `GetLocalListVersion` | ✅ | ✅ | ✅ | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
+  | `RemoteStartTransaction` | ✅ | — | — | Initiate a charging session remotely for an identified customer or token. |
+  | `RemoteStopTransaction` | ✅ | — | — | Terminate active charging sessions from the control center. |
+  | `ReserveNow` | ✅ | ✅ | ✅ | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
+  | `Reset` | ✅ | ✅ | ✅ | Request a soft or hard reboot to recover from faults. |
+  | `SendLocalList` | ✅ | ✅ | ✅ | Publish released and approved RFIDs as the charge point's local authorization list. |
+  | `TriggerMessage` | ✅ | ✅ | ✅ | Ask the device to send an immediate update (for example status or diagnostics). |
+  | `UnlockConnector` | ✅ | ✅ | ✅ | Release stuck connectors without on-site intervention. |
+  | `UpdateFirmware` | ✅ | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
+
+## Role Architecture
+
+Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
+
+> [!NOTE]
+> **Terminal** is the default role and keeps environment-changing capabilities disabled by default.
+> Other roles may enable host-level features (such as networking changes or background services), so choose them only when those capabilities are needed.
+
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th align="left">Role</th>
+      <th align="left">Description &amp; Common Features</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Single-User Research &amp; Development</strong><br />Features: GUI Toast</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Single-Device Testing &amp; Special Task Appliances</strong><br />Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Satellite</strong></td>
+      <td valign="top"><strong>Multi-Device Edge, Network &amp; Data Acquisition</strong><br />Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Watchtower</strong></td>
+      <td valign="top"><strong>Multi-User Cloud &amp; Orchestration</strong><br />Features: Celery Queue, NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
+
+## Quick Guide
+
+### 1. Clone
+- **Linux**: open a terminal and run `git clone https://github.com/arthexis/arthexis.git`.
+- **Windows**: open PowerShell or Git Bash and run the same command.
+
+For preloaded environments without Git remotes configured, see the remotes note in the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md#git-remotes-for-preloaded-environments).
+
+### 2. Start and stop
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Terminal and Watchtower starts listen on `localhost:8888` by default unless `--charger-facing` or `--ocpp-gateway` is explicitly enabled, while Control and Satellite role starts are charger-facing and listen on all interfaces unless explicitly opted out.
+
+For local bootstrapping, run `./install.sh --terminal`, start the server with `./start.sh`, and run a quick smoke test with `pytest -k smoke`. For full runtime options and advanced usage, refer to the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md#21-linux-startsh).
+
+- **VS Code**
+   - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
+   - Select the **Run Server** (or **Debug Server**) configuration.
+   - Press the green start button. Stop the server with the red square button (`Shift+F5`).
+
+- **Shell**
+   - Linux: run [`./start.sh`](https://github.com/arthexis/arthexis/blob/main/start.sh) and stop with [`./stop.sh`](https://github.com/arthexis/arthexis/blob/main/stop.sh).
+   - Windows: run [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) and stop with [`stop.bat`](https://github.com/arthexis/arthexis/blob/main/stop.bat).
+
+### 3. Install and upgrade
+- **Linux:** run `./install.sh --terminal` (or another role preset) and use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) for updates.
+- **Windows:** run [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) and [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat).
+
+Detailed install flags, service-management choices, and upgrade-channel behavior are documented in:
+
+- [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md)
+- [Auto-Upgrade Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md)
+
+### 4. Administration
+- Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
+- Operational manuals and API references are maintained in the [Arthexis repository](https://github.com/arthexis/arthexis/tree/main/docs) rather than exposed by the running suite.
+
+### 5. Development
+- Browse the [repository documentation](https://github.com/arthexis/arthexis/tree/main/docs) for architecture references, protocol manuals, and contribution workflows.
+- Command convention:
+  - Default to `.venv/bin/python manage.py ...` for Django and developer tasks.
+  - Prefer `./command.sh ...` (or `command.bat ...` on Windows) for operational tasks when an instance is already up.
+  - Keep using dedicated scripts (for example `install.sh`, `start.sh`, `upgrade.sh`) when a task has a specific lifecycle entrypoint.
+
+## Support
+
+Arthexis Constellation is actively maintained with documented release notes and operational guidance.
+
+If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.

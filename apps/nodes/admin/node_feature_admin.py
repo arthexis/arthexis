@@ -1,0 +1,439 @@
+import logging
+
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import NoReverseMatch, path, reverse
+from django.utils.html import format_html, format_html_join
+from django.utils.translation import gettext_lazy as _
+
+from apps.discovery.services import record_discovery_item, start_discovery
+from apps.locals.user_data import EntityModelAdmin
+
+from ..models import Node, NodeFeature, NodeFeatureAssignment
+from .actions import (
+    check_features_for_eligibility,
+    discover_node_features,
+    enable_selected_features,
+)
+from .forms import NodeFeatureAdminForm
+from .reports_admin import CeleryReportAdminMixin
+
+
+@admin.register(NodeFeature)
+class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
+    CONTROL_MODE_MANUAL = "Manual"
+    CONTROL_MODE_AUTO = "Auto"
+
+    form = NodeFeatureAdminForm
+    list_display = (
+        "display",
+        "slug",
+        "default_roles",
+        "control_mode",
+        "is_enabled_display",
+        "available_actions",
+    )
+    actions = [
+        discover_node_features,
+        check_features_for_eligibility,
+        enable_selected_features,
+    ]
+    readonly_fields = ("is_enabled", "linked_features")
+    search_fields = ("display", "slug")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related("roles", "suite_features")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.slug == "llm-summary":
+            self._report_prereq_checks(request, obj)
+
+    @admin.display(description="Default Roles")
+    def default_roles(self, obj):
+        roles = [role.name for role in obj.roles.all()]
+        return ", ".join(roles) if roles else "—"
+
+    @admin.display(description="Control")
+    def control_mode(self, obj):
+        return (
+            self.CONTROL_MODE_MANUAL
+            if obj.slug in Node.MANUAL_FEATURE_SLUGS
+            else self.CONTROL_MODE_AUTO
+        )
+
+    @admin.display(description="Is Enabled", boolean=True, ordering="is_enabled")
+    def is_enabled_display(self, obj):
+        return obj.is_enabled
+
+    @admin.display(description="Actions")
+    def available_actions(self, obj):
+        if not obj.is_enabled:
+            return "—"
+        actions = obj.get_default_actions()
+        if not actions:
+            return "—"
+
+        links = []
+        for action in actions:
+            try:
+                url = reverse(action.url_name)
+            except NoReverseMatch:
+                links.append(action.label)
+            else:
+                links.append(format_html('<a href="{}">{}</a>', url, action.label))
+
+        if not links:
+            return "—"
+        return format_html_join(" | ", "{}", ((link,) for link in links))
+
+    @admin.display(description="Linked Suite Features")
+    def linked_features(self, obj):
+        features = obj.suite_features.all()
+        if not features:
+            return "—"
+        items = []
+        for feature in features.order_by("display", "slug"):
+            status = _("Enabled") if feature.is_enabled else _("Disabled")
+            items.append(
+                format_html(
+                    "<li>{} <span class='help'>({})</span></li>",
+                    feature.display,
+                    status,
+                )
+            )
+        return format_html("<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items)))
+
+    def _manual_enablement_data(self, feature, node):
+        """Return manual toggle metadata for a feature on the given node."""
+
+        if node is None:
+            return {
+                "status": "unavailable",
+                "label": "Unavailable",
+                "can_toggle": False,
+                "enabled": False,
+            }
+        if feature.slug in Node.MANUAL_FEATURE_SLUGS:
+            enabled = node.features.filter(pk=feature.pk).exists()
+            return {
+                "status": "manual",
+                "label": "Manual",
+                "can_toggle": True,
+                "enabled": enabled,
+            }
+        return {
+            "status": "auto",
+            "label": "Auto",
+            "can_toggle": False,
+            "enabled": False,
+        }
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "discover/",
+                self.admin_site.admin_view(self.discover_features),
+                name="nodes_nodefeature_discover",
+            ),
+            path(
+                "discover/progress/",
+                self.admin_site.admin_view(self.discover_features_progress),
+                name="nodes_nodefeature_discover_progress",
+            ),
+            path(
+                "discover/manual-toggle/",
+                self.admin_site.admin_view(self.discover_manual_toggle),
+                name="nodes_nodefeature_discover_manual_toggle",
+            ),
+        ]
+        return custom + urls
+
+    def _require_feature_eligible(self, request, feature, *, node=None, action_label="Action"):
+        """Return ``True`` when the feature eligibility check succeeds."""
+
+        from ..feature_checks import feature_checks
+
+        result = feature_checks.run(feature, node=node)
+        if result is None:
+            self.message_user(
+                request,
+                f"{action_label} is unavailable because no eligibility check is configured for {feature.display}.",
+                level=messages.WARNING,
+            )
+            return False
+        if not result.success:
+            self.message_user(request, result.message, level=result.level)
+            return False
+        return True
+
+    def _ensure_feature_enabled(self, request, slug: str, action_label: str):
+        try:
+            feature = NodeFeature.objects.get(slug=slug)
+        except NodeFeature.DoesNotExist:
+            self.message_user(
+                request,
+                f"{action_label} is unavailable because the feature is not configured.",
+                level=messages.ERROR,
+            )
+            return None
+        if not feature.is_enabled:
+            self.message_user(
+                request,
+                f"{feature.display} feature is not enabled on this node.",
+                level=messages.WARNING,
+            )
+            return None
+        return feature
+
+    def discover_features(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        features = list(self.get_queryset(request))
+        discovery = start_discovery(
+            _("Discover"),
+            request,
+            model=self.model,
+            metadata={"action": "node_feature_discover"},
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Discover node features"),
+            "features": features,
+            "feature_ids": [str(feature.pk) for feature in features],
+            "progress_url": reverse("admin:nodes_nodefeature_discover_progress"),
+            "discovery_id": discovery.pk if discovery else "",
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/nodefeature/discover.html",
+            context,
+        )
+
+    def discover_features_progress(self, request):
+        """Run discovery checks for a single feature row and return JSON progress."""
+
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        try:
+            feature_id = int(request.POST.get("feature_id", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "Invalid feature id"}, status=400)
+        discovery_id = request.POST.get("discovery_id") or ""
+        apply_param = (request.POST.get("apply") or "true").strip().lower()
+        if apply_param in {"1", "true", "yes"}:
+            apply_changes = True
+        elif apply_param in {"0", "false", "no"}:
+            apply_changes = False
+        else:
+            return JsonResponse({"detail": "Invalid apply value"}, status=400)
+        feature = self.get_queryset(request).filter(pk=feature_id).first()
+        if not feature:
+            return JsonResponse({"detail": "Feature not found"}, status=404)
+
+        node = Node.get_local()
+        manual_enablement = self._manual_enablement_data(feature, node)
+
+        status = "skipped"
+        message = ""
+        eligible = False
+        level = messages.INFO
+        try:
+            from ..feature_checks import feature_checks
+
+            result = feature_checks.run(feature, node=node)
+        except Exception:  # pragma: no cover - defensive
+            logging.exception("Error while running feature check for %s", feature.display)
+            status = "error"
+            message = (
+                f"An error occurred while checking eligibility for {feature.display}."
+            )
+            level = messages.ERROR
+        else:
+            if result is None:
+                status = "skipped"
+                message = f"No check is configured for {feature.display}."
+                level = messages.WARNING
+            else:
+                eligible = bool(result.success)
+                message = (
+                    result.message
+                    or f"{feature.display} check {'passed' if result.success else 'failed'}."
+                )
+                level = result.level
+                status_map = {
+                    messages.SUCCESS: "success",
+                    messages.WARNING: "warning",
+                    messages.ERROR: "error",
+                }
+                status = status_map.get(level, "info")
+
+        enablement = {"status": "skipped", "message": "Not enabled."}
+        assignment_created = False
+        is_manual_feature = feature.slug in Node.MANUAL_FEATURE_SLUGS
+        if not apply_changes and eligible:
+            enablement = {
+                "status": "eligible",
+                "message": "Eligible for batch detection; select it to apply changes.",
+            }
+        elif not apply_changes:
+            enablement = {
+                "status": "skipped",
+                "message": "Not eligible for batch detection.",
+            }
+        elif eligible and node and not is_manual_feature:
+            assignment, created = NodeFeatureAssignment.objects.update_or_create(
+                node=node, feature=feature
+            )
+            assignment_created = created
+            if created:
+                enablement = {
+                    "status": "enabled",
+                    "message": f"{feature.display} enabled.",
+                }
+            else:
+                enablement = {
+                    "status": "already_enabled",
+                    "message": f"{feature.display} already enabled.",
+                }
+        elif eligible and is_manual_feature:
+            enablement = {
+                "status": "manual",
+                "message": (
+                    f"{feature.display} is eligible and manually controlled; "
+                    "use the Manual toggle to enable it."
+                ),
+            }
+        elif eligible and not node:
+            enablement = {
+                "status": "skipped",
+                "message": "No local node is registered; unable to enable features.",
+            }
+        elif not eligible and status == "error":
+            enablement = {
+                "status": "failed",
+                "message": "Eligibility check failed; feature not enabled.",
+            }
+
+        if discovery_id:
+            from apps.discovery.models import Discovery
+
+            try:
+                discovery = Discovery.objects.get(pk=discovery_id)
+            except (Discovery.DoesNotExist, ValueError, TypeError):
+                discovery = None
+            if discovery:
+                record_discovery_item(
+                    discovery,
+                    obj=feature,
+                    label=str(feature.display),
+                    created=assignment_created,
+                    overwritten=apply_changes and not assignment_created and eligible,
+                    data={
+                        "eligible": eligible,
+                        "status": status,
+                        "message": message,
+                        "enablement": enablement,
+                        "level": level,
+                        "applied": apply_changes,
+                    },
+                )
+
+        return JsonResponse(
+            {
+                "feature": feature.display,
+                "slug": feature.slug,
+                "status": status,
+                "message": message,
+                "eligible": eligible,
+                "applied": apply_changes,
+                "manual_enablement": manual_enablement,
+                "enablement": enablement,
+            }
+        )
+
+    def discover_manual_toggle(self, request):
+        """Enable or disable a manual feature assignment for the local node."""
+
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        try:
+            feature_id = int(request.POST.get("feature_id", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "Invalid feature id"}, status=400)
+
+        enable_param = (request.POST.get("enabled") or "").strip().lower()
+        if enable_param not in {"true", "false"}:
+            return JsonResponse({"detail": "Invalid enabled value"}, status=400)
+        should_enable = enable_param == "true"
+
+        feature = self.get_queryset(request).filter(pk=feature_id).first()
+        if not feature:
+            return JsonResponse({"detail": "Feature not found"}, status=404)
+        if feature.slug not in Node.MANUAL_FEATURE_SLUGS:
+            return JsonResponse(
+                {"detail": "Feature is not manually controlled"},
+                status=400,
+            )
+
+        node = Node.get_local()
+        if not node:
+            return JsonResponse({"detail": "Local node not found"}, status=404)
+
+        if should_enable:
+            if not self._require_feature_eligible(
+                request,
+                feature,
+                node=node,
+                action_label="Manual enablement",
+            ):
+                return JsonResponse(
+                    {"detail": f"{feature.display} is not eligible for manual enablement."},
+                    status=400,
+                )
+            _, created = NodeFeatureAssignment.objects.update_or_create(
+                node=node,
+                feature=feature,
+            )
+            message = (
+                f"{feature.display} enabled."
+                if created
+                else f"{feature.display} already enabled."
+            )
+        else:
+            deleted_count, _ = NodeFeatureAssignment.objects.filter(
+                node=node,
+                feature=feature,
+            ).delete()
+            message = (
+                f"{feature.display} disabled."
+                if deleted_count
+                else f"{feature.display} already disabled."
+            )
+
+        return JsonResponse(
+            {
+                "feature": feature.display,
+                "enabled": should_enable,
+                "message": message,
+                "manual_enablement": self._manual_enablement_data(feature, node),
+            }
+        )
+
+    def _report_prereq_checks(self, request, feature):
+        from ..feature_checks import feature_checks
+
+        result = feature_checks.run(feature, node=Node.get_local())
+        if result:
+            self.message_user(request, result.message, level=result.level)

@@ -1,0 +1,62 @@
+{% load i18n admin_extras %}
+{% with show_user_data=cl.model_admin|supports_user_datum %}
+{% if result_hidden_fields %}
+<div class="hiddenfields">{# DIV for HTML validation #}
+{% for item in result_hidden_fields %}{{ item }}{% endfor %}
+</div>
+{% endif %}
+{% if results %}
+<div class="results">
+<table id="result_list">
+<thead>
+<tr>
+{% if show_user_data %}
+<th scope="col" class="column-user-data user-data-column" aria-label="{% translate 'User Data' %}"></th>
+{% endif %}
+{% for header in result_headers %}
+<th scope="col"{{ header.class_attrib }}>
+   {% if header.sortable and header.sort_priority > 0 %}
+       <div class="sortoptions">
+         <a class="sortremove" href="{{ header.url_remove }}" title="{% translate "Remove from sorting" %}"></a>
+         {% if num_sorted_fields > 1 %}<span class="sortpriority" title="{% blocktranslate with priority_number=header.sort_priority %}Sorting priority: {{ priority_number }}{% endblocktranslate %}">{{ header.sort_priority }}</span>{% endif %}
+         <a href="{{ header.url_toggle }}" class="toggle {{ header.ascending|yesno:'ascending,descending' }}" title="{% translate "Toggle sorting" %}"></a>
+       </div>
+   {% endif %}
+   <div class="text">{% if header.sortable %}<a href="{{ header.url_primary }}">{{ header.text|capfirst }}</a>{% else %}<span>{{ header.text|capfirst }}</span>{% endif %}</div>
+   <div class="clear"></div>
+</th>{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for result in results %}
+{% if result.form and result.form.non_field_errors %}
+    <tr><td colspan="{% if show_user_data %}{{ result|length|add:'1' }}{% else %}{{ result|length }}{% endif %}">{{ result.form.non_field_errors }}</td></tr>
+{% endif %}
+{% with original=cl.result_list|list_index:forloop.counter0 %}
+<tr>
+    {% if show_user_data %}
+    <td class="field-user-data user-data-column">
+        {% if original %}
+        <input type="hidden" name="next" value="{{ request.get_full_path|escape }}">
+        <button type="submit"
+                class="favorite-star user-data-star{% if original.is_user_data %} has-user-data{% endif %}"
+                title="{% translate 'Toggle User Data' %}"
+                aria-label="{% translate 'Toggle User Data' %}"
+                formaction="{% user_data_toggle_url cl original %}"
+                formmethod="post">
+            &#9733;
+        </button>
+        {% else %}
+        <span class="favorite-star user-data-star disabled" aria-hidden="true">&#9733;</span>
+        {% endif %}
+    </td>
+    {% endif %}
+    {% for item in result %}{{ item }}{% endfor %}
+</tr>
+{% endwith %}
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+{% endwith %}

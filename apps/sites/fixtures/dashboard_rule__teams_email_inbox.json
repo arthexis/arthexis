@@ -1,0 +1,16 @@
+[
+  {
+    "model": "counters.dashboardrule",
+    "fields": {
+      "is_seed_data": true,
+      "is_user_data": false,
+      "is_deleted": false,
+      "name": "Email Inbox Validation",
+      "content_type": ["emails", "emailinbox"],
+      "implementation": "python",
+      "function_name": "evaluate_email_profile_rules",
+      "success_message": "All rules met.",
+      "failure_message": ""
+    }
+  }
+]

@@ -1,0 +1,17 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if campaign_progress_url %}
+    <li><a href="{{ campaign_progress_url }}">{% trans "View live campaign progress" %}</a></li>
+  {% endif %}
+  {% if campaign_rollback_url and original %}
+    <li>
+      <form action="{{ campaign_rollback_url }}" method="post">
+        {% csrf_token %}
+        <button type="submit" class="button">{% trans "Rollback to previous known-good release" %}</button>
+      </form>
+    </li>
+  {% endif %}
+{% endblock %}

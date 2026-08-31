@@ -1,0 +1,16 @@
+[
+  {
+    "model": "ocpp.stationmodel",
+    "fields": {
+      "vendor": "EV Ready / IES",
+      "model_family": "wallbox G3",
+      "model": "wallbox G3 CCS",
+      "integration_rating": 3,
+      "max_power_kw": "24.00",
+      "preferred_ocpp_version": "OCPP 1.6J",
+      "connector_type": "CCS",
+      "notes": "Field-observed EV Ready RFID branding and IES OCPP BootNotification. Verify authorization and configuration behavior against the deployed firmware before changing site policy.",
+      "is_seed_data": true
+    }
+  }
+]

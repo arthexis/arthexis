@@ -1,0 +1,121 @@
+import warnings
+from dataclasses import dataclass
+
+from django.db import models
+from django.db.models.fields import DeferredAttribute
+
+
+class _BaseSigilDescriptor(DeferredAttribute):
+    def __set__(self, instance, value):
+        instance.__dict__[self.field.attname] = value
+
+
+class _CheckSigilDescriptor(_BaseSigilDescriptor):
+    def __get__(self, instance, cls=None):
+        value = super().__get__(instance, cls)
+        if instance is None:
+            return value
+        if getattr(instance, f"{self.field.name}_resolve_sigils", False):
+            return instance.resolve_sigils(self.field.name)
+        return value
+
+
+class _AutoSigilDescriptor(_BaseSigilDescriptor):
+    def __get__(self, instance, cls=None):
+        value = super().__get__(instance, cls)
+        if instance is None:
+            return value
+        return instance.resolve_sigils(self.field.name)
+
+
+class _SigilBaseField:
+    def value_from_object(self, obj):
+        return obj.__dict__.get(self.attname)
+
+    def pre_save(self, model_instance, add):
+        # ``models.Field.pre_save`` uses ``getattr`` which would resolve the
+        # sigil descriptor. Persist the raw database value instead so env-based
+        # placeholders remain intact when editing through admin forms.
+        return self.value_from_object(model_instance)
+
+
+class SigilCheckFieldMixin(_SigilBaseField):
+    descriptor_class = _CheckSigilDescriptor
+
+    def contribute_to_class(self, cls, name, private_only=False):
+        super().contribute_to_class(cls, name, private_only=private_only)
+        extra_name = f"{name}_resolve_sigils"
+        if not any(f.name == extra_name for f in cls._meta.fields):
+            cls.add_to_class(
+                extra_name,
+                models.BooleanField(
+                    default=False,
+                    verbose_name="Resolve [SIGILS] in templates",
+                ),
+            )
+
+
+class SigilAutoFieldMixin(_SigilBaseField):
+    descriptor_class = _AutoSigilDescriptor
+
+    def contribute_to_class(self, cls, name, private_only=False):
+        super().contribute_to_class(cls, name, private_only=private_only)
+
+
+class SigilShortCheckField(SigilCheckFieldMixin, models.CharField):
+    pass
+
+
+class SigilLongCheckField(SigilCheckFieldMixin, models.TextField):
+    pass
+
+
+class SigilShortAutoField(SigilAutoFieldMixin, models.CharField):
+    pass
+
+
+class SigilLongAutoField(SigilAutoFieldMixin, models.TextField):
+    pass
+
+
+@dataclass
+class ConditionCheckResult:
+    """Represents the outcome of evaluating a condition field."""
+
+    passed: bool
+    resolved: str
+    error: str | None = None
+
+
+class ConditionTextField(models.TextField):
+    """Field storing a conditional SQL expression resolved through [sigils]."""
+
+    def evaluate(self, instance) -> ConditionCheckResult:
+        """Deprecated execution path for legacy condition expressions."""
+
+        value = self.value_from_object(instance)
+        if hasattr(instance, "resolve_sigils"):
+            resolved = instance.resolve_sigils(self.name)
+        else:
+            resolved = value
+
+        if resolved is None:
+            resolved_text = ""
+        else:
+            resolved_text = str(resolved)
+
+        resolved_text = resolved_text.strip()
+        if not resolved_text:
+            return ConditionCheckResult(True, resolved_text)
+
+        warnings.warn(
+            "ConditionTextField.evaluate is deprecated. Migrate to structured "
+            "condition fields on the owning model.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return ConditionCheckResult(
+            False,
+            resolved_text,
+            "Legacy condition execution is deprecated and disabled.",
+        )

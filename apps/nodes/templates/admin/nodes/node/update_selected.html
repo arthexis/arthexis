@@ -1,0 +1,138 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo;
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo;
+    <a href="{% url 'admin:nodes_node_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo;
+    {% trans 'Update selected nodes' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module" id="update-nodes">
+    <h2>{% trans 'Update selected nodes' %}</h2>
+    <p>{% trans 'Progress for each node will appear below as the updates complete.' %}</p>
+    <p id="update-summary" data-complete="{% blocktrans %}Finished updating {{ nodes|length }} node(s).{% endblocktrans %}" data-progress="{% blocktrans %}Updating node __CURRENT__ of __TOTAL__…{% endblocktrans %}">
+        {% blocktrans with count=nodes|length %}Preparing to update {{ count }} node(s)...{% endblocktrans %}
+    </p>
+    <form id="update-nodes-form" style="display: none;">
+        {% csrf_token %}
+    </form>
+    <table class="admin-table" id="update-nodes-table">
+        <thead>
+            <tr>
+                <th scope="col">{% trans 'Node' %}</th>
+                <th scope="col">{% trans 'Local update' %}</th>
+                <th scope="col">{% trans 'Remote update' %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for node in nodes %}
+            <tr data-node-id="{{ node.pk }}">
+                <th scope="row">{{ node }}</th>
+                <td data-field="local">{% trans 'Pending…' %}</td>
+                <td data-field="remote">{% trans 'Pending…' %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="submit-row">
+        <a class="button" href="{% url 'admin:nodes_node_changelist' %}">{% trans 'Back to node list' %}</a>
+    </p>
+</div>
+<script>
+(function () {
+    const progressUrl = "{{ progress_url }}";
+    const form = document.getElementById("update-nodes-form");
+    const tokenInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    const csrfToken = tokenInput ? tokenInput.value : "";
+    const rows = Array.from(document.querySelectorAll('#update-nodes-table tbody tr'));
+    const summary = document.getElementById('update-summary');
+    const total = rows.length;
+    let completed = 0;
+
+    function setCellStatus(cell, payload) {
+        if (!cell) {
+            return;
+        }
+        if (!payload || typeof payload !== 'object') {
+            cell.textContent = payload;
+            return;
+        }
+        if (payload.ok) {
+            if (payload.message) {
+                cell.textContent = payload.message;
+            } else {
+                cell.textContent = '{% trans "Completed." %}';
+            }
+        } else {
+            const message = payload.message || '{% trans "Failed." %}';
+            cell.textContent = message;
+        }
+    }
+
+    function updateSummary() {
+        if (!summary) {
+            return;
+        }
+        if (completed >= total) {
+            summary.textContent = summary.dataset.complete;
+        } else {
+            const template = summary.dataset.progress || 'Updating node __CURRENT__ of __TOTAL__…';
+            summary.textContent = template
+                .replace('__CURRENT__', completed + 1)
+                .replace('__TOTAL__', total);
+        }
+    }
+
+    function runUpdate(index) {
+        if (index >= rows.length) {
+            updateSummary();
+            return;
+        }
+        const row = rows[index];
+        const nodeId = row.getAttribute('data-node-id');
+        const localCell = row.querySelector('[data-field="local"]');
+        const remoteCell = row.querySelector('[data-field="remote"]');
+        updateSummary();
+        const body = new FormData();
+        body.append('node_id', nodeId);
+
+        fetch(progressUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: body
+        }).then(function (response) {
+            if (!response.ok) {
+                setCellStatus(localCell, {ok: false, message: response.status + ' ' + response.statusText});
+                setCellStatus(remoteCell, {ok: false, message: response.status + ' ' + response.statusText});
+                return null;
+            }
+            return response.json();
+        }).then(function (data) {
+            if (!data) {
+                return;
+            }
+            setCellStatus(localCell, data.local);
+            setCellStatus(remoteCell, data.remote);
+        }).catch(function (error) {
+            setCellStatus(localCell, {ok: false, message: error.toString()});
+            setCellStatus(remoteCell, {ok: false, message: error.toString()});
+        }).finally(function () {
+            completed += 1;
+            updateSummary();
+            runUpdate(index + 1);
+        });
+    }
+
+    runUpdate(0);
+})();
+</script>
+{% endblock %}

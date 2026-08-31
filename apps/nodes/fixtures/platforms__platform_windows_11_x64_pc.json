@@ -1,0 +1,14 @@
+[
+  {
+    "model": "nodes.platform",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Microsoft Windows 11 x64-based PC",
+      "hardware": "PC",
+      "architecture": "x64",
+      "os_name": "Microsoft Windows",
+      "os_version": "11"
+    }
+  }
+]

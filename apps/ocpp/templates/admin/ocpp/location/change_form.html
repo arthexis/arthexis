@@ -1,0 +1,21 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if original %}
+    {% for charger in original.chargers.all %}
+      <li>
+        <a href="{% url 'admin:ocpp_charger_change' charger.pk %}">
+          {% trans "Charge Point" %}: {{ charger.charger_id }}{% if charger.connector_letter %} #{{ charger.connector_letter }}{% endif %}
+        </a>
+      </li>
+    {% endfor %}
+    {% if original.latitude != None and original.longitude != None %}
+      {% with coord=original.latitude|stringformat:"s"|add:","|add:original.longitude|stringformat:"s" %}
+        <li><a href="https://www.waze.com/ul?ll={{ coord|urlencode }}&navigate=yes" target="_blank" rel="noopener noreferrer">{% trans "Open in Waze" %}</a></li>
+        <li><a href="https://maps.google.com/?q={{ coord|urlencode }}" target="_blank" rel="noopener noreferrer">{% trans "Open in Maps" %}</a></li>
+      {% endwith %}
+    {% endif %}
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

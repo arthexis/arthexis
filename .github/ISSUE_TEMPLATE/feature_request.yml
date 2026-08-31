@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an idea or enhancement
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea! Submit the core request; maintainers can amend the issue during implementation if scope changes.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A short description of the feature request.
+      placeholder: e.g. Add bulk import for charge points
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: Describe the pain point or workflow gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you'd like to see.
+      placeholder: Describe the feature, UI, or API changes.
+    validations:
+      required: true

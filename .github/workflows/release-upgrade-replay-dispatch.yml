@@ -1,0 +1,286 @@
+name: Release Upgrade Replay Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: 'Published release tag to upgrade from. Defaults to the latest published release.'
+        required: false
+        type: string
+      candidate_ref:
+        description: 'Candidate ref or SHA to upgrade to. Defaults to the default branch head.'
+        required: false
+        type: string
+
+concurrency:
+  group: release-upgrade-replay-dispatch-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch missing replay for current main
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    outputs:
+      base_ref: ${{ steps.dispatch.outputs.base_ref }}
+      candidate_sha: ${{ steps.dispatch.outputs.candidate_sha }}
+      dispatched: ${{ steps.dispatch.outputs.dispatched }}
+      expected_artifact: ${{ steps.dispatch.outputs.expected_artifact }}
+      skip_reason: ${{ steps.dispatch.outputs.skip_reason }}
+    steps:
+      - name: Dispatch missing release upgrade replay
+        id: dispatch
+        uses: actions/github-script@v9
+        env:
+          BASE_REF_INPUT: ${{ github.event.inputs.base_ref || '' }}
+          CANDIDATE_REF_INPUT: ${{ github.event.inputs.candidate_ref || '' }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+            const replayWorkflowId = 'release-upgrade-replay.yml';
+            const requiredWorkflowNames = ['Install Health Check'];
+
+            function matchesCodeqlPath(path) {
+              return (
+                path.endsWith('.py') ||
+                path.endsWith('.sh') ||
+                /(^|\/)requirements[^/]*\.txt$/.test(path) ||
+                /(^|\/)pyproject\.toml$/.test(path) ||
+                /(^|\/)Pipfile$/.test(path) ||
+                /(^|\/)Pipfile\.lock$/.test(path) ||
+                path === '.github/workflows/codeql.yml' ||
+                path === '.github/workflows/security-scan.yml' ||
+                path.startsWith('.github/codeql/') ||
+                path.startsWith('.github/actions/')
+              );
+            }
+
+            function safeArtifactRef(ref) {
+              return String(ref || '').replace(/[^A-Za-z0-9._-]/g, '-');
+            }
+
+            function setSkip(reason) {
+              core.info(reason);
+              core.setOutput('dispatched', 'false');
+              core.setOutput('skip_reason', reason);
+            }
+
+            async function resolveCommit(ref) {
+              const { data: commit } = await github.rest.repos.getCommit({
+                owner,
+                repo,
+                ref,
+              });
+              return commit.sha;
+            }
+
+            async function currentDefaultBranchSha() {
+              const { data: branch } = await github.rest.repos.getBranch({
+                owner,
+                repo,
+                branch: defaultBranch,
+              });
+              return branch?.commit?.sha || '';
+            }
+
+            async function collectCurrentHeadFiles(defaultBranchSha) {
+              const { data: commit } = await github.rest.repos.getCommit({
+                owner,
+                repo,
+                ref: defaultBranchSha,
+              });
+              const commitFiles = Array.isArray(commit.files)
+                ? commit.files.map((file) => file.filename).filter(Boolean)
+                : [];
+              if (commitFiles.length || !commit.parents?.[0]?.sha) {
+                return commitFiles;
+              }
+
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner,
+                repo,
+                base: commit.parents[0].sha,
+                head: defaultBranchSha,
+              });
+              return Array.isArray(comparison.files)
+                ? comparison.files.map((file) => file.filename).filter(Boolean)
+                : [];
+            }
+
+            function latestRunByName(runs, workflowName, candidateSha) {
+              return runs
+                .filter((run) => (
+                  run.name === workflowName &&
+                  run.head_branch === defaultBranch &&
+                  run.head_sha === candidateSha
+                ))
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+            }
+
+            const baseRefInput = String(process.env.BASE_REF_INPUT || '').trim();
+            const candidateRefInput = String(process.env.CANDIDATE_REF_INPUT || '').trim();
+            const eventRun = context.payload.workflow_run || {};
+            const defaultBranchSha = await currentDefaultBranchSha();
+            const candidateRef = candidateRefInput || eventRun.head_sha || defaultBranchSha || defaultBranch;
+            if (!candidateRef) {
+              setSkip('No candidate ref was available.');
+              return;
+            }
+
+            const candidateSha = await resolveCommit(candidateRef);
+            core.setOutput('candidate_sha', candidateSha);
+            if (defaultBranchSha && candidateSha !== defaultBranchSha) {
+              setSkip(`stale_candidate_sha:${candidateSha}:current:${defaultBranchSha}`);
+              return;
+            }
+
+            let baseRef = baseRefInput;
+            if (baseRef) {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner,
+                repo,
+                tag: baseRef,
+              });
+              baseRef = release.tag_name || baseRef;
+            } else {
+              try {
+                const { data: latestRelease } = await github.rest.repos.getLatestRelease({
+                  owner,
+                  repo,
+                });
+                baseRef = latestRelease.tag_name || '';
+              } catch (error) {
+                if (error.status === 404) {
+                  setSkip('No published release tag exists yet.');
+                  return;
+                }
+                throw error;
+              }
+            }
+
+            if (!baseRef) {
+              setSkip('No published release tag exists yet.');
+              return;
+            }
+            core.setOutput('base_ref', baseRef);
+
+            const expectedArtifactName = `release-upgrade-replay-result-${candidateSha}-${safeArtifactRef(baseRef)}`;
+            core.setOutput('expected_artifact', expectedArtifactName);
+
+            const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner,
+              repo,
+              branch: defaultBranch,
+              per_page: 100,
+            });
+
+            for (const workflowName of requiredWorkflowNames) {
+              const run = latestRunByName(ciRuns, workflowName, candidateSha);
+              if (!run) {
+                setSkip(`waiting_for_required_workflow:${workflowName}:missing`);
+                return;
+              }
+              if (run.status !== 'completed') {
+                setSkip(`waiting_for_required_workflow:${workflowName}:${run.status || 'unknown'}`);
+                return;
+              }
+              if (run.conclusion !== 'success') {
+                setSkip(`required_workflow_not_success:${workflowName}:${run.conclusion || 'unknown'}`);
+                return;
+              }
+            }
+
+            let codeqlRelevantFiles = [];
+            try {
+              const changedFiles = await collectCurrentHeadFiles(candidateSha);
+              codeqlRelevantFiles = changedFiles.filter(matchesCodeqlPath);
+            } catch (error) {
+              setSkip(`unable_to_determine_codeql_relevance:${error.message}`);
+              return;
+            }
+
+            const latestCodeqlRun = latestRunByName(ciRuns, 'CodeQL', candidateSha);
+            const requiresCodeqlEvidence = codeqlRelevantFiles.length > 0 || Boolean(latestCodeqlRun);
+            if (requiresCodeqlEvidence) {
+              if (!latestCodeqlRun) {
+                setSkip('waiting_for_required_workflow:CodeQL:missing');
+                return;
+              }
+              if (latestCodeqlRun.status !== 'completed') {
+                setSkip(`waiting_for_required_workflow:CodeQL:${latestCodeqlRun.status || 'unknown'}`);
+                return;
+              }
+              if (latestCodeqlRun.conclusion !== 'success') {
+                setSkip(`required_workflow_not_success:CodeQL:${latestCodeqlRun.conclusion || 'unknown'}`);
+                return;
+              }
+            } else {
+              core.info('No CodeQL-relevant files changed; CodeQL head evidence is not required.');
+            }
+
+            const replayRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: replayWorkflowId,
+              branch: defaultBranch,
+              per_page: 100,
+            });
+
+            const matchingReplayRuns = replayRuns
+              .filter((run) => run.head_sha === candidateSha)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            const activeReplay = matchingReplayRuns.find((run) => run.status !== 'completed');
+            if (activeReplay) {
+              setSkip(`release_upgrade_replay_active:${activeReplay.html_url}`);
+              return;
+            }
+
+            for (const run of matchingReplayRuns.filter((item) => item.conclusion === 'success')) {
+              const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+              const markerArtifact = artifacts.find((artifact) => (
+                artifact.name === expectedArtifactName && !artifact.expired
+              ));
+              if (markerArtifact) {
+                setSkip(`release_upgrade_replay_artifact_exists:${run.html_url}`);
+                return;
+              }
+            }
+
+            if (matchingReplayRuns.some((run) => run.status === 'completed')) {
+              core.info(
+                'Completed replay runs exist for this candidate, but none produced the expected current-base artifact.',
+              );
+            }
+
+            const dispatchDefaultBranchSha = await currentDefaultBranchSha();
+            if (dispatchDefaultBranchSha && dispatchDefaultBranchSha !== candidateSha) {
+              setSkip(`stale_candidate_sha_before_dispatch:${candidateSha}:current:${dispatchDefaultBranchSha}`);
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: replayWorkflowId,
+              ref: defaultBranch,
+              inputs: {
+                base_ref: baseRef,
+                candidate_ref: candidateSha,
+              },
+            });
+
+            core.setOutput('dispatched', 'true');
+            core.setOutput('skip_reason', '');
+            core.info(`Dispatched ${replayWorkflowId} for ${candidateSha} from ${baseRef}.`);

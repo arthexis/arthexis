@@ -1,0 +1,16 @@
+[
+  {
+    "model": "repos.packagerepository",
+    "fields": {
+      "is_seed_data": true,
+      "name": "PyPI",
+      "repository_url": "https://upload.pypi.org/legacy/",
+      "verify_availability": true,
+      "extra_args": [],
+      "token": "",
+      "username": "",
+      "password": "",
+      "packages": []
+    }
+  }
+]

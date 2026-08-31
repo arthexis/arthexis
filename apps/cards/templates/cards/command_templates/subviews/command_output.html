@@ -1,0 +1,18 @@
+{% load i18n %}
+<h2 class="h4">{% trans "Last Command Output" %}</h2>
+{% if latest_execution %}
+  <p>{{ latest_execution.get_status_display }} · {{ latest_execution.triggered_at }}</p>
+  {% if latest_payload.stdout %}
+    <h3 class="h6">{% trans "stdout" %}</h3>
+    <pre class="p-3 bg-dark-subtle text-break"><code>{{ latest_payload.stdout }}</code></pre>
+  {% endif %}
+  {% if latest_payload.stderr %}
+    <h3 class="h6">{% trans "stderr" %}</h3>
+    <pre class="p-3 bg-dark-subtle text-break"><code>{{ latest_payload.stderr }}</code></pre>
+  {% endif %}
+  {% if not latest_payload.stdout and not latest_payload.stderr %}
+    <pre class="p-3 bg-dark-subtle text-break"><code>{{ latest_result_json }}</code></pre>
+  {% endif %}
+{% else %}
+  <p>{% trans "No recorded run yet." %}</p>
+{% endif %}

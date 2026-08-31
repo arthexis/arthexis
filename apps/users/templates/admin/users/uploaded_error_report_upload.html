@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <fieldset class="module aligned">
+      <div class="form-row">
+        {{ form.source_label.errors }}
+        <label for="{{ form.source_label.id_for_label }}">{% trans "Source label" %}</label>
+        {{ form.source_label }}
+      </div>
+      <div class="form-row">
+        {{ form.package.errors }}
+        <label for="{{ form.package.id_for_label }}">{% trans "Error report zip" %}</label>
+        {{ form.package }}
+      </div>
+    </fieldset>
+    <div class="submit-row">
+      <button type="submit" class="default">{% trans "Upload and analyze" %}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

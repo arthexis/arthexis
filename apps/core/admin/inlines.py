@@ -1,0 +1,180 @@
+from django.apps import apps as django_apps
+from django.contrib import admin
+
+from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
+from apps.users.models import UserDiagnosticsProfile, UserPhoneNumber
+
+from .forms import (
+    EmailInboxInlineForm,
+    EmailOutboxInlineForm,
+    ProfileInlineFormSet,
+    UserDiagnosticsProfileInlineForm,
+)
+
+if django_apps.is_installed("apps.energy"):
+    from apps.energy.models import CustomerAccount
+
+    from .forms import CustomerAccountRFIDForm
+
+if django_apps.is_installed("apps.odoo"):
+    from apps.odoo.models import OdooEmployee
+
+    from .forms import OdooEmployeeInlineForm
+
+
+def _title_case(value):
+    text = str(value or "")
+    return " ".join(
+        word[:1].upper() + word[1:] if word else word for word in text.split()
+    )
+
+
+PROFILE_INLINE_CONFIG = {}
+
+if django_apps.is_installed("apps.odoo"):
+    PROFILE_INLINE_CONFIG[OdooEmployee] = {
+        "form": OdooEmployeeInlineForm,
+        "fieldsets": (
+            (
+                None,
+                {
+                    "fields": (
+                        "host",
+                        "database",
+                        "username",
+                        "password",
+                    )
+                },
+            ),
+            (
+                "Odoo Employee",
+                {
+                    "fields": ("verified_on", "odoo_uid", "name", "email"),
+                },
+            ),
+        ),
+        "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
+    }
+
+PROFILE_INLINE_CONFIG.update(
+    {
+        EmailInbox: {
+            "form": EmailInboxInlineForm,
+            "fields": (
+                "username",
+                "host",
+                "port",
+                "password",
+                "protocol",
+                "use_ssl",
+                "is_enabled",
+                "priority",
+            ),
+        },
+        EmailOutbox: {
+            "form": EmailOutboxInlineForm,
+            "fields": (
+                "password",
+                "host",
+                "port",
+                "username",
+                "use_tls",
+                "use_ssl",
+                "from_email",
+            ),
+        },
+        UserDiagnosticsProfile: {
+            "form": UserDiagnosticsProfileInlineForm,
+            "fields": (
+                "is_enabled",
+                "collect_diagnostics",
+                "allow_manual_feedback",
+            ),
+        },
+    }
+)
+
+
+def _build_profile_inline(model, owner_field):
+    config = PROFILE_INLINE_CONFIG[model]
+    verbose_name = config.get("verbose_name")
+    if verbose_name is None:
+        verbose_name = _title_case(model._meta.verbose_name)
+    verbose_name_plural = config.get("verbose_name_plural")
+    if verbose_name_plural is None:
+        verbose_name_plural = _title_case(model._meta.verbose_name_plural)
+    attrs = {
+        "model": model,
+        "fk_name": owner_field,
+        "form": config["form"],
+        "formset": ProfileInlineFormSet,
+        "extra": 1,
+        "max_num": 1,
+        "can_delete": True,
+        "verbose_name": verbose_name,
+        "verbose_name_plural": verbose_name_plural,
+        "template": "admin/edit_inline/profile_stacked.html",
+        "fieldset_visibility": tuple(config.get("fieldset_visibility", ())),
+    }
+    if "fieldsets" in config:
+        attrs["fieldsets"] = config["fieldsets"]
+    if "fields" in config:
+        attrs["fields"] = config["fields"]
+    if "readonly_fields" in config:
+        attrs["readonly_fields"] = config["readonly_fields"]
+    if "template" in config:
+        attrs["template"] = config["template"]
+    return type(
+        f"{model.__name__}{owner_field.title()}Inline",
+        (admin.StackedInline,),
+        attrs,
+    )
+
+
+PROFILE_MODELS = tuple(PROFILE_INLINE_CONFIG)
+USER_PROFILE_INLINES = [
+    _build_profile_inline(model, "user") for model in PROFILE_MODELS
+]
+GROUP_PROFILE_INLINES = [
+    _build_profile_inline(model, "group") for model in PROFILE_MODELS
+]
+
+
+class UserPhoneNumberInline(admin.TabularInline):
+    model = UserPhoneNumber
+    extra = 0
+    fields = ("number", "priority")
+
+
+class EmailCollectorInline(admin.TabularInline):
+    model = EmailCollector
+    extra = 0
+    fields = (
+        "name",
+        "notification_mode",
+        "collector_change_link",
+    )
+    readonly_fields = ("collector_change_link",)
+
+    def collector_change_link(self, obj):
+        """Return a link to the full collector change form."""
+        if not obj or not obj.pk:
+            return "Save to configure"
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        url = reverse("admin:emails_emailcollector_change", args=[obj.pk])
+        return format_html('<a href="{}">Open collector</a>', url)
+
+    collector_change_link.short_description = "Record"
+
+
+if django_apps.is_installed("apps.energy"):
+
+    class CustomerAccountRFIDInline(admin.TabularInline):
+        model = CustomerAccount.rfids.through
+        form = CustomerAccountRFIDForm
+        autocomplete_fields = ["rfid"]
+        extra = 0
+        verbose_name = "RFID"
+        verbose_name_plural = "RFIDs"

@@ -1,0 +1,9 @@
+name: "Arthexis CodeQL Configuration"
+paths-ignore:
+  - tests/**
+  - docs/**
+  - static/**
+  - media/**
+  - scripts/**
+  - .github/workflows/**
+  - "**/migrations/**"

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.countdowntimer",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "title": "Protoline Integration",
+      "body": "Arthexis.com ready for the 0.2 version upgrade within 72 hours, please standby.",
+      "scheduled_for": "2025-11-16T12:00:00Z",
+      "article": ["protoline-integration"],
+      "is_published": true,
+      "created_on": "2025-11-14T00:00:00Z",
+      "updated_on": "2025-11-14T00:00:00Z"
+    }
+  }
+]

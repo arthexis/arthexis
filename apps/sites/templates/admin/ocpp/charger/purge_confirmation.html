@@ -1,0 +1,61 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<div id="content-main" class="delete-confirmation">
+  <h1>{% translate "Clear all selected CP data" %}</h1>
+  <p>
+    {% blocktranslate %}You are about to purge stored data for the selected charge points. This will remove related transaction and meter value records and clear cached charger history.{% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate %}Review the rows scheduled for deletion for each charge point, then confirm to proceed.{% endblocktranslate %}
+  </p>
+
+  <table class="table table-bordered purge-summary">
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Charge point" %}</th>
+        <th scope="col">{% translate "Transactions" %}</th>
+        <th scope="col">{% translate "Meter values" %}</th>
+        <th scope="col">{% translate "Total rows" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for summary in purge_summaries %}
+        <tr>
+          <th scope="row">{{ summary.display_name }}</th>
+          <td>{{ summary.transactions }}</td>
+          <td>{{ summary.meter_values }}</td>
+          <td>{{ summary.total_rows }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4">{% translate "No data found for the selected charge points." %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th scope="row">{% translate "Total" %}</th>
+        <td colspan="2"></td>
+        <td>{{ total_rows }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <form method="post">
+    {% csrf_token %}
+    {% for obj in queryset %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk|admin_urlquote }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    <input type="hidden" name="select_across" value="{{ select_across }}">
+    <input type="hidden" name="post" value="yes">
+
+    <div class="submit-row">
+      <button type="submit" class="deletelink">{% translate "Confirm purge" %}</button>
+      <a class="button cancel-link" href="{% url opts|admin_urlname:'changelist' %}">{% translate "Cancel" %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

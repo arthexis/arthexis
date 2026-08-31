@@ -1,0 +1,54 @@
+from django.apps import apps as django_apps
+from django.urls import path
+from django.views.generic import RedirectView
+
+from .views import landing, management
+
+OCPP_APP_INSTALLED = django_apps.is_installed("apps.ocpp")
+
+if OCPP_APP_INSTALLED:
+    from .views import analytics
+
+app_name = "pages"
+
+analytics_urlpatterns = (
+    [
+        path("client-report/", analytics.client_report, name="client-report"),
+        path(
+            "client-report/download/<int:report_id>/",
+            analytics.client_report_download,
+            name="client-report-download",
+        ),
+    ]
+    if OCPP_APP_INSTALLED
+    else []
+)
+
+urlpatterns = [
+    path("", landing.index, name="index"),
+    path("favicon.ico", landing.favicon, name="favicon"),
+    path("footer/", landing.footer_fragment, name="footer-fragment"),
+    path("operator-interface/", landing.operator_interface_notice, name="operator-interface-notice"),
+    path("sitemap.xml", landing.sitemap, name="pages-sitemap"),
+    path("changelog/", landing.changelog_report, name="changelog"),
+    path("visitors/", landing.visitors, name="visitors"),
+    path("changelog/data/", landing.changelog_report_data, name="changelog-data"),
+    *analytics_urlpatterns,
+    path("release-checklist/", landing.release_checklist, name="release-checklist"),
+    path(
+        "release-checklist",
+        RedirectView.as_view(pattern_name="pages:release-checklist", permanent=True),
+    ),
+    path("login/rfid/", management.rfid_login_page, name="rfid-login"),
+    path("login/passkey/options/", management.passkey_login_options, name="passkey-login-options"),
+    path("login/passkey/verify/", management.passkey_login_verify, name="passkey-login-verify"),
+    path("login/", management.login_view, name="login"),
+    path("logout/", management.logout_view, name="logout"),
+    path("request-invite/", management.request_invite, name="request-invite"),
+    path(
+        "invitation/<uidb64>/<token>/",
+        management.invitation_login,
+        name="invitation-login",
+    ),
+    path("feedback/user-story/", landing.submit_user_story, name="user-story-submit"),
+]

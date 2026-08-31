@@ -1,0 +1,16 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:nodes_node_register_current' %}" class="addlink discover-action">
+            {% trans 'Discover' %}
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:nodes_node_register_visitor' %}" class="addlink">
+            {% trans 'Register Visitor' %}
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

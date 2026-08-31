@@ -1,0 +1,31 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if open_viewport_url %}
+        <li>
+            <form method="post" action="{{ open_viewport_url }}" class="inline-form">
+                {% csrf_token %}
+                <button type="submit" class="historylink">{% trans "Open Viewport" %}</button>
+            </form>
+        </li>
+    {% endif %}
+    {% if soft_deleted_url %}
+        {% if soft_deleted_count %}
+            {% blocktrans count count=soft_deleted_count asvar soft_deleted_label %}
+                Recover deleted ({{ count }})
+            {% plural %}
+                Recover deleted ({{ count }})
+            {% endblocktrans %}
+        {% else %}
+            {% trans "Recover deleted" as soft_deleted_label %}
+        {% endif %}
+        <li>
+            <a href="{{ soft_deleted_url }}" class="addlink" title="{{ soft_deleted_label }}" aria-label="{{ soft_deleted_label }}">
+                <span aria-hidden="true">{% trans "RECOVER" %}</span>
+                <span class="visually-hidden">{{ soft_deleted_label }}</span>
+            </a>
+        </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

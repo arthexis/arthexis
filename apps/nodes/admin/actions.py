@@ -1,0 +1,534 @@
+import json
+import os
+from pathlib import Path
+
+from django.conf import settings
+from django.contrib import admin, messages
+from django.contrib.admin import helpers
+from django.template.response import TemplateResponse
+from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
+
+from apps.cards.models import RFID
+from apps.cards.sync import serialize_rfid
+from apps.core.system_ui import systemd_unit_status
+
+from ..models import NetMessage, Node
+from ..services.enrollment import (
+    approve_enrollment,
+    issue_enrollment_token,
+    revoke_enrollment,
+)
+from .forms import SendNetMessageForm
+
+
+@admin.action(description="Register Visitor")
+def register_visitor(modeladmin, request, queryset):
+    return modeladmin.register_visitor_view(request)
+
+
+@admin.action(description=_("Discover"))
+def discover_local_node(modeladmin, request, queryset):
+    return modeladmin.register_current(request)
+
+
+discover_local_node.requires_queryset = False
+discover_local_node.is_discover_action = True
+
+
+@admin.action(description=_("Discover"))
+def discover_node_features(modeladmin, request, queryset):
+    return modeladmin.discover_features(request)
+
+
+discover_node_features.requires_queryset = False
+discover_node_features.is_discover_action = True
+
+
+@admin.action(description=_("Approve mesh enrollment"))
+def approve_mesh_enrollment(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        approve_enrollment(node=node, actor=request.user)
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Approved %(count)d enrollment.",
+                "Approved %(count)d enrollments.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Enroll selected nodes"))
+def enroll_mesh_nodes(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Issued enrollment token for %(count)d node.",
+                "Issued enrollment tokens for %(count)d nodes.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Revoke mesh enrollment"))
+def revoke_mesh_enrollment(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        revoke_enrollment(node=node, actor=request.user, reason="admin action")
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Revoked %(count)d enrollment.",
+                "Revoked %(count)d enrollments.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Rotate mesh key"))
+def rotate_mesh_key(modeladmin, request, queryset):
+    rotated = 0
+    for node in queryset:
+        issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        rotated += 1
+    if rotated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Rotated %(count)d node key.",
+                "Rotated %(count)d node keys.",
+                rotated,
+            )
+            % {"count": rotated},
+            messages.WARNING,
+        )
+
+
+@admin.action(description=_("Reissue enrollment token"))
+def reissue_mesh_enrollment_token(modeladmin, request, queryset):
+    issued = []
+    for node in queryset:
+        enrollment, token = issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        issued.append(
+            f"{node.hostname}: {token} (expires {enrollment.expires_at:%Y-%m-%d %H:%M:%SZ})"
+        )
+    if issued:
+        modeladmin.message_user(
+            request,
+            "\n".join(issued),
+            messages.WARNING,
+        )
+
+
+@admin.action(description=_("Update selected nodes"))
+def update_selected_nodes(modeladmin, request, queryset):
+    node_ids = list(queryset.values_list("pk", flat=True))
+    if not node_ids:
+        modeladmin.message_user(request, _("No nodes selected."), messages.INFO)
+        return None
+    context = {
+        **modeladmin.admin_site.each_context(request),
+        "opts": modeladmin.model._meta,
+        "title": _("Update selected nodes"),
+        "nodes": list(queryset),
+        "node_ids": node_ids,
+        "progress_url": reverse("admin:nodes_node_update_selected_progress"),
+    }
+    return TemplateResponse(request, "admin/nodes/node/update_selected.html", context)
+
+
+@admin.action(description=_("Send Message"))
+def send_net_message(modeladmin, request, queryset):
+    is_submit = "apply" in request.POST
+    form = SendNetMessageForm(request.POST if is_submit else None)
+    selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+    if not selected_ids:
+        selected_ids = [str(pk) for pk in queryset.values_list("pk", flat=True)]
+    nodes = []
+    cleaned_ids = []
+    for value in selected_ids:
+        try:
+            cleaned_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    if cleaned_ids:
+        base_queryset = modeladmin.get_queryset(request).filter(pk__in=cleaned_ids)
+        nodes_by_pk = {str(node.pk): node for node in base_queryset}
+        nodes = [nodes_by_pk[value] for value in selected_ids if value in nodes_by_pk]
+    if not nodes:
+        nodes = list(queryset)
+        selected_ids = [str(node.pk) for node in nodes]
+    if not nodes:
+        modeladmin.message_user(request, _("No nodes selected."), messages.INFO)
+        return None
+    if is_submit and form.is_valid():
+        subject = form.cleaned_data["subject"]
+        body = form.cleaned_data["body"]
+        created = 0
+        expires_at = form.cleaned_data.get("expires_at")
+        for node in nodes:
+            message = NetMessage.objects.create(
+                subject=subject,
+                body=body,
+                expires_at=expires_at,
+                filter_node=node,
+            )
+            message.propagate()
+            created += 1
+        if created:
+            success_message = ngettext(
+                "Sent %(count)d net message.",
+                "Sent %(count)d net messages.",
+                created,
+            ) % {"count": created}
+            modeladmin.message_user(request, success_message, messages.SUCCESS)
+        else:
+            modeladmin.message_user(
+                request, _("No net messages were sent."), messages.INFO
+            )
+        return None
+    context = {
+        **modeladmin.admin_site.each_context(request),
+        "opts": modeladmin.model._meta,
+        "title": _("Send Message"),
+        "nodes": nodes,
+        "selected_ids": selected_ids,
+        "action_name": request.POST.get("action", "send_net_message"),
+        "select_across": request.POST.get("select_across", "0"),
+        "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+        "adminform": helpers.AdminForm(
+            form,
+            [(None, {"fields": ("subject", "body", "expires_at")})],
+            {},
+        ),
+        "form": form,
+        "media": modeladmin.media + form.media,
+    }
+    return TemplateResponse(request, "admin/nodes/node/send_net_message.html", context)
+
+
+@admin.action(description=_("Download EVCS firmware"))
+def download_evcs_firmware(modeladmin, request, queryset):
+    from .forms import DownloadFirmwareForm
+
+    nodes = list(queryset)
+    if len(nodes) != 1:
+        modeladmin.message_user(
+            request,
+            _("Select a single node to request firmware."),
+            level=messages.ERROR,
+        )
+        return None
+    node = nodes[0]
+
+    if "apply" in request.POST:
+        form = DownloadFirmwareForm(node, request.POST)
+        if form.is_valid():
+            if modeladmin._process_firmware_download(request, node, form.cleaned_data):
+                return None
+    else:
+        form = DownloadFirmwareForm(node)
+
+    context = {
+        **modeladmin.admin_site.each_context(request),
+        "opts": modeladmin.model._meta,
+        "title": _("Download EVCS firmware"),
+        "node": node,
+        "nodes": [node],
+        "selected_ids": [str(node.pk)],
+        "action_name": request.POST.get("action", "download_evcs_firmware"),
+        "select_across": request.POST.get("select_across", "0"),
+        "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+        "adminform": helpers.AdminForm(
+            form,
+            [
+                (
+                    None,
+                    {
+                        "fields": (
+                            "charger",
+                            "vendor_id",
+                        )
+                    },
+                )
+            ],
+            {},
+        ),
+        "form": form,
+        "media": modeladmin.media + form.media,
+    }
+    return TemplateResponse(request, "admin/nodes/node/download_firmware.html", context)
+
+
+@admin.action(description=_("Import RFIDs from selected"))
+def import_rfids_from_selected(modeladmin, request, queryset):
+    return modeladmin._run_rfid_import(request, queryset)
+
+
+@admin.action(description=_("Export RFIDs to selected"))
+def export_rfids_to_selected(modeladmin, request, queryset):
+    nodes = list(queryset)
+    local_node, private_key, error = modeladmin._load_local_node_credentials()
+    if error:
+        results = [modeladmin._skip_result(node, error) for node in nodes]
+        return modeladmin._render_rfid_sync(
+            request, "export", results, setup_error=error
+        )
+
+    if not nodes:
+        return modeladmin._render_rfid_sync(
+            request,
+            "export",
+            [],
+            setup_error=_("No nodes selected."),
+        )
+
+    rfids = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
+    payload = json.dumps(
+        {"requester": str(local_node.uuid), "rfids": rfids},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    signature, error = Node.sign_payload(payload, private_key)
+    if error or not signature:
+        message = _("Failed to sign payload.")
+        if error:
+            message = _("Failed to sign payload: %(error)s") % {"error": error}
+        return modeladmin._render_rfid_sync(
+            request,
+            "export",
+            [],
+            setup_error=message,
+        )
+    headers = {
+        "Content-Type": "application/json",
+        "X-Signature": signature,
+    }
+
+    results = []
+    for node in nodes:
+        if local_node.pk and node.pk == local_node.pk:
+            results.append(modeladmin._skip_result(node, _("Skipped local node.")))
+            continue
+        results.append(modeladmin._post_export_to_node(node, payload, headers))
+
+    return modeladmin._render_rfid_sync(request, "export", results)
+
+
+@admin.action(description="Check features for eligibility")
+def check_features_for_eligibility(modeladmin, request, queryset):
+    from ..feature_checks import feature_checks
+
+    features = list(queryset)
+    total = len(features)
+    successes = 0
+    node = Node.get_local()
+    for feature in features:
+        manual_enablement = modeladmin._manual_enablement_data(feature, node)
+        enablement_label = manual_enablement.get("label")
+        enablement_message = (
+            f"Manual enablement: {enablement_label}." if enablement_label else ""
+        )
+        try:
+            result = feature_checks.run(feature, node=node)
+        except Exception as exc:  # pragma: no cover - defensive
+            modeladmin.message_user(
+                request,
+                f"{feature.display}: {exc} {enablement_message}",
+                level=messages.ERROR,
+            )
+            continue
+        if result is None:
+            modeladmin.message_user(
+                request,
+                f"No check is configured for {feature.display}. {enablement_message}",
+                level=messages.WARNING,
+            )
+            continue
+        message = result.message or (
+            f"{feature.display} check {'passed' if result.success else 'failed'}."
+        )
+        modeladmin.message_user(
+            request, f"{message} {enablement_message}", level=result.level
+        )
+        if result.success:
+            successes += 1
+    if total:
+        modeladmin.message_user(
+            request,
+            f"Completed {successes} of {total} feature check(s) successfully.",
+            level=messages.INFO,
+        )
+
+
+@admin.action(description="Enable selected action")
+def enable_selected_features(modeladmin, request, queryset):
+    from ..feature_checks import feature_checks
+
+    node = Node.get_local()
+    if node is None:
+        modeladmin.message_user(
+            request,
+            "No local node is registered; unable to enable features manually.",
+            level=messages.ERROR,
+        )
+        return None
+
+    manual_features = [
+        feature for feature in queryset if feature.slug in Node.MANUAL_FEATURE_SLUGS
+    ]
+    non_manual_features = [
+        feature for feature in queryset if feature.slug not in Node.MANUAL_FEATURE_SLUGS
+    ]
+    for feature in non_manual_features:
+        modeladmin.message_user(
+            request,
+            f"{feature.display} cannot be enabled manually.",
+            level=messages.WARNING,
+        )
+
+    if not manual_features:
+        modeladmin.message_user(
+            request,
+            "None of the selected features can be enabled manually.",
+            level=messages.WARNING,
+        )
+        return None
+
+    eligible_manual_features = []
+    for feature in manual_features:
+        check = feature_checks.get(feature.slug)
+        if check is None:
+            eligible_manual_features.append(feature)
+            continue
+        result = feature_checks.run(feature, node=node)
+        if not result.success:
+            modeladmin.message_user(request, result.message, level=result.level)
+            continue
+        eligible_manual_features.append(feature)
+
+    if not eligible_manual_features:
+        modeladmin.message_user(
+            request,
+            "No selected manual features passed eligibility checks.",
+            level=messages.WARNING,
+        )
+        return None
+
+    current_manual = set(
+        node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
+            "slug", flat=True
+        )
+    )
+    desired_manual = current_manual | {
+        feature.slug for feature in eligible_manual_features
+    }
+    newly_enabled = desired_manual - current_manual
+    if not newly_enabled:
+        modeladmin.message_user(
+            request,
+            "Selected manual features are already enabled.",
+            level=messages.INFO,
+        )
+        return None
+
+    node.update_manual_features(desired_manual)
+    display_map = {
+        feature.slug: feature.display for feature in eligible_manual_features
+    }
+    newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
+    modeladmin.message_user(
+        request,
+        "Enabled {} feature(s): {}".format(
+            len(newly_enabled), ", ".join(newly_enabled_names)
+        ),
+        level=messages.SUCCESS,
+    )
+
+
+@admin.action(description=_("Validate Service Configuration"))
+def validate_service_configuration(modeladmin, request, queryset):
+    service_dir = Path(os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
+    base_dir = Path(settings.BASE_DIR)
+    for service in queryset:
+        result = service.compare_to_installed(
+            base_dir=base_dir, service_dir=service_dir
+        )
+        unit_name = result.get("unit_name") or service.unit_template
+        status = result.get("status") or ""
+        if result.get("matches"):
+            message = _("%(unit)s matches the stored template.") % {"unit": unit_name}
+            modeladmin.message_user(request, message, level=messages.SUCCESS)
+        else:
+            detail = status or _("Installed configuration differs from the template.")
+            message = _("%(unit)s: %(detail)s") % {
+                "unit": unit_name,
+                "detail": detail,
+            }
+            modeladmin.message_user(request, message, level=messages.WARNING)
+
+
+@admin.action(description=_("Validate Service is Active"))
+def validate_service_active(modeladmin, request, queryset):
+    base_dir = Path(settings.BASE_DIR)
+    for service in queryset:
+        context = service.build_context(base_dir=base_dir)
+        unit_name = service.resolve_unit_name(context)
+        if not unit_name:
+            message = _("Could not resolve a unit name for %(service)s.") % {
+                "service": service.display
+            }
+            modeladmin.message_user(request, message, level=messages.WARNING)
+            continue
+
+        status = systemd_unit_status(unit_name)
+        unit_status = status.get("status") or str(_("unknown"))
+        enabled_state = status.get("enabled") or ""
+        if status.get("missing"):
+            message = _("%(unit)s is not installed.") % {"unit": unit_name}
+            level = messages.WARNING
+        elif unit_status == "active":
+            message = _("%(unit)s is active.") % {"unit": unit_name}
+            level = messages.SUCCESS
+        else:
+            detail = enabled_state or unit_status
+            message = _("%(unit)s is %(status)s.") % {
+                "unit": unit_name,
+                "status": detail,
+            }
+            level = messages.WARNING
+
+        modeladmin.message_user(request, message, level=level)

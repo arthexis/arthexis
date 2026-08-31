@@ -1,0 +1,138 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ command_template.display_title }}{% endblock %}
+
+{% block content %}
+<section class="py-3">
+  <div class="row g-3 align-items-start">
+    <div class="col-lg-8">
+      <p class="text-uppercase text-secondary mb-1">{{ command_template.name }}</p>
+      <h1 class="h2 mb-2">{{ command_template.display_title }}</h1>
+      {% if command_template.description %}
+        <p class="lead">{{ command_template.description }}</p>
+      {% endif %}
+      <dl class="row mb-0">
+        <dt class="col-sm-3">{% trans "Command" %}</dt>
+        <dd class="col-sm-9"><code>{{ command_template.command_name }}</code></dd>
+        <dt class="col-sm-3">{% trans "Lifecycle" %}</dt>
+        <dd class="col-sm-9">{{ command_template.get_lifecycle_mode_display }}</dd>
+        <dt class="col-sm-3">{% trans "Source" %}</dt>
+        <dd class="col-sm-9">{{ command_template.get_source_display }}</dd>
+        <dt class="col-sm-3">{% trans "View" %}</dt>
+        <dd class="col-sm-9">{{ command_template.get_view_kind_display }}</dd>
+      </dl>
+    </div>
+    <div class="col-lg-4 text-lg-end">
+      {% if qr_data_uri %}
+        <img src="{{ qr_data_uri }}" alt="{% trans 'QR code' %}" class="img-fluid bg-white p-2 command-template-qr">
+      {% endif %}
+      <p class="small text-break mt-2 mb-0"><a href="{{ qr_url }}">{{ qr_url }}</a></p>
+    </div>
+  </div>
+</section>
+
+{% if command_template.instructions %}
+<section class="py-3 border-top">
+  <h2 class="h4">{% trans "Instructions" %}</h2>
+  <div>{{ command_template.instructions|linebreaks }}</div>
+</section>
+{% endif %}
+
+{% if can_view_execution_history %}
+  <section class="py-3 border-top">
+    {% include subview_template %}
+  </section>
+
+  <section class="py-3 border-top">
+    <div class="d-flex justify-content-between align-items-center gap-3">
+      <h2 class="h4 mb-0">{% trans "Card Consistency" %}</h2>
+      <span>{{ valid_card_count }} / {{ card_checks|length }} {% trans "valid" %}</span>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>{% trans "RFID" %}</th>
+            <th>{% trans "Name" %}</th>
+            <th>{% trans "Payload" %}</th>
+            <th>{% trans "Lifecycle" %}</th>
+            <th>{% trans "Result" %}</th>
+            <th>{% trans "Linked" %}</th>
+            <th>{% trans "Valid" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in card_checks %}
+            <tr>
+              <td>{{ check.rfid.display_label }}</td>
+              <td>{{ check.name_matches|yesno:"ok,check" }}</td>
+              <td>{{ check.payload_matches|yesno:"ok,check" }}</td>
+              <td>{{ check.lifecycle_matches|yesno:"ok,check" }}</td>
+              <td>{{ check.result_matches|yesno:"ok,check" }}</td>
+              <td>{{ check.linked|yesno:"ok,check" }}</td>
+              <td>{{ check.valid|yesno:"valid,invalid" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">{% trans "No cards have been linked to this template yet." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="py-3 border-top">
+    <h2 class="h4">{% trans "Past Runs" %}</h2>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>{% trans "Triggered" %}</th>
+            <th>{% trans "RFID" %}</th>
+            <th>{% trans "User" %}</th>
+            <th>{% trans "Reader" %}</th>
+            <th>{% trans "Status" %}</th>
+            <th>{% trans "Detail" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for execution in executions %}
+            <tr>
+              <td>{{ execution.triggered_at }}</td>
+              <td>{{ execution.rfid.display_label|default:execution.rfid_value }}</td>
+              <td>{{ execution.run_as_user|default:"-" }}</td>
+              <td>{{ execution.reader_id|default:"-" }}</td>
+              <td>{{ execution.get_status_display }}</td>
+              <td>
+                {% if execution.status_detail %}
+                  {{ execution.status_detail }}
+                {% elif execution.result.summary %}
+                  {{ execution.result.summary }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">{% trans "No runs have been recorded for this template yet." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="py-3 border-top">
+    <h2 class="h4">{% trans "Template Payload" %}</h2>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <h3 class="h6">{% trans "Parameters" %}</h3>
+        <pre class="p-3 bg-dark-subtle text-break"><code>{{ template_params_json }}</code></pre>
+      </div>
+      <div class="col-lg-6">
+        <h3 class="h6">{% trans "Sigils" %}</h3>
+        <pre class="p-3 bg-dark-subtle text-break"><code>{{ template_sigils_json }}</code></pre>
+      </div>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

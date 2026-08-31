@@ -1,0 +1,17 @@
+[
+  {
+    "model": "pages.sitetemplate",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Twilight Noble",
+      "primary_color": "#0f172a",
+      "primary_color_emphasis": "#0b1221",
+      "accent_color": "#14b8a6",
+      "accent_color_emphasis": "#0f766e",
+      "support_color": "#7c3aed",
+      "support_color_emphasis": "#6d28d9",
+      "support_text_color": "#f5f3ff"
+    }
+  }
+]

@@ -1,0 +1,33 @@
+name: Cleanup Actions Cache
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete caches older than 24 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          now_epoch=$(date -u +%s)
+
+          gh cache list --repo "$REPO" --limit 1000 --json id,createdAt \
+            --jq '.[] | "\(.id) \(.createdAt)"' |
+          while read -r cache_id created_at; do
+            created_epoch=$(date -u -d "$created_at" +%s)
+            age_seconds=$((now_epoch - created_epoch))
+
+            if [ "$age_seconds" -gt 86400 ]; then
+              echo "Deleting cache ${cache_id} created at ${created_at}"
+              gh cache delete "$cache_id" --repo "$REPO" || true
+            fi
+          done

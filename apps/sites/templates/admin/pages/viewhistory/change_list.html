@@ -1,0 +1,7 @@
+{% extends "admin/base/entity_change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+{{ block.super }}
+<li><a href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Traffic graph' %}</a></li>
+{% endblock %}

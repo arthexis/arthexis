@@ -1,0 +1,348 @@
+from __future__ import annotations
+
+import os
+import stat
+import re
+import shlex
+import shutil
+import subprocess
+from collections.abc import Sequence
+from pathlib import Path
+
+from .models import AgentTerminal
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _terminal_state_dir() -> Path:
+    override = os.environ.get("ARTHEXIS_TERMINAL_STATE_DIR")
+    if override:
+        return Path(override)
+    if _is_windows():
+        local_app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+        base = Path(local_app_data) / "Arthexis"
+    else:
+        configured_state_home = os.environ.get("XDG_STATE_HOME")
+        base = Path(configured_state_home) if configured_state_home else Path.home() / ".local" / "state"
+        if not _can_create_state_dir(base):
+            return Path(os.environ.get("TMPDIR") or "/tmp") / "arthexis-agent-terminals"
+    return base / "agent-terminals"
+
+
+def _can_create_state_dir(base: Path) -> bool:
+    current = base
+    while not current.exists() and current.parent != current:
+        current = current.parent
+    return current.is_dir() and os.access(current, os.W_OK | os.X_OK)
+
+
+def _terminal_pid_file(terminal_pk: int) -> Path:
+    return _terminal_state_dir() / f"{terminal_pk}.pid"
+
+
+def _named_terminal_pid_file(state_key: str) -> Path:
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "-", state_key).strip(".-")
+    return _terminal_state_dir() / f"{safe_key or 'terminal'}.pid"
+
+
+def _ensure_private_state_dir(path: Path) -> None:
+    if path.is_symlink():
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+    if _is_windows():
+        return
+    if path.is_symlink():
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    stats = path.lstat()
+    if stat.S_ISLNK(stats.st_mode):
+        raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None and stats.st_uid != getuid():
+        raise PermissionError(f"Terminal state dir must be owned by current user: {path}")
+    current_mode = stat.S_IMODE(stats.st_mode)
+    if current_mode != 0o700:
+        path.chmod(0o700)
+
+
+def _write_pid_file(pid_file: Path, pid: int, command: Sequence[str]) -> None:
+    content = f"{pid}\n{_command_metadata(command)}\n"
+    _write_private_file(pid_file, content, 0o600, "Terminal pid file")
+
+
+def _write_private_file(path: Path, content: str, mode: int, description: str) -> None:
+    if _is_windows():
+        path.write_text(content, encoding="utf-8")
+        return
+    if path.is_symlink():
+        raise PermissionError(f"{description} must not be a symlink: {path}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, mode)
+    fchmod = getattr(os, "fchmod", None)
+    if fchmod is not None:
+        fchmod(fd, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as output:
+        output.write(content)
+
+
+def _is_process_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except (OSError, ValueError, SystemError):
+            return False
+        return True
+
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    synchronize = 0x00100000
+    access = process_query_limited_information | synchronize
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetLastError.argtypes = []
+    kernel32.GetLastError.restype = wintypes.DWORD
+
+    handle = kernel32.OpenProcess(access, False, pid)
+    if handle:
+        kernel32.CloseHandle(handle)
+        return True
+
+    error_access_denied = 5
+    return kernel32.GetLastError() == error_access_denied
+
+
+def _read_pid_file(pid_file: Path) -> tuple[int | None, str | None]:
+    if not pid_file.exists():
+        return None, None
+    try:
+        pid, command = (pid_file.read_text().splitlines() + [""])[:2]
+        return int(pid.strip()), command.strip() or None
+    except (OSError, TypeError, ValueError):
+        return None, None
+
+
+def _process_commandline(pid: int) -> str:
+    if os.name == "nt":
+        return ""
+    proc_cmdline = Path(f"/proc/{pid}/cmdline")
+    if not proc_cmdline.exists():
+        return ""
+    try:
+        return _command_metadata(
+            proc_cmdline.read_bytes().decode(errors="ignore").split("\x00")
+        )
+    except OSError:
+        return ""
+
+
+def _terminal_running(pid_file: Path) -> bool:
+    pid, expected_command = _read_pid_file(pid_file)
+    if not pid or pid <= 0:
+        return False
+    try:
+        if not _is_process_running(pid):
+            raise subprocess.CalledProcessError(1, ["kill", "-0", str(pid)])
+    except (OSError, subprocess.CalledProcessError):
+        pid_file.unlink(missing_ok=True)
+        return False
+
+    if expected_command and os.name != "nt":
+        current_command = _process_commandline(pid)
+        if not current_command or expected_command not in current_command:
+            pid_file.unlink(missing_ok=True)
+            return False
+
+    return True
+
+
+def _build_startup_script(terminal: AgentTerminal) -> str:
+    lines = [terminal.resolved_launch_command(), terminal.resolved_launch_prompt()]
+    blocks = terminal.resolved_prompt_blocks()
+    if terminal.prompt_block_mode == AgentTerminal.LOOP_REPEAT and blocks:
+        block_body = "\n".join(block.strip() for block in blocks if block.strip())
+        if block_body:
+            lines.append("while true; do")
+            lines.append(block_body)
+            lines.append("done")
+    else:
+        lines.extend(blocks)
+
+    script_lines: list[str] = []
+    for line in lines:
+        text = line.strip()
+        if not text:
+            continue
+        script_lines.append(text)
+    return "\n".join(script_lines)
+
+
+def _command_metadata(command: Sequence[str]) -> str:
+    return " ".join(" ".join(str(part).split()) for part in command if str(part).strip())
+
+
+def _powershell_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _split_windows_command(value: str) -> list[str]:
+    return [part.strip("\"") for part in shlex.split(value, posix=False)]
+
+
+def _command_script(
+    command: Sequence[str],
+    *,
+    working_directory: Path | str | None,
+    shell: str,
+) -> str:
+    if not command:
+        raise ValueError("Terminal command cannot be empty.")
+    if shell == "powershell":
+        lines = []
+        if working_directory:
+            lines.append(f"Set-Location -LiteralPath {_powershell_quote(str(working_directory))}")
+        executable, *args = [str(part) for part in command]
+        joined_args = " ".join(_powershell_quote(arg) for arg in args)
+        suffix = f" {joined_args}" if joined_args else ""
+        lines.append(f"& {_powershell_quote(executable)}{suffix}")
+        return "\n".join(lines)
+    lines = []
+    if working_directory:
+        lines.append(f"cd {shlex.quote(str(working_directory))}")
+    lines.append(shlex.join(str(part) for part in command))
+    return "\n".join(lines)
+
+
+def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
+    script_dir = _terminal_state_dir() / "scripts"
+    _ensure_private_state_dir(script_dir)
+    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
+    _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
+    return script_path
+
+
+def _write_posix_startup_script(state_key: str, startup_script: str) -> Path:
+    script_dir = _terminal_state_dir() / "scripts"
+    _ensure_private_state_dir(script_dir)
+    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.sh"
+    _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
+    return script_path
+
+
+def _posix_startup_command(script_path: Path) -> list[str]:
+    return ["sh", "-lc", f". {shlex.quote(str(script_path))}"]
+
+
+def _windows_terminal_command(
+    *,
+    script_path: Path,
+    title: str,
+    executable: str = "",
+) -> list[str]:
+    terminal = executable.strip()
+    if not terminal or terminal == "x-terminal-emulator":
+        terminal_path = shutil.which("wt.exe") or shutil.which("wt") or ""
+        terminal_parts = [terminal_path] if terminal_path else []
+    else:
+        terminal_parts = _split_windows_command(terminal)
+    powershell = shutil.which("powershell.exe") or "powershell.exe"
+    if terminal_parts:
+        return [
+            *terminal_parts,
+            "new-tab",
+            "--title",
+            title,
+            powershell,
+            "-NoExit",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script_path),
+        ]
+    return [
+        powershell,
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script_path),
+    ]
+
+
+def _launch_startup_script(
+    startup_script: str,
+    *,
+    executable: str = "",
+    title: str = "Arthexis Agent Terminal",
+    state_key: str = "terminal",
+) -> Path:
+    pid_dir = _terminal_state_dir()
+    _ensure_private_state_dir(pid_dir)
+    pid_file = _named_terminal_pid_file(state_key)
+    if _is_windows():
+        script_path = _write_windows_startup_script(state_key, startup_script)
+        command = _windows_terminal_command(
+            script_path=script_path,
+            title=title,
+            executable=executable,
+        )
+    else:
+        command = [*shlex.split(executable or "x-terminal-emulator")]
+        if startup_script:
+            script_path = _write_posix_startup_script(state_key, startup_script)
+            command.extend(["-e", *_posix_startup_command(script_path)])
+    process = subprocess.Popen(command)
+    _write_pid_file(pid_file, process.pid, command)
+    return pid_file
+
+
+def launch_command_in_terminal(
+    command: Sequence[str],
+    *,
+    title: str = "Arthexis Agent Terminal",
+    state_key: str = "terminal",
+    working_directory: Path | str | None = None,
+    executable: str = "",
+) -> Path:
+    startup_script = _command_script(
+        command,
+        working_directory=working_directory,
+        shell="powershell" if _is_windows() else "sh",
+    )
+    return _launch_startup_script(
+        startup_script,
+        executable=executable,
+        title=title,
+        state_key=state_key,
+    )
+
+
+def _launch_terminal(terminal: AgentTerminal) -> None:
+    executable = terminal.resolved_executable()
+    startup_script = _build_startup_script(terminal)
+    if _is_windows():
+        _launch_startup_script(
+            startup_script,
+            executable=executable,
+            title=terminal.name or "Arthexis Agent Terminal",
+            state_key=str(terminal.pk),
+        )
+        return
+    pid_dir = _terminal_state_dir()
+    _ensure_private_state_dir(pid_dir)
+    pid_file = _terminal_pid_file(terminal.pk)
+    command = [*shlex.split(executable)]
+    if startup_script:
+        script_path = _write_posix_startup_script(str(terminal.pk), startup_script)
+        command.extend(["-e", *_posix_startup_command(script_path)])
+    process = subprocess.Popen(command)
+    _write_pid_file(pid_file, process.pid, command)

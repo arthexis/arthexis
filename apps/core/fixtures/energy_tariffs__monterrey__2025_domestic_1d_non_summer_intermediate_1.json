@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "non_summer",
+      "zone": "1D",
+      "contract_type": "domestic",
+      "period": "intermediate_1",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "0.9366",
+      "cost_mxn": "0.9366",
+      "notes": "Primer bloque intermedio fuera de verano con umbral reducido respecto al periodo cálido."
+    }
+  }
+]

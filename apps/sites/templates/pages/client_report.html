@@ -1,0 +1,666 @@
+{% extends "pages/base.html" %}
+{% load i18n tz %}
+{% block content %}
+<div id="client-report-content">
+<h1>{% trans "Consumer Report" %}</h1>
+<div id="client-report-results" hx-target="this">
+  {% include "pages/includes/client_report_results.html" %}
+</div>
+{% if not request.user.is_authenticated %}
+  <div class="notification warning" role="alert">
+    {% if login_url %}
+      {% blocktrans trimmed with login_url=login_url %}
+        Please <a href="{{ login_url }}">log in</a> to generate consumer reports.
+      {% endblocktrans %}
+    {% else %}
+      {% trans "Please log in to generate consumer reports." %}
+    {% endif %}
+  </div>
+{% endif %}
+<form
+  method="post"
+  id="report-form"
+  class="client-report-form"
+  hx-post="{% url 'pages:client-report' %}"
+  hx-target="#client-report-content"
+  hx-select="#client-report-content"
+  hx-swap="outerHTML"
+>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="form-errors" role="alert">
+      {% for error in form.non_field_errors %}
+        <p class="error">{{ error }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <fieldset class="report-section" aria-describedby="id_period-help">
+    <legend class="section-title">{% trans "Reporting period" %}</legend>
+    <div class="form-group">
+      {{ form.period.label_tag }}
+      <div class="option-list">
+        {{ form.period }}
+      </div>
+      {% if form.period.help_text %}
+        <p class="help-text" id="id_period-help">{{ form.period.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-grid" id="range-fields">
+      <div class="form-group">
+        {{ form.start.label_tag }}
+        {{ form.start }}
+        {% if form.start.help_text %}
+          <p class="help-text" id="id_start-help">{{ form.start.help_text }}</p>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.end.label_tag }}
+        {{ form.end }}
+        {% if form.end.help_text %}
+          <p class="help-text" id="id_end-help">{{ form.end.help_text }}</p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="form-group" id="week-field">
+      {{ form.week.label_tag }}
+      <div class="week-input-wrapper">
+        {{ form.week }}
+        <button
+          type="button"
+          class="button button-secondary week-shortcut"
+          data-week-target="{{ form.week.id_for_label }}"
+        >
+          {% trans "Last week" %}
+        </button>
+      </div>
+      {% if form.week.help_text %}
+        <p class="help-text" id="id_week-help">{{ form.week.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group" id="month-field">
+      {{ form.month.label_tag }}
+      <div class="month-input-wrapper">
+        {{ form.month }}
+        <div class="month-shortcuts" role="group" aria-label="{% trans "Month shortcuts" %}">
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="-1"
+          >
+            {% trans "Last" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="0"
+          >
+            {% trans "Current" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="1"
+          >
+            {% trans "Next" %}
+          </button>
+        </div>
+      </div>
+      {% if form.month.help_text %}
+        <p class="help-text" id="id_month-help">{{ form.month.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="presentation-help">
+    <legend class="section-title">{% trans "Presentation" %}</legend>
+    <p class="section-description" id="presentation-help">
+      {% trans "Customize the language and heading used when generating the report." %}
+    </p>
+    <div class="form-group">
+      {{ form.view_mode.label_tag }}
+      <div class="option-list">
+        {{ form.view_mode }}
+      </div>
+      {% if form.view_mode.help_text %}
+        <p class="help-text" id="id_view_mode-help">{{ form.view_mode.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.language.label_tag }}
+      {{ form.language }}
+      {% if form.language.help_text %}
+        <p class="help-text" id="id_language-help">{{ form.language.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.title.label_tag }}
+      {{ form.title }}
+      {% if form.title.help_text %}
+        <p class="help-text" id="id_title-help">{{ form.title.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="id_chargers-help">
+    <legend class="section-title">{% trans "Charge points" %}</legend>
+    <div class="form-group">
+      <div class="form-group__header">
+        {{ form.chargers.label_tag }}
+        <button
+          type="button"
+          class="button button-secondary select-all"
+          data-select-all-target="id_chargers"
+        >
+          {% trans "Toggle selection" %}
+        </button>
+      </div>
+      <div class="checkbox-grid" id="id_chargers-wrapper">
+        {{ form.chargers }}
+      </div>
+      {% if form.chargers.help_text %}
+        <p class="help-text" id="id_chargers-help">{{ form.chargers.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="delivery-help">
+    <legend class="section-title">{% trans "Delivery and ownership" %}</legend>
+    <p class="section-description" id="delivery-help">
+      {% trans "Control who receives the report and how it is scheduled for delivery." %}
+    </p>
+    <div class="form-group">
+      {{ form.owner.label_tag }}
+      {{ form.owner }}
+      {% if form.owner.help_text %}
+        <p class="help-text" id="id_owner-help">{{ form.owner.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.destinations.label_tag }}
+      {{ form.destinations }}
+      {% if form.destinations.help_text %}
+        <p class="help-text" id="id_destinations-help">{{ form.destinations.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.recurrence.label_tag }}
+      {{ form.recurrence }}
+      {% if form.recurrence.help_text %}
+        <p class="help-text" id="id_recurrence-help">{{ form.recurrence.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group checkbox-group">
+      <div class="checkbox-wrapper">
+        {{ form.enable_emails }}
+        {{ form.enable_emails.label_tag }}
+      </div>
+      {% if form.enable_emails.help_text %}
+        <p class="help-text" id="id_enable_emails-help">{{ form.enable_emails.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <div class="form-actions">
+    <button type="submit" class="button button-primary" id="generate-report-button"{% if not request.user.is_authenticated %} disabled aria-disabled="true"{% endif %}>
+      {% trans "Generate report" %}
+    </button>
+  </div>
+</form>
+<script>
+  const periodRadios = document.querySelectorAll('input[name="period"]');
+  const rangeFields = document.getElementById('range-fields');
+  const weekField = document.getElementById('week-field');
+  const monthField = document.getElementById('month-field');
+
+  function toggleFields() {
+    const checked = document.querySelector('input[name="period"]:checked');
+    const value = checked ? checked.value : 'range';
+    rangeFields.style.display = value === 'range' ? 'grid' : 'none';
+    weekField.style.display = value === 'week' ? 'flex' : 'none';
+    monthField.style.display = value === 'month' ? 'flex' : 'none';
+  }
+
+  periodRadios.forEach((radio) => radio.addEventListener('change', toggleFields));
+  toggleFields();
+
+  const describedByMap = {
+    id_start: 'id_start-help',
+    id_end: 'id_end-help',
+    id_week: 'id_week-help',
+    id_month: 'id_month-help',
+    id_view_mode: 'id_view_mode-help',
+    id_language: 'id_language-help',
+    id_title: 'id_title-help',
+    id_chargers: 'id_chargers-help',
+    id_owner: 'id_owner-help',
+    id_destinations: 'id_destinations-help',
+    id_recurrence: 'id_recurrence-help',
+    id_enable_emails: 'id_enable_emails-help',
+  };
+
+  Object.entries(describedByMap).forEach(([fieldId, helpId]) => {
+    const field = document.getElementById(fieldId);
+    const help = document.getElementById(helpId);
+    if (field && help) {
+      field.setAttribute('aria-describedby', helpId);
+    }
+  });
+
+  periodRadios.forEach((radio) => { 
+    const help = document.getElementById('id_period-help');
+    if (help) {
+      radio.setAttribute('aria-describedby', 'id_period-help');
+    }
+  });
+
+  function isoWeekString(date) {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+    const year = target.getUTCFullYear();
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  }
+
+  function computeLastWeekValue() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    today.setDate(today.getDate() - 7);
+    return isoWeekString(today);
+  }
+
+  document.querySelectorAll('[data-week-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-week-target');
+    const weekInput = document.getElementById(targetId);
+    if (!weekInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      const lastWeekValue = computeLastWeekValue();
+      weekInput.value = lastWeekValue;
+      weekInput.dispatchEvent(new Event('input', { bubbles: true }));
+      weekInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const weekRadio = document.querySelector('input[name="period"][value="week"]');
+      if (weekRadio && !weekRadio.checked) {
+        weekRadio.checked = true;
+        weekRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      weekInput.focus();
+    });
+  });
+
+  function computeMonthValue(offset) {
+    const today = new Date();
+    today.setDate(1);
+    today.setMonth(today.getMonth() + offset);
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  document.querySelectorAll('[data-month-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-month-target');
+    const offset = parseInt(button.getAttribute('data-month-offset') || '0', 10);
+    const monthInput = document.getElementById(targetId);
+    if (!monthInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      monthInput.value = computeMonthValue(offset);
+      monthInput.dispatchEvent(new Event('input', { bubbles: true }));
+      monthInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const monthRadio = document.querySelector('input[name="period"][value="month"]');
+      if (monthRadio && !monthRadio.checked) {
+        monthRadio.checked = true;
+        monthRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      monthInput.focus();
+    });
+  });
+
+  document.querySelectorAll('[data-select-all-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-select-all-target');
+    const container = document.getElementById(targetId);
+    if (!container) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        if (!checkbox.disabled) {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    });
+  });
+</script>
+</div>
+<style>
+  .report-results {
+    margin-bottom: 2.5rem;
+    padding: 1.75rem;
+    border-radius: 1rem;
+    background: var(--form-bg, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
+  }
+
+  .report-results h2 {
+    margin-top: 0;
+    margin-bottom: 1.25rem;
+  }
+
+  .client-report-form {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 48rem;
+  }
+
+  .client-report-form fieldset {
+    border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
+    border-radius: 8px;
+    padding: 0 1.5rem 1.5rem;
+    background-color: var(--form-bg, rgba(255, 255, 255, 0.04));
+  }
+
+  .client-report-form .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .client-report-form legend.section-title {
+    display: block;
+    box-sizing: border-box;
+    width: calc(100% + 3rem);
+    margin: 0 -1.5rem 0.75rem;
+    padding: 1.25rem 1.5rem 0.75rem;
+    background-color: inherit;
+    border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.12));
+    border-radius: 8px 8px 0 0;
+  }
+
+  .client-report-form fieldset > legend + * {
+    margin-top: 0.75rem;
+  }
+
+  .client-report-form .section-description {
+    margin: 0 0 1rem;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .week-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .week-shortcut {
+    margin: 0;
+  }
+
+  .client-report-form .month-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .month-shortcuts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .month-shortcut {
+    margin: 0;
+  }
+
+  .client-report-form .form-group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .checkbox-grid {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .checkbox-grid ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: contents;
+  }
+
+  .client-report-form .checkbox-grid li {
+    margin: 0;
+  }
+
+  .client-report-form .form-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  @media (min-width: 40rem) {
+    .client-report-form .form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .client-report-form .option-list ul,
+  .client-report-form .option-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .notification {
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .notification.warning {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+
+  .notification.success {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+
+  .auto-download {
+    margin-bottom: 1.5rem;
+  }
+
+  .report-download-frame {
+    display: none;
+  }
+
+  .notification.warning a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .form-errors {
+    border-left: 4px solid #dc2626;
+    background-color: #fee2e2;
+    color: #7f1d1d;
+    padding: 1rem 1.25rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-errors .error {
+    margin: 0;
+  }
+
+  .client-report-evcs {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    padding: 1.5rem;
+    background-color: rgba(15, 23, 42, 0.08);
+    margin-bottom: 1.5rem;
+  }
+
+  .client-report-evcs__summary {
+    margin: 0.5rem 0 0;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-totals {
+    margin-top: 1.5rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+    padding-top: 1rem;
+  }
+
+  .client-report-summary {
+    margin-bottom: 1.5rem;
+  }
+
+  .report-charger {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .report-charger__name {
+    font-weight: 600;
+  }
+
+  .report-charger__serial {
+    font-size: 0.85rem;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .help-text {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .checkbox-group {
+    gap: 0.25rem;
+  }
+
+  .client-report-form .checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .form-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  #generate-report-button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 6px;
+  }
+
+  #generate-report-button[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 40rem) {
+    .client-report-form {
+      gap: 1.5rem;
+    }
+
+    .client-report-form .form-actions {
+      justify-content: stretch;
+    }
+
+    #generate-report-button {
+      width: 100%;
+    }
+  }
+
+  .client-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+  }
+
+  .client-report-table th,
+  .client-report-table td {
+    border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.12));
+    padding: 0.75rem 1rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .client-report-table th {
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+  }
+
+  .report-subject {
+    display: block;
+    font-weight: 600;
+  }
+
+  .report-missing {
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .empty-state {
+    margin: 0;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  @media (max-width: 48rem) {
+    .client-report-table thead {
+      display: none;
+    }
+
+    .client-report-table tr {
+      display: block;
+      border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
+      margin-bottom: 1rem;
+    }
+
+    .client-report-table td {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      border: none;
+      border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.06));
+    }
+
+    .client-report-table td:last-child {
+      border-bottom: none;
+    }
+
+    .client-report-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: inherit;
+    }
+
+    .report-subject {
+      font-size: 1rem;
+    }
+  }
+</style>
+{% endblock %}

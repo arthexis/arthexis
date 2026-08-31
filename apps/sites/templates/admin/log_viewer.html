@@ -1,0 +1,253 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Log viewer" %}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .log-viewer-module {
+      background: var(--body-bg);
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .log-viewer-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .log-viewer-form label {
+      font-weight: 600;
+    }
+    .log-viewer-form select {
+      min-width: 220px;
+    }
+    .log-viewer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .log-viewer-heading {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .log-viewer-heading h2 {
+      margin: 0;
+    }
+    .log-viewer-content {
+      max-height: 60vh;
+      overflow: auto;
+      background: var(--darkened-bg);
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: var(--font-monospace, monospace);
+      font-size: 0.875rem;
+      line-height: 1.4;
+    }
+    .log-viewer-status {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+    .log-viewer-status.error {
+      color: var(--error-fg, #ba2121);
+    }
+    .log-viewer-actions .log-viewer-copy-button {
+      margin-left: auto;
+    }
+    .log-viewer-meta {
+      margin: 0 0 16px;
+      display: grid;
+      gap: 8px;
+    }
+    .log-viewer-meta-row {
+      display: grid;
+      gap: 4px;
+    }
+    .log-viewer-meta-label {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .log-viewer-path {
+      width: 100%;
+      max-width: 100%;
+      font-family: var(--font-monospace, monospace);
+    }
+
+    .log-viewer-dashboard {
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: var(--darkened-bg);
+    }
+    .log-viewer-dashboard-kpis {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .log-viewer-kpi {
+      min-width: 180px;
+      padding: 8px 12px;
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      background: var(--body-bg);
+    }
+    .log-viewer-kpi-label {
+      display: block;
+      font-size: 0.875rem;
+      margin-bottom: 4px;
+    }
+
+    .log-viewer-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      background: var(--body-bg);
+    }
+    .log-viewer-table caption {
+      text-align: left;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .log-viewer-table th,
+    .log-viewer-table td {
+      border: 1px solid var(--hairline-color);
+      padding: 6px 8px;
+      text-align: left;
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo; {% translate "Log viewer" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module log-viewer-module">
+    <form method="get" class="log-viewer-form" aria-label="{% translate 'Select log file' %}">
+      <label for="id_log">{% translate "Log file" %}</label>
+      <select id="id_log" name="log">
+        <option value=""{% if not selected_log %} selected{% endif %} disabled>{% translate "Choose a log file" %}</option>
+        {% for filename in available_logs %}
+          <option value="{{ filename }}"{% if filename == selected_log %} selected{% endif %}>{{ filename }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="button">{% translate "View" %}</button>
+    </form>
+
+    {% if log_notice %}
+      <p class="help">{{ log_notice }}</p>
+    {% endif %}
+
+    <div class="log-viewer-dashboard" aria-label="{% translate 'Operational logs dashboard' %}">
+      <h2>{% translate "Operational logs dashboard" %}</h2>
+      <div class="log-viewer-dashboard-kpis">
+        <div class="log-viewer-kpi">
+          <span class="log-viewer-kpi-label">{% translate "Tracked files" %}</span>
+          <strong>{{ log_dashboard.total_files }}</strong>
+        </div>
+        <div class="log-viewer-kpi">
+          <span class="log-viewer-kpi-label">{% translate "Total lines" %}</span>
+          <strong>{{ log_dashboard.total_lines }}</strong>
+        </div>
+      </div>
+
+      {% if log_dashboard.level_rows %}
+        <table class="log-viewer-table">
+          <caption>{% translate "Recent severity totals (last 500 lines per file)" %}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{% translate "Level" %}</th>
+              <th scope="col">{% translate "Count" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in log_dashboard.level_rows %}
+              <tr>
+                <th scope="row">{{ row.level }}</th>
+                <td>{{ row.count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+      {% if log_dashboard.file_rows %}
+        <table class="log-viewer-table">
+          <caption>{% translate "Per-file health snapshot" %}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{% translate "File" %}</th>
+              <th scope="col">{% translate "Lines" %}</th>
+              <th scope="col">{% translate "Warnings" %}</th>
+              <th scope="col">{% translate "Errors" %}</th>
+              <th scope="col">{% translate "Critical" %}</th>
+              <th scope="col">{% translate "Last updated" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in log_dashboard.file_rows %}
+              <tr>
+                <th scope="row"><a href="?log={{ row.name|urlencode }}">{{ row.name }}</a></th>
+                <td>{{ row.line_count }}</td>
+                <td>{{ row.recent_warning }}</td>
+                <td>{{ row.recent_error }}</td>
+                <td>{{ row.recent_critical }}</td>
+                <td>{{ row.last_updated|default:'-' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+
+    {% if log_error %}
+      <p class="errornote">{{ log_error }}</p>
+    {% endif %}
+
+    {% if selected_log and not log_error %}
+      {% blocktranslate with name=selected_log asvar viewer_heading %}Viewing {{ name }}{% endblocktranslate %}
+      {% translate 'Log copied to your clipboard.' as copy_success %}
+      {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
+      {% translate 'Copy to clipboard' as copy_label %}
+      {% if log_last_updated or log_full_path %}
+        <div class="log-viewer-meta">
+          {% if log_last_updated %}
+            <div class="log-viewer-meta-row">
+              <span class="log-viewer-meta-label">{% translate "Last updated" %}</span>
+              <span>{{ log_last_updated }}</span>
+            </div>
+          {% endif %}
+          {% if log_full_path %}
+            <div class="log-viewer-meta-row">
+              <label class="log-viewer-meta-label" for="log-full-path">{% translate "Log path" %}</label>
+              <input id="log-full-path" class="vTextField log-viewer-path" type="text" value="{{ log_full_path }}" readonly onclick="this.select();">
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% with encoded_log=selected_log|urlencode %}
+        {% with download_url="?log="|add:encoded_log|add:"&download=1" %}
+          {% with viewer_prefix="system-log" viewer_wrapper_class="" viewer_heading=viewer_heading log_filename=selected_log log_download_url=download_url log_content=log_content copy_label=copy_label copy_success=copy_success copy_error=copy_error copy_status_class="log-viewer-status" copy_button_class="button button-secondary log-viewer-copy-button" content_class="log-viewer-content" hide_limit_slider=hide_limit_slider %}
+            {% include "includes/log_viewer.html" %}
+          {% endwith %}
+        {% endwith %}
+      {% endwith %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

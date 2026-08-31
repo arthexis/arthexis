@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  {{ media.css }}
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ media.js }}
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>{% blocktrans with label=source.label_id %}Copy RFID {{ label }}{% endblocktrans %}</h1>
+    <p class="help">{% blocktrans with rfid=source.rfid %}This will create a new RFID using the configuration from {{ rfid }}.{% endblocktrans %}</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="{{ action }}">
+      <input type="hidden" name="select_across" value="0">
+      <input type="hidden" name="_selected_action" value="{{ source.pk }}">
+      {% if form.non_field_errors %}
+        <div class="errornote">
+          {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="form-row">
+        {{ form.rfid.label_tag }}
+        {{ form.rfid }}
+        {% if form.rfid.errors %}
+          <div class="errors">
+            {% for error in form.rfid.errors %}
+              <p>{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if form.rfid.help_text %}
+          <p class="help">{{ form.rfid.help_text }}</p>
+        {% endif %}
+      </div>
+      <div class="submit-row">
+        <button type="submit" name="apply" class="button default">{% trans "Copy" %}</button>
+        <a href="{% url 'admin:cards_rfid_changelist' %}" class="button cancel-link">{% trans "Cancel" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

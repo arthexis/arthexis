@@ -1,0 +1,85 @@
+{% load i18n %}
+
+{% get_current_language as LANGUAGE_CODE %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% trans "Server error" %}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8f9fa;
+        --card-bg: #ffffff;
+        --text: #212529;
+        --muted: #6c757d;
+        --danger: #dc3545;
+        --primary: #0d6efd;
+        --shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      .card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        box-shadow: var(--shadow);
+        padding: 2.5rem;
+        max-width: 480px;
+        margin: 1.5rem;
+        text-align: center;
+      }
+
+      .status {
+        font-size: clamp(2.5rem, 4vw + 1rem, 3.25rem);
+        font-weight: 700;
+        color: var(--danger);
+      }
+
+      h1 {
+        margin: 1.25rem 0 0.75rem;
+        font-size: 1.35rem;
+      }
+
+      p {
+        margin: 0.75rem 0 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .btn {
+        display: inline-block;
+        margin-top: 1.5rem;
+        padding: 0.75rem 1.25rem;
+        background: var(--primary);
+        color: #fff;
+        border-radius: 0.75rem;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .btn:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" role="main">
+      <div class="status">500</div>
+      <h1>{% trans "Something went wrong on our side" %}</h1>
+      <p>{% trans "Please try again in a moment or return to the main page." %}</p>
+      <a class="btn" href="{% url 'pages:index' %}">{% trans "Return to the main page" %}</a>
+    </main>
+  </body>
+</html>

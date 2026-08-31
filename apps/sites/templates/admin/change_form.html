@@ -1,0 +1,149 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify admin_extras favorites %}
+
+{% block title %}{% if errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script src="{% url 'admin:jsi18n' %}"></script>
+{{ media }}
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static "admin/css/forms.css" %}">
+  <style>
+    .fieldset-heading,
+    .inline-heading {
+      scroll-margin-top: 80px;
+    }
+
+    .seed-data-warning {
+      margin: 0 0 12px;
+      padding: 12px;
+      border-radius: 4px;
+      border-left: 4px solid #ffb300;
+      background: #fff8e1;
+      color: #5f4300;
+    }
+
+    .seed-data-warning strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+  {% include "admin/includes/related_models_styles.html" %}
+{% endblock %}
+
+{% block coltype %}colM{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-form{% endblock %}
+
+{% block content_title %}
+  {% favorite_ct_id opts.app_label opts.model_name as ct_id %}
+  {% favorite_map as favorites_map %}
+  {% favorite_from_map favorites_map ct_id as fav %}
+  <div class="content-title-with-favorite">
+    <h1>{{ title }}</h1>
+    {% if ct_id %}
+      <a
+        href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+        class="favorite-star{% if fav %} favorited{% endif %}"
+        title="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+        aria-label="{% if fav %}{% translate 'Configure favorite' %}{% else %}{% translate 'Add favorite' %}{% endif %}"
+      >
+        &#9733;
+      </a>
+    {% endif %}
+  </div>
+{% endblock %}
+
+{% if not is_popup %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; {% if has_view_permission %}<a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>{% else %}{{ opts.verbose_name_plural|capfirst }}{% endif %}
+&rsaquo; {% if add %}{% blocktranslate with name=opts.verbose_name %}Add {{ name }}{% endblocktranslate %}{% else %}{{ original|truncatewords:"18" }}{% endif %}
+{% admin_translate_url language_tabs as translate_url %}
+{% if translate_url %}
+  <a class="breadcrumbs__translate-link" href="{{ translate_url }}">{% translate "Translate" %}</a>
+{% endif %}
+</div>
+{% endblock %}
+{% endif %}
+
+{% block content %}<div id="content-main">
+{% block object-tools %}
+{% if change and not is_popup %}
+  <ul class="object-tools">
+    {% block object-tools-items %}
+      {% for public_link in public_view_links %}
+        <li><a href="{{ public_link.url }}" target="_blank" rel="noopener">{{ public_link.label }}</a></li>
+      {% endfor %}
+      {% change_form_object_tools %}
+    {% endblock %}
+  </ul>
+{% endif %}
+{% endblock %}
+<form {% if has_file_field %}enctype="multipart/form-data" {% endif %}{% if form_url %}action="{{ form_url }}" {% endif %}method="post" id="{{ opts.model_name }}_form" novalidate>{% csrf_token %}{% block form_top %}{% endblock %}
+<div>
+{% if is_popup %}<input type="hidden" name="{{ is_popup_var }}" value="1">{% endif %}
+{% if to_field %}<input type="hidden" name="{{ to_field_var }}" value="{{ to_field }}">{% endif %}
+{% if save_on_top %}{% block submit_buttons_top %}{% submit_row %}{% endblock %}{% endif %}
+{% if errors %}
+    <p class="errornote">
+    {% blocktranslate count counter=errors|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+    </p>
+    {{ adminform.form.non_field_errors }}
+{% endif %}
+
+{% block field_sets %}
+{% for fieldset in adminform %}
+  {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+{% endfor %}
+{% endblock %}
+
+{% block after_field_sets %}{% endblock %}
+
+{% block inline_field_sets %}
+{% for inline_admin_formset in inline_admin_formsets %}
+    {% include inline_admin_formset.opts.template %}
+{% endfor %}
+{% endblock %}
+
+{% block after_related_objects %}
+  {{ block.super }}
+  {% if original and original.is_seed_data %}
+    <div class="seed-data-warning">
+      <strong>{% translate "Seed data item" %}</strong>
+      <div>
+        {% translate "This record comes from seed data and may be replaced during an upgrade." %}
+        {% translate "Mark it as user data to preserve customizations." %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block submit_buttons_bottom %}{% submit_row %}{% endblock %}
+
+{% related_admin_models opts as related_models %}
+{% include "admin/includes/related_models_section.html" %}
+
+{% block admin_change_form_document_ready %}
+    <script id="django-admin-form-add-constants"
+            src="{% static 'admin/js/change_form.js' %}"
+            {% if adminform and add %}
+                data-model-name="{{ opts.model_name }}"
+            {% endif %}
+            async>
+    </script>
+{% endblock %}
+
+{% comment %} JavaScript for prepopulated fields {% endcomment %}
+{% prepopulated_fields_js %}
+
+</div>
+</form></div>
+{% endblock %}
+
+{% block sidebar %}{{ block.super }}{% endblock %}

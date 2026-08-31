@@ -1,0 +1,12 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "release",
+      "description": "Package release management and deployment.",
+      "importance": "critical"
+    }
+  }
+]

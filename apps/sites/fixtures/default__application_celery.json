@@ -1,0 +1,12 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "celery",
+      "description": "Asynchronous task processing and queue orchestration.",
+      "importance": "critical"
+    }
+  }
+]

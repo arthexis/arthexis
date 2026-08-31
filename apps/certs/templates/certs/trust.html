@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; {% trans 'Trust' %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="module">
+    <h1>{% trans "Trust the Local HTTPS Certificate" %}</h1>
+    {% if certificate_available %}
+      <p>
+        {% blocktrans with domain=certificate_domain %}
+          Download the current HTTPS certificate for <strong>{{ domain }}</strong>, then
+          add it to your device or browser trust store to remove the invalid certificate warning.
+        {% endblocktrans %}
+      </p>
+      <dl class="cert-details">
+        <dt>{% trans "Domain" %}</dt>
+        <dd>{{ certificate_domain }}</dd>
+        <dt>{% trans "File" %}</dt>
+        <dd>{{ certificate_filename }}</dd>
+        <dt>{% trans "Path" %}</dt>
+        <dd><code>{{ certificate_path }}</code></dd>
+        <dt>{% trans "Size" %}</dt>
+        <dd>{{ certificate_filesize|filesizeformat }}</dd>
+        <dt>{% trans "Last updated" %}</dt>
+        <dd>{{ certificate_modified|date:"DATETIME_FORMAT" }}</dd>
+      </dl>
+      <p>
+        <a class="button" href="{% url 'certs-trust-download' %}">
+          {% trans "Download certificate (.pem)" %}
+        </a>
+      </p>
+      <ol>
+        <li>{% trans "Download the certificate file." %}</li>
+        <li>{% trans "Open your OS/browser certificate manager." %}</li>
+        <li>{% trans "Import the certificate and mark it as trusted." %}</li>
+        <li>{% trans "Reload this site once the trust store update completes." %}</li>
+      </ol>
+      <p class="help">
+        {% trans "Tip: On managed fleets, distribute the certificate with your MDM profile." %}
+      </p>
+    {% else %}
+      <p>
+        {% trans "No HTTPS certificate is currently available to download. Generate or assign a certificate in the NGINX site configuration first." %}
+      </p>
+      <p>
+        <a class="button" href="{% url 'admin:nginx_siteconfiguration_changelist' %}">
+          {% trans "Set up a self-signed certificate" %}
+        </a>
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

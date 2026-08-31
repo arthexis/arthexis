@@ -1,0 +1,126 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ display_label }}{% endblock %}
+
+{% block content %}
+<section class="py-3">
+  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+    <div>
+      <p class="text-uppercase text-secondary mb-1">{% trans "RFID card" %}</p>
+      <h1 class="h2 mb-2">{{ display_label }}</h1>
+      <p class="mb-0">
+        {% if public_enabled %}
+          {% trans "Public usage view active" %}
+        {% else %}
+          {% trans "Public usage view inactive" %}
+        {% endif %}
+      </p>
+    </div>
+    <div class="text-end">
+      <div class="h3 mb-0">{{ total_kwh|floatformat:2 }}</div>
+      <div class="text-secondary">{% trans "total kWh" %}</div>
+    </div>
+  </div>
+</section>
+
+<section class="py-3 border-top">
+  <div class="row g-3">
+    <div class="col-6 col-lg-3">
+      <div class="border rounded p-3 h-100">
+        <div class="h4 mb-1">{{ total_sessions }}</div>
+        <div class="text-secondary">{% trans "sessions" %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="border rounded p-3 h-100">
+        <div class="h4 mb-1">{{ current_month_kwh|floatformat:2 }}</div>
+        <div class="text-secondary">{% trans "month kWh" %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="border rounded p-3 h-100">
+        <div class="h4 mb-1">{{ accepted_scan_count }}</div>
+        <div class="text-secondary">{% trans "accepted scans" %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="border rounded p-3 h-100">
+        <div class="h4 mb-1">{{ rejected_scan_count }}</div>
+        <div class="text-secondary">{% trans "rejected scans" %}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-3 border-top">
+  <dl class="row mb-0">
+    <dt class="col-sm-3">{% trans "Last used" %}</dt>
+    <dd class="col-sm-9">
+      {% if last_used_at %}<time datetime="{{ last_used_at|date:'c' }}">{{ last_used_at }}</time>{% else %}{% trans "No usage yet" %}{% endif %}
+    </dd>
+    <dt class="col-sm-3">{% trans "Current month sessions" %}</dt>
+    <dd class="col-sm-9">{{ current_month_sessions }}</dd>
+    <dt class="col-sm-3">{% trans "Scanner sightings" %}</dt>
+    <dd class="col-sm-9">{{ scanned_count }}</dd>
+  </dl>
+</section>
+
+<section class="py-3 border-top">
+  <h2 class="h4">{% trans "Recent Charging Sessions" %}</h2>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>{% trans "Started" %}</th>
+          <th>{% trans "Ended" %}</th>
+          <th>{% trans "Charge point" %}</th>
+          <th>{% trans "kWh" %}</th>
+          <th>{% trans "Status" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for transaction in recent_transactions %}
+          <tr>
+            <td><time datetime="{{ transaction.started_at|date:'c' }}">{{ transaction.started_at }}</time></td>
+            <td>{% if transaction.stopped_at %}<time datetime="{{ transaction.stopped_at|date:'c' }}">{{ transaction.stopped_at }}</time>{% else %}{% trans "In progress" %}{% endif %}</td>
+            <td>{{ transaction.charger_label }}</td>
+            <td>{{ transaction.energy_kwh|floatformat:2 }}</td>
+            <td>{{ transaction.status|title }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">{% trans "No charging sessions found." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="py-3 border-top">
+  <h2 class="h4">{% trans "Recent Card Activity" %}</h2>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>{% trans "Time" %}</th>
+          <th>{% trans "Status" %}</th>
+          <th>{% trans "Source" %}</th>
+          <th>{% trans "Reason" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for attempt in recent_attempts %}
+          <tr>
+            <td><time datetime="{{ attempt.attempted_at|date:'c' }}">{{ attempt.attempted_at }}</time></td>
+            <td>{{ attempt.status|title }}</td>
+            <td>{{ attempt.source|title }}</td>
+            <td>{{ attempt.reason|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">{% trans "No recent card activity found." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

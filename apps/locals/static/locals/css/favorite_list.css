@@ -1,0 +1,48 @@
+.favorites-table td,
+.favorites-table th {
+  vertical-align: middle;
+}
+
+.favorites-table .field-input {
+  width: 100%;
+  max-width: 280px;
+  box-sizing: border-box;
+}
+
+.favorites-table .field-order {
+  width: 120px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.favorites-table .field-toggle,
+.favorites-table .field-seed {
+  text-align: center;
+  width: 140px;
+}
+
+.favorites-table .field-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.favorite-order-controls {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.favorite-order-button {
+  min-width: 32px;
+  padding: 2px 8px;
+  line-height: 1.2;
+}
+
+.favorites-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}

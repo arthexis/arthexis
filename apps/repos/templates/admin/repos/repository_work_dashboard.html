@@ -1,0 +1,416 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Repository work" %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <meta http-equiv="refresh" content="{{ refresh_seconds }}">
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .repo-work-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+    .repo-work-toolbar label {
+      display: grid;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .repo-work-toolbar select {
+      min-width: 240px;
+    }
+    .repo-work-meta {
+      margin: 0 0 16px;
+      color: var(--body-quiet-color);
+    }
+    .repo-work-columns {
+      display: grid;
+      gap: 16px;
+    }
+    @media (min-width: 960px) {
+      .repo-work-columns {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+    }
+    .repo-work-panel {
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      background: var(--body-bg);
+      overflow: hidden;
+    }
+    .repo-work-panel h2 {
+      margin: 0;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--hairline-color);
+      background: var(--darkened-bg);
+      font-size: 1rem;
+    }
+    .repo-work-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .repo-work-table th,
+    .repo-work-table td {
+      padding: 8px;
+      border-bottom: 1px solid var(--hairline-color);
+      text-align: left;
+      vertical-align: top;
+    }
+    .repo-work-number {
+      white-space: nowrap;
+      width: 1%;
+    }
+    .repo-work-title {
+      min-width: 180px;
+    }
+    .repo-work-state,
+    .repo-work-tracked {
+      white-space: nowrap;
+    }
+    .repo-work-labels {
+      min-width: 180px;
+    }
+    .repo-work-label-list,
+    .repo-work-label-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .repo-work-label-list {
+      margin-bottom: 6px;
+    }
+    .repo-work-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--darkened-bg);
+      color: var(--body-fg);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .repo-work-label-form input {
+      max-width: 140px;
+    }
+    .repo-work-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--selected-bg);
+      color: var(--body-fg);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .repo-work-badge--assignment {
+      background: var(--message-success-bg, var(--selected-bg));
+    }
+    .repo-work-assignment {
+      min-width: calc(var(--admin-ui-space-6, 1.5rem) * 5);
+      white-space: nowrap;
+    }
+    .repo-work-assignment form {
+      margin-top: var(--admin-ui-space-2, 0.5rem);
+    }
+    .repo-work-empty {
+      margin: 0;
+      padding: 16px;
+      color: var(--body-quiet-color);
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo; {% translate "Repository work" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <form class="repo-work-toolbar" method="get">
+    <label>
+      {% translate "Repository" %}
+      <select name="repository" onchange="this.form.submit()">
+        {% for repository in repositories %}
+          <option value="{{ repository.pk }}"{% if selected_repository and repository.pk == selected_repository.pk %} selected{% endif %}>{{ repository.slug }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      {% translate "Target node" %}
+      <select name="assignment_node" onchange="this.form.submit()">
+        {% for node in assignment_nodes %}
+          <option value="{{ node.pk }}"{% if selected_assignment_node and node.pk == selected_assignment_node.pk %} selected{% endif %}>
+            {{ node.hostname }}{% if node.role %} / {{ node.role.name }}{% endif %} / {{ node.current_relation }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="button">{% translate "View" %}</button>
+  </form>
+
+  {% if selected_repository %}
+    {% if can_sync %}
+      <form class="repo-work-toolbar" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+        {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+        <input type="hidden" name="action" value="sync">
+        <button type="submit" class="button">{% translate "Sync open work" %}</button>
+      </form>
+    {% endif %}
+    <p class="repo-work-meta">
+      {% blocktranslate trimmed with seconds=refresh_seconds repository=selected_repository.slug %}
+        Showing stored work for {{ repository }}. This page refreshes every {{ seconds }} seconds.
+      {% endblocktranslate %}
+      {% if selected_assignment_node %}
+        {% blocktranslate trimmed with node=selected_assignment_node.hostname %}
+          Assignment actions target {{ node }}.
+        {% endblocktranslate %}
+      {% endif %}
+    </p>
+  {% else %}
+    <p class="repo-work-meta">{% translate "Configure a GitHub repository before viewing repository work." %}</p>
+  {% endif %}
+
+  <div class="repo-work-columns">
+    <section class="repo-work-panel">
+      <h2>{% blocktranslate with count=issue_count %}Issues ({{ count }}){% endblocktranslate %}</h2>
+      {% if issue_rows %}
+        <table class="repo-work-table">
+          <thead>
+            <tr>
+              <th scope="col">{% translate "Issue" %}</th>
+              <th scope="col">{% translate "Title" %}</th>
+              <th scope="col">{% translate "Labels" %}</th>
+              <th scope="col">{% translate "State" %}</th>
+              <th scope="col">{% translate "Tracked" %}</th>
+              <th scope="col">{% translate "Assigned" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in issue_rows %}
+              <tr>
+                <td class="repo-work-number">
+                  {% if row.item.html_url %}
+                    <a href="{{ row.item.html_url }}" target="_blank" rel="noopener noreferrer">#{{ row.item.number }}</a>
+                  {% else %}
+                    #{{ row.item.number }}
+                  {% endif %}
+                </td>
+                <td class="repo-work-title">{{ row.item.title }}</td>
+                <td class="repo-work-labels">
+                  <div class="repo-work-label-list">
+                    {% for label in row.label_names %}
+                      <span class="repo-work-label">{{ label }}</span>
+                      {% if can_manage_labels %}
+                        <form method="post">
+                          {% csrf_token %}
+                          <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                          {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                          <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                          <input type="hidden" name="number" value="{{ row.item.number }}">
+                          <input type="hidden" name="label" value="{{ label }}">
+                          <button type="submit" name="action" value="remove-label" class="button">{% translate "Remove" %}</button>
+                        </form>
+                      {% endif %}
+                    {% empty %}
+                      <span class="repo-work-empty-label">{% translate "No labels" %}</span>
+                    {% endfor %}
+                  </div>
+                  {% if can_manage_labels %}
+                    <form class="repo-work-label-form" method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                      {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                      <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                      <input type="hidden" name="number" value="{{ row.item.number }}">
+                      <input type="text" name="label" required aria-label="{% translate 'Label' %}">
+                      <button type="submit" name="action" value="add-label" class="button">{% translate "Add" %}</button>
+                    </form>
+                  {% endif %}
+                </td>
+                <td class="repo-work-state">{{ row.item.state }}</td>
+                <td class="repo-work-tracked">
+                  {% if row.monitor_items %}
+                    {% if can_view_monitor_items %}
+                      <a class="repo-work-badge" href="{{ row.monitor_url }}">{% translate "Tracked" %}: {{ row.monitor_statuses }}</a>
+                    {% else %}
+                      <span class="repo-work-badge">{% translate "Tracked" %}: {{ row.monitor_statuses }}</span>
+                    {% endif %}
+                  {% endif %}
+                </td>
+                <td class="repo-work-assignment">
+                  {% if row.assigned_to_local_node %}
+                    <span class="repo-work-badge repo-work-badge--assignment">
+                      {% if row.local_patchwork_authorized %}
+                        {% translate "Active here" %}
+                      {% else %}
+                        {% translate "Assigned here" %}
+                      {% endif %}
+                    </span>
+                    {% if can_authorize_patchwork and not row.local_patchwork_authorized %}
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                        {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                        <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                        <input type="hidden" name="number" value="{{ row.item.number }}">
+                        <button type="submit" name="action" value="authorize-local-patchwork" class="button">{% translate "Authorize patchwork" %}</button>
+                      </form>
+                    {% endif %}
+                    {% if can_remove_assignments %}
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                        {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                        <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                        <input type="hidden" name="number" value="{{ row.item.number }}">
+                        <button type="submit" name="action" value="remove-local-assignment" class="button">{% translate "Remove assignment" %}</button>
+                      </form>
+                    {% endif %}
+                  {% elif can_assign_work and selected_assignment_node %}
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                      <input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">
+                      <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                      <input type="hidden" name="number" value="{{ row.item.number }}">
+                      <button type="submit" name="action" value="assign-local" class="button">{% translate "Assign to target node" %}</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="repo-work-empty">{% translate "No stored issues for this repository." %}</p>
+      {% endif %}
+    </section>
+
+    <section class="repo-work-panel">
+      <h2>{% blocktranslate with count=pull_request_count %}Pull requests ({{ count }}){% endblocktranslate %}</h2>
+      {% if pull_request_rows %}
+        <table class="repo-work-table">
+          <thead>
+            <tr>
+              <th scope="col">{% translate "PR" %}</th>
+              <th scope="col">{% translate "Title" %}</th>
+              <th scope="col">{% translate "Labels" %}</th>
+              <th scope="col">{% translate "State" %}</th>
+              <th scope="col">{% translate "Tracked" %}</th>
+              <th scope="col">{% translate "Assigned" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in pull_request_rows %}
+              <tr>
+                <td class="repo-work-number">
+                  {% if row.item.html_url %}
+                    <a href="{{ row.item.html_url }}" target="_blank" rel="noopener noreferrer">#{{ row.item.number }}</a>
+                  {% else %}
+                    #{{ row.item.number }}
+                  {% endif %}
+                </td>
+                <td class="repo-work-title">{{ row.item.title }}</td>
+                <td class="repo-work-labels">
+                  <div class="repo-work-label-list">
+                    {% for label in row.label_names %}
+                      <span class="repo-work-label">{{ label }}</span>
+                      {% if can_manage_labels %}
+                        <form method="post">
+                          {% csrf_token %}
+                          <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                          {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                          <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                          <input type="hidden" name="number" value="{{ row.item.number }}">
+                          <input type="hidden" name="label" value="{{ label }}">
+                          <button type="submit" name="action" value="remove-label" class="button">{% translate "Remove" %}</button>
+                        </form>
+                      {% endif %}
+                    {% empty %}
+                      <span class="repo-work-empty-label">{% translate "No labels" %}</span>
+                    {% endfor %}
+                  </div>
+                  {% if can_manage_labels %}
+                    <form class="repo-work-label-form" method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                      {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                      <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                      <input type="hidden" name="number" value="{{ row.item.number }}">
+                      <input type="text" name="label" required aria-label="{% translate 'Label' %}">
+                      <button type="submit" name="action" value="add-label" class="button">{% translate "Add" %}</button>
+                    </form>
+                  {% endif %}
+                </td>
+                <td class="repo-work-state">{{ row.item.state }}</td>
+                <td class="repo-work-tracked">
+                  {% if row.monitor_items %}
+                    {% if can_view_monitor_items %}
+                      <a class="repo-work-badge" href="{{ row.monitor_url }}">{% translate "Tracked" %}: {{ row.monitor_statuses }}</a>
+                    {% else %}
+                      <span class="repo-work-badge">{% translate "Tracked" %}: {{ row.monitor_statuses }}</span>
+                    {% endif %}
+                  {% endif %}
+                </td>
+                <td class="repo-work-assignment">
+                  {% if row.assigned_to_local_node %}
+                    <span class="repo-work-badge repo-work-badge--assignment">
+                      {% if row.local_patchwork_authorized %}
+                        {% translate "Active here" %}
+                      {% else %}
+                        {% translate "Assigned here" %}
+                      {% endif %}
+                    </span>
+                    {% if can_authorize_patchwork and not row.local_patchwork_authorized %}
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                        {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                        <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                        <input type="hidden" name="number" value="{{ row.item.number }}">
+                        <button type="submit" name="action" value="authorize-local-patchwork" class="button">{% translate "Authorize patchwork" %}</button>
+                      </form>
+                    {% endif %}
+                    {% if can_remove_assignments %}
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                        {% if selected_assignment_node %}<input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">{% endif %}
+                        <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                        <input type="hidden" name="number" value="{{ row.item.number }}">
+                        <button type="submit" name="action" value="remove-local-assignment" class="button">{% translate "Remove assignment" %}</button>
+                      </form>
+                    {% endif %}
+                  {% elif can_assign_work and selected_assignment_node %}
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="repository" value="{{ selected_repository.pk }}">
+                      <input type="hidden" name="assignment_node" value="{{ selected_assignment_node.pk }}">
+                      <input type="hidden" name="target_type" value="{{ row.target_type }}">
+                      <input type="hidden" name="number" value="{{ row.item.number }}">
+                      <button type="submit" name="action" value="assign-local" class="button">{% translate "Assign to target node" %}</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="repo-work-empty">{% translate "No stored pull requests for this repository." %}</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

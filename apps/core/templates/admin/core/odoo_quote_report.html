@@ -1,0 +1,135 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+  {% trans 'Quote Report' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+{% if error %}
+  <div class="messagelist">
+    <div class="error">
+      {{ error }}
+      {% if profile_url %}
+        <a href="{{ profile_url }}">{% trans 'Manage Odoo credentials' %}</a>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="module">
+    <h2>{% trans 'Quote templates' %}</h2>
+    <table class="adminlist">
+      <thead>
+        <tr>
+          <th scope="col">{% trans 'Template' %}</th>
+          <th scope="col">{% trans 'Quotes' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for template in template_stats %}
+          <tr>
+            <th scope="row">{{ template.name|default:"-" }}</th>
+            <td>{{ template.quote_count }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="2">{% trans 'No templates found.' %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="module">
+    <h2>{% trans 'Recent unsent quotes' %}</h2>
+    <table class="adminlist">
+      <thead>
+        <tr>
+          <th scope="col">{% trans 'Quote' %}</th>
+          <th scope="col">{% trans 'Customer' %}</th>
+          <th scope="col">{% trans 'Total' %}</th>
+          <th scope="col">{% trans 'Activity' %}</th>
+          <th scope="col">{% trans 'Tags' %}</th>
+          <th scope="col">{% trans 'Created' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for quote in quotes %}
+          <tr>
+            <th scope="row">{{ quote.name|default:"-" }}</th>
+            <td>{{ quote.customer|default:"-" }}</td>
+            <td>{{ quote.total_display|default:"-" }}</td>
+            <td>{{ quote.activity|default:"-" }}</td>
+            <td>{{ quote.tags|join:", "|default:"-" }}</td>
+            <td>{{ quote.create_date|date:"DATETIME_FORMAT"|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6">{% trans 'No matching quotes found.' %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="module">
+    <h2>{% trans 'Recently updated products' %}</h2>
+    <table class="adminlist">
+      <thead>
+        <tr>
+          <th scope="col">{% trans 'Product' %}</th>
+          <th scope="col">{% trans 'Internal reference' %}</th>
+          <th scope="col">{% trans 'Created' %}</th>
+          <th scope="col">{% trans 'Last updated' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in recent_products %}
+          <tr>
+            <th scope="row">{{ product.name|default:"-" }}</th>
+            <td>{{ product.default_code|default:"-" }}</td>
+            <td>{{ product.create_date|date:"DATETIME_FORMAT"|default:"-" }}</td>
+            <td>{{ product.write_date|date:"DATETIME_FORMAT"|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4">{% trans 'No products found.' %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="module">
+    <h2>{% trans 'Installed modules' %}</h2>
+    <table class="adminlist">
+      <thead>
+        <tr>
+          <th scope="col">{% trans 'Module' %}</th>
+          <th scope="col">{% trans 'Description' %}</th>
+          <th scope="col">{% trans 'Version' %}</th>
+          <th scope="col">{% trans 'Author' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for module in installed_modules %}
+          <tr>
+            <th scope="row">{{ module.name|default:"-" }}</th>
+            <td>{{ module.shortdesc|default:"-" }}</td>
+            <td>{{ module.latest_version|default:"-" }}</td>
+            <td>{{ module.author|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4">{% trans 'No installed modules found.' %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}

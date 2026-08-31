@@ -1,0 +1,56 @@
+name: Release Impact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Classify release impact
+        env:
+          BASE_REF: origin/${{ github.base_ref || github.event.repository.default_branch }}
+        run: |
+          python -m scripts.release.release_impact \
+            --root . \
+            --base-ref "$BASE_REF" \
+            --head-ref HEAD \
+            --bump-level auto \
+            --json > release-impact.json
+          cat release-impact.json
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("release-impact.json").read_text(encoding="utf-8"))
+          print("## Release Impact")
+          print()
+          print(f"- Required bump: `{report['required_bump']}`")
+          print(f"- Base ref: `{report['base_ref']}`")
+          print(f"- Head ref: `{report['head_ref']}`")
+          print(f"- Changed files considered: `{report['change_count']}`")
+          print()
+          print("### Findings")
+          for finding in report["findings"]:
+              path = finding.get("path") or "(repository)"
+              detail = finding.get("detail") or finding["message"]
+              print(
+                  f"- `{finding['level']}` `{finding['rule_id']}` "
+                  f"`{path}` - {detail}"
+              )
+          PY
+      - uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: release-impact
+          path: release-impact.json
