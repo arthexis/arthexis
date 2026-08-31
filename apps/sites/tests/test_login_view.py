@@ -54,7 +54,9 @@ def test_login_view_ignores_unsafe_next(client):
     assert Session.objects.count() == 0
 
 
-@pytest.mark.parametrize("target", ["https://attacker.example/", "//attacker.example/"])
+@pytest.mark.parametrize(
+    "target", ["https://attacker.example/", "//attacker.example/", "//["]
+)
 def test_logout_view_rejects_external_redirect_targets(client, target):
     response = client.get(reverse("pages:logout"), {"next": target})
 

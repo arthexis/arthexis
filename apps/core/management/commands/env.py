@@ -70,7 +70,11 @@ def write_env(path: Path, values: OrderedDict[str, str]) -> None:
         )
         temporary_path = Path(temporary_name)
         try:
-            os.fchmod(descriptor, 0o600)
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(descriptor, 0o600)
+            else:
+                temporary_path.chmod(0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write("\n".join(lines) + "\n")
             os.replace(temporary_path, path)
