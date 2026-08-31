@@ -104,7 +104,7 @@ ci = [
   "types-requests==2.33.0.20260712",
 ]
 dev = [
-  "django-debug-toolbar==6.3.0",
+  "django-debug-toolbar==7.1.1",
 ]
 docs = [
   "mkdocs==1.6.1",
