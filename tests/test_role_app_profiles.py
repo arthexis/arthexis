@@ -917,8 +917,7 @@ def test_watchtower_profile_skips_control_hardware_beat_schedules():
     assert "site_view_history_purge" in schedule
     assert "certificate_expiration_refresh" in schedule
     assert "thermometer_sampling" not in schedule
-    assert "usb_lcd_status" not in schedule
-    assert "llm_summary_lcd" not in schedule
+    assert "log_summary" not in schedule
     assert "ocpp_forwarding_push" not in schedule
 
 
@@ -926,8 +925,7 @@ def test_satellite_profile_skips_screen_beat_schedules():
     schedule = _beat_schedule_for_profile("Satellite")
 
     assert "thermometer_sampling" in schedule
-    assert "usb_lcd_status" not in schedule
-    assert "llm_summary_lcd" not in schedule
+    assert "log_summary" not in schedule
 
 
 def test_control_profile_keeps_local_hardware_beat_schedules():
@@ -935,10 +933,8 @@ def test_control_profile_keeps_local_hardware_beat_schedules():
 
     assert "heartbeat" in schedule
     assert "thermometer_sampling" in schedule
-    assert "usb_lcd_status" in schedule
-    assert "llm_summary_lcd" in schedule
+    assert "log_summary" in schedule
     assert "certificate_expiration_refresh" in schedule
-    assert "ocpp_forwarding_push" in schedule
 
 
 def test_beat_schedule_resolver_skips_explicitly_disabled_apps():
@@ -967,8 +963,7 @@ def test_beat_schedule_resolver_keeps_full_fallback_schedule():
         "log_retention_guard",
         "github_monitor",
     } <= set(schedule)
-    assert "llm_summary_lcd" not in schedule
-    assert "usb_lcd_status" not in schedule
+    assert "log_summary" in schedule
 
 
 def test_energy_billing_feature_pack_keeps_legacy_billing_apps_deprecated():

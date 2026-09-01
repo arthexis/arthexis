@@ -3,6 +3,22 @@
 from django.db import migrations, models
 
 
+def remove_retired_lcd_action_config(apps, schema_editor):
+    WatchlistEntry = apps.get_model("cards", "RFIDWatchlistEntry")
+    for entry in WatchlistEntry.objects.iterator():
+        config = entry.action_config
+        if not isinstance(config, dict):
+            continue
+        cleaned = {
+            key: value
+            for key, value in config.items()
+            if key not in {"lcd_channel_type", "lcd_channel_num"}
+        }
+        if cleaned != config:
+            entry.action_config = cleaned
+            entry.save(update_fields=["action_config"])
+
+
 class Migration(migrations.Migration):
     dependencies = [("cards", "0007_alter_rfid_rfid")]
 
@@ -15,5 +31,9 @@ class Migration(migrations.Migration):
                 default=dict,
                 help_text="Allowlisted action options such as subject, body, or reach.",
             ),
+        ),
+        migrations.RunPython(
+            remove_retired_lcd_action_config,
+            migrations.RunPython.noop,
         ),
     ]
