@@ -51,8 +51,8 @@ def ingestion_events(request: HttpRequest) -> HttpResponse:
     service = IngestionService()
     try:
         event = service.ingest_event(payload)
-    except (IngestionServiceError, ValidationError):
-        logger.warning("Rejected invalid Raspberry Pi Connect ingestion event")
+    except (IngestionServiceError, ValidationError) as exc:
+        logger.warning("Rejected invalid Raspberry Pi Connect ingestion event: %s", exc)
         return JsonResponse({"detail": "invalid event"}, status=400)
 
     return JsonResponse({"event_id": event.event_id, "id": event.pk}, status=202)

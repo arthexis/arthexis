@@ -193,6 +193,24 @@ class IngestionApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"detail": "invalid event"})
 
+    def test_logs_invalid_event_reason_without_exposing_it_to_client(self) -> None:
+        with self.assertLogs("apps.rpiconnect.views", level="WARNING") as captured:
+            response = self.client.post(
+                self.url,
+                data={
+                    "event_type": "deployment",
+                    "device_id": self.device.device_id,
+                    "deployment_id": self.deployment.pk,
+                    "status": "succeeded",
+                },
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer shared-secret",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid event"})
+        self.assertIn("event_id is required", captured.output[0])
+
     def test_ignores_mismatched_deployment_id_and_resolves_by_device(self) -> None:
         other_device = ConnectDevice.objects.create(
             account=self.account,
