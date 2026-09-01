@@ -3319,6 +3319,7 @@ fi
 
 if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+  rm -f "$LOCK_DIR/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}" "$LOCK_DIR/lcd_screen_enabled.lck"
 fi
 
 SHOULD_RESTART_AFTER_UPGRADE=1
