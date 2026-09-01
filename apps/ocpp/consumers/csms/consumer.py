@@ -17,7 +17,6 @@ from django.utils.dateparse import parse_datetime
 
 from apps.cards.models import RFID as CoreRFID
 from apps.cards.models import RFIDAttempt
-from apps.core.notifications import LcdChannel
 from apps.energy.models import CustomerAccount
 from apps.nodes.models import NetMessage
 from apps.ocpp import store
@@ -89,7 +88,6 @@ from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from apps.ocpp.utils import _parse_ocpp_timestamp
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-from apps.screens.startup_notifications import format_lcd_lines
 from config.offline import requires_network
 from utils.rate_limit_fallback import fallback_rate_limit_allows
 
@@ -507,34 +505,28 @@ class CSMSConsumer(
                 energy_consumed *= 1000
             elapsed_label = _format_elapsed(tx.start_time)
             body_value = f"{energy_consumed:.1f}{unit} {elapsed_label}"[:256]
-            line1, line2 = format_lcd_lines(subject_value, body_value)
             expires_at = timezone.now() + timedelta(
                 seconds=max(self.consumption_update_interval * 2, 30)
             )
             if existing_uuid:
                 msg = NetMessage.objects.filter(uuid=existing_uuid).first()
                 if msg:
-                    msg.subject = line1
-                    msg.body = line2
+                    msg.subject = subject_value
+                    msg.body = body_value
                     msg.expires_at = expires_at
-                    msg.lcd_channel_type = LcdChannel.HIGH.value
-                    msg.lcd_channel_num = 0
                     msg.save(
                         update_fields=[
                             "subject",
                             "body",
                             "expires_at",
-                            "lcd_channel_type",
-                            "lcd_channel_num",
                         ]
                     )
                     msg.propagate()
                     return str(msg.uuid)
             msg = NetMessage.broadcast(
-                subject=line1,
-                body=line2,
+                subject=subject_value,
+                body=body_value,
                 expires_at=expires_at,
-                lcd_channel_type=LcdChannel.HIGH.value,
             )
             return str(msg.uuid)
 

@@ -14,7 +14,6 @@ from django.db import models
 from django.utils import timezone
 
 from apps.base.models import Entity
-from apps.core.notifications import LcdChannel
 from apps.sigils.fields import SigilShortAutoField
 
 from .features import NodeFeature
@@ -27,9 +26,6 @@ LEGACY_REMOTE_UPGRADE_CONTROL_QUEUE_MARKER = "__arthexis_local_remote_upgrade_co
 
 class NetMessage(Entity):
     """Message propagated across nodes."""
-
-    SUPPRESS_LCD_CHANNEL_TYPE = "none"
-    SUPPRESSED_LCD_CHANNEL_TYPES = {SUPPRESS_LCD_CHANNEL_TYPE, "off", "disabled"}
 
     class Kind(models.TextChoices):
         MESSAGE = "message", "Message"
@@ -67,16 +63,6 @@ class NetMessage(Entity):
         null=True,
         blank=True,
         help_text="UTC timestamp after which this message should be discarded.",
-    )
-    lcd_channel_type = models.CharField(
-        max_length=20,
-        blank=True,
-        default=LcdChannel.LOW.value,
-        help_text="LCD channel type for local display (for example low, high, clock, or uptime).",
-    )
-    lcd_channel_num = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="LCD channel number to target when displaying locally.",
     )
     filter_node = models.ForeignKey(
         "Node",
@@ -149,8 +135,6 @@ class NetMessage(Entity):
         seen: list[str] | None = None,
         attachments: list[dict[str, object]] | None = None,
         expires_at: datetime | str | None = None,
-        lcd_channel_type: str | None = None,
-        lcd_channel_num: int | None = None,
     ):
         """Create and propagate a network message."""
         role = None
@@ -162,9 +146,6 @@ class NetMessage(Entity):
         else:
             role = NodeRole.objects.filter(name="Terminal").first()
         origin = Node.get_local()
-        normalized_channel_type, normalized_channel_num = cls.normalize_lcd_channel(
-            lcd_channel_type, lcd_channel_num
-        )
         normalized_attachments = cls.normalize_attachments(attachments)
         msg = cls.objects.create(
             subject=subject[:64],
@@ -173,8 +154,6 @@ class NetMessage(Entity):
             node_origin=origin,
             attachments=normalized_attachments or None,
             expires_at=cls.normalize_expires_at(expires_at),
-            lcd_channel_type=normalized_channel_type,
-            lcd_channel_num=normalized_channel_num,
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
@@ -263,28 +242,6 @@ class NetMessage(Entity):
 
         return parsed
 
-    @staticmethod
-    def normalize_lcd_channel(
-        channel_type: object | None, channel_num: object | None
-    ) -> tuple[str, int]:
-        """Normalize LCD channel metadata."""
-        normalized_type = (
-            str(channel_type or LcdChannel.LOW.value).strip() or LcdChannel.LOW.value
-        ).lower()
-        try:
-            normalized_num = int(channel_num) if channel_num is not None else 0
-        except (TypeError, ValueError):
-            normalized_num = 0
-        if normalized_num < 0:
-            normalized_num = 0
-        return normalized_type[:20], normalized_num
-
-    @classmethod
-    def suppresses_lcd_channel(cls, channel_type: object | None) -> bool:
-        """Return whether normalized LCD metadata should skip local display."""
-
-        return str(channel_type or "").strip().lower() in cls.SUPPRESSED_LCD_CHANNEL_TYPES
-
     @property
     def is_expired(self) -> bool:
         """Return ``True`` when the message has expired."""
@@ -343,11 +300,6 @@ class NetMessage(Entity):
             payload["kind"] = self.kind
         if self.control_payload:
             payload["control_payload"] = self.control_payload
-        channel_type, channel_num = self.normalize_lcd_channel(
-            self.lcd_channel_type, self.lcd_channel_num
-        )
-        payload["lcd_channel_type"] = channel_type
-        payload["lcd_channel_num"] = channel_num
         if self.attachments:
             payload["attachments"] = self.attachments
         if self.expires_at:

@@ -100,7 +100,7 @@ python manage.py enabled_apps_lock \
   --role Watchtower \
   --feature-pack hosted-ocpp \
   --feature-pack screen-devices \
-  --include apps.screens \
+  --include apps.sensors \
   --disable repos
 ```
 
@@ -303,8 +303,7 @@ explicit local disables and dependency validation. This keeps new default-on
 suite apps available on Control immediately after upgrade without adding another
 hand-maintained role-default entry.
 
-Control is the only profile that should select `apps.screens` and launch RFID,
-LCD, USB inventory, hosted OCPP, and other non-commerce app-provided startup
+Control launches RFID, USB inventory, hosted OCPP, and other non-commerce app-provided startup
 behavior by default. Public commerce remains opt-in through the
 `public_commerce` feature pack. Use
 `ARTHEXIS_ROLE_APP_DISABLED_APPS`, `ARTHEXIS_DISABLED_APPS`, or the enabled-apps
@@ -331,8 +330,7 @@ Optional Satellite feature packs:
 - Audio capture launch behavior: deprecated; no app is selected by the feature
   pack.
 - Raspberry Pi Connect: `apps.rpiconnect`
-- Screen devices: `apps.screens`, with `apps.sensors` and `apps.summary`
-  selected through dependency closure.
+- Screen devices: retired; no suite app is selected.
 - Local summaries: `apps.summary`
 
 Satellite's default OCPP monitoring pack currently includes `apps.nodes`,
@@ -359,9 +357,8 @@ Default Terminal apps:
 Optional Terminal feature packs:
 
 - OCPP experiments: `apps.ocpp`
-- Hardware experiments: `apps.cards`, `apps.sensors`, `apps.screens`
-- Screen devices: `apps.screens`, with `apps.sensors` and `apps.summary`
-  selected through dependency closure.
+- Hardware experiments: `apps.cards`, `apps.sensors`
+- Screen devices: retired; no suite app is selected.
 
 Terminal includes `apps.imager` so a local operator with an attached USB
 SD-card reader can inspect media or run `manage.py imager ...` without changing
@@ -382,7 +379,6 @@ and require explicit feature pack enablement.
 - `apps.clocks`
 - `apps.printers`
 - `apps.rpiconnect`
-- `apps.screens`
 - `apps.shop`
 - `apps.summary`
 

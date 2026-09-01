@@ -17,8 +17,6 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.system.filesystem import _read_service_mode
-from apps.nodes.tasks import send_startup_net_message
-from apps.screens.startup_notifications import lcd_feature_enabled
 
 ARTHEXIS_SERVICE_MODE_EMBEDDED = "embedded"
 ARTHEXIS_SERVICE_MODE_SYSTEMD = "systemd"
@@ -74,15 +72,6 @@ class Command(BaseCommand):
 
         systemd_units = self._read_systemd_units(lock_dir)
         systemd_celery_units = self._has_systemd_celery_units(service_name, systemd_units)
-        lcd_systemd_unit = self._has_unit(
-            service_name=service_name,
-            units=systemd_units,
-            template="lcd-{service_name}.service",
-        )
-        lcd_lock_enabled = lcd_feature_enabled(lock_dir)
-        lcd_role_allowed = self._lcd_role_allowed()
-        lcd_enabled = lcd_lock_enabled and lcd_role_allowed
-
         payload: dict[str, object] = {
             "status": "ok",
             "port": str(options["port"]),
@@ -96,12 +85,6 @@ class Command(BaseCommand):
                 "name": service_name,
                 "mode": service_mode,
                 "systemd_celery_units": systemd_celery_units,
-                "lcd_systemd_unit": lcd_systemd_unit,
-            },
-            "features": {
-                "lcd_enabled": lcd_enabled,
-                "lcd_lock_enabled": lcd_lock_enabled,
-                "lcd_role_allowed": lcd_role_allowed,
             },
             "checks": [],
         }
@@ -114,25 +97,12 @@ class Command(BaseCommand):
         maintenance_ok, maintenance_status = self._run_startup_maintenance()
         payload["checks"].append(maintenance_status)
 
-        startup_message_status = "skipped:lcd-disabled"
-        if lcd_enabled:
-            startup_message_status = self._queue_startup_message(str(options["port"]))
-        payload["startup_message_status"] = startup_message_status
-
         celery_embedded = self._resolve_celery_embedded(
             celery_mode=celery_mode,
             service_mode=service_mode,
         )
-        lcd_target_mode = self._resolve_lcd_target_mode(
-            lcd_enabled=lcd_enabled,
-            service_mode=service_mode,
-            lcd_systemd_unit=lcd_systemd_unit,
-        )
-
         payload["launch"] = {
             "celery_embedded": celery_embedded,
-            "lcd_embedded": lcd_enabled and lcd_target_mode == ARTHEXIS_SERVICE_MODE_EMBEDDED,
-            "lcd_target_mode": lcd_target_mode,
         }
 
         if not preflight_ok or not maintenance_ok:
@@ -204,13 +174,6 @@ class Command(BaseCommand):
         return True, {"name": "startup_maintenance", "status": "ok", "detail": "ok"}
 
     @staticmethod
-    def _queue_startup_message(port: str) -> str:
-        try:
-            return send_startup_net_message(port=port)
-        except Exception as exc:
-            return f"error:{exc}"
-
-    @staticmethod
     def _read_lock_line(path: Path) -> str:
         try:
             return path.read_text(encoding="utf-8").strip()
@@ -248,18 +211,6 @@ class Command(BaseCommand):
         if celery_mode == "systemd":
             return False
         return service_mode != ARTHEXIS_SERVICE_MODE_SYSTEMD
-
-    @staticmethod
-    def _resolve_lcd_target_mode(*, lcd_enabled: bool, service_mode: str, lcd_systemd_unit: bool) -> str:
-        if not lcd_enabled:
-            return ARTHEXIS_SERVICE_MODE_EMBEDDED
-        if service_mode == ARTHEXIS_SERVICE_MODE_SYSTEMD and lcd_systemd_unit:
-            return ARTHEXIS_SERVICE_MODE_SYSTEMD
-        return ARTHEXIS_SERVICE_MODE_EMBEDDED
-
-    @staticmethod
-    def _lcd_role_allowed() -> bool:
-        return str(getattr(settings, "NODE_ROLE", "")).strip().casefold() == "control"
 
     @staticmethod
     def _write_startup_started_lock(lock_path: Path, started_at_epoch: int) -> None:

@@ -18,7 +18,6 @@ from django.utils import timezone
 from apps.features.parameters import get_feature_parameter
 from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.roles import node_is_control
-from apps.screens.startup_notifications import render_lcd_lock_file
 
 from .constants import (
     LCD_SUMMARY_MAX_WINDOW_MINUTES,
@@ -916,10 +915,6 @@ def fixed_frame_window(screens: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return list(screens[:LCD_SUMMARY_FRAME_COUNT])
 
 
-def render_lcd_payload(subject: str, body: str, *, expires_at=None) -> str:
-    return render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
-
-
 def summary_output_target(config: LLMSummaryConfig) -> str:
     """Return the configured output target, falling back to LCD for old configs."""
 
@@ -1205,17 +1200,13 @@ def _record_summary_error(
 
 
 def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
-    """Generate LCD log summary output and persist latest run metadata."""
+    """Generate log summary output and persist latest run metadata."""
 
     from apps.nodes.models import Node
-    from apps.screens.startup_notifications import LCD_SUMMARY_LOCK_FILE
     from apps.summary.tasks import (
         LocalLLMSummarizer,
         LocalLLMSummaryError,
-        _write_lcd_frames,
     )
-
-    lock_dir = Path(settings.BASE_DIR) / ".locks"
 
     node = Node.get_local()
     if not node:
@@ -1227,7 +1218,7 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True
     ):
         logger.info(
-            "Skipping LCD summary automation because suite feature '%s' is disabled.",
+            "Skipping summary automation because suite feature '%s' is disabled.",
             LLM_SUMMARY_SUITE_FEATURE_SLUG,
         )
         return "skipped:suite-feature-disabled"
@@ -1262,7 +1253,7 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
     try:
         output = summarizer.summarize(prompt)
     except LocalLLMSummaryError:
-        logger.exception("Failed to generate deterministic LCD summary")
+        logger.exception("Failed to generate deterministic summary")
         _record_summary_error(
             config,
             now=now,
@@ -1280,7 +1271,6 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
 
     output_target = summary_output_target(config)
-    lock_file = lock_dir / LCD_SUMMARY_LOCK_FILE
     frames = fixed_frame_window(screens)
     written_files: list[Path] = []
     file_output_failed = False
@@ -1297,22 +1287,6 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         except (OSError, TypeError, ValueError):
             logger.exception("Failed to write summary file output")
             file_output_failed = True
-        if lock_dir.exists():
-            try:
-                _write_lcd_frames([], lock_file=lock_file)
-            except OSError:
-                pass
-    elif node.has_feature("lcd-screen"):
-        _write_lcd_frames(
-            frames,
-            lock_file=lock_file,
-            expires_at=now + LCD_SUMMARY_EXPIRES_AFTER,
-        )
-    elif lock_dir.exists():
-        try:
-            _write_lcd_frames([], lock_file=lock_file)
-        except OSError:
-            pass
 
     config.last_run_at = now
     config.last_prompt = prompt

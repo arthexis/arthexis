@@ -75,7 +75,6 @@ EXPECTED_PROFILE_APP_DEPENDENCIES = {
         "apps.protocols",
     ),
     "apps.odoo": ("apps.discovery",),
-    "apps.screens": ("apps.sensors", "apps.summary"),
     "apps.sites": ("apps.docs", "apps.modules"),
 }
 
@@ -131,7 +130,6 @@ def test_control_profile_defaults_to_manifest_apps_except_feature_pack_only():
 
     assert missing == []
     assert RETIRED_RUNTIME_APP_SELECTORS.isdisjoint(control_apps)
-    assert "apps.screens" in control_apps
     assert "apps.shop" not in control_apps
 
 
@@ -149,7 +147,6 @@ def test_control_all_apps_does_not_expand_other_role_defaults():
         role_apps = set(resolve_role_app_selectors(role_profile))
 
         assert "apps.printers" not in role_apps
-        assert "apps.screens" not in role_apps
 
 
 def test_satellite_profile_makes_ocpp_monitoring_explicit_without_commerce_bloat():
@@ -165,7 +162,6 @@ def test_satellite_profile_makes_ocpp_monitoring_explicit_without_commerce_bloat
     assert "apps.odoo" in apps
     assert "apps.rates" not in apps
     assert "apps.repos" not in apps
-    assert "apps.screens" not in apps
     assert "apps.sites" in apps
     assert "apps.shop" not in apps
     assert RETIRED_RUNTIME_APP_SELECTORS.isdisjoint(apps)
@@ -243,7 +239,7 @@ def test_watchtower_profile_keeps_admin_actions_for_staff_tasks_template():
     assert "apps.actions" in watchtower_apps
 
 
-def test_screen_devices_feature_pack_enables_lcd_profile_stack():
+def test_screen_devices_feature_pack_has_no_retired_runtime_app():
     terminal_apps = set(resolve_role_app_selectors("terminal"))
     screen_apps = set(
         resolve_role_app_selectors(
@@ -258,11 +254,8 @@ def test_screen_devices_feature_pack_enables_lcd_profile_stack():
         )
     )
 
-    assert "apps.screens" not in terminal_apps
-    assert "apps.screens" in screen_apps
-    assert "apps.sensors" in screen_apps
-    assert "apps.summary" in screen_apps
-    assert "apps.screens" in hardware_apps
+    assert screen_apps == terminal_apps
+    assert "apps.sensors" in hardware_apps
 
 
 def test_rpi_connect_updates_feature_pack_enables_native_artifact_builder():
@@ -808,8 +801,8 @@ def test_explain_role_app_selectors_preserves_one_shot_feature_pack_iterables():
     result = explain_role_app_selectors("Terminal", feature_packs=feature_packs)
     reasons = {item.selector: item.reasons for item in result.explanations}
 
-    assert "apps.screens" in result.selectors
-    assert "feature-pack:screen_devices" in reasons["apps.screens"]
+    assert result.selectors == tuple(resolve_role_app_selectors("Terminal"))
+    assert "feature-pack:screen_devices" not in reasons
 
 
 def test_unknown_role_profile_disables_no_route_apps():

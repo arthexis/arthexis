@@ -12,8 +12,6 @@ from apps.core.services.health import (
 )
 from apps.core.services.health_checks import (
     run_check_admin,
-    run_check_lcd_send,
-    run_check_lcd_service,
     run_check_next_upgrade,
     run_check_rfid,
     run_check_system_user,
@@ -26,22 +24,6 @@ HEALTH_CHECKS = {
         group="core",
         description="Verify default admin account health",
         runner=run_check_admin,
-    ),
-    "core.lcd_send": HealthCheckDefinition(
-        target="core.lcd_send",
-        group="core",
-        description="Send and validate an LCD lock-file message",
-        runner=run_check_lcd_send,
-        include_in_group=False,
-        node_roles=("Control",),
-    ),
-    "core.lcd_service": HealthCheckDefinition(
-        target="core.lcd_service",
-        group="core",
-        description="Validate LCD service readiness",
-        runner=run_check_lcd_service,
-        include_in_group=False,
-        node_roles=("Control",),
     ),
     "core.next_upgrade": HealthCheckDefinition(
         target="core.next_upgrade",

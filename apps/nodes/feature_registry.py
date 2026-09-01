@@ -10,15 +10,11 @@ from django.apps import apps as django_apps
 from apps.nodes.node_features import (
     register_node_feature_detection as register_nodes_features,
 )
-from apps.screens.node_features import (
-    register_node_feature_detection as register_screens_features,
-)
 
 from .feature_detection import DetectionRegistrar
 
 APPROVED_NODE_FEATURE_REGISTRARS: tuple[DetectionRegistrar, ...] = (
     register_nodes_features,
-    register_screens_features,
 )
 
 OPTIONAL_NODE_FEATURE_REGISTRARS: Sequence[tuple[str, str]] = (

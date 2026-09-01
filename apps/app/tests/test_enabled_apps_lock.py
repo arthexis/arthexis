@@ -163,13 +163,13 @@ def test_refresh_enabled_apps_lock_preserves_explicit_optional_app_selectors(
     )
     monkeypatch.setattr(
         "apps.app.models._load_manifest_declared_app_entries",
-        lambda: {"apps.docs", "apps.screens"},
+        lambda: {"apps.docs", "apps.ftp"},
     )
     with override_settings(BASE_DIR=tmp_path):
         write_enabled_apps_lock(
-            ("apps.screens", "apps.docs"),
+            ("apps.ftp", "apps.docs"),
             tmp_path,
-            direct_apps=("apps.screens",),
+            direct_apps=("apps.ftp",),
         )
         Application.objects.create(name="docs", enabled=True)
 
@@ -178,9 +178,9 @@ def test_refresh_enabled_apps_lock_preserves_explicit_optional_app_selectors(
     lock_entries = read_enabled_apps_lock(tmp_path)
 
     assert lock_entries is not None
-    assert "apps.screens" in lock_entries
+    assert "apps.ftp" in lock_entries
     assert "apps.docs" in lock_entries
-    assert read_enabled_apps_lock_direct_entries(tmp_path) == {"apps.screens"}
+    assert read_enabled_apps_lock_direct_entries(tmp_path) == {"apps.ftp"}
 
 
 @pytest.mark.django_db
@@ -194,15 +194,15 @@ def test_refresh_enabled_apps_lock_drops_explicitly_disabled_optional_app_select
     )
     monkeypatch.setattr(
         "apps.app.models._load_manifest_declared_app_entries",
-        lambda: {"apps.docs", "apps.screens"},
+        lambda: {"apps.docs", "apps.ftp"},
     )
     with override_settings(BASE_DIR=tmp_path):
         write_enabled_apps_lock(
-            ("apps.screens", "apps.docs"),
+            ("apps.ftp", "apps.docs"),
             tmp_path,
-            direct_apps=("apps.screens",),
+            direct_apps=("apps.ftp",),
         )
-        Application.objects.create(name="screens", enabled=False)
+        Application.objects.create(name="ftp", enabled=False)
         Application.objects.create(name="docs", enabled=True)
 
         refresh_enabled_apps_lock()
@@ -210,10 +210,10 @@ def test_refresh_enabled_apps_lock_drops_explicitly_disabled_optional_app_select
     lock_entries = read_enabled_apps_lock(tmp_path)
 
     assert lock_entries is not None
-    assert "apps.screens" not in lock_entries
+    assert "apps.ftp" not in lock_entries
     assert "apps.docs" in lock_entries
     direct_entries = read_enabled_apps_lock_direct_entries(tmp_path)
-    assert direct_entries is None or "apps.screens" not in direct_entries
+    assert direct_entries is None or "apps.ftp" not in direct_entries
 
 
 @pytest.mark.django_db
@@ -221,26 +221,26 @@ def test_register_site_apps_creates_optional_apps_disabled_by_default(tmp_path):
     with override_settings(
         BASE_DIR=tmp_path,
         PROJECT_LOCAL_APPS=[],
-        OPTIONAL_PROJECT_LOCAL_APPS=["apps.screens"],
+        OPTIONAL_PROJECT_LOCAL_APPS=["apps.ftp"],
     ):
         call_command("register_site_apps")
 
-    optional_app = Application.objects.get(name="screens")
+    optional_app = Application.objects.get(name="ftp")
 
     assert optional_app.enabled is False
 
 
 @pytest.mark.django_db
 def test_register_site_apps_preserves_existing_optional_lock_opt_in(tmp_path):
-    write_enabled_apps_lock(("apps.screens",), tmp_path)
+    write_enabled_apps_lock(("apps.ftp",), tmp_path)
     with override_settings(
         BASE_DIR=tmp_path,
         PROJECT_LOCAL_APPS=[],
-        OPTIONAL_PROJECT_LOCAL_APPS=["apps.screens"],
+        OPTIONAL_PROJECT_LOCAL_APPS=["apps.ftp"],
     ):
         call_command("register_site_apps")
 
-    optional_app = Application.objects.get(name="screens")
+    optional_app = Application.objects.get(name="ftp")
 
     assert optional_app.enabled is True
 

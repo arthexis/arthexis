@@ -46,8 +46,6 @@ from apps.cards.command_layout import (
     normalize_command_lifecycle_mode,
 )
 from apps.cards.rfid_names import generated_label_for_rfid, rfid_name_key
-from apps.core.notifications import notify_event_async
-from apps.screens.startup_notifications import lcd_feature_enabled
 from config.loadenv import loadenv
 from config.sqlite_driver import bootstrap_sqlite_driver
 
@@ -60,11 +58,7 @@ SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
 SCAN_STATE_SCHEMA = "arthexis.rfid.scan.v1"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
-RFID_LCD_SCAN_EVENT_DURATION_SECONDS = 10
-RFID_LCD_SCAN_EVENT_ID = 0
-RFID_LCD_SCAN_EVENT_REFRESH_SECONDS = 5.0
 RFID_COMMAND_HOLD_SECONDS = 3.0
-RFID_COMMAND_LCD_REFRESH_SECONDS = 0.5
 
 
 def default_service_host() -> str:
@@ -95,32 +89,11 @@ def default_worker_scan_timeout() -> float:
     return float(os.environ.get("RFID_SERVICE_WORKER_SCAN_TIMEOUT", "0.1"))
 
 
-def default_lcd_scan_event_refresh_seconds() -> float:
-    return float(
-        os.environ.get(
-            "RFID_LCD_SCAN_EVENT_REFRESH_SECONDS",
-            str(RFID_LCD_SCAN_EVENT_REFRESH_SECONDS),
-        )
-    )
-
-
 def default_command_hold_seconds() -> float:
     return float(
         os.environ.get(
             "RFID_SERVICE_COMMAND_HOLD_SECONDS",
             os.environ.get("RFID_COMMAND_HOLD_SECONDS", str(RFID_COMMAND_HOLD_SECONDS)),
-        )
-    )
-
-
-def default_command_lcd_refresh_seconds() -> float:
-    return float(
-        os.environ.get(
-            "RFID_SERVICE_COMMAND_LCD_REFRESH_SECONDS",
-            os.environ.get(
-                "RFID_COMMAND_LCD_REFRESH_SECONDS",
-                str(RFID_COMMAND_LCD_REFRESH_SECONDS),
-            ),
         )
     )
 
@@ -157,9 +130,7 @@ DEFAULT_QUEUE_MAX = default_queue_max()
 DEFAULT_EVENT_DURATION = default_event_duration()
 DEFAULT_SCAN_DEDUPE_SECONDS = default_scan_dedupe_seconds()
 DEFAULT_WORKER_SCAN_TIMEOUT = default_worker_scan_timeout()
-DEFAULT_LCD_SCAN_EVENT_REFRESH_SECONDS = default_lcd_scan_event_refresh_seconds()
 DEFAULT_COMMAND_HOLD_SECONDS = default_command_hold_seconds()
-DEFAULT_COMMAND_LCD_REFRESH_SECONDS = default_command_lcd_refresh_seconds()
 DEFAULT_DEEP_SCAN_HOLD_SECONDS = default_deep_scan_hold_seconds()
 DEFAULT_DEEP_SCAN_TIMEOUT = default_deep_scan_timeout()
 DEFAULT_AUTO_INITIALIZE_UNKNOWN = default_auto_initialize_unknown()
@@ -267,8 +238,6 @@ class RFIDServiceState:
         self.worker_thread: threading.Thread | None = None
         self._last_emitted_rfid: str | None = None
         self._last_emitted_at: float | None = None
-        self._last_lcd_rfid: str | None = None
-        self._last_lcd_refresh_at: float | None = None
         self._current_rfid: str | None = None
         self._current_presence_started_at: float | None = None
         self._current_presence_started_iso: str | None = None
@@ -309,46 +278,11 @@ class RFIDServiceState:
                     )
                     self.queue.put(result)
                     payload = self._emit_scan_artifacts(result)
-                    self._notify_lcd_event(payload or result)
                 else:
                     self._emit_scan_artifacts(result)
         finally:
             stop_reader()
             logger.info("RFID service worker stopped")
-
-    def _notify_lcd_event(self, result: dict[str, Any]) -> None:
-        rfid_value = str(result.get("rfid") or "").strip().upper()
-        if not rfid_value:
-            return
-        base_dir = Path(settings.BASE_DIR)
-        lock_dir = base_dir / ".locks"
-        if not lcd_feature_enabled(lock_dir):
-            return
-        now = time.monotonic()
-        command_card = result.get("command_card")
-        command_display = isinstance(command_card, dict) and any(
-            key in command_card for key in ("command", "execution", "payload")
-        )
-        refresh_seconds = (
-            default_command_lcd_refresh_seconds()
-            if command_display
-            else default_lcd_scan_event_refresh_seconds()
-        )
-        if (
-            self._last_lcd_rfid == rfid_value
-            and self._last_lcd_refresh_at is not None
-            and now - self._last_lcd_refresh_at < refresh_seconds
-        ):
-            return
-        subject, body = format_lcd_scan_event(result)
-        notify_event_async(
-            subject,
-            body,
-            duration=RFID_LCD_SCAN_EVENT_DURATION_SECONDS,
-            event_id=RFID_LCD_SCAN_EVENT_ID,
-        )
-        self._last_lcd_rfid = rfid_value
-        self._last_lcd_refresh_at = now
 
     def _emit_scan_artifacts(self, result: dict[str, Any]) -> dict[str, Any] | None:
         now = time.monotonic()
@@ -929,87 +863,6 @@ def mask_rfid(value: Any) -> str | None:
     if len(text) <= 4:
         return "*" * len(text)
     return f"{'*' * (len(text) - 4)}{text[-4:]}"
-
-
-def format_lcd_scan_event(result: dict[str, Any]) -> tuple[str, str]:
-    """Return the two-line LCD event shown for an RFID scan."""
-
-    command_card = result.get("command_card")
-    command_name = ""
-    if isinstance(command_card, dict):
-        command_name = str(command_card.get("command") or "").strip().upper()
-    card_name = str(
-        result.get("card_name")
-        or (command_card.get("name") if isinstance(command_card, dict) else "")
-        or ""
-    ).strip()
-    if card_name:
-        subject = card_name[:16]
-        if command_name:
-            status = result.get("command_execution")
-            if isinstance(status, dict) and status.get("status"):
-                progress = _command_progress_bar(
-                    default_command_hold_seconds(),
-                    default_command_hold_seconds(),
-                )
-                body = f"{_command_status_label(status['status'])} {progress}"[:16]
-            else:
-                try:
-                    duration = float(result.get("presence_duration_seconds") or 0.0)
-                except (TypeError, ValueError):
-                    duration = 0.0
-                progress = _command_progress_bar(
-                    duration,
-                    default_command_hold_seconds(),
-                )
-                body = f"{command_name[:5]} {progress}"[:16]
-            return subject, body
-        rfid_value = str(result.get("rfid") or "").strip().upper()
-        return subject, (f"ID {rfid_value}" if rfid_value else "ID unknown")[:16]
-
-    lcd_label = (
-        str(result.get("lcd_label") or "").replace("\r\n", "\n").replace("\r", "\n")
-    )
-    if lcd_label.strip():
-        parts = lcd_label.split("\n", 1)
-        subject = (parts[0] or "RFID")[:16]
-        body = (parts[1] if len(parts) > 1 else "")[:16]
-        if not body:
-            rfid_value = str(result.get("rfid") or "").strip().upper()
-            body = f"ID {rfid_value}"[:16] if rfid_value else "ID unknown"
-        return subject, body
-
-    rfid_value = str(result.get("rfid") or "").strip().upper()
-    label = str(
-        result.get("display_label")
-        or result.get("custom_label")
-        or result.get("generated_label")
-        or generated_label_for_rfid(rfid_value)
-        or result.get("name_key")
-        or ""
-    ).strip()
-    subject = label[:16] if label else "RFID scan"
-    body = f"ID {rfid_value}" if rfid_value else "ID unknown"
-    return subject, body
-
-
-def _command_progress_bar(duration: float, hold_seconds: float) -> str:
-    width = 8
-    if hold_seconds <= 0:
-        filled = width
-    else:
-        filled = max(0, min(width, int(round((duration / hold_seconds) * width))))
-    return "[" + ("#" * filled).ljust(width, "-") + "]"
-
-
-def _command_status_label(value: object) -> str:
-    status = str(value or "").strip().lower()
-    return {
-        "blocked": "BLOCK",
-        "failed": "FAIL",
-        "started": "START",
-        "succeeded": "DONE",
-    }.get(status, status.upper()[:5] or "CMD")
 
 
 def utc_now_iso() -> str:

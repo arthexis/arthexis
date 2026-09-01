@@ -13,7 +13,6 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import timedelta
 from datetime import timezone as dt_timezone
 from pathlib import Path
 from typing import Any
@@ -34,11 +33,6 @@ from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.models import Node
 from apps.repos.models import GitHubMonitorItem, GitHubMonitorTask, GitHubRepository
 from apps.repos.services import github as github_service
-from apps.screens.startup_notifications import (
-    LCD_GITHUB_LOCK_FILE,
-    LCD_LEGACY_FEATURE_LOCK,
-    LCD_RUNTIME_LOCK_FILE,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -62,22 +56,6 @@ DEFAULT_TRUSTED_ISSUE_APPROVALS = 1000
 TRUSTED_AUTHOR_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 DEFAULT_PR_APPROVAL_ACTOR = "arthexis"
 DEFAULT_PR_APPROVAL_EMOJI = "+1"
-GITHUB_MONITOR_LCD_LOCK_NAME = LCD_GITHUB_LOCK_FILE
-GITHUB_MONITOR_LCD_EXPIRES_AFTER = timedelta(minutes=20)
-GWAY_LCD_KEYWORDS = (
-    "ap portal",
-    "control node",
-    "gateway",
-    "gway",
-    "gway 001",
-    "gway-001",
-    "imager",
-    "kindle",
-    "lcd",
-    "rfid",
-    "temperature",
-    "usb",
-)
 REACTION_ALIASES = {
     "thumbs_up": "+1",
     "thumbsup": "+1",

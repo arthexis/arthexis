@@ -12,7 +12,6 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
 
-from .constants import USB_LCD_LABEL_WIDTH, USB_LCD_PORT_COUNT
 
 
 class PhysicalSensor(Entity):
@@ -173,10 +172,6 @@ class Thermometer(PhysicalSensor):
         validators=[MinValueValidator(1)],
         help_text=_("Minimum seconds between repeated alarms at the same level."),
     )
-    alarm_lcd_enabled = models.BooleanField(
-        default=True,
-        help_text=_("Display local LCD notifications when alarm state changes."),
-    )
     alarm_net_message_enabled = models.BooleanField(
         default=True,
         help_text=_("Broadcast NetMessages when alarm state changes."),
@@ -255,18 +250,6 @@ class Thermometer(PhysicalSensor):
                 }
             )
 
-    def format_lcd_reading(self) -> str:
-        """Return the current reading formatted for compact displays.
-
-        Returns:
-            The formatted current thermometer reading.
-        """
-        reading = self.format_reading()
-        if not reading:
-            return ""
-        prefix = {"ambient": "amb", "soc": "soc"}.get(str(self.kind or "").lower())
-        return f"{prefix} {reading}" if prefix else reading
-
     def record_reading(
         self,
         reading: Decimal,
@@ -344,7 +327,6 @@ class ThermometerAlarmEvent(models.Model):
         max_digits=8, decimal_places=2, null=True, blank=True
     )
     message = models.CharField(max_length=256, blank=True)
-    lcd_notified = models.BooleanField(default=False)
     net_message = models.ForeignKey(
         "nodes.NetMessage",
         null=True,
@@ -406,80 +388,11 @@ class UsbTracker(Entity):
         return self.name
 
 
-class UsbPortMapping(Entity):
-    """Local LCD mapping for one physical USB hub port."""
-
-    class SourceType(models.TextChoices):
-        USB_TRACKER = "usb-tracker", _("USB tracker")
-
-    node = models.ForeignKey(
-        "nodes.Node",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=False,
-        related_name="usb_port_mappings",
-        help_text=_("Node that owns this physical USB hub mapping."),
-    )
-    port_number = models.PositiveSmallIntegerField(
-        validators=[
-            MinValueValidator(1),
-            MaxValueValidator(USB_LCD_PORT_COUNT),
-        ],
-        help_text=_("Physical USB hub port number shown on the LCD."),
-    )
-    label = models.CharField(
-        max_length=USB_LCD_LABEL_WIDTH,
-        blank=True,
-        help_text=_("Optional LCD label. Labels are rendered in up to 7 characters."),
-    )
-    source_type = models.CharField(
-        max_length=32,
-        choices=SourceType.choices,
-        help_text=_(
-            "Local device inventory used to decide whether the port is connected."
-        ),
-    )
-    source_identifier = models.CharField(
-        max_length=255,
-        help_text=_("USB tracker slug used to decide whether the port is connected."),
-    )
-    description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["node__hostname", "port_number"]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(
-                    port_number__gte=1, port_number__lte=USB_LCD_PORT_COUNT
-                ),
-                name="sensors_usbportmapping_port_range",
-            ),
-            models.UniqueConstraint(
-                fields=["node", "port_number"],
-                name="sensors_usbportmapping_node_port_unique",
-            ),
-            models.UniqueConstraint(
-                fields=["port_number"],
-                condition=models.Q(node__isnull=True),
-                name="sensors_usbportmapping_unassigned_port_unique",
-            ),
-        ]
-        verbose_name = _("USB Port Mapping")
-        verbose_name_plural = _("USB Port Mappings")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        label = (self.label or self.source_identifier or self.source_type).strip()
-        node = self.node or _("Unassigned node")
-        return f"{node} USB {self.port_number}: {label}"
-
-
 __all__ = [
     "PhysicalSensor",
     "Thermometer",
     "ThermometerManager",
     "ThermometerReading",
-    "UsbPortMapping",
     "UsbTracker",
     "UsbTrackerManager",
 ]

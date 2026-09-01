@@ -16,7 +16,7 @@ from filelock import FileLock
 from apps.features.models import Feature
 from apps.repos import github_monitor
 from apps.repos.models import GitHubMonitorItem, GitHubMonitorTask, GitHubRepository
-from apps.screens.startup_notifications import LCD_LEGACY_FEATURE_LOCK
+LCD_LEGACY_FEATURE_LOCK = "lcd_screen.lck"
 from apps.skills.models import Skill
 
 

@@ -8,7 +8,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
-from apps.core.notifications import CUSTOM_CHANNEL_PATTERN, LcdChannel
 
 
 class RFIDWatchlistEntry(Entity):
@@ -16,16 +15,9 @@ class RFIDWatchlistEntry(Entity):
 
     ALLOWED_ACTION_CONFIG_KEYS = {
         "body",
-        "lcd_channel_num",
-        "lcd_channel_type",
         "reach",
         "subject",
     }
-    ALLOWED_LCD_CHANNEL_TYPES = {channel.value for channel in LcdChannel} | {
-        "all",
-        "full",
-    }
-    NET_MESSAGE_SUPPRESSED_LCD_CHANNEL_TYPES = {"none", "off", "disabled"}
 
     class ActionType(models.TextChoices):
         AUDIT = "audit", _("Audit only")
@@ -56,7 +48,7 @@ class RFIDWatchlistEntry(Entity):
     action_config = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Allowlisted action options such as subject, body, reach, or LCD channel.",
+        help_text="Allowlisted action options such as subject, body, or reach.",
     )
     rate_limit_seconds = models.PositiveIntegerField(
         default=60,
@@ -95,35 +87,6 @@ class RFIDWatchlistEntry(Entity):
                     _("Unsupported action config keys: %(keys)s")
                     % {"keys": ", ".join(unsupported_keys)}
                 )
-            channel_type = config.get("lcd_channel_type")
-            if channel_type not in (None, ""):
-                normalized_channel_type = str(channel_type).strip().lower()
-                is_known_channel = (
-                    normalized_channel_type in self.ALLOWED_LCD_CHANNEL_TYPES
-                )
-                is_net_message_suppression = (
-                    self.action_type == self.ActionType.NET_MESSAGE
-                    and normalized_channel_type
-                    in self.NET_MESSAGE_SUPPRESSED_LCD_CHANNEL_TYPES
-                )
-                is_safe_custom_channel = bool(
-                    CUSTOM_CHANNEL_PATTERN.fullmatch(normalized_channel_type)
-                    and normalized_channel_type
-                    not in self.NET_MESSAGE_SUPPRESSED_LCD_CHANNEL_TYPES
-                )
-                if not (
-                    is_known_channel
-                    or is_net_message_suppression
-                    or is_safe_custom_channel
-                ):
-                    config_errors.append(
-                        _(
-                            "LCD channel type must be one of: %(values)s, "
-                            "a safe custom channel name, or a NetMessage "
-                            "suppression value."
-                        )
-                        % {"values": ", ".join(sorted(self.ALLOWED_LCD_CHANNEL_TYPES))}
-                    )
             if config_errors:
                 errors["action_config"] = config_errors
 

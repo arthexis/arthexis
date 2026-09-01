@@ -190,7 +190,6 @@ FEATURE_PACK_APP_SELECTORS: Mapping[FeaturePackName, tuple[AppSelector, ...]] = 
     "hardware_experiments": (
         "apps.cards",
         "apps.sensors",
-        "apps.screens",
     ),
     "hosted_ocpp": (
         "apps.ocpp",
@@ -210,7 +209,7 @@ FEATURE_PACK_APP_SELECTORS: Mapping[FeaturePackName, tuple[AppSelector, ...]] = 
     "public_widgets": (),
     "rpi_connect": ("apps.rpiconnect",),
     "rpi_connect_updates": (IMAGER_APP_SELECTOR, "apps.rpiconnect"),
-    "screen_devices": ("apps.screens",),
+    "screen_devices": (),
     "task_management": (),
     "terms_pages": (),
 }

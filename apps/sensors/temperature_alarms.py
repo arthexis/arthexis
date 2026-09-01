@@ -8,8 +8,6 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.notifications import LcdChannel
-from apps.core.notifications import manager as notification_manager
 from apps.nodes.models import NetMessage
 
 from .models import Thermometer, ThermometerAlarmEvent
@@ -107,38 +105,10 @@ def _deliver_alarm(
     body: str,
 ) -> None:
     update_fields: list[str] = []
-    lcd_via_net_message = (
-        thermometer.alarm_lcd_enabled and thermometer.alarm_net_message_enabled
-    )
-
-    if thermometer.alarm_lcd_enabled and not lcd_via_net_message:
-        try:
-            event.lcd_notified = notification_manager.send(
-                subject,
-                body,
-                sticky=event.level != ThermometerAlarmEvent.Level.RECOVERY,
-                channel_type=LcdChannel.HIGH.value,
-            )
-        except Exception:
-            logger.exception("Temperature alarm LCD notification failed")
-            event.lcd_notified = False
-        update_fields.append("lcd_notified")
 
     if thermometer.alarm_net_message_enabled:
-        broadcast_kwargs = {}
-        if thermometer.alarm_lcd_enabled:
-            broadcast_kwargs["lcd_channel_type"] = LcdChannel.HIGH.value
-        else:
-            broadcast_kwargs["lcd_channel_type"] = NetMessage.SUPPRESS_LCD_CHANNEL_TYPE
         try:
-            event.net_message = NetMessage.broadcast(
-                subject,
-                body,
-                **broadcast_kwargs,
-            )
-            if thermometer.alarm_lcd_enabled:
-                event.lcd_notified = True
-                update_fields.append("lcd_notified")
+            event.net_message = NetMessage.broadcast(subject, body)
         except Exception:
             logger.exception("Temperature alarm NetMessage broadcast failed")
             event.net_message = None

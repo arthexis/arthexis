@@ -7,7 +7,6 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
-from apps.screens.startup_notifications import lcd_feature_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +89,6 @@ class LifecycleService(models.Model):
             return False
         if "celery.lck" in lock_names:
             return is_celery_enabled(lock_dir / "celery.lck")
-        if "lcd_screen.lck" in lock_names:
-            return lcd_feature_enabled(lock_dir)
         return any((lock_dir / name).exists() for name in lock_names)
 
     def is_configured(

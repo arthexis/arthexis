@@ -34,7 +34,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
-from apps.core.notifications import LcdChannel, notify_async
+from apps.core.notifications import notify_async
 from apps.emails import mailer
 from apps.sigils.fields import SigilShortAutoField
 from apps.users.models import Profile

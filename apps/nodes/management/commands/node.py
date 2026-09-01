@@ -265,17 +265,6 @@ class Command(BaseCommand):
             dest="seen",
             help="UUIDs of nodes that have already seen the message",
         )
-        message_parser.add_argument(
-            "--lcd-channel-type",
-            dest="lcd_channel_type",
-            help="LCD channel type to target (for example low, high, clock, uptime)",
-        )
-        message_parser.add_argument(
-            "--lcd-channel-num",
-            dest="lcd_channel_num",
-            type=int,
-            help="LCD channel number to target",
-        )
 
         upgrade_request_parser = subparsers.add_parser(
             "upgrade-request",
@@ -764,8 +753,6 @@ class Command(BaseCommand):
             body=options["body"],
             reach=options.get("reach"),
             seen=options.get("seen"),
-            lcd_channel_type=options.get("lcd_channel_type"),
-            lcd_channel_num=options.get("lcd_channel_num"),
         )
         self.stdout.write(self.style.SUCCESS("Net message broadcast"))
 

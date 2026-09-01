@@ -18,8 +18,6 @@ class Command(BaseCommand):
         parser.add_argument("body", nargs="?", default="", help="Optional body text")
         parser.add_argument("--reach", dest="reach")
         parser.add_argument("--seen", nargs="+", dest="seen")
-        parser.add_argument("--lcd-channel-type", dest="lcd_channel_type")
-        parser.add_argument("--lcd-channel-num", dest="lcd_channel_num", type=int)
 
     def handle(self, *args, **options):
         """Execute ``node message`` with the mirrored standalone arguments."""
@@ -31,8 +29,6 @@ class Command(BaseCommand):
             options["body"],
             reach=options.get("reach"),
             seen=options.get("seen"),
-            lcd_channel_type=options.get("lcd_channel_type"),
-            lcd_channel_num=options.get("lcd_channel_num"),
             stdout=self.stdout,
             stderr=self.stderr,
         )

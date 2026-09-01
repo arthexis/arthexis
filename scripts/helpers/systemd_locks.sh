@@ -42,48 +42,7 @@ arthexis_record_systemd_unit() {
 }
 
 arthexis_install_lcd_service_unit() {
-  local base_dir="$1"
-  local lock_dir="$2"
-  local service_name="$3"
-
-  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
-    return 0
-  fi
-
-  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
-  local lcd_service
-  lcd_service="lcd-${service_name}"
-  local lcd_service_file
-  lcd_service_file="${systemd_dir}/${lcd_service}.service"
-  local lcd_service_user
-  lcd_service_user="$(arthexis_detect_service_user "$base_dir")"
-
-  sudo bash -c "cat > '$lcd_service_file'" <<SERVICEEOF
-[Unit]
-Description=LCD screen updater service for Arthexis
-After=${service_name}.service network-online.target
-Wants=${service_name}.service
-PartOf=${service_name}.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$base_dir
-ExecStart=$base_dir/.venv/bin/python -m apps.screens.lcd_screen.runner
-Restart=always
-TimeoutStartSec=500
-StandardOutput=journal
-StandardError=journal
-User=$lcd_service_user
-
-[Install]
-WantedBy=multi-user.target
-WantedBy=${service_name}.service
-SERVICEEOF
-
-  sudo systemctl daemon-reload
-  sudo systemctl enable "$lcd_service"
-  arthexis_record_systemd_unit "$lock_dir" "${lcd_service}.service"
+  return 0
 }
 
 arthexis_install_rfid_service_unit() {
