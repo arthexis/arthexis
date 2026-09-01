@@ -119,13 +119,24 @@ class SummarySource:
     collector: Callable[[SummarySourceContext, SummarySource], list[LogChunk]]
 
 
-def get_summary_config() -> LLMSummaryConfig:
-    """Return the singleton LCD summary configuration record."""
+SUMMARY_CONFIG_SLUG = "log-summary"
+LEGACY_SUMMARY_CONFIG_SLUG = "lcd-log-summary"
 
-    config, _created = LLMSummaryConfig.objects.get_or_create(
-        slug="lcd-log-summary",
-        defaults={"display": "LCD Log Summary"},
-    )
+
+def get_summary_config() -> LLMSummaryConfig:
+    """Return the singleton file-summary configuration, reconciling legacy rows."""
+
+    config = LLMSummaryConfig.objects.filter(slug=SUMMARY_CONFIG_SLUG).first()
+    if config is None:
+        config = LLMSummaryConfig.objects.filter(
+            slug=LEGACY_SUMMARY_CONFIG_SLUG
+        ).first()
+        if config is not None:
+            config.slug = SUMMARY_CONFIG_SLUG
+            config.display = "Log Summary"
+            config.save(update_fields=["slug", "display", "updated_at"])
+        else:
+            config = LLMSummaryConfig.objects.create(slug=SUMMARY_CONFIG_SLUG)
     return apply_summary_feature_parameters(config)
 
 

@@ -15,6 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 CELERY_LOCK_NAME = "celery.lck"
 LLM_SUMMARY_SLUG = "llm-summary"
+SUMMARY_CONFIG_SLUG = "log-summary"
 
 
 def _celery_lock_enabled(base_dir: Path, base_path: Path) -> bool:
@@ -33,7 +34,7 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
 
     try:
         return LLMSummaryConfig.objects.filter(
-            slug="lcd-log-summary",
+            slug=SUMMARY_CONFIG_SLUG,
             is_active=True,
         ).exists()
     except (OperationalError, ProgrammingError):

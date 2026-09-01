@@ -180,7 +180,6 @@ def _check_llm_summary(feature: NodeFeature, node: Node | None):
 
     details = [
         f"Suite gate: {'ok' if suite_enabled else 'disabled'}",
-        f"LCD lock: {'ok' if prereqs['lcd_enabled'] else 'missing'}",
         f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
         f"Config active: {'yes' if config.is_active else 'no'}",
         "Mode: deterministic (in-process)",
@@ -188,7 +187,6 @@ def _check_llm_summary(feature: NodeFeature, node: Node | None):
 
     success = (
         suite_enabled
-        and prereqs["lcd_enabled"]
         and prereqs["celery_enabled"]
         and config.is_active
     )
