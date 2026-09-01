@@ -23,8 +23,9 @@ def test_private_askpass_is_created_with_owner_only_permissions(tmp_path) -> Non
 
     _write_private_askpass(path, "operator", "secret-value")
 
-    assert stat.S_IMODE(path.stat().st_mode) == 0o700
     assert 'echo "secret-value"' in path.read_text(encoding="utf-8")
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o700
 
 
 def test_private_askpass_restores_execute_permission_masked_by_umask(tmp_path) -> None:
@@ -35,7 +36,8 @@ def test_private_askpass_restores_execute_permission_masked_by_umask(tmp_path) -
     finally:
         os.umask(original_umask)
 
-    assert stat.S_IMODE(path.stat().st_mode) == 0o700
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o700
 
 
 def test_private_askpass_falls_back_when_fchmod_is_unavailable(tmp_path, monkeypatch) -> None:
@@ -44,7 +46,9 @@ def test_private_askpass_falls_back_when_fchmod_is_unavailable(tmp_path, monkeyp
 
     _write_private_askpass(path, "operator", "secret-value")
 
-    assert stat.S_IMODE(path.stat().st_mode) == 0o700
+    assert 'echo "secret-value"' in path.read_text(encoding="utf-8")
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o700
 
 
 def test_pipeline_package_keeps_existing_publish_steps_export() -> None:
