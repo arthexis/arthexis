@@ -14,7 +14,6 @@ from .models import (
     Thermometer,
     ThermometerAlarmEvent,
     ThermometerReading,
-    UsbPortMapping,
     UsbTracker,
 )
 from .tasks import read_configured_thermometer
@@ -74,7 +73,6 @@ class ThermometerAdmin(admin.ModelAdmin):
                     "alarm_warning_threshold_c",
                     "alarm_critical_threshold_c",
                     "alarm_repeat_seconds",
-                    "alarm_lcd_enabled",
                     "alarm_net_message_enabled",
                     "last_alarm_level",
                     "last_alarm_at",
@@ -273,10 +271,9 @@ class ThermometerAlarmEventAdmin(admin.ModelAdmin):
         "reading",
         "threshold",
         "created",
-        "lcd_notified",
         "net_message",
     )
-    list_filter = ("level", "lcd_notified", "created")
+    list_filter = ("level", "created")
     search_fields = ("thermometer__name", "thermometer__slug", "message")
     readonly_fields = (
         "thermometer",
@@ -284,7 +281,6 @@ class ThermometerAlarmEventAdmin(admin.ModelAdmin):
         "reading",
         "threshold",
         "message",
-        "lcd_notified",
         "net_message",
         "created",
     )
@@ -309,17 +305,3 @@ class UsbTrackerAdmin(admin.ModelAdmin):
         "last_match_path",
         "last_error",
     )
-
-
-@admin.register(UsbPortMapping)
-class UsbPortMappingAdmin(admin.ModelAdmin):
-    list_display = (
-        "node",
-        "port_number",
-        "label",
-        "source_type",
-        "source_identifier",
-        "is_active",
-    )
-    search_fields = ("node__hostname", "label", "source_identifier", "description")
-    list_filter = ("node", "source_type", "is_active")

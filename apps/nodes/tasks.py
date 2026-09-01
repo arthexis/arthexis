@@ -23,92 +23,11 @@ from django.utils import timezone as django_timezone
 from apps.core import uptime_constants, uptime_utils
 from apps.core.auto_upgrade import auto_upgrade_suite_feature_enabled
 from apps.core.tasks.auto_upgrade import check_github_updates
-from apps.screens.startup_notifications import (
-    LCD_HIGH_LOCK_FILE,
-    lcd_feature_enabled,
-    write_lcd_message,
-)
 from utils import revision
 
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
 
 logger = logging.getLogger(__name__)
-
-STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
-
-
-def _startup_message_cache_key() -> str:
-    try:
-        boot_time = psutil.boot_time()
-    except Exception:
-        logger.debug(
-            "Unable to determine boot time for startup Net Message cache", exc_info=True
-        )
-        boot_time = None
-
-    if boot_time:
-        return f"{STARTUP_NET_MESSAGE_CACHE_KEY}:{int(boot_time)}"
-
-    return STARTUP_NET_MESSAGE_CACHE_KEY
-
-
-def _build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
-    host = (socket.gethostname() or "").strip()
-    port_value = str(port or os.environ.get("PORT") or "8888").strip()
-
-    version = ""
-    ver_path = Path(base_dir) / "VERSION"
-    if ver_path.exists():
-        try:
-            version = ver_path.read_text(encoding="utf-8").strip()
-        except (OSError, UnicodeDecodeError):
-            logger.debug("Failed to read VERSION file", exc_info=True)
-
-    revision_value = (revision.get_revision() or "").strip()
-    rev_short = revision_value[-6:] if revision_value else ""
-
-    body_parts = []
-    if version:
-        body_parts.append(f"v{version}")
-    if rev_short:
-        body_parts.append(f"r{rev_short}")
-
-    subject = f"{host}:{port_value}".strip()
-    return subject, " ".join(body_parts).strip()
-
-
-@shared_task
-def send_startup_net_message(
-    lock_file: str | None = None, port: str | None = None
-) -> str:
-    """Queue the LCD startup Net Message once Celery is available."""
-
-    cache_key = _startup_message_cache_key()
-    try:
-        # Prevent duplicate dispatches across multiple workers or reloads.
-        if not cache.add(cache_key, True, timeout=None):
-            return "skipped:already-sent"
-    except Exception:
-        logger.debug("Unable to set startup Net Message cache flag", exc_info=True)
-
-    base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parents[1]))
-    target_lock = (
-        Path(lock_file) if lock_file else base_dir / ".locks" / LCD_HIGH_LOCK_FILE
-    )
-    lock_dir = target_lock.parent.resolve()
-
-    if not lcd_feature_enabled(lock_dir):
-        return "skipped:lcd-disabled"
-
-    subject, body = _build_startup_message(base_dir=base_dir, port=port)
-    try:
-        write_lcd_message(lock_file=target_lock, subject=subject, body=body)
-    except Exception:
-        logger.exception("Failed to queue startup Net Message")
-        raise
-
-    return f"queued:{target_lock}"
-
 
 @shared_task
 def apply_upgrade_policies() -> str:

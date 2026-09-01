@@ -133,8 +133,6 @@ _arthexis_systemd_unit_present() {
 arthexis_stop_embedded_lcd_processes() {
   local lock_dir="$1"
 
-  pkill -f "python -m apps.screens\\.lcd_screen\\.runner" 2>/dev/null || true
-
   if [ -n "$lock_dir" ]; then
     rm -f "$lock_dir/lcd.pid"
   fi

@@ -233,11 +233,8 @@ PROJECT_LOCAL_APPS = [
     "apps.users",
 ]
 ODOO_APP_SELECTOR = "apps.odoo"
-SCREENS_APP_SELECTOR = "apps.screens"
 SKILLS_APP_SELECTOR = "apps.skills"
-OPTIONAL_PROJECT_LOCAL_APPS = [
-    SCREENS_APP_SELECTOR,
-]
+OPTIONAL_PROJECT_LOCAL_APPS: list[str] = []
 THIRD_PARTY_APPS = [
     "channels",
     "django_mermaid.apps.MermaidConfig",
@@ -448,7 +445,7 @@ INSTALLED_APPS = (
     + ARTHEXIS_EXTERNAL_APPS
 )
 
-OPTIONAL_MIGRATION_STATE_PROVIDER_APPS = (SCREENS_APP_SELECTOR,)
+OPTIONAL_MIGRATION_STATE_PROVIDER_APPS: tuple[str, ...] = ()
 DJANGO_GLOBAL_OPTIONS_WITH_VALUES = {"--settings", "--pythonpath", "--verbosity", "-v"}
 PYTEST_ENTRYPOINT_NAMES = {"pytest", "pytest.exe", "py.test", "py.test.exe"}
 PYTEST_ENV_MARKERS = ("PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER")

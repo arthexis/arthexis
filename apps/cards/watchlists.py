@@ -171,12 +171,7 @@ def _process_local_notification_event(event: RFIDWatchlistEvent) -> str:
     config = event.entry.action_config if isinstance(event.entry.action_config, dict) else {}
     subject = _action_text(config, "subject", "RFID watchlist", 64)
     body = _action_text(config, "body", event.rfid, 160)
-    notify(
-        subject,
-        body,
-        channel_type=config.get("lcd_channel_type") or None,
-        channel_num=config.get("lcd_channel_num") or None,
-    )
+    notify(subject, body)
     return "local-notification"
 
 
@@ -190,8 +185,6 @@ def _process_net_message_event(event: RFIDWatchlistEvent) -> str:
         subject=subject,
         body=body,
         reach=config.get("reach") or None,
-        lcd_channel_type=config.get("lcd_channel_type") or None,
-        lcd_channel_num=config.get("lcd_channel_num") or None,
     )
     return "net-message"
 

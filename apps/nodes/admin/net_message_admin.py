@@ -50,7 +50,6 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
-        (_("LCD Display"), {"fields": ("lcd_channel_type", "lcd_channel_num")}),
         ("Attachments", {"fields": ("attachments", "control_payload")}),
         (
             "Propagation",
@@ -79,7 +78,6 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
-        (_("LCD Display"), {"fields": ("lcd_channel_type", "lcd_channel_num")}),
         (
             _("Propagation"),
             {
@@ -273,4 +271,3 @@ class NetMessageAdmin(EntityModelAdmin):
         if not created:
             return ""
         return timezone.localtime(created).date().isoformat()
-

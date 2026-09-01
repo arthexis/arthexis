@@ -418,9 +418,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --lcd-screen)
-            ENABLE_LCD_SCREEN=true
-            DISABLE_LCD_SCREEN=false
-            shift
+            echo "LCD service installation moved to gway-lcd-sound." >&2
+            exit 2
             ;;
         --no-lcd-screen)
             ENABLE_LCD_SCREEN=false
@@ -522,8 +521,6 @@ while [[ $# -gt 0 ]]; do
         --control)
             SERVICE="arthexis"
             ENABLE_CELERY=true
-            ENABLE_LCD_SCREEN=true
-            DISABLE_LCD_SCREEN=false
             if [ "$DISABLE_IMAGER_BURNER_SERVICE" = false ] && command -v lsblk >/dev/null 2>&1; then
                 ENABLE_IMAGER_BURNER_SERVICE=true
             fi
@@ -841,10 +838,6 @@ if [ "$REPAIR" = true ]; then
     fi
     if [ "$SERVICE_MANAGEMENT_MODE_FLAG" = false ]; then
         SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR_PATH")"
-    fi
-    if [ "$ENABLE_LCD_SCREEN" = false ] && arthexis_lcd_feature_enabled "$LOCK_DIR_PATH"; then
-        ENABLE_LCD_SCREEN=true
-        DISABLE_LCD_SCREEN=false
     fi
     if [ "$ENABLE_RFID_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
         ENABLE_RFID_SERVICE=true
@@ -1370,7 +1363,7 @@ if [ -n "$SERVICE" ]; then
                 sudo systemctl daemon-reload
             fi
             arthexis_remove_systemd_unit_record "$LOCK_DIR" "${LCD_SERVICE}.service"
-        elif [ "$ENABLE_LCD_SCREEN" = true ] || [ "$ENABLE_CONTROL" = true ]; then
+        elif [ "$ENABLE_LCD_SCREEN" = true ]; then
             arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
         else
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"

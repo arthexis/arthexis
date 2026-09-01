@@ -22,7 +22,7 @@ from .services import get_summary_config, resolve_summary_output_file_path
 
 
 class LLMSummaryWizardForm(forms.Form):
-    """Collect deterministic LCD summary settings for operators."""
+    """Collect deterministic summary settings for operators."""
 
     is_active = forms.BooleanField(
         label=_("Enable deterministic summaries"),
@@ -32,7 +32,7 @@ class LLMSummaryWizardForm(forms.Form):
     output_target = forms.ChoiceField(
         label=_("Output target"),
         choices=LLMSummaryConfig.OutputTarget.choices,
-        initial=LLMSummaryConfig.OutputTarget.LCD,
+        initial=LLMSummaryConfig.OutputTarget.FILE,
     )
     output_file_path = forms.CharField(
         label=_("Output file path"),
@@ -50,7 +50,7 @@ class LLMSummaryWizardForm(forms.Form):
 
 @admin.register(LLMSummaryConfig)
 class LLMSummaryConfigAdmin(admin.ModelAdmin):
-    """Admin integration for deterministic LCD summary runtime settings."""
+    """Admin integration for deterministic summary runtime settings."""
 
     list_display = (
         "display",
@@ -265,13 +265,6 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         prereqs = get_llm_summary_prereq_state(
             base_dir=Path(settings.BASE_DIR),
             base_path=node.get_base_path(),
-        )
-        checks.append(
-            {
-                "label": _("LCD lock"),
-                "status": _("Ready") if prereqs["lcd_enabled"] else _("Missing"),
-                "detail": _("Enable the LCD Screen node feature and runtime lock."),
-            }
         )
         checks.append(
             {

@@ -551,7 +551,7 @@ class NodeFeatureMixin:
 
         from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
-        raw_task_name = "llm_summary_lcd"
+        raw_task_name = "llm_summary"
         task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
         if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(

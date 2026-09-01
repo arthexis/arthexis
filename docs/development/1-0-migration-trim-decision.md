@@ -77,8 +77,7 @@ This baseline cut applies the cleanup decisions that were previously blocking
 the trim:
 
 - The retired app list is excluded from fresh 1.0 app selection.
-- `apps.screens` remains available only through explicit screen/hardware
-  profile selection.
+- Screen-device functionality is owned by the GWAY architecture, not the suite.
 - Odoo is preserved as a baseline CRM connector because current energy, email,
   and task models hold Odoo relationships.
 - Historical migration-only shim packages under `apps._legacy` are removed.

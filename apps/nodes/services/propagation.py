@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
-from django.utils import timezone
 
 from apps.nodes.models.features import NodeFeature
 from apps.nodes.models.node import Node
@@ -74,7 +71,6 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
     if is_remote_upgrade_control:
         origin_node = sender
 
-    channel_type, channel_num = message_model.normalize_lcd_channel(data.get("lcd_channel_type"), data.get("lcd_channel_num"))
     expires_at = message_model.normalize_expires_at(data.get("expires_at"))
 
     msg, created = message_model.objects.get_or_create(
@@ -88,8 +84,6 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
             "node_origin": origin_node,
             "attachments": attachments or None,
             "expires_at": expires_at,
-            "lcd_channel_type": channel_type,
-            "lcd_channel_num": channel_num,
             "filter_node": filter_node,
             "filter_node_feature": filter_feature,
             "filter_node_role": filter_role,
@@ -126,10 +120,6 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
         if attachments and msg.attachments != attachments:
             msg.attachments = attachments
             update_fields.append("attachments")
-        if (msg.lcd_channel_type != channel_type) or (msg.lcd_channel_num != channel_num):
-            msg.lcd_channel_type = channel_type
-            msg.lcd_channel_num = channel_num
-            update_fields.extend(["lcd_channel_type", "lcd_channel_num"])
         if update_fields:
             msg.save(update_fields=update_fields)
 
@@ -171,7 +161,6 @@ def propagate(
     allow_remote_upgrade_control: bool = False,
 ) -> None:
     """Propagate ``message`` to eligible peers."""
-    from apps.core.notifications import notify
     from apps.nodes.models.net_message import PendingNetMessage
 
     local = Node.get_local()
@@ -188,27 +177,6 @@ def propagate(
         _mark_complete(message)
         PendingNetMessage.objects.filter(message=message).delete()
         return
-
-    channel_type, channel_num = message.normalize_lcd_channel(
-        message.lcd_channel_type,
-        message.lcd_channel_num,
-    )
-    displayed = False
-    if not message.suppresses_lcd_channel(channel_type):
-        displayed = notify(
-            message.subject,
-            message.body,
-            expires_at=message.expires_at,
-            channel_type=channel_type,
-            channel_num=channel_num,
-        )
-    if displayed:
-        cutoff = timezone.now() - timedelta(hours=24)
-        prune_qs = type(message).objects.filter(created__lt=cutoff)
-        prune_qs = prune_qs.filter(models.Q(node_origin=local) | models.Q(node_origin__isnull=True)) if local else prune_qs.filter(node_origin__isnull=True)
-        if message.pk:
-            prune_qs = prune_qs.exclude(pk=message.pk)
-        prune_qs.delete()
 
     if _upgrade_in_progress():
         logger.info("Skipping NetMessage propagation during upgrade in progress", extra={"id": message.pk})

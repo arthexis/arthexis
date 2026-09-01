@@ -27,7 +27,6 @@ from apps.core.auto_upgrade import (
     auto_upgrade_base_dir,
     shorten_auto_upgrade_failure,
 )
-from apps.core.notifications import LcdChannel
 from apps.core.versioning import (
     UPGRADE_CHANNEL_CUSTOM,
     UPGRADE_CHANNEL_REGULAR,
@@ -70,8 +69,6 @@ from .scheduling import (
 )
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
-AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
-AUTO_UPGRADE_LCD_CHANNEL_NUM = 1
 NON_TERMINAL_ROLES = {"Control", "Constellation", "Watchtower"}
 DEFAULT_CUSTOM_VERSION_BUMPS = (VERSION_BUMP_PATCH, VERSION_BUMP_MINOR)
 SAFE_UPGRADE_BRANCH_CHARACTERS = frozenset(
@@ -590,8 +587,6 @@ def _broadcast_upgrade_start_message(
         NetMessage.broadcast(
             subject=subject,
             body=body,
-            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
-            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
         )
     except DatabaseError as exc:
         if _is_net_message_pre_migration_schema_error(exc):
@@ -656,8 +651,6 @@ def _send_auto_upgrade_failure_message(
         NetMessage.broadcast(
             subject=subject,
             body=body,
-            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
-            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
         )
     except Exception:
         logger.warning(
@@ -688,8 +681,6 @@ def _send_auto_upgrade_check_message(status: str, change_tag: str) -> None:
         NetMessage.broadcast(
             subject=subject,
             body=f"{status[:16]} {change_tag}",
-            lcd_channel_type=AUTO_UPGRADE_LCD_CHANNEL_TYPE,
-            lcd_channel_num=AUTO_UPGRADE_LCD_CHANNEL_NUM,
         )
     except Exception:
         logger.warning(

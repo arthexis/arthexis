@@ -46,7 +46,6 @@ PAYMENTS_APP_SELECTOR = "apps.payments"
 PLAYWRIGHT_APP_SELECTOR = "apps.playwright"
 PROJECTS_APP_SELECTOR = "apps.projects"
 RATES_APP_SELECTOR = "apps.rates"
-SCREENS_APP_SELECTOR = "apps.screens"
 SHOP_APP_SELECTOR = "apps.shop"
 SIMULATORS_APP_SELECTOR = "apps.simulators"
 SURVEY_APP_SELECTOR = "apps.survey"
@@ -75,7 +74,6 @@ OPTIONAL_APP_TEST_REQUIREMENTS = {
     "apps/playwright/tests": (PLAYWRIGHT_APP_SELECTOR,),
     "apps/projects/tests": (PROJECTS_APP_SELECTOR,),
     "apps/rates/tests": (RATES_APP_SELECTOR,),
-    "apps/screens/tests": (SCREENS_APP_SELECTOR,),
     "apps/simulators/tests": (SIMULATORS_APP_SELECTOR,),
     "apps/survey/tests": (SURVEY_APP_SELECTOR,),
     "apps/teams/tests": (TEAMS_APP_SELECTOR,),

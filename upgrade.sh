@@ -1025,37 +1025,6 @@ resolve_pinned_release_target() {
   REMOTE_VERSION="${TARGET_VERSION:-$resolved_version}"
 }
 
-queue_startup_net_message() {
-  if [ -z "$PYTHON_BIN" ]; then
-    echo "Python interpreter not found; cannot queue startup notification." >&2
-    return 1
-  fi
-
-  local raw_status
-  raw_status="$("$PYTHON_BIN" manage.py startup_message --lock-file "$LOCK_DIR/lcd-high")" || return 1
-
-  local status=""
-  local line
-  while IFS= read -r line; do
-    case "$line" in
-      queued:*|skipped:*)
-        status="$line"
-        ;;
-    esac
-  done <<< "$raw_status"
-
-  case "$status" in
-    queued:*|skipped:*)
-      printf '%s\n' "$status"
-      return 0
-      ;;
-    *)
-      echo "Unexpected startup message status: $raw_status" >&2
-      return 1
-      ;;
-  esac
-}
-
 broadcast_upgrade_start_net_message() {
   local local_revision="$1"
   local remote_revision="$2"
@@ -2062,9 +2031,7 @@ lcd_service_was_active() {
     return 1
   fi
 
-  if pgrep -f "python -m apps.screens\\.lcd_screen\\.runner" >/dev/null 2>&1; then
-    return 0
-  fi
+  return 1
 
   return 1
 }
@@ -3351,15 +3318,8 @@ if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_M
 fi
 
 if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-  if lcd_service_configured "$SERVICE_NAME"; then
-    arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
-  else
-    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
-  fi
-fi
-
-if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_service_configured "$SERVICE_NAME"; then
-  clear_lcd_lockfiles
+  arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+  rm -f "$LOCK_DIR/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}" "$LOCK_DIR/lcd_screen_enabled.lck"
 fi
 
 SHOULD_RESTART_AFTER_UPGRADE=1
@@ -3405,10 +3365,4 @@ fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]]; then
   arthexis_refresh_suite_uptime_lock "$BASE_DIR" || true
-fi
-
-if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
-  if ! queue_startup_net_message; then
-    echo "Failed to queue startup Net Message" >&2
-  fi
 fi

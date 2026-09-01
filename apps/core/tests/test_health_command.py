@@ -51,29 +51,6 @@ def _failing_health_runner(**_options) -> None:
     raise CommandError("Synthetic failed with token=secret-value")
 
 
-def test_health_runs_control_lcd_target_without_screens_app_selector(
-    monkeypatch, settings
-) -> None:
-    settings.NODE_ROLE = "Control"
-    settings.INSTALLED_APPS = ["apps.core"]
-    monkeypatch.setitem(
-        health_command.HEALTH_CHECKS,
-        "core.lcd_service",
-        replace(
-            health_command.HEALTH_CHECKS["core.lcd_service"],
-            runner=f"{__name__}._positive_health_runner",
-        ),
-    )
-    stdout = StringIO()
-
-    call_command("health", "--target", "core.lcd_service", stdout=stdout)
-
-    output = stdout.getvalue()
-    assert "[skipped]" not in output
-    assert "Positive runner executed." in output
-    assert "Health checks passed." in output
-
-
 def test_health_reports_failed_target_when_requested(monkeypatch, settings) -> None:
     settings.INSTALLED_APPS = ["apps.core"]
     definition = HealthCheckDefinition(
@@ -238,36 +215,24 @@ def test_health_reports_recovered_target_when_requested(monkeypatch, settings) -
     ]
 
 
-def test_health_command_text_includes_optional_health_flags() -> None:
+def test_health_command_text_includes_supported_health_flags() -> None:
     command_text = health_command._health_command_text(
         {
-            "target": ["core.lcd_send"],
+            "target": ["core.rfid"],
             "group": ["release"],
             "force": True,
             "release": "1.2.3",
             "rfid_value": "04 AB",
             "rfid_kind": "MIFARE",
             "rfid_pretty": True,
-            "lcd_subject": "Power warning",
-            "lcd_body": "Needs reset",
-            "lcd_expires_at": "2026-06-12T12:00:00Z",
-            "lcd_sticky": True,
-            "lcd_channel_type": "i2c",
-            "lcd_channel_num": "1",
-            "lcd_timeout": 3.5,
-            "lcd_poll_interval": 0.1,
-            "lcd_confirmed": True,
             "report_github": True,
         }
     )
 
     assert command_text == (
-        "manage.py health --target core.lcd_send --group release --force "
+        "manage.py health --target core.rfid --group release --force "
         "--release 1.2.3 --rfid-value '04 AB' --rfid-kind MIFARE "
-        "--rfid-pretty --lcd-subject 'Power warning' --lcd-body 'Needs reset' "
-        "--lcd-expires-at 2026-06-12T12:00:00Z --lcd-sticky "
-        "--lcd-channel-type i2c --lcd-channel-num 1 --lcd-timeout 3.5 "
-        "--lcd-poll-interval 0.1 --lcd-confirmed --report-github"
+        "--rfid-pretty --report-github"
     )
 
 
@@ -285,22 +250,6 @@ def test_health_command_text_limits_force_to_supported_targets() -> None:
         options,
         definition=health_command.HEALTH_CHECKS["core.time"],
     ) == "manage.py health --target core.time --report-github"
-
-
-def test_health_command_text_preserves_option_looking_values() -> None:
-    command_text = health_command._health_command_text(
-        {
-            "lcd_body": "-offline",
-            "report_github": True,
-        },
-        definition=health_command.HEALTH_CHECKS["core.lcd_send"],
-    )
-
-    assert (
-        command_text
-        == "manage.py health --target core.lcd_send --lcd-body=-offline "
-        "--report-github"
-    )
 
 
 def test_health_github_reporting_skips_when_feature_disabled(monkeypatch) -> None:
@@ -333,8 +282,8 @@ def test_health_github_reporting_redacts_sensitive_values() -> None:
             "manage.py",
             "health",
             "--target",
-            "core.lcd_send",
-            "--lcd-body",
+            "core.synthetic",
+            "--rfid-value",
             "token=foo' bar",
         ]
     )
@@ -351,7 +300,7 @@ def test_health_github_reporting_redacts_sensitive_values() -> None:
         "password='correct horse battery staple' "
         'secret="quoted secret value" '
         "--rfid-value DEADBEEF --rfid-value=FACEBEEF "
-        "--rfid-value '04 AB' --lcd-body 'token=foo bar' "
+        "--rfid-value '04 AB' "
         f"{shell_escaped_command}"
     )
 
@@ -368,7 +317,6 @@ def test_health_github_reporting_redacts_sensitive_values() -> None:
     assert "rfid-value=[REDACTED]" in redacted
     assert "password='[REDACTED]'" in redacted
     assert 'secret="[REDACTED]"' in redacted
-    assert "--lcd-body 'token=[REDACTED]'" in redacted
     assert "--rfid-value [REDACTED]" in redacted
     assert "--rfid-value=[REDACTED]" in redacted
     assert "mytoken=visible" in redacted
@@ -510,14 +458,14 @@ def test_health_fingerprint_uses_raw_command_identity_for_secret_values(
 ) -> None:
     settings.NODE_ROLE = "Terminal"
     definition = HealthCheckDefinition(
-        target="core.lcd_send",
+        target="core.synthetic",
         group="core",
-        description="Send and validate an LCD lock-file message",
+        description="Synthetic health diagnostics",
         runner=f"{__name__}._failing_health_runner",
     )
     monkeypatch.setattr(health_reporting.socket, "gethostname", lambda: "node-a")
-    first_command = "manage.py health --target core.lcd_send --lcd-body 'token=foo'"
-    second_command = "manage.py health --target core.lcd_send --lcd-body 'token=bar'"
+    first_command = "manage.py health --target core.synthetic --rfid-value 'token=foo'"
+    second_command = "manage.py health --target core.synthetic --rfid-value 'token=bar'"
 
     assert health_reporting._redact(first_command) == health_reporting._redact(
         second_command

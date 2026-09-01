@@ -7,7 +7,6 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 from apps.nodes.roles import node_is_control
-from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.summary.models import LLMSummaryConfig
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -16,6 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 CELERY_LOCK_NAME = "celery.lck"
 LLM_SUMMARY_SLUG = "llm-summary"
+SUMMARY_CONFIG_SLUG = "log-summary"
 
 
 def _celery_lock_enabled(base_dir: Path, base_path: Path) -> bool:
@@ -34,7 +34,7 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
 
     try:
         return LLMSummaryConfig.objects.filter(
-            slug="lcd-log-summary",
+            slug=SUMMARY_CONFIG_SLUG,
             is_active=True,
         ).exists()
     except (OperationalError, ProgrammingError):
@@ -77,10 +77,9 @@ def setup_node_feature(
 
 
 def get_llm_summary_prereq_state(*, base_dir: Path, base_path: Path) -> dict[str, bool]:
-    """Return optional LCD output and Celery scheduling state for summaries."""
+    """Return Celery scheduling state for summaries."""
 
     return {
-        "lcd_enabled": lcd_feature_enabled_for_paths(base_dir, base_path),
         "celery_enabled": _celery_lock_enabled(base_dir, base_path),
     }
 

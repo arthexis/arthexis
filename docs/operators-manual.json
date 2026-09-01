@@ -35,9 +35,6 @@
     {
       "title": "Control Node Hardware",
       "sources": [
-        "docs/services/lcd-screen.md",
-        "docs/lcd-screen-hardware.md",
-        "docs/services/llm-lcd-summary.md",
         "docs/services/rfid-scanner-service.md",
         "docs/development/rfid-card-layout.md",
         "docs/services/usb-inventory.md",
