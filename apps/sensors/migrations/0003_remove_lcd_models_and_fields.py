@@ -4,7 +4,7 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-    dependencies = [("sensors", "0001_initial")]
+    dependencies = [("sensors", "0002_remove_thermometer_alarm_audio_enabled_and_more")]
 
     operations = [
         migrations.RemoveField(model_name="thermometer", name="alarm_lcd_enabled"),
