@@ -313,7 +313,8 @@ def net_message(request):
     try:
         msg = NetMessage.receive_payload(data, sender=node)
     except ValueError as exc:
-        return JsonResponse({"detail": str(exc)}, status=400)
+        logger.warning("Rejected invalid network message from node %s: %s", node.pk, exc)
+        return JsonResponse({"detail": "invalid message"}, status=400)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
 
 

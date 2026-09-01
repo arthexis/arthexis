@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import os
+import re
+import tempfile
 from collections import OrderedDict
 from pathlib import Path
-import re
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from dotenv import dotenv_values
 from filelock import FileLock, Timeout
-
 
 _VALID_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -58,12 +59,29 @@ def _validate_key(key: str) -> None:
 
 
 def write_env(path: Path, values: OrderedDict[str, str]) -> None:
-    """Write key/value pairs to the operator-managed environment file."""
+    """Atomically write operator-managed values with owner-only permissions."""
 
     lines = [f"{key}={_format_env_value(value)}" for key, value in values.items()]
     if lines:
-        # This command intentionally persists operator-managed environment values.
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            text=True,
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is not None:
+                fchmod(descriptor, 0o600)
+            else:
+                temporary_path.chmod(0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write("\n".join(lines) + "\n")
+            os.replace(temporary_path, path)
+            path.chmod(0o600)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
     elif path.exists():
         path.unlink()
 

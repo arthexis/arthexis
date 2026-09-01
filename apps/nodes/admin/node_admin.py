@@ -2,6 +2,7 @@ import base64
 import binascii
 import ipaddress
 import json
+import logging
 import uuid
 from collections import OrderedDict
 from collections.abc import Mapping
@@ -62,6 +63,7 @@ from .inlines import (
 from .visitor_registration import VisitorRegistrationRequest, VisitorRegistrationService
 
 registration_logger = get_register_visitor_logger()
+logger = logging.getLogger(__name__)
 OCPP_ADMIN_AVAILABLE = django_apps.is_installed("apps.ocpp")
 
 
@@ -734,8 +736,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if node.is_local:
             try:
                 _, created = Node.register_current()
-            except Exception as exc:  # pragma: no cover - unexpected errors
-                return {"ok": False, "message": str(exc)}
+            except Exception:  # pragma: no cover - unexpected errors
+                logger.exception("Local node registration refresh failed")
+                return {"ok": False, "message": "Local node registration failed."}
             return {
                 "ok": True,
                 "created": created,

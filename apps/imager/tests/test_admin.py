@@ -83,6 +83,32 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
     )
     mock_build.assert_not_called()
 
+
+def test_imager_admin_rejects_a_symlink_that_escapes_an_allowed_root(tmp_path) -> None:
+    """Resolve symlinks before checking the configured local path boundary."""
+
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    outside_path = tmp_path / "outside.img"
+    outside_path.touch()
+    escaped_path = allowed_root / "escaped.img"
+    escaped_path.symlink_to(outside_path)
+
+    with override_settings(IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=(str(allowed_root),)):
+        form = RaspberryPiImageBuildForm(
+            data={
+                "name": "stable",
+                "base_image_uri": str(escaped_path),
+                "output_dir": str(allowed_root),
+                "git_url": "",
+                "download_base_uri": "",
+                "skip_recovery_ssh": "on",
+            }
+        )
+
+        assert not form.is_valid()
+        assert "base_image_uri" in form.errors
+
 @patch("apps.imager.admin.build_rpi4b_image")
 def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
     """Regression: successful builds should return to the wizard with artifact URL actions."""

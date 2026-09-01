@@ -17,7 +17,13 @@ from apps.release import git_utils
 from .builder import _run
 from .defaults import DEFAULT_PACKAGE
 from .models import Credentials, GitCredentials, Package, ReleaseError, RepositoryTarget
-from .network import close_response, fetch_pypi_releases, is_retryable_twine_error, network_available, requests
+from .network import (
+    close_response,
+    fetch_pypi_releases,
+    is_retryable_twine_error,
+    network_available,
+    requests,
+)
 
 if TYPE_CHECKING:
     from apps.release.models import PackageRelease
@@ -96,6 +102,30 @@ def _environment_git_credentials() -> Optional[GitCredentials]:
     if not token:
         return None
     return GitCredentials(username="x-access-token", password=token)
+
+
+def _write_private_askpass(path: Path, username: str, password: str) -> None:
+    """Create Git's credential helper before placing credentials in it."""
+
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700)
+    fchmod = getattr(os, "fchmod", None)
+    if fchmod is not None:
+        fchmod(descriptor, 0o700)
+    else:
+        path.chmod(0o700)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(
+            "\n".join(
+                [
+                    "#!/bin/sh",
+                    'case "$1" in',
+                    '*Username*) echo "' + username.replace('"', '\\"') + '" ;;',
+                    '*Password*) echo "' + password.replace('"', '\\"') + '" ;;',
+                    "*) echo ;;",
+                    "esac",
+                ]
+            )
+        )
 
 
 def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
@@ -206,20 +236,7 @@ def _push_tag(tag_name: str) -> None:
             password = (creds.password or "").strip()
             with tempfile.TemporaryDirectory(prefix="arthexis-git-") as temp_dir:
                 askpass_path = Path(temp_dir) / "askpass.sh"
-                askpass_path.write_text(
-                    "\n".join(
-                        [
-                            "#!/bin/sh",
-                            'case "$1" in',
-                            '*Username*) echo "' + username.replace('"', '\\"') + '" ;;',
-                            '*Password*) echo "' + password.replace('"', '\\"') + '" ;;',
-                            "*) echo ;;",
-                            "esac",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-                askpass_path.chmod(0o700)
+                _write_private_askpass(askpass_path, username, password)
                 env = os.environ.copy()
                 env.update(
                     {
