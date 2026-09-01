@@ -384,7 +384,7 @@ def _write_lcd_frames(
 
 
 @shared_task(name=LLM_SUMMARY_CELERY_TASK_NAME)
-def generate_lcd_log_summary() -> str:
+def generate_log_summary() -> str:
     from apps.summary.services import execute_log_summary_generation
 
     return execute_log_summary_generation()
@@ -394,5 +394,5 @@ __all__ = [
     "LocalLLMSummarizer",
     "LocalLLMSummaryError",
     "_write_lcd_frames",
-    "generate_lcd_log_summary",
+    "generate_log_summary",
 ]

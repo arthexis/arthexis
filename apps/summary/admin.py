@@ -268,13 +268,6 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         )
         checks.append(
             {
-                "label": _("LCD lock"),
-                "status": _("Ready") if prereqs["lcd_enabled"] else _("Missing"),
-                "detail": _("Enable the LCD Screen node feature and runtime lock."),
-            }
-        )
-        checks.append(
-            {
                 "label": _("Celery lock"),
                 "status": _("Ready") if prereqs["celery_enabled"] else _("Missing"),
                 "detail": _("Enable the Celery Queue node feature and lock file."),
