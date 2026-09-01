@@ -76,22 +76,6 @@ class Command(BaseCommand):
             help="Poll GitHub and maintain active state without launching a terminal.",
         )
 
-        lcd_parser = subparsers.add_parser(
-            "lcd",
-            help="Write queued GitHub monitor items to the LCD GitHub channel.",
-        )
-        lcd_parser.add_argument(
-            "--limit",
-            type=int,
-            default=4,
-            help="Maximum number of monitor items to project.",
-        )
-        lcd_parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Write even when the LCD runtime lock is not present.",
-        )
-
         heartbeat_parser = subparsers.add_parser(
             "heartbeat",
             help="Record activity for a monitor item.",
@@ -169,13 +153,6 @@ class Command(BaseCommand):
         if action == "poll":
             return github_monitor.run_monitor_cycle(
                 launch=not bool(options.get("no_launch"))
-            )
-        if action == "lcd":
-            raw_limit = options.get("limit")
-            limit = int(raw_limit) if raw_limit is not None else 4
-            return github_monitor.write_monitor_lcd(
-                limit=limit,
-                force=bool(options.get("force")),
             )
         if action == "heartbeat":
             item = github_monitor.record_activity(

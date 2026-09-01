@@ -9,9 +9,7 @@ The Suite Services Report (Admin → System → Suite Services Report) summarize
 | [Suite service](services/suite-service.md) | `{service-name}.service` | Primary Django/ASGI process that serves the Arthexis application. | [Suite service](services/suite-service.md) |
 | [Celery worker](services/celery-worker.md) | `celery-{service-name}.service` | Background task processor for email, upgrades, and other async work. | [Celery worker](services/celery-worker.md) |
 | [Celery beat](services/celery-beat.md) | `celery-beat-{service-name}.service` | Scheduler that triggers periodic Celery tasks. | [Celery beat](services/celery-beat.md) |
-| [LCD screen](services/lcd-screen.md) | `lcd-{service-name}.service` | 16x2 LCD updater service for Control nodes. | [LCD screen](services/lcd-screen.md) |
 | [RFID scanner service](services/rfid-scanner-service.md) | `rfid-{service-name}.service` | UDP-backed RFID scanner service for local reads. | [RFID scanner service](services/rfid-scanner-service.md) |
-| [Deterministic LCD summary](services/llm-lcd-summary.md) | `arthexis-llm-lcd-summary.service` / `arthexis-llm-lcd-summary.timer` | Dense deterministic low-channel LCD log summaries for Control nodes. | [Deterministic LCD summary](services/llm-lcd-summary.md) |
 | [USB inventory](services/usb-inventory.md) | `arthexis-usb-inventory.service` / `arthexis-usb-inventory.timer` | Local USB block-device inventory and claim lookup for Control nodes. | [USB inventory](services/usb-inventory.md) |
 
 ## Reading the report
@@ -23,5 +21,4 @@ The Suite Services Report (Admin → System → Suite Services Report) summarize
 ## Related operator docs
 
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
-- [LCD Screen Hardware](lcd-screen-hardware.md)
 - [Auto-Upgrade Flow](auto-upgrade.md)

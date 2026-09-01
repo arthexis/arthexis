@@ -87,8 +87,7 @@ GITHUB_MONITOR_FEATURE_FIELDS = {
         "The scheduled monitor task must do nothing until monitor task rows exist. "
         "When configured, it polls GitHub issues and PRs, honors explicit approval "
         "reactions, maintains one active terminal, times out inactive consoles, "
-        "projects queued work onto the LCD GitHub channel when available, and emails "
-        "admins on failures."
+        "emails admins on failures."
     ),
     "admin_views": [
         "admin:features_feature_changelist",
@@ -98,7 +97,6 @@ GITHUB_MONITOR_FEATURE_FIELDS = {
     "public_views": [],
     "service_views": [
         "Command: python manage.py gh_monitor",
-        "Command: python manage.py gh_monitor lcd",
         "apps.repos.tasks.monitor_github_readiness",
     ],
     "code_locations": [
@@ -739,130 +737,6 @@ def _label_names(item: Mapping[str, object]) -> set[str]:
         if cleaned:
             names.add(cleaned)
     return names
-
-
-def _normalize_lcd_text(text: str, *, limit: int = 16) -> str:
-    normalized = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in str(text or ""))
-    normalized = " ".join(normalized.split())
-    return normalized[:limit]
-
-
-def _monitor_item_is_gway_relevant(item: GitHubMonitorItem) -> bool:
-    for value in (
-        item.issue_title,
-        item.issue_body,
-        item.task.display,
-        item.task.name,
-        item.task.label_filter,
-    ):
-        text = str(value or "").lower()
-        if any(keyword in text for keyword in GWAY_LCD_KEYWORDS):
-            return True
-    return False
-
-
-def _monitor_item_lcd_heading(
-    item: GitHubMonitorItem, *, gway_relevant: bool | None = None
-) -> str:
-    target_label = (
-        "PR" if item.target_type == GitHubMonitorTask.TargetType.PULL_REQUEST else "ISS"
-    )
-    if item.status == GitHubMonitorItem.Status.ACTIVE:
-        prefix = "ACTIVE"
-    elif item.target_type == GitHubMonitorTask.TargetType.PULL_REQUEST and (
-        gway_relevant
-        if gway_relevant is not None
-        else _monitor_item_is_gway_relevant(item)
-    ):
-        prefix = "GWAY"
-    else:
-        prefix = "NEXT"
-    return _normalize_lcd_text(f"{prefix} {target_label} {item.issue_number}")
-
-
-def _monitor_item_lcd_topic(item: GitHubMonitorItem) -> str:
-    topic = item.issue_title
-    if item.target_type == GitHubMonitorTask.TargetType.PULL_REQUEST:
-        topic = topic.removeprefix("Draft:").strip()
-    return _normalize_lcd_text(topic)
-
-
-def monitor_lcd_frames(*, limit: int = 4) -> list[tuple[str, str]]:
-    """Return LCD frames for queued or active GitHub monitor items."""
-
-    status_priority = {
-        GitHubMonitorItem.Status.ACTIVE: 0,
-        GitHubMonitorItem.Status.QUEUED: 1,
-    }
-    target_priority = {
-        GitHubMonitorTask.TargetType.PULL_REQUEST: 0,
-        GitHubMonitorTask.TargetType.ISSUE: 1,
-    }
-    items = list(
-        GitHubMonitorItem.objects.select_related("task")
-        .filter(status__in=tuple(status_priority))
-        .order_by("queued_at", "id")
-    )
-    ranked_items = [(item, _monitor_item_is_gway_relevant(item)) for item in items]
-    ranked_items.sort(
-        key=lambda ranked_item: (
-            status_priority.get(ranked_item[0].status, 99),
-            target_priority.get(ranked_item[0].target_type, 99),
-            0 if ranked_item[1] else 1,
-            ranked_item[0].queued_at,
-            ranked_item[0].pk,
-        )
-    )
-    frame_limit = max(int(limit or 0), 0)
-    return [
-        (
-            _monitor_item_lcd_heading(item, gway_relevant=gway_relevant),
-            _monitor_item_lcd_topic(item),
-        )
-        for item, gway_relevant in ranked_items[:frame_limit]
-    ]
-
-
-def _lcd_runtime_enabled() -> bool:
-    lock_dir = Path(settings.BASE_DIR) / ".locks"
-    return any(
-        (lock_dir / name).exists()
-        for name in (LCD_RUNTIME_LOCK_FILE, LCD_LEGACY_FEATURE_LOCK)
-    )
-
-
-def write_monitor_lcd(*, limit: int = 4, force: bool = False) -> dict[str, Any]:
-    """Write GitHub monitor queue frames into the LCD GitHub channel."""
-
-    lock_file = Path(settings.BASE_DIR) / ".locks" / GITHUB_MONITOR_LCD_LOCK_NAME
-    if not force and not _lcd_runtime_enabled():
-        return {
-            "skipped": True,
-            "reason": "lcd_runtime_disabled",
-            "lock": str(lock_file),
-            "written": 0,
-            "frames": [],
-        }
-
-    from apps.summary.tasks import _write_lcd_frames
-
-    frames = monitor_lcd_frames(limit=limit)
-    expires_at = timezone.now() + GITHUB_MONITOR_LCD_EXPIRES_AFTER if frames else None
-    _write_lcd_frames(frames, lock_file=lock_file, expires_at=expires_at)
-    return {
-        "skipped": False,
-        "lock": str(lock_file),
-        "written": len(frames),
-        "frames": frames,
-    }
-
-
-def _safe_write_monitor_lcd() -> dict[str, Any]:
-    try:
-        return write_monitor_lcd()
-    except Exception as exc:
-        logger.warning("GitHub monitor LCD projection failed: %s", exc, exc_info=True)
-        return {"skipped": True, "reason": "error", "error": str(exc), "written": 0}
 
 
 def _label_filter_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -> bool:
@@ -1522,7 +1396,6 @@ def _run_monitor_cycle_unlocked(*, launch: bool = True) -> dict[str, Any]:
         "sync": sync,
         "active": active,
         "launch": launch_result,
-        "lcd": _safe_write_monitor_lcd(),
     }
 
 
