@@ -7,12 +7,11 @@ from django.db import models
 
 
 class LLMSummaryConfig(models.Model):
-    """Configuration and cursor state for deterministic LCD log summaries."""
+    """Configuration and cursor state for deterministic log summaries."""
 
     class OutputTarget(models.TextChoices):
         """Supported summary output targets."""
 
-        LCD = "lcd", "LCD"
         FILE = "file", "File"
 
     class OutputFileFormat(models.TextChoices):
@@ -22,12 +21,12 @@ class LLMSummaryConfig(models.Model):
         JSON = "json", "JSON"
         BOTH = "both", "Text and JSON"
 
-    slug = models.SlugField(unique=True, default="lcd-log-summary")
-    display = models.CharField(max_length=120, default="LCD Log Summary")
+    slug = models.SlugField(unique=True, default="log-summary")
+    display = models.CharField(max_length=120, default="Log Summary")
     output_target = models.CharField(
         max_length=16,
         choices=OutputTarget.choices,
-        default=OutputTarget.LCD,
+        default=OutputTarget.FILE,
     )
     output_file_path = models.CharField(
         max_length=255,

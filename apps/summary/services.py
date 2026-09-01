@@ -916,14 +916,14 @@ def fixed_frame_window(screens: list[tuple[str, str]]) -> list[tuple[str, str]]:
 
 
 def summary_output_target(config: LLMSummaryConfig) -> str:
-    """Return the configured output target, falling back to LCD for old configs."""
+    """Return the configured output target, migrating legacy values to files."""
 
     target = str(
-        getattr(config, "output_target", LLMSummaryConfig.OutputTarget.LCD) or ""
+        getattr(config, "output_target", LLMSummaryConfig.OutputTarget.FILE) or ""
     ).strip()
     if target == LLMSummaryConfig.OutputTarget.FILE:
         return LLMSummaryConfig.OutputTarget.FILE
-    return LLMSummaryConfig.OutputTarget.LCD
+    return LLMSummaryConfig.OutputTarget.FILE
 
 
 def resolve_summary_output_file_path(
@@ -1271,6 +1271,9 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         screens = normalize_screens([("No events", "-"), ("Chk logs", "manual")])
 
     output_target = summary_output_target(config)
+    if output_target != LLMSummaryConfig.OutputTarget.FILE:
+        output_target = LLMSummaryConfig.OutputTarget.FILE
+        config.output_target = output_target
     frames = fixed_frame_window(screens)
     written_files: list[Path] = []
     file_output_failed = False
@@ -1298,6 +1301,8 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         "log_offsets",
         "updated_at",
     ]
+    if config.output_target == LLMSummaryConfig.OutputTarget.FILE:
+        update_fields.append("output_target")
     if written_files:
         config.last_output_file_path = str(written_files[0])
         update_fields.append("last_output_file_path")

@@ -42,7 +42,8 @@ arthexis_record_systemd_unit() {
 }
 
 arthexis_install_lcd_service_unit() {
-  return 0
+  echo "LCD service installation moved to gway-lcd-sound." >&2
+  return 1
 }
 
 arthexis_install_rfid_service_unit() {
