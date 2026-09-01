@@ -8,8 +8,6 @@ from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
 from apps.core.auto_upgrade import AUTO_UPGRADE_CADENCE_HOUR, AUTO_UPGRADE_TASK_PATH
-from apps.sensors.constants import USB_LCD_STATUS_CELERY_TASK_NAME
-from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
 
 from .apps import INSTALLED_APPS, _app_entry_aliases
 from .base import NODE_ROLE
@@ -57,27 +55,11 @@ _CELERY_BEAT_SCHEDULE_ENTRIES: tuple[BeatScheduleEntry, ...] = (
         },
     ),
     (
-        "apps.screens",
-        "llm_summary_lcd",
-        {
-            "task": LLM_SUMMARY_CELERY_TASK_NAME,
-            "schedule": timedelta(minutes=5),
-        },
-    ),
-    (
         "apps.sensors",
         "thermometer_sampling",
         {
             "task": "apps.sensors.tasks.sample_thermometers",
             "schedule": timedelta(minutes=1),
-        },
-    ),
-    (
-        "apps.screens",
-        "usb_lcd_status",
-        {
-            "task": USB_LCD_STATUS_CELERY_TASK_NAME,
-            "schedule": timedelta(seconds=30),
         },
     ),
     (
