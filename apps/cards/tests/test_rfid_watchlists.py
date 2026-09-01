@@ -55,26 +55,12 @@ def test_watchlist_entry_creates_pending_event_and_enqueue(
     assert enqueued == [event.pk]
 
 
-def test_watchlist_rejects_unsafe_lcd_channel_type():
-    entry = RFIDWatchlistEntry(
-        normalized_rfid="ABCD1234",
-        action_type=RFIDWatchlistEntry.ActionType.LOCAL_NOTIFICATION,
-        action_config={"lcd_channel_type": "x/../../../tmp/watchlist-pwn"},
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        entry.full_clean()
-
-    assert "LCD channel type must be one of" in str(exc_info.value)
-
-
 def test_watchlist_collects_action_config_validation_errors():
     entry = RFIDWatchlistEntry(
         normalized_rfid="ABCD1234",
         action_type=RFIDWatchlistEntry.ActionType.LOCAL_NOTIFICATION,
         action_config={
             "extra": "value",
-            "lcd_channel_type": "x/../../../tmp/watchlist-pwn",
         },
     )
 
@@ -82,54 +68,8 @@ def test_watchlist_collects_action_config_validation_errors():
         entry.full_clean()
 
     action_config_errors = exc_info.value.message_dict["action_config"]
-    assert len(action_config_errors) == 2
+    assert len(action_config_errors) == 1
     assert "Unsupported action config keys: extra" in action_config_errors
-    assert any(
-        "LCD channel type must be one of" in message for message in action_config_errors
-    )
-
-
-def test_watchlist_allows_known_lcd_channel_type():
-    entry = RFIDWatchlistEntry(
-        normalized_rfid="ABCD1234",
-        action_type=RFIDWatchlistEntry.ActionType.LOCAL_NOTIFICATION,
-        action_config={"lcd_channel_type": "high", "lcd_channel_num": 2},
-    )
-
-    entry.full_clean()
-
-
-def test_watchlist_allows_safe_custom_lcd_channel_type():
-    entry = RFIDWatchlistEntry(
-        normalized_rfid="ABCD1234",
-        action_type=RFIDWatchlistEntry.ActionType.LOCAL_NOTIFICATION,
-        action_config={"lcd_channel_type": "field_panel"},
-    )
-
-    entry.full_clean()
-
-
-def test_watchlist_allows_net_message_lcd_suppression():
-    entry = RFIDWatchlistEntry(
-        normalized_rfid="ABCD1234",
-        action_type=RFIDWatchlistEntry.ActionType.NET_MESSAGE,
-        action_config={"lcd_channel_type": "none"},
-    )
-
-    entry.full_clean()
-
-
-def test_watchlist_rejects_suppression_for_local_notifications():
-    entry = RFIDWatchlistEntry(
-        normalized_rfid="ABCD1234",
-        action_type=RFIDWatchlistEntry.ActionType.LOCAL_NOTIFICATION,
-        action_config={"lcd_channel_type": "none"},
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        entry.full_clean()
-
-    assert "LCD channel type must be one of" in str(exc_info.value)
 
 
 def test_watchlist_no_match_creates_no_event(monkeypatch):

@@ -389,6 +389,3 @@ def run_check_next_upgrade(*, stdout, **_kwargs) -> None:
             stdout.write(f" - {blocker}")
     else:
         stdout.write("Blockers: none detected.")
-
-
-    )
