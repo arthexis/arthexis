@@ -8,7 +8,6 @@ import pytest
 from gate_markers import gate
 from scripts.helpers.migration_reconcile import reconcile_sqlite_tables
 
-
 pytestmark = [gate.upgrade]
 
 
@@ -110,3 +109,93 @@ def test_reconcile_handles_tables_with_quotes_in_name(tmp_path: Path) -> None:
             f"SELECT id, name FROM {_sqlite_identifier(weird_table)}"
         ).fetchall()
     assert rows == [(1, "Alpha")]
+
+
+@pytest.mark.parametrize("table", ["django_site", "nodes_node"])
+def test_reconcile_preserves_legacy_runtime_identity_on_primary_key_collision(
+    tmp_path: Path, table: str
+) -> None:
+    source = tmp_path / "source.sqlite3"
+    target = tmp_path / "target.sqlite3"
+
+    _exec_many(
+        source,
+        [
+            f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, name TEXT)",
+            f"INSERT INTO {table} (id, name) VALUES (1, 'legacy identity')",
+        ],
+    )
+    _exec_many(
+        target,
+        [
+            f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, name TEXT, current TEXT DEFAULT 'current default')",
+            f"INSERT INTO {table} (id, name, current) VALUES (1, 'fresh default', 'retained')",
+        ],
+    )
+
+    report = reconcile_sqlite_tables(source, target)
+
+    assert report.skipped_tables == {}
+    with sqlite3.connect(target) as conn:
+        row = conn.execute(f"SELECT id, name, current FROM {table}").fetchone()
+    expected_current = "current default" if table == "django_site" else "retained"
+    assert row == (1, "legacy identity", expected_current)
+
+
+def test_reconcile_restores_site_defaults_if_source_priority_copy_fails(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.sqlite3"
+    target = tmp_path / "target.sqlite3"
+
+    _exec_many(
+        source,
+        [
+            "CREATE TABLE django_site (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO django_site (id, name) VALUES (1, 'legacy identity')",
+        ],
+    )
+    _exec_many(
+        target,
+        [
+            "CREATE TABLE django_site (id INTEGER PRIMARY KEY, name TEXT, required TEXT NOT NULL)",
+            "INSERT INTO django_site (id, name, required) VALUES (1, 'fresh default', 'retained')",
+        ],
+    )
+
+    report = reconcile_sqlite_tables(source, target)
+
+    assert "NOT NULL constraint failed" in report.skipped_tables["django_site"]
+    with sqlite3.connect(target) as conn:
+        row = conn.execute(
+            "SELECT id, name, required FROM django_site"
+        ).fetchone()
+    assert row == (1, "fresh default", "retained")
+
+
+def test_reconcile_keeps_fresh_defaults_for_other_primary_key_collisions(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.sqlite3"
+    target = tmp_path / "target.sqlite3"
+
+    _exec_many(
+        source,
+        [
+            "CREATE TABLE seed_data (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO seed_data (id, name) VALUES (1, 'legacy value')",
+        ],
+    )
+    _exec_many(
+        target,
+        [
+            "CREATE TABLE seed_data (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO seed_data (id, name) VALUES (1, 'fresh default')",
+        ],
+    )
+
+    reconcile_sqlite_tables(source, target)
+
+    with sqlite3.connect(target) as conn:
+        name = conn.execute("SELECT name FROM seed_data WHERE id = 1").fetchone()[0]
+    assert name == "fresh default"
