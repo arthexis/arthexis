@@ -3310,6 +3310,14 @@ if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_M
 fi
 
 if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if rfid_service_configured; then
+    arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  else
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "rfid-${SERVICE_NAME}.service"
+  fi
+fi
+
+if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   if camera_service_configured; then
     arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
   else
