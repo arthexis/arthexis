@@ -210,6 +210,25 @@ def test_rfid_systemd_unit_uses_django_management_entrypoint() -> None:
     assert "-m apps.cards.rfid_service" not in rfid_body
 
 
+def test_upgrade_refreshes_rfid_systemd_unit_before_restart() -> None:
+    upgrade_script = _read_shell_contract("upgrade.sh")
+    reconcile_index = upgrade_script.index(
+        '"$PYTHON_BIN" manage.py reconcile_node_features_services'
+    )
+    install_index = upgrade_script.index(
+        'arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"',
+        reconcile_index,
+    )
+    restart_index = upgrade_script.index("SHOULD_RESTART_AFTER_UPGRADE=1")
+
+    assert reconcile_index < install_index < restart_index
+    assert (
+        'arthexis_remove_systemd_unit_if_present "$LOCK_DIR" '
+        '"rfid-${SERVICE_NAME}.service"'
+        in upgrade_script[reconcile_index:restart_index]
+    )
+
+
 def test_boot_upgrade_service_stack_has_no_extra_layout_cleanup_unit() -> None:
     service_helper = _read_shell_contract("scripts/helpers/systemd_locks.sh")
     boot_unit_start = service_helper.index(
