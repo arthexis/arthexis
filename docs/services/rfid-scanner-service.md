@@ -76,7 +76,7 @@ environment variables.
 3. You can also run the configurator with `--no-rfid-service` to remove the lock and unit.
 
 ## Notes
-- Systemd should launch the service with module execution (`python -m apps.cards.rfid_service`), not `manage.py`.
+- Systemd should launch the service through Django (`.venv/bin/python manage.py rfid service`) so the application registry and settings are initialized before the RFID service starts.
 - The service may write command-card execution ledger rows and card result
   digests during held-card execution. Ordinary scan artifact ingestion still
   belongs to the Django-side RFID attempt path.
