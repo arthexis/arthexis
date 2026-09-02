@@ -23,6 +23,7 @@ def _table_names(conn: sqlite3.Connection, *, database: str = "main") -> set[str
     ).fetchall()
     return {row[0] for row in rows}
 
+
 def _quote_identifier(identifier: str) -> str:
     escaped = identifier.replace('"', '""')
     return f'"{escaped}"'
@@ -46,7 +47,9 @@ def _primary_key_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     return [row[0] for row in rows]
 
 
-def _copy_statement(table: str, columns: list[str], primary_key: list[str]) -> str:
+def _copy_statements(
+    table: str, columns: list[str], primary_key: list[str]
+) -> list[str]:
     quoted_table = _quote_identifier(table)
     quoted_columns = ", ".join(_quote_identifier(column) for column in columns)
     select_sql = f"SELECT {quoted_columns} FROM source_db.{quoted_table}"
@@ -56,26 +59,45 @@ def _copy_statement(table: str, columns: list[str], primary_key: list[str]) -> s
         or len(primary_key) != 1
         or primary_key[0] not in columns
     ):
-        return (
+        return [
             f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"
-        )
+        ]
 
     update_columns = [column for column in columns if column != primary_key[0]]
     if not update_columns:
-        return (
+        return [
             f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"
-        )
+        ]
 
     quoted_primary_key = _quote_identifier(primary_key[0])
     update_sql = ", ".join(
-        f"{_quote_identifier(column)} = excluded.{_quote_identifier(column)}"
+        f"{_quote_identifier(column)} = ("
+        f"SELECT source.{_quote_identifier(column)} "
+        f"FROM source_db.{quoted_table} AS source "
+        f"WHERE source.{quoted_primary_key} = target.{quoted_primary_key}"
+        f")"
         for column in update_columns
     )
-    return (
-        f"INSERT INTO {quoted_table} ({quoted_columns}) "
-        f"{select_sql} WHERE true "
-        f"ON CONFLICT ({quoted_primary_key}) DO UPDATE SET {update_sql}"
+    update_statement = (
+        f"UPDATE {quoted_table} AS target SET {update_sql} "
+        f"WHERE EXISTS ("
+        f"SELECT 1 FROM source_db.{quoted_table} AS source "
+        f"WHERE source.{quoted_primary_key} = target.{quoted_primary_key}"
+        f")"
     )
+    insert_columns = ", ".join(
+        f"source.{_quote_identifier(column)}" for column in columns
+    )
+    insert_statement = (
+        f"INSERT INTO {quoted_table} ({quoted_columns}) "
+        f"SELECT {insert_columns} FROM source_db.{quoted_table} AS source "
+        f"WHERE NOT EXISTS ("
+        f"SELECT 1 FROM {quoted_table} AS target "
+        f"WHERE target.{quoted_primary_key} = source.{quoted_primary_key}"
+        f")"
+    )
+    return [update_statement, insert_statement]
+
 
 def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport:
     """Copy common tables from *source_db* into *target_db*.
@@ -109,7 +131,7 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
                 skipped_tables[table] = "no common columns"
                 continue
 
-            statement = _copy_statement(
+            statements = _copy_statements(
                 table,
                 target_columns,
                 _primary_key_columns(target_conn, table),
@@ -122,7 +144,8 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
                     target_conn.execute(
                         f"DELETE FROM {_quote_identifier(table)}"
                     )
-                target_conn.execute(statement)
+                for statement in statements:
+                    target_conn.execute(statement)
             except sqlite3.DatabaseError as exc:
                 if replace_target:
                     target_conn.execute("ROLLBACK TO reconcile_source_priority")

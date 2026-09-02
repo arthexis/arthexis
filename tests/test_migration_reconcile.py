@@ -142,6 +142,37 @@ def test_reconcile_preserves_legacy_runtime_identity_on_primary_key_collision(
     assert row == (1, "legacy identity", expected_current)
 
 
+def test_reconcile_updates_node_when_target_has_required_new_column(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.sqlite3"
+    target = tmp_path / "target.sqlite3"
+
+    _exec_many(
+        source,
+        [
+            "CREATE TABLE nodes_node (id INTEGER PRIMARY KEY, name TEXT)",
+            "INSERT INTO nodes_node (id, name) VALUES (1, 'legacy identity')",
+        ],
+    )
+    _exec_many(
+        target,
+        [
+            "CREATE TABLE nodes_node (id INTEGER PRIMARY KEY, name TEXT, required TEXT NOT NULL)",
+            "INSERT INTO nodes_node (id, name, required) VALUES (1, 'fresh default', 'retained')",
+        ],
+    )
+
+    report = reconcile_sqlite_tables(source, target)
+
+    assert report.skipped_tables == {}
+    with sqlite3.connect(target) as conn:
+        row = conn.execute(
+            "SELECT id, name, required FROM nodes_node"
+        ).fetchone()
+    assert row == (1, "legacy identity", "retained")
+
+
 def test_reconcile_restores_site_defaults_if_source_priority_copy_fails(
     tmp_path: Path,
 ) -> None:
