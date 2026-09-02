@@ -78,13 +78,12 @@ def _load_ocpp_rule_models():
             Charger,
             ChargerConfiguration,
             CPFirmware,
-            Simulator,
         )
     except ImportError:
         logger.exception("Unable to import OCPP dashboard rule models")
         return None
 
-    return Charger, ChargerConfiguration, CPFirmware, Simulator
+    return Charger, ChargerConfiguration, CPFirmware
 
 
 def _load_node_model():
@@ -105,7 +104,7 @@ def evaluate_cp_configuration_rules() -> dict[str, object] | None:
     if ocpp_models is None:
         return rule_failure(_("CP config check failed: import err."))
 
-    Charger, ChargerConfiguration, _firmware_model, _simulator_model = ocpp_models
+    Charger, ChargerConfiguration, _firmware_model = ocpp_models
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
         .order_by("charger_id")
@@ -138,7 +137,7 @@ def evaluate_cp_firmware_rules() -> dict[str, object] | None:
     if ocpp_models is None:
         return rule_failure(_("CP firmware check failed: import err."))
 
-    Charger, _configuration_model, CPFirmware, _simulator_model = ocpp_models
+    Charger, _configuration_model, CPFirmware = ocpp_models
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
         .order_by("charger_id")
@@ -174,7 +173,7 @@ def evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
     if ocpp_models is None:
         return rule_failure(_("Heartbeat check failed: import err."))
 
-    Charger, _configuration_model, _firmware_model, _simulator_model = ocpp_models
+    Charger, _configuration_model, _firmware_model = ocpp_models
     cutoff = timezone.now() - timedelta(hours=1)
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
@@ -336,20 +335,6 @@ def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
         return rule_failure(message)
 
     return rule_success()
-
-
-def evaluate_cp_simulator_default_rules() -> dict[str, object] | None:
-    """Warn when no CP simulator is marked as default."""
-
-    ocpp_models = _load_ocpp_rule_models()
-    if ocpp_models is None:
-        return rule_failure(_("CP simulator check failed: import err."))
-
-    _charger_model, _configuration_model, _firmware_model, Simulator = ocpp_models
-    if Simulator.objects.filter(default=True, is_deleted=False).exists():
-        return rule_success()
-
-    return rule_failure(_("No default CP simulator."))
 
 
 def evaluate_required_operations_rules() -> dict[str, object] | None:
