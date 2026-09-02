@@ -200,6 +200,16 @@ def test_install_no_start_and_embedded_skip_systemd_restart() -> None:
         )
 
 
+def test_rfid_systemd_unit_uses_django_management_entrypoint() -> None:
+    service_helper = _read_shell_contract("scripts/helpers/systemd_locks.sh")
+    rfid_start = service_helper.index("arthexis_install_rfid_service_unit()")
+    rfid_end = service_helper.index("arthexis_install_camera_service_unit()")
+    rfid_body = service_helper[rfid_start:rfid_end]
+
+    assert "ExecStart=$base_dir/.venv/bin/python manage.py rfid service" in rfid_body
+    assert "-m apps.cards.rfid_service" not in rfid_body
+
+
 def test_boot_upgrade_service_stack_has_no_extra_layout_cleanup_unit() -> None:
     service_helper = _read_shell_contract("scripts/helpers/systemd_locks.sh")
     boot_unit_start = service_helper.index(
