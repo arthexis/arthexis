@@ -17,32 +17,15 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  # Keep the PR trigger unfiltered so the required Linux sanity check is
+  # reported for every pull request. A path-filtered required check can remain
+  # forever "Expected" when GitHub skips the workflow entirely.
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
-    paths:
-      - "**/*.py"
-      - "**/*.json"
-      - "**/*.toml"
-      - "**/*.txt"
-      - ".python-version"
-      - ".github/workflows/ci.yml"
-      - "apps/**"
-      - "config/**"
-      - "docs/development/ci.md"
-      - "requirements*.txt"
-      - "scripts/**"
-      - "tests/**"
-      - "manage.py"
-      - "configure.sh"
-      - "env-refresh.sh"
-      - "install.sh"
-      - "start.sh"
-      - "stop.sh"
-      - "upgrade.sh"
   push:
     branches:
       - main
