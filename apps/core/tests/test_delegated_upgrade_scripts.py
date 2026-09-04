@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gate_markers import gate
+from tests.gate_markers import gate
 
 
 pytestmark = [gate.upgrade]
