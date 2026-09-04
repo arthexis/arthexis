@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from gate_markers import gate
 from scripts.helpers.migration_reconcile import reconcile_sqlite_tables
+from tests.gate_markers import gate
 
 pytestmark = [gate.upgrade]
 
