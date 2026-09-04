@@ -11,6 +11,19 @@ export NODE_OPTIONS="${NODE_OPTIONS:---no-deprecation}"
 export OCPP_STATE_REDIS_URL="${OCPP_STATE_REDIS_URL:-redis://localhost:6379}"
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 
+run_timed() {
+  local label="$1"
+  shift
+  local started=$SECONDS
+  local status=0
+
+  echo "::group::$label"
+  "$@" || status=$?
+  echo "::endgroup::"
+  printf 'TIMING: %s: %ds\n' "$label" "$((SECONDS - started))"
+  return "$status"
+}
+
 if [[ "${ARTHEXIS_SKIP_SANITY_APT:-0}" != "1" ]] && command -v apt-get >/dev/null 2>&1; then
   sudo_cmd=()
   if [[ "$(id -u)" != "0" ]]; then
@@ -29,31 +42,31 @@ if [[ "${ARTHEXIS_SKIP_SANITY_APT:-0}" != "1" ]] && command -v apt-get >/dev/nul
     libpangocairo-1.0-0 shared-mime-info
 fi
 
-./scripts/ci/start-native-redis.sh
+run_timed "Redis startup" ./scripts/ci/start-native-redis.sh
 
 if [[ "${ARTHEXIS_FORCE_SANITY_INSTALL:-0}" == "1" ]]; then
-  ./scripts/ci/install-linux-smoke.sh --cold
+  run_timed "Install smoke (cold)" ./scripts/ci/install-linux-smoke.sh --cold
 else
-  ./scripts/ci/install-linux-smoke.sh
+  run_timed "Install smoke" ./scripts/ci/install-linux-smoke.sh
 fi
 
 source .venv/bin/activate
-python -m pip install --only-binary=:all: -r requirements-ci.txt
+run_timed "Install CI requirements" python -m pip install --only-binary=:all: -r requirements-ci.txt
 
 # Verify the installed environment is internally consistent after the smoke install.
-python -m pip check
+run_timed "Dependency consistency" python -m pip check
 
-python scripts/sort_pyproject_deps.py --check
-python scripts/generate_requirements.py --check
-python scripts/check_import_resolution.py
-python -m ruff check --select E9,F821,F823 .
+run_timed "Pyproject dependency ordering" python scripts/sort_pyproject_deps.py --check
+run_timed "Generated requirements" python scripts/generate_requirements.py --check
+run_timed "Import resolution" python scripts/check_import_resolution.py
+run_timed "Ruff correctness checks" python -m ruff check --select E9,F821,F823 .
 
 # Import and collect the complete test corpus without paying the cost of executing it.
 # This catches broken modules, fixtures, plugins, and collection-time Django failures.
-python -m pytest --collect-only -q
+run_timed "Pytest collection" python -m pytest --collect-only -q
 
 # Exercise the small, documented critical-path matrix alongside CI policy regressions.
-python -m pytest \
+run_timed "Required pytest tests" python -m pytest \
   apps/nodes/tests/test_enrollment.py::test_submit_enrollment_public_key_rejects_duplicate_submission_regression \
   apps/ocpp/tests/test_charger_status_polling.py::test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions \
   tests/test_nodes_registration.py::test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation \
@@ -67,5 +80,5 @@ python -m pytest \
 # Build the artifact users receive; editable-install checks alone can miss packaging errors.
 wheel_dir="$(mktemp -d)"
 trap 'rm -rf "$wheel_dir"' EXIT
-python -m pip wheel --no-deps --wheel-dir "$wheel_dir" .
-python -m twine check "$wheel_dir"/*.whl
+run_timed "Wheel build" python -m pip wheel --no-deps --wheel-dir "$wheel_dir" .
+run_timed "Wheel metadata check" python -m twine check "$wheel_dir"/*.whl
