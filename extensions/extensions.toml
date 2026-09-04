@@ -1,0 +1,4 @@
+# Managed Arthexis extension repositories.
+# Add repositories here and run `.venv/bin/python manage.py extensions sync`.
+
+[extensions]
