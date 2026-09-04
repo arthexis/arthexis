@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from django.conf import settings
 from django.contrib import messages
 
 from apps.clocks.utils import has_clock_device
@@ -154,53 +152,6 @@ def _default_feature_check(
         f"{feature.display} is not enabled on {target.hostname}.",
         messages.WARNING,
     )
-
-
-@feature_checks.register("llm-summary")
-def _check_llm_summary(feature: NodeFeature, node: Node | None):
-    from apps.features.utils import is_suite_feature_enabled
-    from apps.summary.node_features import get_llm_summary_prereq_state
-    from apps.summary.services import get_summary_config
-
-    from .models import Node
-
-    target: Node | None = node or Node.get_local()
-    if target is None:
-        return FeatureCheckResult(
-            False,
-            f"No local node is registered; cannot verify {feature.display}.",
-            messages.WARNING,
-        )
-
-    base_dir = Path(settings.BASE_DIR)
-    base_path = target.get_base_path()
-    prereqs = get_llm_summary_prereq_state(base_dir=base_dir, base_path=base_path)
-    config = get_summary_config()
-    suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
-
-    details = [
-        f"Suite gate: {'ok' if suite_enabled else 'disabled'}",
-        f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
-        f"Config active: {'yes' if config.is_active else 'no'}",
-        "Mode: deterministic (in-process)",
-    ]
-
-    success = (
-        suite_enabled
-        and prereqs["celery_enabled"]
-        and config.is_active
-    )
-    if success:
-        level = messages.SUCCESS
-    else:
-        level = messages.WARNING
-    return FeatureCheckResult(
-        success,
-        f"{feature.display} prerequisites checked: " + "; ".join(details),
-        level,
-    )
-
-
 
 
 __all__ = [

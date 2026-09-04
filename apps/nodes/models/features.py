@@ -23,7 +23,7 @@ from apps.clocks.utils import has_clock_device
 from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.nodes.feature_detection import node_feature_detection_registry
-from apps.nodes.roles import node_feature_allowed_for_node, node_is_control
+from apps.nodes.roles import node_feature_allowed_for_node
 
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
@@ -88,12 +88,6 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:clocks_clockdevice_find_devices",
             ),
         ),
-        "llm-summary": (
-            NodeFeatureDefaultAction(
-                label=_("Configure"),
-                url_name="admin:summary_llmsummaryconfig_wizard",
-            ),
-        ),
     }
 
     class Meta:
@@ -121,7 +115,7 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
         )
 
     def get_default_actions(self) -> tuple[NodeFeatureDefaultAction, ...]:
-        """Return the configured default actions for this feature."""
+        """Return the configured default actions for this feature if any."""
 
         actions = self.DEFAULT_ACTIONS.get(self.slug, ())
         if isinstance(actions, NodeFeatureDefaultAction):  # pragma: no cover - legacy
@@ -205,7 +199,6 @@ class NodeFeatureMixin:
         "imager-burner",
         "kindle-postbox",
         "lcd-screen",
-        "llm-summary",
         "usb-inventory",
     }
     LAZY_AUTO_DETECTION_FEATURE_SLUGS = {"rfid-scanner"}
@@ -368,24 +361,12 @@ class NodeFeatureMixin:
 
     def sync_feature_tasks(self):
         """Synchronize periodic tasks based on active features."""
-        from apps.features.utils import is_suite_feature_enabled
-
-        llm_summary_suite_enabled = is_suite_feature_enabled(
-            "llm-summary-suite", default=True
-        )
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        llm_summary_enabled = (
-            llm_summary_suite_enabled
-            and celery_enabled
-            and node_is_control(self)
-            and self.has_feature("llm-summary")
-        )
         self._sync_ocpp_session_report_task(celery_enabled)
         self._sync_upstream_poll_task(celery_enabled)
         self._sync_net_message_purge_task(celery_enabled)
         self._sync_node_update_task(celery_enabled)
         self._sync_connectivity_monitor_task(celery_enabled)
-        self._sync_llm_summary_task(llm_summary_enabled)
 
     def _sync_ocpp_session_report_task(self, celery_enabled: bool):
         """Sync the periodic OCPP session report task."""
@@ -534,34 +515,6 @@ class NodeFeatureMixin:
                 defaults={
                     "interval": schedule,
                     "task": "apps.nodes.tasks.monitor_nmcli",
-                    "enabled": True,
-                },
-            )
-        else:
-            PeriodicTask.objects.filter(
-                name__in=periodic_task_name_variants(raw_task_name)
-            ).delete()
-
-    def _sync_llm_summary_task(self, enabled: bool) -> None:
-        """Sync the periodic deterministic summary generation task."""
-        if not self.is_local:
-            return
-
-        from django_celery_beat.models import IntervalSchedule, PeriodicTask
-
-        from apps.summary.constants import LLM_SUMMARY_CELERY_TASK_NAME
-
-        raw_task_name = "llm_summary"
-        task_name = normalize_periodic_task_name(PeriodicTask.objects, raw_task_name)
-        if enabled:
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=5, period=IntervalSchedule.MINUTES
-            )
-            PeriodicTask.objects.update_or_create(
-                name=task_name,
-                defaults={
-                    "interval": schedule,
-                    "task": LLM_SUMMARY_CELERY_TASK_NAME,
                     "enabled": True,
                 },
             )
