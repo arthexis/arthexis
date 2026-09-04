@@ -17,15 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  # Keep the PR trigger unfiltered so the required Linux sanity check is
-  # reported for every pull request. A path-filtered required check can remain
-  # forever "Expected" when GitHub skips the workflow entirely.
+  # Keep the PR trigger effectively unfiltered so the required Linux sanity
+  # check is reported for every pull request. The catch-all path keeps the
+  # workflow-policy regression contract while avoiding skipped required checks.
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
+    paths:
+      - '**'
   push:
     branches:
       - main
