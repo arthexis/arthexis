@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_ENV_ROOT="${HOME:-$BASE_DIR}/.cache/arthexis"
 MODE="auto"
 
 usage() {
   cat <<'MSG'
-Usage: ./dev-env.sh [--auto|--local|--install]
+Usage: ./scripts/dev/dev-env.sh [--auto|--local|--install]
 
 Fast contributor bootstrap for Arthexis.
 
@@ -22,8 +23,8 @@ Environment:
   ARTHEXIS_VENV_DIR    Exact shared virtualenv directory; overrides ARTHEXIS_ENV_ROOT.
 
 Examples:
-  ./dev-env.sh
-  ARTHEXIS_ENV_ROOT="$HOME/.cache/arthexis" ./dev-env.sh --local
+  ./scripts/dev/dev-env.sh
+  ARTHEXIS_ENV_ROOT="$HOME/.cache/arthexis" ./scripts/dev/dev-env.sh --local
   ARTHEXIS_VENV_DIR="$HOME/.cache/arthexis/venv" ./py manage.py check
 MSG
 }
