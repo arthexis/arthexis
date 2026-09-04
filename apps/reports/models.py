@@ -21,7 +21,6 @@ class SQLReport(Entity):
         REPORT_PRODUCT_ACTIVITY = "report_product_activity", _("Report product activity")
         SCHEDULED_REPORTS = "scheduled_reports", _("Scheduled reports overview")
         SIGIL_ROOTS = "sigil_roots", _("Sigil roots catalog")
-        LEGACY_ARCHIVED = "legacy_archived", _("Archived legacy SQL report")
 
     name = models.CharField(max_length=255, unique=True)
     report_type = models.CharField(max_length=64, choices=ReportType.choices)
@@ -34,7 +33,6 @@ class SQLReport(Entity):
         default="",
         editable=False,
     )
-    legacy_definition = models.JSONField(blank=True, null=True, editable=False)
     schedule_enabled = models.BooleanField(default=False)
     schedule_interval_minutes = models.PositiveIntegerField(default=0)
     schedule_crontab = models.ForeignKey(
@@ -84,7 +82,7 @@ class SQLReport(Entity):
             Matching ``ReportDefinition`` instance.
 
         Raises:
-            ValidationError: If the report type is archived or unknown.
+            ValidationError: If the report type is unknown.
         """
 
         from .report_definitions import get_report_definition
@@ -109,8 +107,6 @@ class SQLReport(Entity):
 
         if not isinstance(self.parameters, dict):
             errors["parameters"] = _("Parameters must be a JSON object.")
-        elif self.report_type == self.ReportType.LEGACY_ARCHIVED:
-            self.parameters = {}
         else:
             try:
                 self.parameters = self.definition.clean_parameters(self.parameters)
@@ -119,11 +115,6 @@ class SQLReport(Entity):
                     errors.update(exc.message_dict)
                 else:
                     errors["parameters"] = exc
-
-        if self.report_type == self.ReportType.LEGACY_ARCHIVED and not self.legacy_definition:
-            errors["legacy_definition"] = _(
-                "Archived legacy SQL reports must preserve the original definition."
-            )
 
         if self.schedule_enabled:
             cadence_count = int(self.schedule_interval is not None) + int(

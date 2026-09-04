@@ -5,7 +5,7 @@ from importlib import import_module
 import pytest
 from django.db import connection
 
-from gate_markers import gate
+from tests.gate_markers import gate
 
 pytestmark = [gate.upgrade]
 

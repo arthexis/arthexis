@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from gate_markers import gate
 from scripts.startup_orchestration import extract_payload
+from tests.gate_markers import gate
 
 
 pytestmark = [gate.upgrade]
