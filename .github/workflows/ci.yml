@@ -18,8 +18,8 @@ concurrency:
 
 on:
   # Keep the PR trigger effectively unfiltered so the required Linux sanity
-  # check is reported for every pull request. The catch-all path keeps the
-  # workflow-policy regression contract while avoiding skipped required checks.
+  # check is reported for every non-draft pull request. Drafts are skipped at
+  # the job level and ready_for_review retriggers the required gate.
   pull_request:
     types:
       - opened
@@ -57,10 +57,11 @@ on:
 jobs:
   sanity:
     name: Linux sanity
-    # A PR that GitHub already classifies as behind cannot satisfy the strict
-    # main ruleset until its branch is updated, so do not allocate our
-    # self-hosted runner for that revision. Pushes/manual runs are unaffected.
-    if: github.event_name != 'pull_request' || github.event.pull_request.mergeable_state != 'behind'
+    # Draft PRs cannot merge and are retriggered by ready_for_review, so avoid
+    # allocating the self-hosted runner until review is requested. A PR that
+    # GitHub already classifies as behind likewise cannot satisfy the strict
+    # main ruleset until its branch is updated. Pushes/manual runs are unaffected.
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && github.event.pull_request.mergeable_state != 'behind')
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
     # Preserve the workflow-policy contract; the sanity script still targets <5 minutes.
     timeout-minutes: 40
