@@ -7,11 +7,13 @@ additional evidence where configured.
 ## Automatic Gates
 
 - `Linux CI / Linux sanity` runs on every pull request so it can safely be used
-  as a required status check for `main`. Do not add pull-request `paths:` filters
-  to this workflow: if GitHub skips a required workflow entirely, the check can
-  remain `Expected` indefinitely.
-- Pushes to `main` and `release/**` keep path filters so irrelevant pushes do not
-  consume the self-hosted runner.
+  as a required status check for `main`. Its pull-request `paths:` filter is the
+  catch-all `**`, which preserves the workflow-policy regression contract while
+  ensuring GitHub creates the check for every PR. Do not narrow this filter: if
+  GitHub skips a required workflow entirely, the check can remain `Expected`
+  indefinitely.
+- Pushes to `main` and `release/**` keep selective path filters so irrelevant
+  pushes do not consume the self-hosted runner.
 - `Linux CI / Linux sanity` runs on the local self-hosted Ubuntu runner labels
   `[self-hosted, Linux, X64, arthexis-ci]` and delegates to
   `./scripts/ci/linux-sanity.sh`.
