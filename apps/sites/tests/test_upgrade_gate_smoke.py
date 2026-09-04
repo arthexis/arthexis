@@ -5,7 +5,7 @@ from collections.abc import Iterable
 import pytest
 from django.urls import reverse
 
-from gate_markers import gate
+from tests.gate_markers import gate
 
 pytestmark = [pytest.mark.django_db, gate.upgrade]
 

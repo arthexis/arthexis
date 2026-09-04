@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from gate_markers import gate
+from tests.gate_markers import gate
 
 
 pytestmark = [gate.upgrade]
