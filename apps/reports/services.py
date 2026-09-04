@@ -214,15 +214,13 @@ def run_due_scheduled_reports(
                 schedule_interval_minutes__gt=0,
                 next_scheduled_run_at__lte=current,
                 schedule_periodic_task__isnull=True,
-            )
-            .exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
-            .values_list("pk", flat=True)
+            ).values_list("pk", flat=True)
         )
 
     due_reports = SQLReport.objects.filter(
         pk__in=selected_ids,
         schedule_enabled=True,
-    ).exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
+    )
 
     processed = 0
     for report in due_reports:

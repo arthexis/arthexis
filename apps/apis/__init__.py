@@ -1,1 +1,1 @@
-"""API explorer application."""
+"""Managed service credential application."""

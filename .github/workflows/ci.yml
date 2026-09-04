@@ -17,6 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  # Keep the PR trigger effectively unfiltered so the required Linux sanity
+  # check is reported for every pull request. The catch-all path keeps the
+  # workflow-policy regression contract while avoiding skipped required checks.
   pull_request:
     types:
       - opened
@@ -24,25 +27,7 @@ on:
       - reopened
       - ready_for_review
     paths:
-      - "**/*.py"
-      - "**/*.json"
-      - "**/*.toml"
-      - "**/*.txt"
-      - ".python-version"
-      - ".github/workflows/ci.yml"
-      - "apps/**"
-      - "config/**"
-      - "docs/development/ci.md"
-      - "requirements*.txt"
-      - "scripts/**"
-      - "tests/**"
-      - "manage.py"
-      - "configure.sh"
-      - "env-refresh.sh"
-      - "install.sh"
-      - "start.sh"
-      - "stop.sh"
-      - "upgrade.sh"
+      - '**'
   push:
     branches:
       - main
@@ -72,7 +57,12 @@ on:
 jobs:
   sanity:
     name: Linux sanity
+    # A PR that GitHub already classifies as behind cannot satisfy the strict
+    # main ruleset until its branch is updated, so do not allocate our
+    # self-hosted runner for that revision. Pushes/manual runs are unaffected.
+    if: github.event_name != 'pull_request' || github.event.pull_request.mergeable_state != 'behind'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    # Preserve the workflow-policy contract; the sanity script still targets <5 minutes.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
