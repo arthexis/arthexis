@@ -55,12 +55,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  pr-readiness:
+  pr_readiness:
     name: PR readiness
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      up-to-date: ${{ steps.check.outputs.result }}
+      up_to_date: ${{ steps.check.outputs.result }}
     steps:
       - id: check
         name: Check whether the PR includes the current base
@@ -91,8 +91,8 @@ jobs:
 
   sanity:
     name: Linux sanity
-    needs: pr-readiness
-    if: needs.pr-readiness.outputs.up-to-date == 'true'
+    needs: pr_readiness
+    if: needs.pr_readiness.outputs.up_to_date == 'true'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
     timeout-minutes: 40
     steps:
