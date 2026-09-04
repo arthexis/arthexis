@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tomllib
 from pathlib import Path
-
-try:
-    import tomllib
-except ModuleNotFoundError as exc:  # pragma: no cover
-    raise RuntimeError("Python 3.11+ is required to parse pyproject.toml") from exc
 
 
 PYPROJECT_PATH = Path("pyproject.toml")
