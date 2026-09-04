@@ -313,7 +313,7 @@ def normalize_feature_pack_name(feature_pack: str) -> FeaturePackName:
         supported = ", ".join(sorted(FEATURE_PACK_APP_SELECTORS))
         raise ValueError(
             f"Unknown feature pack {feature_pack!r}. Expected one of: {supported}"
-        ) from exc
+        )
     return normalized
 
 
