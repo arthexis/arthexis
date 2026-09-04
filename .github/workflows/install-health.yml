@@ -142,6 +142,15 @@ jobs:
           ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
+      - name: Run staged mypy checks
+        if: ${{ matrix.os_flavor == 'debian' && matrix.python_version == '3.13' && matrix.db_backend == 'sqlite' && matrix.test_shard == 'rest' }}
+        env:
+          PIP_DEFAULT_TIMEOUT: "60"
+          PIP_RETRIES: "5"
+        run: |
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: 'mypy==1.18.2'
+          bash scripts/ci/run-mypy.sh
       - name: Verify editable install import
         run: |
           source .venv/bin/activate
