@@ -20,7 +20,7 @@ from utils.app_manifests import (
 AppSelector: TypeAlias = str
 FeaturePackName: TypeAlias = str
 
-DEPRECATED_FEATURE_PACKS = frozenset({"charger_cutovers"})
+DEPRECATED_FEATURE_PACKS = frozenset({"charger_cutovers", "local_summaries"})
 IMAGER_APP_SELECTOR: AppSelector = "apps.imager"
 FEATURE_PACK_ONLY_APP_SELECTORS: tuple[AppSelector, ...] = ()
 DIRECT_LOCK_REASON_PREFIXES = ("role-default:", "feature-pack:")
@@ -154,7 +154,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
         "apps.rpiconnect",
         "apps.sensors",
         "apps.serialbridge",
-        "apps.summary",
     ),
     RoleProfile.SATELLITE: (
         "apps.discovery",
@@ -201,7 +200,6 @@ FEATURE_PACK_APP_SELECTORS: Mapping[FeaturePackName, tuple[AppSelector, ...]] = 
     "image_classification": (),
     "logbook": (),
     "local_ocpp_testing": ("apps.ocpp", "apps.protocols"),
-    "local_summaries": ("apps.summary",),
     "ocpp_experiments": ("apps.ocpp",),
     "ocpp_forwarding": (),
     "printer_workflows": ("apps.printers",),

@@ -6,7 +6,6 @@ CONTROL_ONLY_NODE_FEATURE_SLUGS = frozenset(
         "imager-burner",
         "kindle-postbox",
         "lcd-screen",
-        "llm-summary",
         "rfid-scanner",
         "usb-inventory",
     }

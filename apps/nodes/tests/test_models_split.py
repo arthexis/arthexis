@@ -279,90 +279,11 @@ def test_ensure_feature_enabled_handles_lazy_detection_exception(monkeypatch, tm
     logger.exception.assert_called_once()
 
 
-@pytest.fixture
-def llm_summary_node(tmp_path, db):
-    """Provide a node for llm-summary detection."""
-
-    role = NodeRole.objects.create(name="Control")
-    return (
-        Node(
-            hostname="summary-node",
-            base_path=str(tmp_path),
-            public_endpoint="summary-node",
-            role=role,
-        ),
-        tmp_path,
-    )
-
-
-@pytest.mark.django_db
-def test_detect_auto_feature_enables_llm_summary_without_lcd_when_config_active(
-    llm_summary_node,
-):
-    """llm-summary detection should reflect generation capability, not LCD output."""
-
-    from apps.summary.models import LLMSummaryConfig
-
-    node, tmp_path = llm_summary_node
-
-    LLMSummaryConfig.objects.create(is_active=True)
-
-    result = node._detect_auto_feature(
-        "llm-summary", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is True
-
-
-@pytest.mark.django_db
-def test_detect_auto_feature_skips_llm_summary_when_config_inactive(
-    llm_summary_node,
-):
-    """Inactive summary config should keep the node summary feature off."""
-
-    from apps.summary.models import LLMSummaryConfig
-
-    node, tmp_path = llm_summary_node
-
-    LLMSummaryConfig.objects.create(is_active=False)
-
-    result = node._detect_auto_feature(
-        "llm-summary", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is False
-
-
-@pytest.mark.django_db
-def test_detect_auto_feature_skips_llm_summary_on_non_control_node(
-    tmp_path,
-):
-    """llm-summary is local Control-node behavior even when config is active."""
-
-    from apps.summary.models import LLMSummaryConfig
-
-    role = NodeRole.objects.create(name="Terminal")
-    node = Node(
-        hostname="summary-node",
-        base_path=str(tmp_path),
-        public_endpoint="summary-node",
-        role=role,
-    )
-    LLMSummaryConfig.objects.create(is_active=True)
-
-    result = node._detect_auto_feature(
-        "llm-summary", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is False
-
-
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     ("slug", "display"),
     [
         ("lcd-screen", "LCD Screen"),
-        ("llm-summary", "Deterministic Summary"),
         ("rfid-scanner", "RFID Scanner"),
     ],
 )
@@ -374,9 +295,9 @@ def test_control_only_feature_assignment_is_inactive_on_non_control_node(
     Node._local_cache.clear()
     role = NodeRole.objects.create(name="Terminal")
     node = Node.objects.create(
-        hostname="terminal-summary-node",
+        hostname="terminal-feature-node",
         base_path=str(tmp_path),
-        public_endpoint="terminal-summary-node",
+        public_endpoint="terminal-feature-node",
         current_relation=Node.Relation.SELF,
         role=role,
     )
@@ -412,22 +333,6 @@ def test_detect_auto_feature_skips_control_only_hook_on_non_control_node(
     )
 
     assert result is False
-
-
-@pytest.mark.django_db
-def test_detect_auto_feature_does_not_create_llm_summary_config(llm_summary_node):
-    """Feature detection should be a read-only probe."""
-
-    from apps.summary.models import LLMSummaryConfig
-
-    node, tmp_path = llm_summary_node
-
-    result = node._detect_auto_feature(
-        "llm-summary", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is False
-    assert LLMSummaryConfig.objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -540,18 +445,3 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(
         is True
     )
     assert setup_calls == ["rfid-scanner"]
-
-
-@pytest.mark.django_db
-def test_llm_summary_default_action_points_to_configure_wizard() -> None:
-    """Deterministic summary feature should expose a Configure admin action."""
-
-    feature = NodeFeature.objects.create(
-        slug="llm-summary", display="Deterministic Summary"
-    )
-
-    action = feature.get_default_action()
-
-    assert action is not None
-    assert action.label == "Configure"
-    assert action.url_name == "admin:summary_llmsummaryconfig_wizard"

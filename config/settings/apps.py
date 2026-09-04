@@ -226,7 +226,6 @@ PROJECT_LOCAL_APPS = [
     "apps.services",
     "apps.sigils",
     "apps.sites",
-    "apps.summary",
     "apps.terminals",
     "apps.totp",
     "apps.users",
