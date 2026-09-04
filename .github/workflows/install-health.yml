@@ -10,49 +10,58 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   install:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: install (${{ matrix.os_flavor }}, py${{ matrix.python_version }}, ${{ matrix.db_backend }}, ${{ matrix.test_shard }})
     runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.container_image }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os_flavor: ubuntu
-            python_version: '3.12'
-            python_cache_version: python3.12
-            db_backend: sqlite
-            test_shard: smoke
-            pytest_args: ""
-            full_pytest: false
-          - os_flavor: ubuntu
-            python_version: '3.12'
-            python_cache_version: python3.12
-            db_backend: postgres
-            test_shard: smoke
-            pytest_args: ""
-            full_pytest: false
-          - os_flavor: ubuntu
-            python_version: '3.11'
-            python_cache_version: python3.11
+          - os_flavor: debian
+            container_image: debian:13-slim
+            python_version: '3.13'
+            python_cache_version: python3.13
             db_backend: sqlite
             test_shard: ocpp
             pytest_args: apps/ocpp/tests
             full_pytest: true
-          - os_flavor: ubuntu
-            python_version: '3.11'
-            python_cache_version: python3.11
+          - os_flavor: debian
+            container_image: debian:13-slim
+            python_version: '3.13'
+            python_cache_version: python3.13
             db_backend: sqlite
             test_shard: rest
             pytest_args: --ignore=apps/ocpp/tests
             full_pytest: true
+          - os_flavor: debian
+            container_image: debian:13-slim
+            python_version: '3.13'
+            python_cache_version: python3.13
+            db_backend: postgres
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
           - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            python_version: '3.13'
+            python_cache_version: python3.13
+            db_backend: sqlite
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
             python_version: '3.11'
             python_cache_version: python3.11
-            db_backend: postgres
+            db_backend: sqlite
             test_shard: smoke
             pytest_args: ""
             full_pytest: false
@@ -74,9 +83,9 @@ jobs:
     steps:
       - name: Install base system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ca-certificates curl git sudo python3 python3-venv \
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git openssl sudo python3 python3-venv \
             libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
             libpangocairo-1.0-0 shared-mime-info
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -112,22 +121,16 @@ jobs:
           restore-keys: |
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-
-      - name: Cache virtualenv
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
-          restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-
       - name: Validate pyproject dependency ordering
         run: |
           "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Validate generated requirements
         run: |
           "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
-      - name: Install suite from repository
+      - name: Install suite from clean repository
         run: |
-          ./install.sh --embedded --no-start
+          rm -rf .venv
+          ./install.sh --no-start
       - name: Refresh environment dependencies
         run: |
           ./env-refresh.sh
