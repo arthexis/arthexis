@@ -13,7 +13,7 @@ from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment, NodeRole
 from apps.services import lifecycle
 from apps.services.lifecycle import write_lifecycle_config
 from apps.services.models import LifecycleService
-from gate_markers import gate
+from tests.gate_markers import gate
 
 pytestmark = [gate.upgrade]
 
