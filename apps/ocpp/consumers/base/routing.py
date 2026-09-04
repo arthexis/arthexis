@@ -5,6 +5,7 @@ OCPP 2.x call dispatch. Routing itself does not perform DB writes; side effects
 occur only inside delegated handlers on the consumer.
 """
 
+from apps.ocpp.consumers.csms.protocol import OCPPAction
 from apps.ocpp.consumers.csms.router import build_action_registry
 from apps.ocpp.consumers.csms.router import CSMSRouterContext
 from apps.ocpp.payload_types import Handler
@@ -26,7 +27,7 @@ class ActionRouter:
     def _build_registry(self) -> dict[str, Handler]:
         return build_action_registry(self.consumer)
 
-    def resolve(self, action: str) -> Handler | None:
-        """Return the bound handler for the OCPP action name."""
+    def resolve(self, action: OCPPAction) -> Handler | None:
+        """Return the bound handler for a validated OCPP action name."""
 
         return self._handlers.get(action)
