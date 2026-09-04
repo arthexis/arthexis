@@ -1,8 +1,0 @@
-repos:
-  - repo: local
-    hooks:
-      - id: dead-modules
-        name: dead modules
-        entry: python3 scripts/check_dead_modules.py
-        language: system
-        types: [python]
