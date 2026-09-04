@@ -44,10 +44,11 @@ permissions:
 jobs:
   analyze:
     name: Analyze
-    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.mergeable_state != 'behind') && (!github.event.repository.private || vars.CODEQL_ENABLED_ON_PRIVATE == 'true') }}
+    if: ${{ (github.event_name != 'pull_request' || (github.event.pull_request.draft == false && github.event.pull_request.mergeable_state != 'behind')) && (!github.event.repository.private || vars.CODEQL_ENABLED_ON_PRIVATE == 'true') }}
     runs-on: ubuntu-latest
     # Runtime expectations:
     # - Runs on relevant code, dependency, workflow, and script changes on trusted refs.
+    # - Draft pull requests wait until they are marked ready for review.
     # - Stale pull requests wait until their branch is updated before consuming analysis time.
     # - Weekly baselines keep security analysis automatic.
     # - Private repositories must opt in with CODEQL_ENABLED_ON_PRIVATE once code scanning is available.
