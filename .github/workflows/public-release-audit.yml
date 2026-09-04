@@ -1,0 +1,157 @@
+name: Public Release Audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/public-release-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  history-secret-audit:
+    name: Full repository secret audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch all repository and pull request refs
+        run: |
+          set -euo pipefail
+          git fetch --force --prune origin \
+            '+refs/heads/*:refs/remotes/origin/heads/*' \
+            '+refs/tags/*:refs/tags/*' \
+            '+refs/pull/*/head:refs/remotes/origin/pull/*'
+
+          branch_refs="$(git for-each-ref --format='%(refname)' refs/remotes/origin/heads | wc -l | tr -d ' ')"
+          pull_refs="$(git for-each-ref --format='%(refname)' refs/remotes/origin/pull | wc -l | tr -d ' ')"
+          tag_refs="$(git for-each-ref --format='%(refname)' refs/tags | wc -l | tr -d ' ')"
+          echo "Audit ref inventory: branches=${branch_refs} pull-heads=${pull_refs} tags=${tag_refs}"
+
+      - name: Install scanners
+        env:
+          GITLEAKS_VERSION: 8.24.2
+          TRUFFLEHOG_VERSION: 3.97.4
+          TRUFFLEHOG_LINUX_AMD64_SHA256: dc24007c2f233bd61c05beabeb44aa27ea9b43288166279209abe0458c5ce76b
+        run: |
+          set -euo pipefail
+          install_dir="${RUNNER_TEMP}/bin"
+          mkdir -p "${install_dir}"
+
+          curl -fsSL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C "${install_dir}" gitleaks
+          chmod 0755 "${install_dir}/gitleaks"
+
+          trufflehog_archive="${RUNNER_TEMP}/trufflehog.tar.gz"
+          curl -fsSL \
+            "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz" \
+            -o "${trufflehog_archive}"
+          echo "${TRUFFLEHOG_LINUX_AMD64_SHA256}  ${trufflehog_archive}" | sha256sum -c -
+          tar -xzf "${trufflehog_archive}" -C "${install_dir}" trufflehog
+          chmod 0755 "${install_dir}/trufflehog"
+
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+          "${install_dir}/gitleaks" version
+          "${install_dir}/trufflehog" --version
+
+      - name: Scan all reachable history with Gitleaks and TruffleHog
+        env:
+          AUDIT_DIR: ${{ runner.temp }}/public-release-audit
+        run: |
+          set -euo pipefail
+          rm -rf "${AUDIT_DIR}"
+          mkdir -p "${AUDIT_DIR}"
+
+          gitleaks_report="${AUDIT_DIR}/gitleaks.json"
+          trufflehog_report="${AUDIT_DIR}/trufflehog.jsonl"
+          trufflehog_filtered_report="${AUDIT_DIR}/trufflehog-filtered.jsonl"
+          trufflehog_stderr="${AUDIT_DIR}/trufflehog.stderr"
+          trap 'rm -f "${gitleaks_report}" "${trufflehog_report}" "${trufflehog_filtered_report}" "${trufflehog_stderr}"' EXIT
+
+          set +e
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --redact \
+            --no-banner \
+            --log-opts='--all' \
+            --report-format json \
+            --report-path "${gitleaks_report}" \
+            --exit-code 1 \
+            >/dev/null 2>&1
+          gitleaks_status=$?
+
+          trufflehog git "file://${GITHUB_WORKSPACE}" \
+            --no-update \
+            --no-verification \
+            --fail \
+            --json \
+            >"${trufflehog_report}" 2>"${trufflehog_stderr}"
+          trufflehog_status=$?
+          set -e
+
+          audit_failed=0
+
+          if [ "${gitleaks_status}" -ne 0 ]; then
+            audit_failed=1
+            if [ -s "${gitleaks_report}" ]; then
+              count="$(jq 'length' "${gitleaks_report}")"
+              echo "::error::Gitleaks detected ${count} potential secret(s)."
+              jq -r '.[] | "Gitleaks detector=\(.RuleID // "unknown") path=\(.File // "unknown") commit=\(.Commit // "unknown")"' \
+                "${gitleaks_report}" | sed -n '1,100p'
+            else
+              echo "::error::Gitleaks failed without producing a report."
+            fi
+          else
+            echo "Gitleaks: no findings across all fetched refs."
+          fi
+
+          if [ -s "${trufflehog_report}" ]; then
+            # This exact historical test commit intentionally contains three
+            # basic-auth-shaped URLs on IANA-reserved example domains to test
+            # that credentials are stripped from feedback source URLs. Ignore
+            # only URI findings at this exact path+commit; all other detectors,
+            # paths, and commits remain audit failures.
+            jq -c 'select(
+              (.DetectorName != "URI") or
+              (.SourceMetadata.Data.Git.file != "apps/sites/tests/test_user_story_github_issues.py") or
+              (.SourceMetadata.Data.Git.commit != "b5d03a9b8eed2c638427e6270821f0b09b019e19")
+            )' "${trufflehog_report}" > "${trufflehog_filtered_report}"
+
+            raw_count="$(wc -l < "${trufflehog_report}" | tr -d ' ')"
+            filtered_count="$(wc -l < "${trufflehog_filtered_report}" | tr -d ' ')"
+            ignored_count=$((raw_count - filtered_count))
+            if [ "${ignored_count}" -gt 0 ]; then
+              echo "TruffleHog: ignored ${ignored_count} manually reviewed historical URI fixture finding(s)."
+            fi
+          else
+            : > "${trufflehog_filtered_report}"
+            filtered_count=0
+          fi
+
+          if [ "${filtered_count}" -gt 0 ]; then
+            audit_failed=1
+            echo "::error::TruffleHog detected ${filtered_count} non-allowlisted potential secret(s)."
+            jq -r '"TruffleHog detector=\(.DetectorName // "unknown") path=\(.SourceMetadata.Data.Git.file // "unknown") commit=\(.SourceMetadata.Data.Git.commit // "unknown")"' \
+              "${trufflehog_filtered_report}" | sed -n '1,100p'
+          elif [ "${trufflehog_status}" -ne 0 ] && [ ! -s "${trufflehog_report}" ]; then
+            audit_failed=1
+            echo "::error::TruffleHog failed without producing findings. Raw stderr is intentionally not printed."
+          else
+            echo "TruffleHog: no non-allowlisted findings across all fetched refs."
+          fi
+
+          if [ "${audit_failed}" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "Public release history audit passed."
