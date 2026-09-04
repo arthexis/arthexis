@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: resolve.sh [--file PATH | --text TEXT | TEXT ...]
+Usage: ./scripts/resolve_cli.sh [--file PATH | --text TEXT | TEXT ...]
 
 Resolve sigils in either piped input, a file, or provided text arguments.
 
@@ -13,9 +13,9 @@ Options:
   -h, --help        Show this help message and exit.
 
 Examples:
-  ./resolve.sh --text "Hello [SYS.version]"
-  ./resolve.sh --file template.txt
-  cat template.txt | ./resolve.sh
+  ./scripts/resolve_cli.sh --text "Hello [SYS.version]"
+  ./scripts/resolve_cli.sh --file template.txt
+  cat template.txt | ./scripts/resolve_cli.sh
 USAGE
 }
 
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
   esac
- done
+done
 
 if [[ -n "$file" ]]; then
   "$PYTHON_CMD" -m scripts.resolve_sigils --file "$file"
