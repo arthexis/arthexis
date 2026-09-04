@@ -1,6 +1,9 @@
 name: Public Release Audit
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/public-release-audit.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,12 +31,10 @@ jobs:
             '+refs/tags/*:refs/tags/*' \
             '+refs/pull/*/head:refs/remotes/origin/pull/*'
 
-          echo "Refs included in audit:"
-          git for-each-ref --format='%(refname)' \
-            refs/remotes/origin/heads \
-            refs/remotes/origin/pull \
-            refs/tags \
-            | sort
+          branch_refs="$(git for-each-ref --format='%(refname)' refs/remotes/origin/heads | wc -l | tr -d ' ')"
+          pull_refs="$(git for-each-ref --format='%(refname)' refs/remotes/origin/pull | wc -l | tr -d ' ')"
+          tag_refs="$(git for-each-ref --format='%(refname)' refs/tags | wc -l | tr -d ' ')"
+          echo "Audit ref inventory: branches=${branch_refs} pull-heads=${pull_refs} tags=${tag_refs}"
 
       - name: Install scanners
         env:
@@ -66,13 +67,14 @@ jobs:
         env:
           AUDIT_DIR: ${{ runner.temp }}/public-release-audit
         run: |
-          set -u
+          set -euo pipefail
           rm -rf "${AUDIT_DIR}"
           mkdir -p "${AUDIT_DIR}"
 
           gitleaks_report="${AUDIT_DIR}/gitleaks.json"
           trufflehog_report="${AUDIT_DIR}/trufflehog.jsonl"
           trufflehog_stderr="${AUDIT_DIR}/trufflehog.stderr"
+          trap 'rm -f "${gitleaks_report}" "${trufflehog_report}" "${trufflehog_stderr}"' EXIT
 
           set +e
           gitleaks detect \
@@ -104,7 +106,7 @@ jobs:
               count="$(jq 'length' "${gitleaks_report}")"
               echo "::error::Gitleaks detected ${count} potential secret(s)."
               jq -r '.[] | "Gitleaks detector=\(.RuleID // "unknown") path=\(.File // "unknown") commit=\(.Commit // "unknown")"' \
-                "${gitleaks_report}" | head -100
+                "${gitleaks_report}" | sed -n '1,100p'
             else
               echo "::error::Gitleaks failed without producing a report."
             fi
@@ -118,16 +120,13 @@ jobs:
               count="$(wc -l < "${trufflehog_report}" | tr -d ' ')"
               echo "::error::TruffleHog detected ${count} potential secret(s)."
               jq -r '"TruffleHog detector=\(.DetectorName // "unknown") path=\(.SourceMetadata.Data.Git.file // "unknown") commit=\(.SourceMetadata.Data.Git.commit // "unknown")"' \
-                "${trufflehog_report}" | head -100
+                "${trufflehog_report}" | sed -n '1,100p'
             else
               echo "::error::TruffleHog failed without producing findings. Raw stderr is intentionally not printed."
             fi
           else
             echo "TruffleHog: no findings across all fetched refs."
           fi
-
-          # Reports may contain sensitive material. Never upload them as artifacts.
-          rm -f "${gitleaks_report}" "${trufflehog_report}" "${trufflehog_stderr}"
 
           if [ "${audit_failed}" -ne 0 ]; then
             exit 1
