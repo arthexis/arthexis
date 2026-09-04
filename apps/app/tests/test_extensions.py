@@ -19,12 +19,10 @@ from utils.extensions import (
 
 MANIFEST = """\
 [extension]
-name = "printers"
-repository = "arthexis/arthexis-printers"
-django_apps = ["arthexis_printers"]
+name = "diagnostics"
+repository = "arthexis/arthexis-diagnostics"
+django_apps = ["arthexis_diagnostics"]
 requires_apps = ["apps.core"]
-feature_packs = ["printer_workflows"]
-suite_features = ["printer-workflows"]
 """
 
 
@@ -32,7 +30,7 @@ class ExtensionDiscoveryTests(SimpleTestCase):
     def test_discovers_manifest_and_activates_checkout_path(self):
         with TemporaryDirectory() as temporary:
             base_dir = Path(temporary)
-            checkout = base_dir / "extensions" / "arthexis-printers"
+            checkout = base_dir / "extensions" / "arthexis-diagnostics"
             checkout.mkdir(parents=True)
             (checkout / "arthexis-extension.toml").write_text(
                 MANIFEST,
@@ -42,8 +40,8 @@ class ExtensionDiscoveryTests(SimpleTestCase):
             manifests = load_extension_manifests(base_dir)
 
             self.assertEqual(len(manifests), 1)
-            self.assertEqual(manifests[0].name, "printers")
-            self.assertEqual(manifests[0].django_apps, ("arthexis_printers",))
+            self.assertEqual(manifests[0].name, "diagnostics")
+            self.assertEqual(manifests[0].django_apps, ("arthexis_diagnostics",))
             self.assertEqual(manifests[0].requires_apps, ("apps.core",))
 
             original_sys_path = list(sys.path)
@@ -59,12 +57,12 @@ class ExtensionDiscoveryTests(SimpleTestCase):
             extensions = base_dir / "extensions"
             extensions.mkdir()
             (extensions / "extensions.toml").write_text(
-                '[extensions]\nprinters = "arthexis/arthexis-printers"\n',
+                '[extensions]\ndiagnostics = "arthexis/arthexis-diagnostics"\n',
                 encoding="utf-8",
             )
             with patch.dict(
                 os.environ,
-                {"ARTHEXIS_EXTENSIONS": "widgets,other/example"},
+                {"ARTHEXIS_EXTENSIONS": "telemetry,other/example"},
                 clear=False,
             ):
                 declarations = load_declared_extension_repositories(base_dir)
@@ -72,16 +70,16 @@ class ExtensionDiscoveryTests(SimpleTestCase):
         self.assertEqual(
             declarations,
             {
+                "diagnostics": "arthexis/arthexis-diagnostics",
                 "example": "other/example",
-                "printers": "arthexis/arthexis-printers",
-                "widgets": "arthexis/arthexis-widgets",
+                "telemetry": "arthexis/arthexis-telemetry",
             },
         )
 
     def test_normalizes_short_names_and_github_urls(self):
         self.assertEqual(
-            normalize_github_repository("printers"),
-            "arthexis/arthexis-printers",
+            normalize_github_repository("diagnostics"),
+            "arthexis/arthexis-diagnostics",
         )
         self.assertEqual(
             normalize_github_repository(
