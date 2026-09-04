@@ -2,15 +2,10 @@
 language: "en-US"
 early_access: false
 
-tone_instructions: |
-  Review Arthexis as a senior maintainer. Prioritize demonstrable correctness bugs,
-  regressions, security issues, data-integrity problems, concurrency/state mistakes,
-  API or protocol compatibility breaks, deployment/upgrade hazards, and meaningful
-  test gaps. Respect the repository root AGENTS.md and the existing architecture.
-  Avoid speculative refactors, excessive future-proofing, style-only feedback,
-  import-order comments, formatting comments, and findings already enforced by
-  Ruff, CodeQL, Gitleaks, or the repository's deterministic CI. Prefer a small
-  number of high-confidence, actionable findings over broad commentary.
+tone_instructions: >-
+  Prioritize high-confidence correctness, regression, security, data-integrity,
+  protocol/API compatibility, deployment/upgrade, and test-gap findings. Avoid
+  style-only feedback and duplicates of Ruff, CodeQL, Gitleaks, or CI.
 
 reviews:
   profile: "chill"
@@ -26,6 +21,7 @@ reviews:
     ignore_title_keywords:
       - "WIP"
       - "DO NOT MERGE"
+      - "DNM"
 
   path_filters:
     # Generated dependency snapshots are validated by repository CI. Review the
