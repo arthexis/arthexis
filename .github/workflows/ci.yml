@@ -55,44 +55,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  pr_readiness:
-    name: PR readiness
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      up_to_date: ${{ steps.check.outputs.result }}
-    steps:
-      - id: check
-        name: Check whether the PR includes the current base
-        uses: actions/github-script@v8
-        with:
-          result-encoding: string
-          script: |
-            if (context.eventName !== 'pull_request') {
-              return 'true';
-            }
-
-            const pull = context.payload.pull_request;
-            const { data: comparison } = await github.rest.repos.compareCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              base: pull.base.sha,
-              head: pull.head.sha,
-            });
-
-            const upToDate = comparison.status === 'ahead' || comparison.status === 'identical';
-            if (!upToDate) {
-              core.notice(
-                `Skipping Linux sanity: ${pull.head.ref} does not include ${pull.base.ref} at ${pull.base.sha}. Update the PR branch first.`
-              );
-            }
-
-            return String(upToDate);
-
   sanity:
     name: Linux sanity
-    needs: pr_readiness
-    if: needs.pr_readiness.outputs.up_to_date == 'true'
+    # A PR that GitHub already classifies as behind cannot satisfy the strict
+    # main ruleset until its branch is updated, so do not allocate our
+    # self-hosted runner for that revision. Pushes/manual runs are unaffected.
+    if: github.event_name != 'pull_request' || github.event.pull_request.mergeable_state != 'behind'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
     timeout-minutes: 40
     steps:
