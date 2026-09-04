@@ -63,14 +63,6 @@ _CELERY_BEAT_SCHEDULE_ENTRIES: tuple[BeatScheduleEntry, ...] = (
         },
     ),
     (
-        "apps.summary",
-        "log_summary",
-        {
-            "task": "apps.summary.tasks.generate_log_summary",
-            "schedule": timedelta(minutes=10),
-        },
-    ),
-    (
         "apps.ocpp",
         "ocpp_configuration_check",
         {
