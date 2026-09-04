@@ -282,23 +282,3 @@ def _safe_report_url_fetcher(url: str, *args: Any, **kwargs: Any) -> dict[str, A
     if parsed.scheme == "data" and default_url_fetcher is not None:
         return default_url_fetcher(url, *args, **kwargs)
     raise ValueError("External resource loading is disabled for report PDF rendering")
-
-
-def _render_reportlab_fallback(rendered_html: str) -> bytes:
-    """Render a plain-text fallback PDF when needed by callers/tests."""
-
-    buffer = bytearray()
-    from io import BytesIO
-
-    stream = BytesIO()
-    pdf = canvas.Canvas(stream, pagesize=letter)
-    text = pdf.beginText(40, 750)
-    for line in strip_tags(rendered_html).splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        text.textLine(line[:110])
-    pdf.drawText(text)
-    pdf.save()
-    buffer.extend(stream.getvalue())
-    return bytes(buffer)
