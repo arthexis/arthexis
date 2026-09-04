@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
+
+from apps.ocpp.payload_types import PendingCallMetadata
 
 from . import (
     logs as logs_module,
@@ -31,6 +34,46 @@ _PUBLIC_FUNCTION_NAMES = tuple(
 logs = logs_module.logs
 pending_calls = pending_calls_module.pending_calls
 transactions = state_module.transactions
+
+
+def register_pending_call(
+    message_id: str, metadata: Mapping[str, object]
+) -> None:
+    """Store metadata about an outstanding CSMS call."""
+
+    pending_calls_module.register_pending_call(message_id, dict(metadata))
+
+
+def pop_pending_call(message_id: str) -> PendingCallMetadata | None:
+    """Return typed metadata for a previously registered call."""
+
+    return cast(
+        PendingCallMetadata | None,
+        pending_calls_module.pop_pending_call(message_id),
+    )
+
+
+def record_pending_call_result(
+    message_id: str,
+    *,
+    metadata: Mapping[str, object] | None = None,
+    success: bool = True,
+    payload: object | None = None,
+    error_code: str | None = None,
+    error_description: str | None = None,
+    error_details: object | None = None,
+) -> None:
+    """Record the outcome for a previously registered pending call."""
+
+    pending_calls_module.record_pending_call_result(
+        message_id,
+        metadata=dict(metadata) if metadata is not None else None,
+        success=success,
+        payload=payload,
+        error_code=error_code,
+        error_description=error_description,
+        error_details=error_details,
+    )
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:
