@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from utils.devtools import migration_server
+from scripts.devtools import migration_server
 
 
 def _completed(*, returncode: int, stderr: str = "", stdout: str = "") -> subprocess.CompletedProcess[str]:
