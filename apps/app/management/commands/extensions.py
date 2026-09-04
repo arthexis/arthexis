@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.repos.services.github import resolve_configured_token
+from utils.extension_features import sync_extension_suite_features
 from utils.extensions import (
     DEFAULT_GITHUB_OWNER,
     ExtensionError,
@@ -54,7 +55,7 @@ class Command(BaseCommand):
             nargs="+",
             help=(
                 "Short names, owner/name slugs, or GitHub URLs. A short name such as "
-                "'printers' resolves to arthexis/arthexis-printers."
+                "'printer-zebra' resolves to arthexis/arthexis-printer-zebra."
             ),
         )
         install.add_argument(
@@ -70,7 +71,14 @@ class Command(BaseCommand):
 
         subparsers.add_parser(
             "sync",
-            help="Clone missing declared extensions and fast-forward existing checkouts.",
+            help=(
+                "Clone/update declared extensions and synchronize their Suite Feature "
+                "definitions."
+            ),
+        )
+        subparsers.add_parser(
+            "sync-features",
+            help="Synchronize Suite Features declared by installed extensions.",
         )
 
     def handle(self, *args, **options):
@@ -91,6 +99,9 @@ class Command(BaseCommand):
                 return
             if action == "sync":
                 self._sync()
+                return
+            if action == "sync-features":
+                self._sync_features()
                 return
         except ExtensionError as exc:
             raise CommandError(str(exc)) from exc
@@ -173,6 +184,7 @@ class Command(BaseCommand):
                 self.base_dir,
             )
             self.stdout.write(f"Updated {path}")
+        self._sync_features()
         self.stdout.write(
             "Run migrations or restart Arthexis so newly installed extension apps are loaded."
         )
@@ -181,10 +193,20 @@ class Command(BaseCommand):
         declarations = load_declared_extension_repositories(self.base_dir)
         if not declarations:
             self.stdout.write("No extensions are declared.")
+            self._sync_features()
             return
         checkouts = sync_declared_extensions(self.base_dir)
         for checkout in checkouts:
             self.stdout.write(self.style.SUCCESS(f"Synchronized {checkout.name}"))
+        self._sync_features()
         self.stdout.write(
             "Run migrations or restart Arthexis so extension app changes are loaded."
+        )
+
+    def _sync_features(self) -> None:
+        created, updated = sync_extension_suite_features(self.base_dir)
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Suite Features synchronized: created={created} updated={updated}"
+            )
         )
