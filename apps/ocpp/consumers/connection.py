@@ -15,6 +15,7 @@ from .constants import (
     OCPP_VERSION_16,
     OCPP_VERSION_21,
     OCPP_VERSION_201,
+    OCPPVersion,
 )
 from .ip_utils import _parse_ip
 
@@ -119,18 +120,22 @@ class RateLimitedConnectionMixin:
 
 
 class SubprotocolConnectionMixin:
-    def _canonicalize_ocpp_subprotocol(self, value: str | None) -> str | None:
+    ocpp_version: OCPPVersion
+
+    def _canonicalize_ocpp_subprotocol(
+        self, value: str | None
+    ) -> OCPPVersion | None:
         """Return the canonical OCPP version for a websocket subprotocol token."""
 
         normalized = str(value or "").strip().lower()
         if not normalized:
             return None
         if normalized in {OCPP_VERSION_16, OCPP_SUBPROTOCOL_16J}:
-            return OCPP_VERSION_16
+            return OCPPVersion.V16
         if normalized == OCPP_VERSION_201:
-            return OCPP_VERSION_201
+            return OCPPVersion.V201
         if normalized == OCPP_VERSION_21:
-            return OCPP_VERSION_21
+            return OCPPVersion.V21
         return None
 
     def _select_subprotocol(
@@ -138,7 +143,7 @@ class SubprotocolConnectionMixin:
     ) -> str | None:
         """Choose the negotiated OCPP subprotocol, honoring stored preference."""
 
-        canonical_offered: dict[str, str] = {}
+        canonical_offered: dict[OCPPVersion, str] = {}
         for proto in offered:
             if not proto:
                 continue
@@ -159,7 +164,7 @@ class SubprotocolConnectionMixin:
             # Prefer the JSON-only OCPP 1.6 token when both 1.6 aliases are
             # offered; keep first-seen ordering for all other versions.
             if current is None or (
-                canonical == OCPP_VERSION_16
+                canonical is OCPPVersion.V16
                 and proto_text.lower() == OCPP_SUBPROTOCOL_16J
                 and current.lower() != OCPP_SUBPROTOCOL_16J
             ):
@@ -169,16 +174,16 @@ class SubprotocolConnectionMixin:
             return canonical_offered[preferred_normalized]
         # Prefer the latest supported OCPP 2.x protocol when the charger
         # requests it, otherwise fall back to older versions.
-        if OCPP_VERSION_21 in canonical_offered:
-            return canonical_offered[OCPP_VERSION_21]
-        if OCPP_VERSION_201 in canonical_offered:
-            return canonical_offered[OCPP_VERSION_201]
+        if OCPPVersion.V21 in canonical_offered:
+            return canonical_offered[OCPPVersion.V21]
+        if OCPPVersion.V201 in canonical_offered:
+            return canonical_offered[OCPPVersion.V201]
         # Operational safeguard: never reject a charger solely because it omits
         # or sends an unexpected subprotocol. We prefer the JSON 1.6 token
         # (``ocpp1.6j``) when available, then accept the ``ocpp1.6`` alias, and
         # otherwise continue without a negotiated token for compatibility.
-        if OCPP_VERSION_16 in canonical_offered:
-            return canonical_offered[OCPP_VERSION_16]
+        if OCPPVersion.V16 in canonical_offered:
+            return canonical_offered[OCPPVersion.V16]
         return None
 
     def _get_offered_subprotocols(self) -> list[str]:
@@ -225,7 +230,7 @@ class SubprotocolConnectionMixin:
         return normalized
 
     def _negotiate_ocpp_version(self, existing_charger: Charger | None) -> str | None:
-        """Resolve the negotiated OCPP subprotocol and set version attributes."""
+        """Resolve the wire subprotocol and set the canonical OCPP version."""
 
         preferred_version = (
             existing_charger.preferred_ocpp_version_value()
@@ -238,11 +243,11 @@ class SubprotocolConnectionMixin:
         self.preferred_ocpp_version = preferred_version
         negotiated_version = self._canonicalize_ocpp_subprotocol(subprotocol)
         if not negotiated_version and preferred_canonical in {
-            OCPP_VERSION_201,
-            OCPP_VERSION_21,
+            OCPPVersion.V201,
+            OCPPVersion.V21,
         }:
             negotiated_version = preferred_canonical
-        self.ocpp_version = negotiated_version or OCPP_VERSION_16
+        self.ocpp_version = negotiated_version or OCPPVersion.V16
         return subprotocol
 
 
