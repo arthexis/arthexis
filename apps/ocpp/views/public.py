@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET
 
-from apps.docs import rendering
+from apps.ocpp import markdown as rendering
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
