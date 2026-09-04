@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+
+tone_instructions: |
+  Review Arthexis as a senior maintainer. Prioritize demonstrable correctness bugs,
+  regressions, security issues, data-integrity problems, concurrency/state mistakes,
+  API or protocol compatibility breaks, deployment/upgrade hazards, and meaningful
+  test gaps. Respect the repository root AGENTS.md and the existing architecture.
+  Avoid speculative refactors, excessive future-proofing, style-only feedback,
+  import-order comments, formatting comments, and findings already enforced by
+  Ruff, CodeQL, Gitleaks, or the repository's deterministic CI. Prefer a small
+  number of high-confidence, actionable findings over broad commentary.
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+
+  path_filters:
+    # Generated dependency snapshots are validated by repository CI. Review the
+    # source dependency declarations and generation logic instead.
+    - "!requirements.txt"
+    - "!requirements-ci.txt"
+
+  path_instructions:
+    - path: "**/*.py"
+      instructions: |
+        Focus on runtime correctness, backwards compatibility, exception behavior,
+        data integrity, typing assumptions that affect runtime behavior, and useful
+        regression coverage. For Django code, pay particular attention to queryset
+        semantics, transactions, migrations, permissions, request boundaries,
+        async/sync interactions, and behavior that differs across SQLite/PostgreSQL.
+        Do not report formatting, import ordering, or routine Ruff findings.
+
+    - path: "apps/ocpp/**"
+      instructions: |
+        Treat OCPP and WebSocket behavior as protocol-critical. Check message-shape
+        validation, request/result/error correlation, pending-call lifecycle,
+        charger and connector identity, retry/idempotency behavior, ordering races,
+        connection state, OCPP 1.6/2.0.1/2.1 compatibility, and wire-format changes.
+        Prefer concrete protocol or state-machine failures over stylistic advice.
+
+    - path: ".github/**"
+      instructions: |
+        Review GitHub Actions and repository automation for trigger gaps, fork-PR
+        trust boundaries, excessive permissions, unsafe use of secrets, stale or
+        bypassable required checks, concurrency mistakes, release safety, and
+        divergence from the repository's documented CI/release invariants.
+
+    - path: "scripts/**"
+      instructions: |
+        Review operational scripts for destructive behavior, quoting/path errors,
+        partial-failure handling, privilege assumptions, portability across the
+        supported Debian/Raspberry Pi/Linux environments, upgrade safety, and CI
+        behavior. Avoid shell-style-only comments unless they expose a real defect.
+
+    - path: "install.sh"
+      instructions: |
+        Treat installation as a public user-facing compatibility boundary. Check
+        clean-install behavior, rerun/idempotency behavior, supported Python and OS
+        assumptions, failure recovery, permissions, paths, and dependency setup.
+
+    - path: "upgrade.sh"
+      instructions: |
+        Treat upgrade behavior as stateful and high risk. Check data/configuration
+        preservation, version transitions, rerun/idempotency behavior, partial
+        failure recovery, and compatibility with supported installations.
+
+    - path: "**/tests/**"
+      instructions: |
+        Evaluate whether tests protect the behavior actually changed by the PR,
+        especially failure paths and regressions. Do not request tests for trivial
+        micro-behaviors or styling; follow the repository testing policy in AGENTS.md.
+
+  tools:
+    # Ruff already runs in the deterministic Linux sanity workflow. Avoid
+    # duplicating its findings in AI review comments.
+    ruff:
+      enabled: false
+
+chat:
+  auto_reply: true
