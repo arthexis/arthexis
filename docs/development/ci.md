@@ -1,12 +1,17 @@
 # CI Policy
 
-GitHub Actions budget is treated as a scarce shared resource for the private
-repository. Pull requests should run only the lightweight Linux sanity gate by
-default.
+GitHub Actions budget is treated as a shared resource. Pull requests should run
+the lightweight Linux sanity gate by default, with security scans providing
+additional evidence where configured.
 
 ## Automatic Gates
 
-- `Linux CI` is the only workflow triggered by pull requests.
+- `Linux CI / Linux sanity` runs on every pull request so it can safely be used
+  as a required status check for `main`. Do not add pull-request `paths:` filters
+  to this workflow: if GitHub skips a required workflow entirely, the check can
+  remain `Expected` indefinitely.
+- Pushes to `main` and `release/**` keep path filters so irrelevant pushes do not
+  consume the self-hosted runner.
 - `Linux CI / Linux sanity` runs on the local self-hosted Ubuntu runner labels
   `[self-hosted, Linux, X64, arthexis-ci]` and delegates to
   `./scripts/ci/linux-sanity.sh`.
@@ -15,7 +20,11 @@ default.
   workflow runs.
 - The self-hosted runner installs native packages outside the workflow, so the
   workflow sets `ARTHEXIS_SKIP_SANITY_APT=1`.
-- Workflow path filters intentionally ignore root Windows batch entrypoints.
+
+The repository ruleset for the default branch should require
+`Linux CI / Linux sanity` before merging. This keeps pull requests blocked while
+the sanity job is queued or running and prevents merge after a failed sanity
+run.
 
 The sanity script validates dependency metadata, performs the Linux install
 smoke path, checks migrations and imports, runs critical Ruff rules, and runs
@@ -39,7 +48,9 @@ default-branch evidence when budget is available:
 - `Release Upgrade Replay`
 - housekeeping workflows such as cache cleanup, stale closure, and branch prune
 
-These workflows should not be required for ordinary PR iteration.
+These workflows should not be required for ordinary PR iteration unless the
+repository policy is deliberately tightened and their triggers are adjusted so
+the corresponding required checks are reported for every applicable PR.
 
 `Install Health Check` is `workflow_dispatch` only. It does not run on pushes,
 pull requests, or schedules, and it no longer opens or updates automation issues
@@ -67,7 +78,7 @@ For focused test work after the environment exists:
 
 ```bash
 source .venv/bin/activate
-python -m pytest apps/core/tests/reports/test_release_publish_regressions.py::test_only_linux_ci_runs_on_pull_requests -q
+python -m pytest apps/core/tests/reports/test_release_publish_regressions.py::test_linux_ci_and_security_scans_run_on_pull_requests -q
 python -m ruff check .github scripts apps/core/tests/reports/test_release_publish_regressions.py
 ```
 
