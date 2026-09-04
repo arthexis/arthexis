@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import manage
-from gate_markers import gate
+from tests.gate_markers import gate
 
 
 pytestmark = [gate.upgrade, pytest.mark.django_db]
