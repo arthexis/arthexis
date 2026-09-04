@@ -73,8 +73,9 @@ jobs:
 
           gitleaks_report="${AUDIT_DIR}/gitleaks.json"
           trufflehog_report="${AUDIT_DIR}/trufflehog.jsonl"
+          trufflehog_filtered_report="${AUDIT_DIR}/trufflehog-filtered.jsonl"
           trufflehog_stderr="${AUDIT_DIR}/trufflehog.stderr"
-          trap 'rm -f "${gitleaks_report}" "${trufflehog_report}" "${trufflehog_stderr}"' EXIT
+          trap 'rm -f "${gitleaks_report}" "${trufflehog_report}" "${trufflehog_filtered_report}" "${trufflehog_stderr}"' EXIT
 
           set +e
           gitleaks detect \
@@ -114,18 +115,39 @@ jobs:
             echo "Gitleaks: no findings across all fetched refs."
           fi
 
-          if [ "${trufflehog_status}" -ne 0 ]; then
-            audit_failed=1
-            if [ -s "${trufflehog_report}" ]; then
-              count="$(wc -l < "${trufflehog_report}" | tr -d ' ')"
-              echo "::error::TruffleHog detected ${count} potential secret(s)."
-              jq -r '"TruffleHog detector=\(.DetectorName // "unknown") path=\(.SourceMetadata.Data.Git.file // "unknown") commit=\(.SourceMetadata.Data.Git.commit // "unknown")"' \
-                "${trufflehog_report}" | sed -n '1,100p'
-            else
-              echo "::error::TruffleHog failed without producing findings. Raw stderr is intentionally not printed."
+          if [ -s "${trufflehog_report}" ]; then
+            # This exact historical test commit intentionally contains three
+            # basic-auth-shaped URLs on IANA-reserved example domains to test
+            # that credentials are stripped from feedback source URLs. Ignore
+            # only URI findings at this exact path+commit; all other detectors,
+            # paths, and commits remain audit failures.
+            jq -c 'select(
+              (.DetectorName != "URI") or
+              (.SourceMetadata.Data.Git.file != "apps/sites/tests/test_user_story_github_issues.py") or
+              (.SourceMetadata.Data.Git.commit != "b5d03a9b8eed2c638427e6270821f0b09b019e19")
+            )' "${trufflehog_report}" > "${trufflehog_filtered_report}"
+
+            raw_count="$(wc -l < "${trufflehog_report}" | tr -d ' ')"
+            filtered_count="$(wc -l < "${trufflehog_filtered_report}" | tr -d ' ')"
+            ignored_count=$((raw_count - filtered_count))
+            if [ "${ignored_count}" -gt 0 ]; then
+              echo "TruffleHog: ignored ${ignored_count} manually reviewed historical URI fixture finding(s)."
             fi
           else
-            echo "TruffleHog: no findings across all fetched refs."
+            : > "${trufflehog_filtered_report}"
+            filtered_count=0
+          fi
+
+          if [ "${filtered_count}" -gt 0 ]; then
+            audit_failed=1
+            echo "::error::TruffleHog detected ${filtered_count} non-allowlisted potential secret(s)."
+            jq -r '"TruffleHog detector=\(.DetectorName // "unknown") path=\(.SourceMetadata.Data.Git.file // "unknown") commit=\(.SourceMetadata.Data.Git.commit // "unknown")"' \
+              "${trufflehog_filtered_report}" | sed -n '1,100p'
+          elif [ "${trufflehog_status}" -ne 0 ] && [ ! -s "${trufflehog_report}" ]; then
+            audit_failed=1
+            echo "::error::TruffleHog failed without producing findings. Raw stderr is intentionally not printed."
+          else
+            echo "TruffleHog: no non-allowlisted findings across all fetched refs."
           fi
 
           if [ "${audit_failed}" -ne 0 ]; then
