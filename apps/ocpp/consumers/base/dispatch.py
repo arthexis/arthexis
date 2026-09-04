@@ -1,12 +1,19 @@
 import base64
 import json
 from functools import cached_property
+from typing import assert_never
 
 from ... import store
 from ...call_error_handlers import dispatch_call_error
 from ...call_result_handlers import dispatch_call_result
 from ...models import Charger
-from ..csms.protocol import validate_call_envelope
+from ..csms.protocol import (
+    OCPPCallEnvelope,
+    OCPPCallErrorEnvelope,
+    OCPPCallResultEnvelope,
+    validate_call_envelope,
+    validate_message_envelope,
+)
 from .routing import ActionRouter
 
 
@@ -27,19 +34,23 @@ class DispatchMixin:
         msg = self._parse_message(raw)
         if msg is None:
             return
-        message_type = msg[0]
-        if message_type == 2:
-            await self._handle_call_message(msg, raw, text_data)
-        elif message_type == 3:
-            msg_id = msg[1] if len(msg) > 1 else ""
-            payload = msg[2] if len(msg) > 2 else {}
-            await self._handle_call_result(msg_id, payload, raw)
-        elif message_type == 4:
-            msg_id = msg[1] if len(msg) > 1 else ""
-            error_code = msg[2] if len(msg) > 2 else ""
-            description = msg[3] if len(msg) > 3 else ""
-            details = msg[4] if len(msg) > 4 else {}
-            await self._handle_call_error(msg_id, error_code, description, details, raw)
+        envelope = validate_message_envelope(msg)
+        if envelope is None:
+            return
+        if isinstance(envelope, OCPPCallEnvelope):
+            await self._handle_call_message(envelope, raw, text_data)
+        elif isinstance(envelope, OCPPCallResultEnvelope):
+            await self._handle_call_result(envelope.message_id, envelope.payload, raw)
+        elif isinstance(envelope, OCPPCallErrorEnvelope):
+            await self._handle_call_error(
+                envelope.message_id,
+                envelope.error_code,
+                envelope.description,
+                envelope.details,
+                raw,
+            )
+        else:  # pragma: no cover - exhaustiveness guard for static typing
+            assert_never(envelope)
 
     def _normalize_raw_message(self, text_data, bytes_data):
         raw = text_data
@@ -47,7 +58,7 @@ class DispatchMixin:
             raw = base64.b64encode(bytes_data).decode("ascii")
         return raw
 
-    def _parse_message(self, raw: str):
+    def _parse_message(self, raw: str) -> list[object] | None:
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
@@ -56,14 +67,14 @@ class DispatchMixin:
             return None
         return msg
 
-    async def _handle_call_message(self, msg, raw, text_data):
-        envelope = validate_call_envelope(msg)
+    async def _handle_call_message(self, msg: object, raw, text_data):
+        envelope = (
+            msg if isinstance(msg, OCPPCallEnvelope) else validate_call_envelope(msg)
+        )
         if envelope is None:
             return
         msg_id, action, payload = envelope.message_id, envelope.action, envelope.payload
-        connector_hint = (
-            payload.get("connectorId") if isinstance(payload, dict) else None
-        )
+        connector_hint = payload.get("connectorId")
         self._log_triggered_follow_up(action, connector_hint)
         await self._assign_connector(payload.get("connectorId"))
         reply_payload = {}
