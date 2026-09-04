@@ -27,7 +27,10 @@ def clear_rate_limit_cache():
     cache.clear()
 
 
-@override_settings(CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True)
+@override_settings(
+    CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True,
+    ROOT_URLCONF="apps.ocpp.tests.intake_test_urls",
+)
 def test_charger_vendor_submission_persists_submission_and_redirects(client):
     """Regression: valid public vendor submissions should be stored for admin review."""
 
@@ -78,7 +81,10 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
     ) in messages
 
 
-@override_settings(CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True)
+@override_settings(
+    CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True,
+    ROOT_URLCONF="apps.ocpp.tests.intake_test_urls",
+)
 def test_charger_vendor_submission_rate_limits_repeated_posts(client):
     """Regression: repeated public submissions should eventually be throttled."""
 
