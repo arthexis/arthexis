@@ -9,10 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.gate_markers import gate
 
-
-pytestmark = [gate.upgrade]
+pytestmark = [pytest.mark.gate_upgrade]
 
 
 def _write_fake_manage(path: Path) -> None:

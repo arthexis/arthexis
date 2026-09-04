@@ -3,10 +3,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from tests.gate_markers import gate
+import pytest
 
 
-pytestmark = [gate.upgrade]
+pytestmark = [pytest.mark.gate_upgrade]
 
 ROOT = Path(__file__).resolve().parents[3]
 

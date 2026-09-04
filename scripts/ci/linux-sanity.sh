@@ -59,6 +59,7 @@ run_timed "Dependency consistency" python -m pip check
 run_timed "Pyproject dependency ordering" python scripts/sort_pyproject_deps.py --check
 run_timed "Generated requirements" python scripts/generate_requirements.py --check
 run_timed "Import resolution" python scripts/check_import_resolution.py
+run_timed "Import contracts" lint-imports
 run_timed "Ruff correctness checks" python -m ruff check --select E9,F821,F823 .
 
 # Import and collect the complete test corpus without paying the cost of executing it.
@@ -73,6 +74,7 @@ run_timed "Required pytest tests" python -m pytest \
   apps/core/tests/reports/test_release_publish_regressions.py::test_github_workflows_do_not_define_windows_gates \
   apps/core/tests/reports/test_release_publish_regressions.py::test_linux_ci_and_security_scans_run_on_pull_requests \
   apps/core/tests/reports/test_release_publish_regressions.py::test_security_workflows_keep_scheduled_baseline_scans \
+  apps/core/tests/reports/test_release_publish_regressions.py::test_install_health_workflow_runs_on_main_and_manual_dispatch \
   apps/core/tests/reports/test_release_publish_regressions.py::test_linux_ci_uses_single_sanity_job \
   -q
 
