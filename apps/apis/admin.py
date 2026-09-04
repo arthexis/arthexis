@@ -1,4 +1,4 @@
-"""Admin integration for API explorer and service token management."""
+"""Admin integration for managed service credentials."""
 
 from datetime import timedelta
 
@@ -12,23 +12,12 @@ from django.urls import path, reverse
 from django.utils import timezone
 
 from apps.apis.models import (
-    APIExplorer,
     GeneralServiceToken,
     GeneralServiceTokenEvent,
-    ResourceMethod,
     ServiceToken,
     ServiceTokenEvent,
 )
 from apps.groups.models import SecurityGroup
-
-
-class ResourceMethodInline(admin.TabularInline):
-    """Inline editor for API resource methods."""
-
-    model = ResourceMethod
-    extra = 0
-    fields = ("operation_name", "resource_path", "http_method")
-    show_change_link = True
 
 
 class ServiceTokenCreateForm(forms.Form):
@@ -123,25 +112,6 @@ class GeneralServiceTokenCreateForm(forms.Form):
         if custom_claims is not None and not isinstance(custom_claims, dict):
             self.add_error("custom_claims", "Custom claims must be a JSON object.")
         return cleaned
-
-
-@admin.register(APIExplorer)
-class APIExplorerAdmin(admin.ModelAdmin):
-    """Admin settings for API entry points."""
-
-    list_display = ("name", "base_url", "is_active", "updated_at")
-    list_filter = ("is_active",)
-    search_fields = ("name", "base_url", "description")
-    inlines = (ResourceMethodInline,)
-
-
-@admin.register(ResourceMethod)
-class ResourceMethodAdmin(admin.ModelAdmin):
-    """Admin settings for individual API resource methods."""
-
-    list_display = ("operation_name", "api", "http_method", "resource_path", "updated_at")
-    list_filter = ("http_method", "api")
-    search_fields = ("operation_name", "resource_path", "api__name", "notes")
 
 
 @admin.register(ServiceToken)

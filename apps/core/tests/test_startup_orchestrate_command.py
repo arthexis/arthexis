@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from apps.core.management.commands.startup_orchestrate import Command
-from gate_markers import gate
+from tests.gate_markers import gate
 
 pytestmark = [gate.upgrade]
 

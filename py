@@ -98,7 +98,7 @@ Expected one of:
   venv/Scripts/python.exe
 
 Bootstrap the environment first:
-  ./dev-env.sh
+  ./scripts/dev/dev-env.sh
   ./install.sh
 
 Then rerun your command, for example:

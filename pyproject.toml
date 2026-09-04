@@ -282,10 +282,6 @@ include-package-data = true
 "apps.users.migrations" = [ "**/*",]
 "apps.users.models" = [ "**/*",]
 "apps.users.tests" = [ "**/*",]
-"apps.wikis" = [ "**/*",]
-"apps.wikis.migrations" = [ "**/*",]
-"apps.wikis.templatetags" = [ "**/*",]
-"apps.wikis.tests" = [ "**/*",]
 config = [ "**/*",]
 
 [tool.setuptools.packages.find]
@@ -315,6 +311,50 @@ extend-select = ["I", "UP", "B904"]
 
 [tool.ruff.lint.per-file-ignores]
 "apps/*/tests/*.py" = ["B904"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+norecursedirs = [
+  "*.egg",
+  ".*",
+  "_darcs",
+  "build",
+  "CVS",
+  "dist",
+  "{arch}",
+  "node_modules",
+  "venv",
+]
+markers = [
+  "gate_upgrade: blocks upgrade regressions that would leave installs crashing, stalled, or unusable after upgrade",
+  "sigil_roots: loads SigilRoot fixtures for tests that require default sigils",
+]
+# Temporary global suppression for websocket live-server runs; local markers
+# are preferred when practical, but this warning currently originates from
+# test infrastructure startup rather than individual test bodies.
+# TODO: remove once the live-server multiprocessing startup avoids fork().
+filterwarnings = [
+  'ignore:This process .* is multi-threaded, use of fork\(\) may lead to deadlocks in the child\.:DeprecationWarning',
+]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+extraPaths = ["."]
+reportMissingImports = "error"
+reportMissingModuleSource = "error"
+exclude = [
+  "**/migrations/**",
+  "**/__pycache__/**",
+  "media/**",
+  "static/**",
+  "node_modules/**",
+  "tests/fixtures/**",
+]
 
 [tool.setuptools.dynamic]
 version = { file = ["VERSION"] }
