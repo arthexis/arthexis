@@ -66,27 +66,27 @@ jobs:
           required_workflows=("Linux CI" "CodeQL" "Secret Scan")
           for workflow_name in "${required_workflows[@]}"; do
             if ! jq -e --arg name "${workflow_name}" '
-              any(
-                .workflow_runs[];
-                .name == $name and
-                .status == "completed" and
-                .conclusion == "success"
-              )
+              [
+                .workflow_runs[]
+                | select(.name == $name)
+              ]
+              | sort_by(.created_at)
+              | last
+              | .status == "completed" and .conclusion == "success"
             ' <<<"${runs_json}" >/dev/null; then
-              echo "${workflow_name} is not successful for ${TRIGGER_SHA}; skipping for now."
+              echo "Latest ${workflow_name} run is not successful for ${TRIGGER_SHA}; skipping for now."
               exit 0
             fi
           done
 
           marker="<!-- coderabbit-gate:${TRIGGER_SHA} -->"
-          if gh api --paginate "/repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100" \
-            --jq '.[].body' | grep -Fq "${marker}"; then
+          comments="$(gh api --paginate "/repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100" --jq '.[].body')"
+          if grep -Fq "${marker}" <<<"${comments}"; then
             echo "CodeRabbit has already been triggered for ${TRIGGER_SHA}."
             exit 0
           fi
 
-          body="${marker}
-          @coderabbitai review"
+          printf -v body '%s\n%s' "${marker}" '@coderabbitai review'
           gh api "/repos/${REPOSITORY}/issues/${pr_number}/comments" \
             --method POST \
             --raw-field body="${body}" \
