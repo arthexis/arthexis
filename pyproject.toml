@@ -284,10 +284,6 @@ include-package-data = true
 "apps.users.migrations" = [ "**/*",]
 "apps.users.models" = [ "**/*",]
 "apps.users.tests" = [ "**/*",]
-"apps.wikis" = [ "**/*",]
-"apps.wikis.migrations" = [ "**/*",]
-"apps.wikis.templatetags" = [ "**/*",]
-"apps.wikis.tests" = [ "**/*",]
 config = [ "**/*",]
 
 [tool.setuptools.packages.find]
