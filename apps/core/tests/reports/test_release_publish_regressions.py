@@ -142,8 +142,44 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
     )
 
     assert "pr_affected_linux_install" not in workflow["jobs"]
-    assert "notify_failure" not in workflow["jobs"]
-    assert "notify_recovery" not in workflow["jobs"]
+
+    notify_failure = workflow["jobs"]["notify_failure"]
+    assert notify_failure["needs"] == "install"
+    assert (
+        notify_failure["if"]
+        == "${{ always() && needs.install.result == 'failure' && github.ref == 'refs/heads/main' }}"
+    )
+    assert notify_failure["runs-on"] == "ubuntu-latest"
+    assert notify_failure["permissions"]["contents"] == "read"
+    assert notify_failure["permissions"]["issues"] == "write"
+    assert notify_failure["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert notify_failure["env"]["ISSUE_MARKER"] == "<!-- install-health-failure -->"
+    failure_script = _workflow_step(
+        notify_failure, "Create or update failure issue"
+    )["run"]
+    assert "gh api --paginate" in failure_script
+    assert "<!-- install-health-failure -->" in failure_script
+    assert "gh issue create" in failure_script
+    assert "gh issue edit" in failure_script
+    assert "gh issue comment" in failure_script
+
+    notify_recovery = workflow["jobs"]["notify_recovery"]
+    assert notify_recovery["needs"] == "install"
+    assert (
+        notify_recovery["if"]
+        == "${{ always() && needs.install.result == 'success' && github.ref == 'refs/heads/main' }}"
+    )
+    assert notify_recovery["runs-on"] == "ubuntu-latest"
+    assert notify_recovery["permissions"]["contents"] == "read"
+    assert notify_recovery["permissions"]["issues"] == "write"
+    assert notify_recovery["env"]["GH_TOKEN"] == "${{ github.token }}"
+    recovery_script = _workflow_step(
+        notify_recovery, "Close recovered failure issue"
+    )["run"]
+    assert "gh api --paginate" in recovery_script
+    assert "<!-- install-health-failure -->" in recovery_script
+    assert "gh issue comment" in recovery_script
+    assert "gh issue close" in recovery_script
 
 
 @pytest.mark.parametrize(
