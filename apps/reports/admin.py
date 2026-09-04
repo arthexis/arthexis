@@ -53,7 +53,6 @@ class SQLReportAdmin(admin.ModelAdmin):
         "last_run_at",
         "last_run_duration",
         "maintained_report_catalog",
-        "legacy_definition",
         "schedule_periodic_task",
     )
     inlines = [SQLReportProductInline]
@@ -63,7 +62,7 @@ class SQLReportAdmin(admin.ModelAdmin):
         (None, {"fields": ("name", "report_type", "parameters")}),
         (
             _("Maintained catalog"),
-            {"fields": ("maintained_report_catalog", "legacy_definition")},
+            {"fields": ("maintained_report_catalog",)},
         ),
         (
             _("Scheduling"),
