@@ -2,10 +2,11 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from apps.core.management.commands.startup_orchestrate import Command
-from tests.gate_markers import gate
+import pytest
 
-pytestmark = [gate.upgrade]
+from apps.core.management.commands.startup_orchestrate import Command
+
+pytestmark = [pytest.mark.gate_upgrade]
 
 
 def test_run_preflight_passes_current_python_to_helper(tmp_path, monkeypatch):

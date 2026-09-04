@@ -5,9 +5,7 @@ from collections.abc import Iterable
 import pytest
 from django.urls import reverse
 
-from tests.gate_markers import gate
-
-pytestmark = [pytest.mark.django_db, gate.upgrade]
+pytestmark = [pytest.mark.django_db, pytest.mark.gate_upgrade]
 
 
 def _response_contexts(response) -> Iterable:
