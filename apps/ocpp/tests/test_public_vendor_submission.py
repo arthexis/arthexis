@@ -29,13 +29,13 @@ def clear_rate_limit_cache():
 
 @override_settings(
     CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True,
-    ROOT_URLCONF="apps.ocpp.intake_urls",
+    ROOT_URLCONF="apps.ocpp.tests.intake_test_urls",
 )
 def test_charger_vendor_submission_persists_submission_and_redirects(client):
     """Regression: valid public vendor submissions should be stored for admin review."""
 
     response = client.post(
-        reverse("charger-vendor-submission"),
+        reverse("ocpp_intake:charger-vendor-submission"),
         data={
             "company_name": "Vendor Grid",
             "contact_name": "Avery Watts",
@@ -65,7 +65,7 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
 
     assert response.status_code == 200
     assert response.redirect_chain[-1][0].endswith(
-        reverse("charger-vendor-submission-thanks")
+        reverse("ocpp_intake:charger-vendor-submission-thanks")
     )
     submission = ChargerVendorSubmission.objects.get()
     assert submission.company_name == "Vendor Grid"
@@ -83,7 +83,7 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
 
 @override_settings(
     CHARGER_INTAKE_PUBLIC_ROUTES_ENABLED=True,
-    ROOT_URLCONF="apps.ocpp.intake_urls",
+    ROOT_URLCONF="apps.ocpp.tests.intake_test_urls",
 )
 def test_charger_vendor_submission_rate_limits_repeated_posts(client):
     """Regression: repeated public submissions should eventually be throttled."""
@@ -102,13 +102,13 @@ def test_charger_vendor_submission_rate_limits_repeated_posts(client):
 
     for _ in range(5):
         response = client.post(
-            reverse("charger-vendor-submission"),
+            reverse("ocpp_intake:charger-vendor-submission"),
             data=payload,
         )
         assert response.status_code == 302
 
     throttled_response = client.post(
-        reverse("charger-vendor-submission"),
+        reverse("ocpp_intake:charger-vendor-submission"),
         data=payload,
     )
 
