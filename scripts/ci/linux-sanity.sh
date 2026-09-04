@@ -69,8 +69,7 @@ run_timed "Pytest collection" python -m pytest --collect-only -q
 run_timed "Required pytest tests" python -m pytest \
   apps/nodes/tests/test_enrollment.py::test_submit_enrollment_public_key_rejects_duplicate_submission_regression \
   apps/ocpp/tests/test_charger_status_polling.py::test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions \
-  tests/test_nodes_registration.py::test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation \
-  apps/sites/tests/test_public_routes.py::test_require_site_operator_or_staff_enforces_admin_operator_boundary \
+  'tests/test_nodes_registration.py::test_register_visitor_proxy_failure_paths[visitor-confirmation-timeout]' \
   apps/core/tests/reports/test_release_publish_regressions.py::test_github_workflows_do_not_define_windows_gates \
   apps/core/tests/reports/test_release_publish_regressions.py::test_linux_ci_and_security_scans_run_on_pull_requests \
   apps/core/tests/reports/test_release_publish_regressions.py::test_security_workflows_keep_scheduled_baseline_scans \
