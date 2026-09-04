@@ -142,6 +142,15 @@ jobs:
           ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
+      - name: Run staged mypy checks
+        if: ${{ matrix.os_flavor == 'debian' && matrix.python_version == '3.13' && matrix.db_backend == 'sqlite' && matrix.test_shard == 'rest' }}
+        env:
+          PIP_DEFAULT_TIMEOUT: "60"
+          PIP_RETRIES: "5"
+        run: |
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: 'mypy==1.18.2'
+          bash scripts/ci/run-mypy.sh
       - name: Verify editable install import
         run: |
           source .venv/bin/activate
@@ -220,3 +229,84 @@ jobs:
             pytest.log
             pytest-junit.xml
           if-no-files-found: warn
+
+  notify_failure:
+    name: Open install health failure issue
+    needs: install
+    if: ${{ always() && needs.install.result == 'failure' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_MARKER: '<!-- install-health-failure -->'
+      ISSUE_TITLE: 'Install Health Check failing on main'
+    steps:
+      - name: Create or update failure issue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue_number="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- install-health-failure -->"))) | .number' \
+              | sed -n '1p'
+          )"
+          body="$(cat <<EOF
+          ${ISSUE_MARKER}
+          Install Health Check is failing on main.
+
+          - Commit: ${GITHUB_SHA}
+          - Run: ${run_url}
+          - Event: ${GITHUB_EVENT_NAME}
+
+          This issue is managed automatically. Subsequent failures update this issue, and a successful Install Health run closes it.
+          EOF
+          )"
+          if [[ -z "${issue_number}" ]]; then
+            gh issue create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${ISSUE_TITLE}" \
+              --body "${body}"
+          else
+            gh issue edit "${issue_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${ISSUE_TITLE}" \
+              --body "${body}"
+            gh issue comment "${issue_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --body "Install Health failed again for ${GITHUB_SHA}: ${run_url}"
+          fi
+
+  notify_recovery:
+    name: Close recovered install health issue
+    needs: install
+    if: ${{ always() && needs.install.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Close recovered failure issue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue_numbers="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- install-health-failure -->"))) | .number'
+          )"
+          if [[ -z "${issue_numbers}" ]]; then
+            echo "No open Install Health failure issue found."
+            exit 0
+          fi
+          while IFS= read -r issue_number; do
+            [[ -n "${issue_number}" ]] || continue
+            gh issue comment "${issue_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --body "Install Health recovered for ${GITHUB_SHA}: ${run_url}"
+            gh issue close "${issue_number}" --repo "${GITHUB_REPOSITORY}"
+          done <<< "${issue_numbers}"
