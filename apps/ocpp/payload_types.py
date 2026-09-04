@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Protocol, TypedDict, TypeAlias
-from typing_extensions import NotRequired
+from typing import NotRequired, Protocol, TypedDict, TypeAlias
 
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | dict[str, "JSONValue"] | list["JSONValue"]
 JSONObject: TypeAlias = dict[str, JSONValue]
+
+
+class PendingCallMetadata(TypedDict):
+    """Common metadata retained while an outbound OCPP call is pending."""
+
+    action: str
+    charger_id: NotRequired[str]
+    connector_id: NotRequired[int | str | None]
+    log_key: NotRequired[str]
+    auto_start_attempt_id: NotRequired[str]
+    timeout_notice_sent: NotRequired[bool]
 
 
 class CertificateHashData(TypedDict):

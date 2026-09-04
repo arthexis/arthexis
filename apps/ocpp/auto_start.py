@@ -9,6 +9,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.ocpp.models import AutoStartAttempt, Charger
+from apps.ocpp.payload_types import PendingCallMetadata
 
 REQUEST_TIMEOUT = timedelta(seconds=90)
 RETRY_DELAY = timedelta(seconds=15)
@@ -178,7 +179,7 @@ def mark_scope_started(*, charger_pk: int, reservation_scope: str) -> bool:
     )
 
 
-def apply_call_result(*, metadata: dict, payload: dict) -> bool:
+def apply_call_result(*, metadata: PendingCallMetadata, payload: dict) -> bool:
     """Record an auto-start result without affecting a later attempt."""
 
     attempt_id = metadata.get("auto_start_attempt_id")
@@ -199,7 +200,10 @@ def apply_call_result(*, metadata: dict, payload: dict) -> bool:
 
 
 def apply_call_error(
-    *, metadata: dict, error_code: str | None, description: str | None
+    *,
+    metadata: PendingCallMetadata,
+    error_code: str | None,
+    description: str | None,
 ) -> bool:
     """Record a call error for exactly the associated auto-start attempt."""
 
