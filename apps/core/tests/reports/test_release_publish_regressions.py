@@ -1,13 +1,37 @@
 import pytest
 
 from .release_publish_regressions import *  # noqa: F403
-from .release_publish_regressions import _workflow_data, _workflow_on, _workflow_step
+from .release_publish_regressions import (
+    _workflow_data,
+    _workflow_files,
+    _workflow_on,
+    _workflow_step,
+)
 
 # Replace the retired policy assertions while keeping the existing regression
 # corpus collected from release_publish_regressions.py under the stable test
 # module path.
 globals().pop("test_install_health_workflow_is_manual_only_not_scheduled", None)
 globals().pop("test_host_redis_workflows_use_native_service", None)
+globals().pop("test_linux_ci_and_security_scans_run_on_pull_requests", None)
+
+
+def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
+    pr_workflows: list[str] = []
+    for workflow_path in _workflow_files():
+        workflow = _workflow_data(workflow_path.name)
+        on_section = _workflow_on(workflow)
+        if isinstance(on_section, dict) and (
+            "pull_request" in on_section or "pull_request_target" in on_section
+        ):
+            pr_workflows.append(workflow_path.name)
+
+    assert pr_workflows == [
+        "ci.yml",
+        "codeql.yml",
+        "public-release-audit.yml",
+        "secret-scan.yml",
+    ]
 
 
 def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
