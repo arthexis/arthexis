@@ -32,6 +32,9 @@ additional evidence where configured.
 - Every Install Health matrix entry removes `.venv` before running the normal
   `./install.sh --no-start` entry point. Pip downloads may be cached, but the
   installed environment itself is always rebuilt from a clean repository.
+- A failed Install Health run on `main` opens or updates one managed GitHub
+  issue. Repeated failures are recorded on the same issue, and the next
+  successful Install Health run comments on and closes it automatically.
 
 The repository ruleset for the default branch should require
 `Linux CI / Linux sanity` before merging. This keeps pull requests blocked while
@@ -72,11 +75,12 @@ These workflows should not be required for ordinary PR iteration unless the
 repository policy is deliberately tightened and their triggers are adjusted so
 the corresponding required checks are reported for every applicable PR.
 
-`Install Health Check` intentionally does not run on pull requests or schedules,
-and it does not open or update automation issues from inside the workflow. Its
-automatic trigger is limited to pushes that produce a new `main` revision; use
-`workflow_dispatch` when install evidence needs to be regenerated manually for
-release prep or a focused regression investigation.
+`Install Health Check` intentionally does not run on pull requests or schedules.
+Its automatic trigger is limited to pushes that produce a new `main` revision;
+use `workflow_dispatch` when install evidence needs to be regenerated manually
+for release prep or a focused regression investigation. Failure/recovery issue
+management is also limited to `refs/heads/main`, so a manual run on another ref
+cannot create, update, or close the managed Install Health failure issue.
 
 ## Local Linux Validation
 
