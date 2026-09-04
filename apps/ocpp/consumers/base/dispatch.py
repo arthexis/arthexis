@@ -1,11 +1,13 @@
 import base64
 import json
 from functools import cached_property
-from typing import assert_never
+from typing import Protocol, assert_never, cast
 
 from ... import store
 from ...call_error_handlers import dispatch_call_error
+from ...call_error_handlers.types import CallErrorContext
 from ...call_result_handlers import dispatch_call_result
+from ...call_result_handlers.common import CallResultContext
 from ...models import Charger
 from ..csms.protocol import (
     OCPPCallEnvelope,
@@ -14,23 +16,45 @@ from ..csms.protocol import (
     validate_call_envelope,
     validate_message_envelope,
 )
+from ..csms.router import CSMSRouterContext
 from .routing import ActionRouter
 
 
+class DispatchTransportContext(Protocol):
+    """Runtime members supplied to ``DispatchMixin`` by the CSMS composition."""
+
+    store_key: str
+    charger_id: str | None
+
+    async def _assign_connector(self, connector_id: object) -> None: ...
+
+    async def send(
+        self,
+        text_data: str | None = None,
+        bytes_data: bytes | None = None,
+        close: bool = False,
+    ) -> None: ...
+
+
 class DispatchMixin:
+    def _dispatch_context(self) -> DispatchTransportContext:
+        """Expose members provided by sibling mixins and the websocket base."""
+
+        return cast(DispatchTransportContext, self)
 
     @cached_property
     def _action_router(self) -> ActionRouter:
         """Cache action router for the life of a websocket consumer instance."""
 
-        return ActionRouter(self)
+        return ActionRouter(cast(CSMSRouterContext, self))
 
     async def receive(self, text_data=None, bytes_data=None):
+        runtime = self._dispatch_context()
         raw = self._normalize_raw_message(text_data, bytes_data)
         if raw is None:
             return
-        store.add_log(self.store_key, raw, log_type="charger")
-        store.add_session_message(self.store_key, raw)
+        store.add_log(runtime.store_key, raw, log_type="charger")
+        store.add_session_message(runtime.store_key, raw)
         msg = self._parse_message(raw)
         if msg is None:
             return
@@ -68,6 +92,7 @@ class DispatchMixin:
         return msg
 
     async def _handle_call_message(self, msg: object, raw, text_data):
+        runtime = self._dispatch_context()
         envelope = (
             msg if isinstance(msg, OCPPCallEnvelope) else validate_call_envelope(msg)
         )
@@ -76,22 +101,27 @@ class DispatchMixin:
         msg_id, action, payload = envelope.message_id, envelope.action, envelope.payload
         connector_hint = payload.get("connectorId")
         self._log_triggered_follow_up(action, connector_hint)
-        await self._assign_connector(payload.get("connectorId"))
+        await runtime._assign_connector(payload.get("connectorId"))
         reply_payload = {}
         handler = self._action_router.resolve(action)
         if handler:
             reply_payload = await handler(payload, msg_id, raw, text_data)
         response = [3, msg_id, reply_payload]
-        await self.send(json.dumps(response))
-        store.add_log(self.store_key, f"< {json.dumps(response)}", log_type="charger")
+        await runtime.send(json.dumps(response))
+        store.add_log(
+            runtime.store_key,
+            f"< {json.dumps(response)}",
+            log_type="charger",
+        )
 
     def _log_triggered_follow_up(self, action: str, connector_hint):
+        runtime = self._dispatch_context()
         follow_up = store.consume_triggered_followup(
-            self.charger_id, action, connector_hint
+            runtime.charger_id, action, connector_hint
         )
         if not follow_up:
             return
-        follow_up_log_key = follow_up.get("log_key") or self.store_key
+        follow_up_log_key = follow_up.get("log_key") or runtime.store_key
         target_label = follow_up.get("target") or action
         connector_slug_value = follow_up.get("connector")
         suffix = ""
@@ -110,13 +140,14 @@ class DispatchMixin:
     async def _handle_call_result(
         self, message_id: str, payload: dict | None, raw: str | None = None
     ) -> None:
+        runtime = self._dispatch_context()
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
         metadata_charger = metadata.get("charger_id")
-        if metadata_charger and self.charger_id:
+        if metadata_charger and runtime.charger_id:
             metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
-            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
+            consumer_serial = Charger.normalize_serial(runtime.charger_id).casefold()
             if (
                 metadata_serial
                 and consumer_serial
@@ -124,13 +155,13 @@ class DispatchMixin:
             ):
                 return
         action = metadata.get("action")
-        log_key = metadata.get("log_key") or self.store_key
+        log_key = metadata.get("log_key") or runtime.store_key
         payload_data = payload if isinstance(payload, dict) else {}
         handled = await dispatch_call_result(
-            self,
+            cast(CallResultContext, self),
             action,
             message_id,
-            metadata,
+            dict(metadata),
             payload_data,
             log_key,
         )
@@ -150,13 +181,14 @@ class DispatchMixin:
         details: dict | None,
         raw: str | None = None,
     ) -> None:
+        runtime = self._dispatch_context()
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
         metadata_charger = metadata.get("charger_id")
-        if metadata_charger and self.charger_id:
+        if metadata_charger and runtime.charger_id:
             metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
-            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
+            consumer_serial = Charger.normalize_serial(runtime.charger_id).casefold()
             if (
                 metadata_serial
                 and consumer_serial
@@ -164,12 +196,12 @@ class DispatchMixin:
             ):
                 return
         action = metadata.get("action")
-        log_key = metadata.get("log_key") or self.store_key
+        log_key = metadata.get("log_key") or runtime.store_key
         handled = await dispatch_call_error(
-            self,
+            cast(CallErrorContext, self),
             action,
             message_id,
-            metadata,
+            dict(metadata),
             error_code,
             description,
             details,

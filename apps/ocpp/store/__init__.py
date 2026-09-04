@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import Any, cast
 
 from apps.ocpp.payload_types import PendingCallMetadata
@@ -83,11 +83,12 @@ def reassign_identity(old_key: str, new_key: str) -> str:
         return new_key
     if not old_key:
         return new_key
-    for mapping in (
+    for raw_mapping in (
         state_module.connections,
         state_module.transactions,
         logs_module.history,
     ):
+        mapping = cast(MutableMapping[str, Any], raw_mapping)
         if old_key in mapping:
             mapping[new_key] = mapping.pop(old_key)
     for log_type in logs_module.logs:
