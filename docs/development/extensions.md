@@ -4,26 +4,42 @@ Arthexis can load optional Django applications from Git repositories checked out
 under the repository-level `extensions/` directory. Extensions are code
 availability; Suite Features remain the runtime capability gates.
 
+Extensions may add capabilities to existing core applications. A specialized
+printer extension, for example, should depend on `apps.printers` and contribute
+its own Suite Feature rather than replacing the core printers application.
+
 ## Repository contract
 
 Each extension repository must contain `arthexis-extension.toml` at its root.
-A minimal extension looks like this:
+A printer-driver extension could look like this:
 
 ```toml
 [extension]
-name = "printers"
-repository = "arthexis/arthexis-printers"
-django_apps = ["arthexis_printers"]
-requires_apps = ["apps.core"]
+name = "printer-zebra"
+repository = "arthexis/arthexis-printer-zebra"
+django_apps = ["arthexis_printer_zebra"]
+requires_apps = ["apps.printers"]
 feature_packs = ["printer_workflows"]
-suite_features = ["printer-workflows"]
+
+[[suite_features]]
+slug = "zebra-label-printing"
+display = "Zebra Label Printing"
+main_app = "printers"
+summary = "Adds Zebra label printing to the core printers app."
+enabled_by_default = false
 ```
 
 `django_apps` contains importable Django application entries. `requires_apps`
-declares apps that must already be available in the suite. `feature_packs` and
-`suite_features` document the extension's Arthexis capability contracts; the
-extension owns any migrations or fixtures needed to create its Suite Feature
-records.
+declares apps that must already be available in the suite. `feature_packs`
+documents app-selection contracts.
+
+Structured `[[suite_features]]` entries are synchronized into the normal
+`features.Feature` catalog. `main_app` may name an existing core application such
+as `printers`, `ocpp`, `energy`, or `sensors`; extensions therefore extend core
+capabilities instead of replacing their owning apps. New extension features are
+disabled by default unless `enabled_by_default = true` is explicitly declared.
+Subsequent syncs update descriptive metadata but preserve the operator's current
+enabled/disabled choice.
 
 An installed extension repository is added to `sys.path` before Django finalizes
 `INSTALLED_APPS`. Extension apps can therefore provide normal Django models,
@@ -36,7 +52,7 @@ Persistent extension selections live in `extensions/extensions.toml`:
 
 ```toml
 [extensions]
-printers = "arthexis/arthexis-printers"
+printer-zebra = "arthexis/arthexis-printer-zebra"
 another = "example/arthexis-another"
 ```
 
@@ -45,7 +61,7 @@ repositories through `ARTHEXIS_EXTENSIONS` or `ARTHEXIS_EXTENSION_REPOS`.
 Environment declarations are combined with the file declarations.
 
 Short names use the default GitHub owner and the `arthexis-` repository prefix.
-For example, `printers` resolves to `arthexis/arthexis-printers`.
+For example, `printer-zebra` resolves to `arthexis/arthexis-printer-zebra`.
 
 ## Commands
 
@@ -65,13 +81,21 @@ List repositories published by the default GitHub owner with the
 Install one or more extensions and persist them to `extensions/extensions.toml`:
 
 ```bash
-.venv/bin/python manage.py extensions install printers another
+.venv/bin/python manage.py extensions install printer-zebra another
 ```
 
-Clone every missing declaration and fast-forward existing managed checkouts:
+Clone every missing declaration, fast-forward existing managed checkouts, and
+synchronize their Suite Feature definitions:
 
 ```bash
 .venv/bin/python manage.py extensions sync
+```
+
+To synchronize feature definitions from already-installed extensions without
+updating Git checkouts:
+
+```bash
+.venv/bin/python manage.py extensions sync-features
 ```
 
 The commands use normal Git HTTPS checkouts and therefore respect the host's Git
