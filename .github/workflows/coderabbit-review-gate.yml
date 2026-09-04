@@ -1,0 +1,115 @@
+name: CodeRabbit Review Gate
+
+on:
+  workflow_run:
+    workflows:
+      - Linux CI
+      - CodeQL
+      - Secret Scan
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: coderabbit-review-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-review:
+    name: Trigger CodeRabbit after required checks pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check PR state and required workflow results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pr_number="$(jq -r '.workflow_run.pull_requests[0].number // empty' "${GITHUB_EVENT_PATH}")"
+          if [ -z "${pr_number}" ]; then
+            echo "No pull request is associated with this workflow run; skipping."
+            exit 0
+          fi
+
+          pr_json="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}")"
+          pr_state="$(jq -r '.state' <<<"${pr_json}")"
+          pr_draft="$(jq -r '.draft' <<<"${pr_json}")"
+          pr_head_sha="$(jq -r '.head.sha' <<<"${pr_json}")"
+
+          if [ "${pr_state}" != "open" ]; then
+            echo "PR #${pr_number} is not open; skipping."
+            exit 0
+          fi
+
+          if [ "${pr_draft}" = "true" ]; then
+            echo "PR #${pr_number} is a draft; skipping CodeRabbit review."
+            exit 0
+          fi
+
+          if [ "${pr_head_sha}" != "${TRIGGER_SHA}" ]; then
+            echo "Workflow run belongs to stale head ${TRIGGER_SHA}; current PR head is ${pr_head_sha}."
+            exit 0
+          fi
+
+          runs_json="$(gh api "/repos/${REPOSITORY}/actions/runs?head_sha=${TRIGGER_SHA}&event=pull_request&per_page=100")"
+
+          required_workflows=("Linux CI" "Secret Scan")
+
+          # CodeQL is path-filtered. Require it only when this PR changes a path
+          # that causes CodeQL to run, otherwise documentation/config-only PRs
+          # would never reach CodeRabbit.
+          changed_paths="$(gh api --paginate "/repos/${REPOSITORY}/pulls/${pr_number}/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)')"
+          codeql_applicable=false
+          while IFS= read -r changed_path; do
+            case "${changed_path}" in
+              *.py|*requirements*.txt|*pyproject.toml|*Pipfile|*Pipfile.lock|*.sh|.github/workflows/codeql.yml|.github/workflows/security-scan.yml|.github/codeql/*|.github/actions/*)
+                codeql_applicable=true
+                break
+                ;;
+            esac
+          done <<<"${changed_paths}"
+
+          if [ "${codeql_applicable}" = "true" ]; then
+            required_workflows+=("CodeQL")
+          fi
+
+          for workflow_name in "${required_workflows[@]}"; do
+            if ! jq -e --arg name "${workflow_name}" '
+              [
+                .workflow_runs[]
+                | select(.name == $name)
+              ]
+              | sort_by(.created_at)
+              | last
+              | .status == "completed" and .conclusion == "success"
+            ' <<<"${runs_json}" >/dev/null; then
+              echo "Latest ${workflow_name} run is not successful for ${TRIGGER_SHA}; skipping for now."
+              exit 0
+            fi
+          done
+
+          marker="<!-- coderabbit-gate:${TRIGGER_SHA} -->"
+          comments="$(gh api --paginate "/repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100" --jq '.[].body')"
+          if grep -Fq "${marker}" <<<"${comments}"; then
+            echo "CodeRabbit has already been triggered for ${TRIGGER_SHA}."
+            exit 0
+          fi
+
+          printf -v body '%s\n%s' "${marker}" '@coderabbitai review'
+          gh api "/repos/${REPOSITORY}/issues/${pr_number}/comments" \
+            --method POST \
+            --raw-field body="${body}" \
+            >/dev/null
+
+          echo "Triggered CodeRabbit for PR #${pr_number} at ${TRIGGER_SHA}."
