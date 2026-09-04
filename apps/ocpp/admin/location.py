@@ -130,9 +130,5 @@ class LocationAdmin(EntityModelAdmin):
 
 @admin.register(GoogleMapsLocation)
 class GoogleMapsLocationAdmin(EntityModelAdmin):
-    list_display = ("location", "place_id", "formatted_address")
-    search_fields = (
-        "location__name",
-        "place_id",
-        "formatted_address",
-    )
+    list_display = ("location", "place_id")
+    search_fields = ("location__name", "place_id")
