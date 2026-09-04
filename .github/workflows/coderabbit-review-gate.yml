@@ -63,7 +63,27 @@ jobs:
 
           runs_json="$(gh api "/repos/${REPOSITORY}/actions/runs?head_sha=${TRIGGER_SHA}&event=pull_request&per_page=100")"
 
-          required_workflows=("Linux CI" "CodeQL" "Secret Scan")
+          required_workflows=("Linux CI" "Secret Scan")
+
+          # CodeQL is path-filtered. Require it only when this PR changes a path
+          # that causes CodeQL to run, otherwise documentation/config-only PRs
+          # would never reach CodeRabbit.
+          changed_paths="$(gh api --paginate "/repos/${REPOSITORY}/pulls/${pr_number}/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)')"
+          codeql_applicable=false
+          while IFS= read -r changed_path; do
+            case "${changed_path}" in
+              *.py|*requirements*.txt|*pyproject.toml|*Pipfile|*Pipfile.lock|*.sh|.github/workflows/codeql.yml|.github/workflows/security-scan.yml|.github/codeql/*|.github/actions/*)
+                codeql_applicable=true
+                break
+                ;;
+            esac
+          done <<<"${changed_paths}"
+
+          if [ "${codeql_applicable}" = "true" ]; then
+            required_workflows+=("CodeQL")
+          fi
+
           for workflow_name in "${required_workflows[@]}"; do
             if ! jq -e --arg name "${workflow_name}" '
               [
