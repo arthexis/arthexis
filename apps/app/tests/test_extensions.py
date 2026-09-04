@@ -9,6 +9,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from utils.extensions import (
+    ExtensionError,
     activate_extension_paths,
     load_declared_extension_repositories,
     load_extension_manifests,
@@ -88,3 +89,5 @@ class ExtensionDiscoveryTests(SimpleTestCase):
             ),
             "example/arthexis-tools",
         )
+        with self.assertRaises(ExtensionError):
+            normalize_github_repository("example/..")
