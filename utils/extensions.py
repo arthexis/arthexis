@@ -24,6 +24,7 @@ EXTENSION_CONFIG_FILENAME = "extensions.toml"
 DEFAULT_GITHUB_OWNER = "arthexis"
 GITHUB_API_ROOT = "https://api.github.com"
 GITHUB_REQUEST_TIMEOUT = 10
+_GITHUB_REPOSITORY_PART_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _EXTENSION_REPOSITORY_ENV_NAMES = (
     "ARTHEXIS_EXTENSIONS",
     "ARTHEXIS_EXTENSION_REPOS",
@@ -223,6 +224,17 @@ def _split_repository_setting(value: str) -> tuple[str, ...]:
     return tuple(part for part in re.split(r"[,;\s]+", value) if part)
 
 
+def _validate_github_repository_part(value: str, *, field_name: str) -> str:
+    cleaned = value.strip()
+    if (
+        cleaned in {".", ".."}
+        or not cleaned
+        or not _GITHUB_REPOSITORY_PART_RE.fullmatch(cleaned)
+    ):
+        raise ExtensionError(f"Invalid GitHub {field_name}: {value!r}")
+    return cleaned
+
+
 def normalize_github_repository(
     value: str,
     *,
@@ -242,19 +254,39 @@ def normalize_github_repository(
         if len(parts) < 2:
             raise ExtensionError(f"Invalid GitHub repository URL: {cleaned}")
         repository_owner, repository_name = parts[:2]
-        repository_name = repository_name.removesuffix(".git")
+        repository_owner = _validate_github_repository_part(
+            repository_owner,
+            field_name="owner",
+        )
+        repository_name = _validate_github_repository_part(
+            repository_name.removesuffix(".git"),
+            field_name="repository name",
+        )
         return f"{repository_owner}/{repository_name}"
 
     if "/" in cleaned:
         parts = [part for part in cleaned.split("/") if part]
         if len(parts) != 2:
             raise ExtensionError("Repository must use owner/name format.")
-        return f"{parts[0]}/{parts[1].removesuffix('.git')}"
+        repository_owner = _validate_github_repository_part(
+            parts[0],
+            field_name="owner",
+        )
+        repository_name = _validate_github_repository_part(
+            parts[1].removesuffix(".git"),
+            field_name="repository name",
+        )
+        return f"{repository_owner}/{repository_name}"
 
     repository_name = cleaned
     if not repository_name.startswith("arthexis-"):
         repository_name = f"arthexis-{repository_name}"
-    return f"{owner}/{repository_name}"
+    repository_owner = _validate_github_repository_part(owner, field_name="owner")
+    repository_name = _validate_github_repository_part(
+        repository_name,
+        field_name="repository name",
+    )
+    return f"{repository_owner}/{repository_name}"
 
 
 def extension_key_for_repository(repository: str) -> str:
