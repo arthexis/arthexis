@@ -18,7 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
-from apps.docs import rendering
+from apps.ocpp import markdown as rendering
 from apps.energy.models import CustomerAccount
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
 from apps.ocpp.models import PublicConnectorPage, PublicScanEvent, Transaction

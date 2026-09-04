@@ -1,5 +1,4 @@
 {% extends "pages/base.html" %}
-{% load i18n static docs_mermaid %}
 {% block title %}{{ title }}{% endblock %}
 {% block extra_head %}
   {% if canonical_url %}
@@ -16,15 +15,6 @@
         <h4>Contents</h4>
         {{ toc|safe }}
       </nav>
-      <div class="reader-qr-card mt-4">
-        <div
-          id="reader-qr"
-          class="reader-qr-image"
-          data-url="{{ page_url }}"
-          role="img"
-          aria-label="{% trans 'QR code linking to this page' %}"
-        ></div>
-      </div>
     </div>
   </div>
   {% endif %}
@@ -38,9 +28,3 @@
 {% endblock %}
 
 {% block funding_banner %}{% endblock %}
-
-{% block extra_scripts %}
-  <script src="{% static 'docs/js/qrcode.min.js' %}"></script>
-  {% include "includes/reader_qr_script.html" %}
-  {% mermaid_assets %}
-{% endblock %}
