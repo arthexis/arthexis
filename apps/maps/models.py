@@ -100,7 +100,7 @@ class Location(Entity):
 
 
 class GoogleMapsLocation(Entity):
-    """Map location metadata synchronized with Google Maps."""
+    """Google Maps identity for a location."""
 
     location = models.OneToOneField(
         Location,
@@ -113,31 +113,6 @@ class GoogleMapsLocation(Entity):
         max_length=255,
         unique=True,
         help_text=_("Google Maps place identifier for the location."),
-    )
-    map_url = models.URLField(
-        _("Map URL"),
-        blank=True,
-        default="",
-        help_text=_("Public map URL returned by Google Maps."),
-    )
-    embed_url = models.URLField(
-        _("Embed URL"),
-        blank=True,
-        default="",
-        help_text=_("Embeddable map URL for dashboards and reports."),
-    )
-    formatted_address = models.CharField(
-        _("Formatted address"),
-        max_length=255,
-        blank=True,
-        default="",
-        help_text=_("Normalized address provided by Google Maps."),
-    )
-    coordinates = models.JSONField(
-        _("Coordinates"),
-        null=True,
-        blank=True,
-        help_text=_("Latitude/longitude and viewport details from Google Maps."),
     )
 
     class Meta:

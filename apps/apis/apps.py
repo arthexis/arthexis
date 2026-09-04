@@ -1,11 +1,11 @@
-"""Configuration for the API explorer app."""
+"""Configuration for managed service credentials."""
 
 from django.apps import AppConfig
 
 
 class ApisConfig(AppConfig):
-    """Register API explorer models in Django."""
+    """Register managed service credential models in Django."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.apis"
-    verbose_name = "API Explorer"
+    verbose_name = "Service Credentials"

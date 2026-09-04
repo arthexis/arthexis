@@ -57,7 +57,12 @@ on:
 jobs:
   sanity:
     name: Linux sanity
+    # A PR that GitHub already classifies as behind cannot satisfy the strict
+    # main ruleset until its branch is updated, so do not allocate our
+    # self-hosted runner for that revision. Pushes/manual runs are unaffected.
+    if: github.event_name != 'pull_request' || github.event.pull_request.mergeable_state != 'behind'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    # Preserve the workflow-policy contract; the sanity script still targets <5 minutes.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6

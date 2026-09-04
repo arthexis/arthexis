@@ -1,7 +1,3 @@
-"""Root route provider for app-owned URL mounts."""
+"""Root route provider for the backend-only clocks app."""
 
-from django.urls import include, path
-
-ROOT_URLPATTERNS = [
-    path("clocks/", include("apps.clocks.urls")),
-]
+ROOT_URLPATTERNS = []
