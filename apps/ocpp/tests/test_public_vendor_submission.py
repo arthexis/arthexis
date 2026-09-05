@@ -60,11 +60,10 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
             ),
             "additional_notes": "Sandbox credentials available on request.",
         },
-        follow=True,
     )
 
-    assert response.status_code == 200
-    assert response.redirect_chain[-1][0].endswith(
+    assert response.status_code == 302
+    assert response.url.endswith(
         reverse("ocpp_intake:charger-vendor-submission-thanks")
     )
     submission = ChargerVendorSubmission.objects.get()

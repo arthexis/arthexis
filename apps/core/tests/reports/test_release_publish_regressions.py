@@ -14,6 +14,42 @@ from .release_publish_regressions import (
 globals().pop("test_install_health_workflow_is_manual_only_not_scheduled", None)
 globals().pop("test_host_redis_workflows_use_native_service", None)
 globals().pop("test_linux_ci_and_security_scans_run_on_pull_requests", None)
+globals().pop(
+    "test_tag_from_version_workflow_creates_or_reuses_release_tag_and_dispatches_publish",
+    None,
+)
+
+
+def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
+    """Keep release-tag creation manual-only while preserving publish dispatch."""
+
+    workflow = _workflow_data("tag-from-version.yml")
+    on_section = _workflow_on(workflow)
+
+    assert isinstance(on_section, dict)
+    assert set(on_section) == {"workflow_dispatch"}
+    assert workflow["permissions"]["contents"] == "write"
+    assert workflow["permissions"]["actions"] == "write"
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+    job = workflow["jobs"]["tag-from-version"]
+
+    create_tag_run = _workflow_step(job, "Create tag when missing")["run"]
+    assert 'tag="v${VERSION}"' in create_tag_run
+    assert 'git tag -a "$tag" -m "Release ${tag}"' in create_tag_run
+    assert 'git push origin "$tag"' in create_tag_run
+    assert "created=false" in create_tag_run
+    assert "publish=true" in create_tag_run
+
+    dispatch_step = _workflow_step(job, "Dispatch publish workflow for release tag")
+    assert dispatch_step["if"] == "steps.create_tag.outputs.publish == 'true'"
+    dispatch_run = dispatch_step["run"]
+    assert 'tag="v${VERSION}"' in dispatch_run
+    assert (
+        'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
+    )
+    removed_workflow = "publish" "-image"
+    assert removed_workflow not in str(workflow)
 
 
 def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
