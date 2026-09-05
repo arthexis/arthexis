@@ -12,11 +12,29 @@ if TYPE_CHECKING:
     from apps.nodes.models import Node
 
 
+def _resolve_allow_missing(path: Path) -> Path:
+    """Resolve existing path components while permitting a missing tail."""
+
+    current = Path(path)
+    missing_parts: list[str] = []
+    while not current.exists() and not current.is_symlink():
+        parent = current.parent
+        if parent == current:
+            break
+        missing_parts.append(current.name)
+        current = parent
+
+    resolved = current.resolve(strict=True)
+    for part in reversed(missing_parts):
+        resolved /= part
+    return resolved
+
+
 def _resolve_within(root: Path, candidate: Path) -> Path | None:
     """Return ``candidate`` resolved under ``root`` or ``None`` when it escapes."""
 
     try:
-        resolved_root = root.resolve(strict=False)
+        resolved_root = _resolve_allow_missing(root)
         candidate_path = Path(candidate)
         if candidate_path.is_absolute():
             relative_candidate = None
@@ -34,7 +52,7 @@ def _resolve_within(root: Path, candidate: Path) -> Path | None:
             except ValueError:
                 relative_candidate = candidate_path
         safe_candidate = Path(safe_join(resolved_root, str(relative_candidate)))
-        resolved_candidate = safe_candidate.resolve(strict=False)
+        resolved_candidate = _resolve_allow_missing(safe_candidate)
         if not resolved_candidate.is_relative_to(resolved_root):
             return None
     except (OSError, RuntimeError, SuspiciousFileOperation, ValueError):

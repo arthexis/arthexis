@@ -33,7 +33,7 @@ def test_release_publish_steps_share_canonical_order() -> None:
     assert [name for name, _handler in UI_PUBLISH_STEPS] == EXPECTED_STEP_ORDER
     workflow = _build_release_workflow()
 
-    assert [step.name for step in workflow.steps] == EXPECTED_STEP_ORDER
+    assert [step.name for step in workflow] == EXPECTED_STEP_ORDER
     assert step_names.index("Complete test suite with --all flag") < step_names.index(
         "Prune worst 1% of tests by PR"
     )

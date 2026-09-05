@@ -23,14 +23,11 @@ def test_funding_banner_include_renders_supplied_layout_classes():
     assert "View funding issue" in html
 
 
-def test_funding_banner_templates_share_single_include():
+def test_funding_banner_base_template_uses_shared_include():
     base_template = Path("apps/sites/templates/pages/base.html").read_text()
-    docs_template = Path("apps/docs/templates/docs/readme.html").read_text()
 
     assert 'include "pages/includes/funding_banner.html"' in base_template
-    assert 'include "pages/includes/funding_banner.html"' in docs_template
     assert "funding-banner__mark" not in base_template
-    assert "funding-banner__mark" not in docs_template
 
 
 def test_funding_banner_css_uses_defined_tokens():

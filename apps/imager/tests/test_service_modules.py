@@ -117,12 +117,18 @@ def test_network_profile_selection_matches_id_and_deduplicates_filenames(
         profile_dir=tmp_path, names=["shop-floor", "uplink"]
     )
 
-    assert [profile.name for profile in profiles] == ["shop-floor", "uplink"]
+    assert [profile.name for profile in profiles] == [
+        "shop-floor",
+        "uplink",
+        "arthexis-charger-eth0",
+    ]
     assert [profile.filename for profile in profiles] == [
         "shop_wifi.nmconnection",
         "uplink.nmconnection",
+        "arthexis-charger-eth0.nmconnection",
     ]
     assert [profile.remote_path for profile in profiles] == [
         "/etc/NetworkManager/system-connections/shop_wifi.nmconnection",
         "/etc/NetworkManager/system-connections/uplink.nmconnection",
+        "/etc/NetworkManager/system-connections/arthexis-charger-eth0.nmconnection",
     ]
