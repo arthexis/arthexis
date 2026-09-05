@@ -3,31 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal, NewType, TypeAlias
 
 from ...payload_types import JSONObject
 
 
 OCPPMessageType: TypeAlias = Literal[2, 3, 4]
+OCPPMessageId = NewType("OCPPMessageId", str)
+OCPPAction = NewType("OCPPAction", str)
+OCPPErrorCode = NewType("OCPPErrorCode", str)
 
 
 @dataclass(frozen=True)
 class OCPPCallEnvelope:
-    message_id: str
-    action: str
+    message_id: OCPPMessageId
+    action: OCPPAction
     payload: JSONObject
 
 
 @dataclass(frozen=True)
 class OCPPCallResultEnvelope:
-    message_id: str
+    message_id: OCPPMessageId
     payload: JSONObject
 
 
 @dataclass(frozen=True)
 class OCPPCallErrorEnvelope:
-    message_id: str
-    error_code: str
+    message_id: OCPPMessageId
+    error_code: OCPPErrorCode
     description: str
     details: JSONObject
 
@@ -64,7 +67,11 @@ def validate_call_envelope(msg: object) -> OCPPCallEnvelope | None:
         or not isinstance(payload, dict)
     ):
         return None
-    return OCPPCallEnvelope(message_id=message_id, action=action, payload=payload)
+    return OCPPCallEnvelope(
+        message_id=OCPPMessageId(message_id),
+        action=OCPPAction(action),
+        payload=payload,
+    )
 
 
 def validate_call_result_envelope(msg: object) -> OCPPCallResultEnvelope | None:
@@ -74,7 +81,10 @@ def validate_call_result_envelope(msg: object) -> OCPPCallResultEnvelope | None:
     payload = msg[2]
     if not isinstance(message_id, str) or not isinstance(payload, dict):
         return None
-    return OCPPCallResultEnvelope(message_id=message_id, payload=payload)
+    return OCPPCallResultEnvelope(
+        message_id=OCPPMessageId(message_id),
+        payload=payload,
+    )
 
 
 def validate_call_error_envelope(msg: object) -> OCPPCallErrorEnvelope | None:
@@ -92,8 +102,8 @@ def validate_call_error_envelope(msg: object) -> OCPPCallErrorEnvelope | None:
     ):
         return None
     return OCPPCallErrorEnvelope(
-        message_id=message_id,
-        error_code=error_code,
+        message_id=OCPPMessageId(message_id),
+        error_code=OCPPErrorCode(error_code),
         description=description,
         details=details,
     )
