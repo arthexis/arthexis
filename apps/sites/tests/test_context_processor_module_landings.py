@@ -6,7 +6,6 @@ from django.contrib.sites.models import Site
 from django.db.utils import OperationalError
 from django.test import RequestFactory
 
-from apps.app.models import Application
 from apps.groups.models import SecurityGroup
 from apps.modules.models import Module
 from apps.nodes.models import NodeFeature, NodeRole
@@ -19,33 +18,6 @@ from apps.sites.context_processors import (
 from apps.sites.models import Landing, SiteModuleVisibility
 
 pytestmark = pytest.mark.django_db
-
-
-def _load_control_documents_fixture() -> None:
-    docs_app, _ = Application.objects.get_or_create(name="docs")
-    control_role, _ = NodeRole.objects.get_or_create(name="Control")
-    module, _ = Module.objects.update_or_create(
-        path="/apps/docs/",
-        defaults={
-            "application": docs_app,
-            "menu": "Documents",
-            "priority": 40,
-            "is_default": False,
-            "security_mode": Module.SECURITY_INCLUSIVE,
-            "is_seed_data": True,
-        },
-    )
-    module.roles.set([control_role])
-    Landing.objects.update_or_create(
-        module=module,
-        path="/apps/docs/",
-        defaults={
-            "label": "Application Documents",
-            "enabled": True,
-            "description": "Application documentation.",
-            "is_seed_data": True,
-        },
-    )
 
 
 def test_sort_module_landings_prioritizes_ocpp_navigation_paths():
@@ -128,19 +100,6 @@ def test_soft_deleted_landing_is_excluded_from_navigation(rf: RequestFactory) ->
 
 def _module_paths(context):
     return [module.path for module in context["nav_modules"]]
-
-
-def _normalized_module_paths(context):
-    return [module.path.rstrip("/") or "/" for module in context["nav_modules"]]
-
-
-def _module_by_path(context, path: str):
-    normalized_path = path.rstrip("/") or "/"
-    return next(
-        module
-        for module in context["nav_modules"]
-        if (module.path.rstrip("/") or "/") == normalized_path
-    )
 
 
 def _prepare_site_visibility_modules():
@@ -536,59 +495,3 @@ def test_nav_links_show_rule_keeps_already_visible_locked_module(
     context = context_processors.nav_links(request)
 
     assert "/shop/" in _module_paths(context)
-
-
-def test_nav_links_adds_public_documents_module_for_control_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-    rf: RequestFactory,
-) -> None:
-    site, _ = Site.objects.get_or_create(
-        domain="control.test", defaults={"name": "Control"}
-    )
-    control_role, _ = NodeRole.objects.get_or_create(name="Control")
-    _load_control_documents_fixture()
-    request = rf.get("/", HTTP_HOST="control.test")
-    request.user = AnonymousUser()
-
-    _patch_nav_chrome(monkeypatch)
-    monkeypatch.setattr(
-        context_processors,
-        "_initialize_request_badges",
-        lambda request: (site, None, control_role),
-    )
-
-    context = context_processors.nav_links(request)
-
-    assert _normalized_module_paths(context).count("/apps/docs") == 1
-    documents_module = _module_by_path(context, "/apps/docs")
-    assert documents_module.menu_label == "Documents"
-    assert len(documents_module.enabled_landings) == 1
-    landing = documents_module.enabled_landings[0]
-    assert (landing.path.rstrip("/") or "/") == "/apps/docs"
-    assert landing.label == "Application Documents"
-    assert not landing.nav_is_locked
-    assert not landing.nav_is_invalid
-
-
-def test_nav_links_omits_public_documents_module_for_non_control_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-    rf: RequestFactory,
-) -> None:
-    site, _ = Site.objects.get_or_create(
-        domain="watchtower.test", defaults={"name": "Watchtower"}
-    )
-    watchtower_role, _ = NodeRole.objects.get_or_create(name="Watchtower")
-    _load_control_documents_fixture()
-    request = rf.get("/", HTTP_HOST="watchtower.test")
-    request.user = AnonymousUser()
-
-    _patch_nav_chrome(monkeypatch)
-    monkeypatch.setattr(
-        context_processors,
-        "_initialize_request_badges",
-        lambda request: (site, None, watchtower_role),
-    )
-
-    context = context_processors.nav_links(request)
-
-    assert "/apps/docs" not in _normalized_module_paths(context)

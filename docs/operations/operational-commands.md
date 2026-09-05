@@ -41,7 +41,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `https`
 - `imager`
 - `invite`
-- `lcd`
 - `message`
 - `migrations`
 - `nginx`
@@ -57,7 +56,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `runserver`
 - `sensors`
 - `startup`
-- `summary`
 - `test`
 - `upgrade`
 - `uptime`
