@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+import os
 import re
 from pathlib import Path
 
@@ -20,6 +22,34 @@ DEFAULT_CHARGER_NETWORK_PROFILE_PATH = (
     / "arthexis-charger-eth0.nmconnection"
 )
 DEFAULT_CHARGER_NETWORK_INTERFACE = "eth0"
+DEFAULT_CHARGER_NETWORK_ADDRESS = "192.168.129.10/24"
+CHARGER_NETWORK_ADDRESS_ENV = "IMAGER_CHARGER_ETH0_ADDRESS"
+DEFAULT_GWAY_PARENT_MANAGEMENT_ADDRESS = "192.168.129.1/24"
+
+
+def charger_network_address() -> str:
+    """Return the validated charger-facing IPv4 interface address for new images."""
+
+    configured = os.environ.get(
+        CHARGER_NETWORK_ADDRESS_ENV, DEFAULT_CHARGER_NETWORK_ADDRESS
+    ).strip()
+    try:
+        interface = ipaddress.ip_interface(configured)
+    except ValueError as exc:
+        raise ImagerBuildError(
+            f"{CHARGER_NETWORK_ADDRESS_ENV} must be an IPv4 interface address with prefix length."
+        ) from exc
+    if interface.version != 4:
+        raise ImagerBuildError(
+            f"{CHARGER_NETWORK_ADDRESS_ENV} must be an IPv4 interface address."
+        )
+    return str(interface)
+
+
+def charger_network_host() -> str:
+    """Return the host address used as the canonical wired GWAY management target."""
+
+    return str(ipaddress.ip_interface(charger_network_address()).ip)
 
 
 def _parse_network_profile_value(profile_path: Path, *, section: str, key: str) -> str:
@@ -74,17 +104,54 @@ def _network_profile_remote_filename(source_path: Path) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", filename)
 
 
+def _render_default_charger_profile(*, output_dir: Path | None = None) -> Path:
+    """Return the built-in charger profile, rendering an override when configured."""
+
+    address = charger_network_address()
+    if address == DEFAULT_CHARGER_NETWORK_ADDRESS:
+        return DEFAULT_CHARGER_NETWORK_PROFILE_PATH
+    if not DEFAULT_CHARGER_NETWORK_PROFILE_PATH.is_file():
+        raise ImagerBuildError(
+            "Built-in charger Ethernet NetworkManager profile is missing: "
+            f"{DEFAULT_CHARGER_NETWORK_PROFILE_PATH}"
+        )
+    try:
+        content = DEFAULT_CHARGER_NETWORK_PROFILE_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ImagerBuildError(
+            f"Could not read built-in charger Ethernet profile: {exc}"
+        ) from exc
+    content = content.replace(
+        f"address1={DEFAULT_CHARGER_NETWORK_ADDRESS}", f"address1={address}"
+    )
+    if f"address1={address}" not in content:
+        raise ImagerBuildError(
+            "Built-in charger Ethernet profile does not contain its expected default address."
+        )
+    generated_dir = (output_dir or Path("build/rpi-imager")).expanduser().resolve()
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    generated_path = generated_dir / ".arthexis-charger-eth0.nmconnection"
+    generated_path.write_text(content, encoding="utf-8")
+    try:
+        generated_path.chmod(0o600)
+    except OSError:
+        pass
+    return generated_path
+
+
 def select_host_network_profiles(
     *,
     profile_dir: Path | None = None,
     names: list[str] | tuple[str, ...] | None = None,
     copy_all: bool = False,
+    generated_profile_dir: Path | None = None,
 ) -> tuple[NetworkProfileInfo, ...]:
     """Select host profiles plus the default charger-facing Ethernet profile.
 
     Customized images receive a no-gateway ``eth0`` profile at
-    ``192.168.129.10/24`` so a directly attached charger can reach Arthexis.
-    Selecting a host profile explicitly pinned to ``eth0`` replaces that default.
+    ``192.168.129.10/24`` by default so a directly attached charger can reach
+    Arthexis. ``IMAGER_CHARGER_ETH0_ADDRESS`` overrides that address. Selecting a
+    host profile explicitly pinned to ``eth0`` replaces the generated default.
     """
 
     requested_names = tuple(name.strip() for name in (names or ()) if str(name).strip())
@@ -131,7 +198,7 @@ def select_host_network_profiles(
                 sorted({alias for _, _, aliases in candidates for alias in aliases})
             )
             raise ImagerBuildError(
-                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'}."
+                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'} ."
             )
         if match not in selected:
             selected.append(match)
@@ -145,19 +212,22 @@ def select_host_network_profiles(
         DEFAULT_CHARGER_NETWORK_INTERFACE not in selected_interfaces
         and DEFAULT_CHARGER_NETWORK_PROFILE_ID not in selected_ids
     ):
-        if not DEFAULT_CHARGER_NETWORK_PROFILE_PATH.is_file():
+        default_profile_path = _render_default_charger_profile(
+            output_dir=generated_profile_dir
+        )
+        if not default_profile_path.is_file():
             raise ImagerBuildError(
                 "Built-in charger Ethernet NetworkManager profile is missing: "
-                f"{DEFAULT_CHARGER_NETWORK_PROFILE_PATH}"
+                f"{default_profile_path}"
             )
-        selected.append(
-            (DEFAULT_CHARGER_NETWORK_PROFILE_PATH, DEFAULT_CHARGER_NETWORK_PROFILE_ID)
-        )
+        selected.append((default_profile_path, DEFAULT_CHARGER_NETWORK_PROFILE_ID))
 
     used_filenames: set[str] = set()
     profiles: list[NetworkProfileInfo] = []
     for source_path, profile_id in selected:
         filename = _network_profile_remote_filename(source_path)
+        if profile_id == DEFAULT_CHARGER_NETWORK_PROFILE_ID:
+            filename = DEFAULT_CHARGER_NETWORK_PROFILE_PATH.name
         if filename in used_filenames:
             stem = Path(filename).stem
             suffix = Path(filename).suffix or ".nmconnection"

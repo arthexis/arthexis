@@ -37,6 +37,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - OCPP 1.6 coverage artifact: `apps/ocpp/coverage.json`
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Imager SD-Card Recovery Workflow](operations/imager-sd-card-recovery.md)
+- [Direct GWAY Peer SSH](operations/gway-peer-ssh.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [1.0 Migration Trim Decision Gate](development/1-0-migration-trim-decision.md)
 - [Role-Based Application Profiles](development/role-based-application-profiles.md)

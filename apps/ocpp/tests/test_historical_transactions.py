@@ -41,6 +41,7 @@ def test_historical_timestamp_requires_more_than_grace_window():
     now = timezone.now()
 
     assert is_historical_transaction_timestamp(now - timedelta(seconds=61), now=now)
+    assert not is_historical_transaction_timestamp(now - timedelta(seconds=60), now=now)
     assert not is_historical_transaction_timestamp(now - timedelta(seconds=59), now=now)
     assert not is_historical_transaction_timestamp(now + timedelta(seconds=1), now=now)
     assert not is_historical_transaction_timestamp(None, now=now)
@@ -98,6 +99,86 @@ async def test_historical_start_is_accepted_without_enrolling_unknown_rfid():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @override_settings(OCPP_HISTORICAL_TRANSACTION_GRACE_SECONDS=60)
+async def test_historical_start_replay_is_idempotent():
+    consumer = await _consumer(charger_id="CP-HISTORICAL-REPLAY")
+    sent_at = timezone.now() - timedelta(hours=2)
+    payload = {
+        "idTag": "historical-replay",
+        "connectorId": 1,
+        "meterStart": 1500,
+        "timestamp": sent_at.isoformat(),
+    }
+
+    first = await consumer._handle_start_transaction_action(
+        payload,
+        "msg-historical-replay",
+        "",
+        "",
+    )
+    second = await consumer._handle_start_transaction_action(
+        payload,
+        "msg-historical-replay",
+        "",
+        "",
+    )
+
+    assert second["transactionId"] == first["transactionId"]
+    assert await database_sync_to_async(
+        Transaction.objects.filter(charger=consumer.charger).count
+    )() == 1
+    assert await database_sync_to_async(
+        RFIDAttempt.objects.filter(transaction_id=first["transactionId"]).count
+    )() == 1
+
+    store.transactions.pop(consumer.store_key, None)
+    store.end_session_log(consumer.store_key)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@override_settings(OCPP_HISTORICAL_TRANSACTION_GRACE_SECONDS=60)
+async def test_reused_call_id_with_different_historical_payload_is_not_deduplicated():
+    consumer = await _consumer(charger_id="CP-HISTORICAL-REUSED-CALL-ID")
+    first_sent_at = timezone.now() - timedelta(hours=3)
+    second_sent_at = timezone.now() - timedelta(hours=2)
+
+    first = await consumer._handle_start_transaction_action(
+        {
+            "idTag": "historical-reused-call",
+            "connectorId": 1,
+            "meterStart": 1500,
+            "timestamp": first_sent_at.isoformat(),
+        },
+        "reused-call-id",
+        "",
+        "",
+    )
+    store.transactions.pop(consumer.store_key, None)
+    store.end_session_log(consumer.store_key)
+    second = await consumer._handle_start_transaction_action(
+        {
+            "idTag": "historical-reused-call",
+            "connectorId": 1,
+            "meterStart": 2500,
+            "timestamp": second_sent_at.isoformat(),
+        },
+        "reused-call-id",
+        "",
+        "",
+    )
+
+    assert second["transactionId"] != first["transactionId"]
+    assert await database_sync_to_async(
+        Transaction.objects.filter(charger=consumer.charger).count
+    )() == 2
+
+    store.transactions.pop(consumer.store_key, None)
+    store.end_session_log(consumer.store_key)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@override_settings(OCPP_HISTORICAL_TRANSACTION_GRACE_SECONDS=60)
 async def test_recent_start_still_uses_live_authorization_policy():
     consumer = await _consumer(charger_id="CP-RECENT-START")
 
@@ -120,5 +201,6 @@ async def test_recent_start_still_uses_live_authorization_policy():
         charger=consumer.charger,
         rfid="recent-unknown",
     )
+    assert result["transactionId"] == tx.pk
     assert tx.authorization_status == Transaction.AuthorizationStatus.REJECTED
     assert tx.authorization_reason == "strict_account_required"
