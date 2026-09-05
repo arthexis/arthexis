@@ -265,10 +265,15 @@ def test_systemd_user_update_purges_retired_kiosk_cleanup_records() -> None:
 def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
     upgrade_script = _read_shell_contract("upgrade.sh")
     assert "retire_legacy_kiosk_units()" in upgrade_script
-    assert (
-        "if [[ $CHECK_ONLY -ne 1 ]]; then\n  retire_legacy_kiosk_units\nfi"
-        in upgrade_script
-    )
+    check_only_guard = "if [[ $CHECK_ONLY -ne 1 ]]; then"
+    guarded_sections = [
+        section.split("\nfi", 1)[0]
+        for section in upgrade_script.split(check_only_guard)[1:]
+    ]
+    assert any(
+        "retire_legacy_kiosk_units" in {line.strip() for line in section.splitlines()}
+        for section in guarded_sections
+    ), "legacy kiosk retirement must remain guarded from --check mode"
     assert '"arthexis-hdmi-kiosk.service"' in upgrade_script
     assert '"arthexis-hdmi-kiosk-layout.service"' in upgrade_script
     assert '"arthexis-hdmi-kiosk-layout.path"' in upgrade_script
