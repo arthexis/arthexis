@@ -72,7 +72,7 @@ class RedirectProfile:
             "    type nat hook prerouting priority dstnat - 10; policy accept;\n"
             f'    iifname "{self.interface}" ip saddr {self.charger_ip} '
             f"ip daddr {target_expression} tcp dport {self.target_port} "
-            f"redirect to :{self.listen_port}\n"
+            f"counter redirect to :{self.listen_port}\n"
             "  }\n"
             "}\n"
         )

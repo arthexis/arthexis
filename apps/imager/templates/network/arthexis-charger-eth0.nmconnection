@@ -1,0 +1,16 @@
+[connection]
+id=arthexis-charger-eth0
+type=ethernet
+interface-name=eth0
+autoconnect=true
+autoconnect-priority=100
+
+[ethernet]
+
+[ipv4]
+address1=192.168.129.10/24
+method=manual
+never-default=true
+
+[ipv6]
+method=disabled

@@ -50,6 +50,7 @@ class _NoRedirectHandler(HTTPRedirectHandler):
     """Prevent urllib from auto-following redirects so redirect targets can be validated."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        """Return None to prevent urllib from following HTTP redirects."""
         return None
 
 
