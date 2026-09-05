@@ -168,7 +168,25 @@ Agents must run relevant tests after code changes.
 * Each **feature should have a test**.
 * Prefer **quality over quantity** of tests.
 * Do **not create tests solely to validate styling**.
-* Do **not create tests solely to confirm removed features are gone**.
+* When removing a feature, remove tests whose contract existed only for that feature.
+* Do **not replace removed-feature tests with tombstone tests** that assert the old API, file, command, setting, workflow, job, hook, dependency, model field, or other implementation artifact stays absent.
+* Negative assertions are valid when they define **supported current behavior**, including input validation, security boundaries, compatibility behavior, and intentional architecture or repository invariants.
+* Test names and assertions should describe the current supported contract rather than repository history. Names such as `stays_removed`, `omits_retired`, or `does_not_retain_retired` are a strong sign that the test should be deleted or rewritten around current behavior.
+
+Bad tombstone test:
+
+```python
+def test_dashboard_screenshot_workflow_stays_removed() -> None:
+    assert not (WORKFLOWS / "dashboard-screenshot.yml").exists()
+```
+
+Good current-contract test:
+
+```python
+def test_unknown_feature_pack_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown feature pack"):
+        resolve_role_app_selectors("terminal", feature_packs=("unknown",))
+```
 
 ### Regression Handling
 
@@ -307,8 +325,6 @@ Create or reuse one or more Django Models to model a business process and its in
 ### Refactor
 
 In general, to reduce complexity and duplication, improve accessibility, and remove old unused cruft, plus any other specific goals, that targets a set or class of code.
-
----
 
 ### Cleave
 
