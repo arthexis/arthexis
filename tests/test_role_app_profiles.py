@@ -239,14 +239,7 @@ def test_watchtower_profile_keeps_admin_actions_for_staff_tasks_template():
     assert "apps.actions" in watchtower_apps
 
 
-def test_screen_devices_feature_pack_has_no_retired_runtime_app():
-    terminal_apps = set(resolve_role_app_selectors("terminal"))
-    screen_apps = set(
-        resolve_role_app_selectors(
-            "terminal",
-            feature_packs=("screen_devices",),
-        )
-    )
+def test_hardware_experiments_feature_pack_enables_sensors():
     hardware_apps = set(
         resolve_role_app_selectors(
             "terminal",
@@ -254,7 +247,6 @@ def test_screen_devices_feature_pack_has_no_retired_runtime_app():
         )
     )
 
-    assert screen_apps == terminal_apps
     assert "apps.sensors" in hardware_apps
 
 

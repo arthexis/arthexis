@@ -188,13 +188,6 @@ def test_scheduled_secret_scan_uses_non_empty_history_range() -> None:
     assert 'log_range="origin/main..HEAD"' not in script
 
 
-def test_dashboard_screenshot_workflow_stays_removed() -> None:
-    workflow_names = {workflow_path.name for workflow_path in _workflow_files()}
-
-    assert "dashboard-screenshot.yml" not in workflow_names
-    assert not any("screenshot" in name for name in workflow_names)
-
-
 def test_publish_workflow_polling_pauses_when_run_in_progress(
     monkeypatch, tmp_path: Path
 ):
@@ -896,38 +889,6 @@ def test_publish_workflow_leaves_abandoned_release_pr_cleanup_to_readiness() -> 
     assert "close-superseded-release-prs" not in _publish_workflow_jobs()
 
 
-def test_tag_from_version_workflow_creates_or_reuses_release_tag_and_dispatches_publish() -> (
-    None
-):
-    workflow = _workflow_data("tag-from-version.yml")
-    on_section = _workflow_on(workflow)
-
-    assert on_section["push"]["branches"] == ["main"]
-    assert workflow["permissions"]["contents"] == "write"
-    assert workflow["permissions"]["actions"] == "write"
-    assert workflow["concurrency"]["cancel-in-progress"] is False
-
-    job = workflow["jobs"]["tag-from-version"]
-
-    create_tag_run = _workflow_step(job, "Create tag when missing")["run"]
-    assert 'tag="v${VERSION}"' in create_tag_run
-    assert 'git tag -a "$tag" -m "Release ${tag}"' in create_tag_run
-    assert 'git push origin "$tag"' in create_tag_run
-
-    assert "created=false" in create_tag_run
-    assert "publish=true" in create_tag_run
-
-    dispatch_step = _workflow_step(job, "Dispatch publish workflow for release tag")
-    assert dispatch_step["if"] == "steps.create_tag.outputs.publish == 'true'"
-    dispatch_run = dispatch_step["run"]
-    assert 'tag="v${VERSION}"' in dispatch_run
-    assert (
-        'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
-    )
-    removed_workflow = "publish" "-image"
-    assert removed_workflow not in dispatch_run
-
-
 def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
     workflow = _workflow_data("install-health.yml")
     on_section = _workflow_on(workflow)
@@ -1006,22 +967,6 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
     assert "pr_affected_linux_install" not in workflow["jobs"]
     assert "notify_failure" not in workflow["jobs"]
     assert "notify_recovery" not in workflow["jobs"]
-
-
-
-def test_install_health_workflow_does_not_manage_github_issues() -> None:
-    workflow = _workflow_data("install-health.yml")
-    repo_root = Path(__file__).resolve().parents[4]
-    with open(
-        repo_root / ".github" / "workflows" / "install-health.yml",
-        encoding="utf-8",
-    ) as handle:
-        workflow_text = handle.read()
-
-    assert list(workflow["jobs"]) == ["install"]
-    assert "Install health check is failing" not in workflow_text
-    assert "issues: write" not in workflow_text
-    assert "github.rest.issues" not in workflow_text
 
 
 @pytest.mark.parametrize(

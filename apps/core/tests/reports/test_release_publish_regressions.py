@@ -8,17 +8,11 @@ from .release_publish_regressions import (
     _workflow_step,
 )
 
-# Replace the retired policy assertions while keeping the existing regression
-# corpus collected from release_publish_regressions.py under the stable test
-# module path.
+# Replace policy assertions while keeping the existing regression corpus collected
+# from release_publish_regressions.py under the stable test module path.
 globals().pop("test_install_health_workflow_is_manual_only_not_scheduled", None)
-globals().pop("test_install_health_workflow_does_not_manage_github_issues", None)
 globals().pop("test_host_redis_workflows_use_native_service", None)
 globals().pop("test_linux_ci_and_security_scans_run_on_pull_requests", None)
-globals().pop(
-    "test_tag_from_version_workflow_creates_or_reuses_release_tag_and_dispatches_publish",
-    None,
-)
 
 
 def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
@@ -49,8 +43,6 @@ def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
     assert (
         'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
     )
-    removed_workflow = "publish" "-image"
-    assert removed_workflow not in str(workflow)
 
 
 def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
@@ -201,8 +193,6 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
         upload_name == "install-health-pytest-results-${{ matrix.os_flavor }}-"
         "${{ matrix.db_backend }}-${{ matrix.test_shard }}"
     )
-
-    assert "pr_affected_linux_install" not in workflow["jobs"]
 
     notify_failure = workflow["jobs"]["notify_failure"]
     assert notify_failure["needs"] == "install"

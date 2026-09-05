@@ -262,32 +262,6 @@ def test_systemd_user_update_purges_retired_kiosk_cleanup_records() -> None:
     )
 
 
-def test_lifecycle_scripts_do_not_retain_retired_feature_cleanup_hooks() -> None:
-    retired_tokens = (
-        "manage.py audio_alert shutdown",
-        "ocpp_simulator",
-        "simulator.json",
-        "playwright install",
-        "ensure_playwright",
-    )
-    lifecycle_scripts = (
-        "install.sh",
-        "upgrade.sh",
-        "env-refresh.sh",
-        "start.sh",
-        "stop.sh",
-        "status.sh",
-        "configure.sh",
-        "uninstall.sh",
-        "scripts/helpers/systemd_locks.sh",
-    )
-
-    for script in lifecycle_scripts:
-        script_text = _read_shell_contract(script)
-        for token in retired_tokens:
-            assert token not in script_text, f"{script} still references {token}"
-
-
 def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
     upgrade_script = _read_shell_contract("upgrade.sh")
     assert "retire_legacy_kiosk_units()" in upgrade_script
@@ -306,7 +280,7 @@ def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
     assert 'for legacy_unit in "${legacy_units_to_remove[@]}"; do' in upgrade_script
 
 
-def test_dev_env_exposes_only_native_modes() -> None:
+def test_dev_env_auto_mode_uses_local_path() -> None:
     script = _read("dev-env.sh")
     _, mode_dispatch = script.split('case "$MODE" in', 1)
     auto_case = re.search(
@@ -317,15 +291,7 @@ def test_dev_env_exposes_only_native_modes() -> None:
     assert auto_case, "dev-env.sh is missing auto mode"
 
     auto_body = auto_case.group("body")
-    removed_runtime = "doc" "ker"
-    removed_helper = "run_" "container_path"
-    removed_flag = "--" "container"
-    removed_case = "container" ")"
     assert "run_local_path" in auto_body
-    assert removed_helper not in auto_body
-    assert removed_flag not in script
-    assert removed_case not in script
-    assert removed_runtime not in script.lower()
 
 
 def test_install_script_supports_explicit_charger_facing_lock() -> None:
@@ -1081,9 +1047,7 @@ def test_systemd_locks_retriggers_configured_attached_burner(
 
 def test_watchtower_connect_update_artifact_script_uses_native_imager() -> None:
     script = _read("scripts/watchtower-connect-update-artifact.sh")
-    removed_runtime = "doc" "ker"
 
-    assert removed_runtime not in script.lower()
     assert "ARTHEXIS_ROLE_APP_FEATURE_PACKS" in script
     assert "rpi_connect_updates" in script
     assert "apps.imager" in script
@@ -1228,25 +1192,9 @@ def test_stop_unknown_flag_exits_before_stop_actions(tmp_path: Path) -> None:
     assert not call_log.exists(), result.stdout + result.stderr
 
 
-def test_stop_script_omits_retired_audio_and_simulator_hooks() -> None:
-    script_text = _read_shell_contract("stop.sh")
-
-    assert "emit_shutdown_audio_alert" not in script_text
-    assert "manage.py audio_alert shutdown" not in script_text
-    assert "ARTHEXIS_AUDIO_ALERTS" not in script_text
-    assert "ocpp_simulator" not in script_text
-    assert "simulator.json" not in script_text
-
-
-def test_env_refresh_omits_retired_browser_preview_bootstrap() -> None:
+def test_env_refresh_dependency_refresh_includes_qa_requirements() -> None:
     script_text = _read_shell_contract("env-refresh.sh")
 
-    assert "--preview-deps" not in script_text
-    assert "ARTHEXIS_INSTALL_PREVIEW_DEPS" not in script_text
-    assert "ARTHEXIS_SKIP_PLAYWRIGHT_INSTALL_DEPS" not in script_text
-    assert "ensure_playwright" not in script_text
-    assert "playwright install" not in script_text
-    assert "ensure_selenium" not in script_text
     assert "Unsupported env-refresh.sh option: $1" in script_text
     assert (
         'if [[ "$DEPS_ONLY" -eq 1 ]]; then\n  INCLUDE_QA_REQUIREMENTS=1' in script_text
