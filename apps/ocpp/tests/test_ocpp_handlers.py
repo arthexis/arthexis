@@ -1853,7 +1853,7 @@ async def test_start_transaction_rejection_creates_transaction_record(charger_fa
         "idTag": "unknown-tag",
         "connectorId": 1,
         "meterStart": 0,
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": timezone.now().isoformat().replace("+00:00", "Z"),
     }
 
     result = await consumer._handle_start_transaction_action(
