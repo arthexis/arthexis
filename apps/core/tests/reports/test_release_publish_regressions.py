@@ -21,12 +21,13 @@ globals().pop(
 
 
 def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
+    """Keep release-tag creation manual-only while preserving publish dispatch."""
+
     workflow = _workflow_data("tag-from-version.yml")
     on_section = _workflow_on(workflow)
 
-    assert "push" not in on_section
-    assert "schedule" not in on_section
-    assert "workflow_dispatch" in on_section
+    assert isinstance(on_section, dict)
+    assert set(on_section) == {"workflow_dispatch"}
     assert workflow["permissions"]["contents"] == "write"
     assert workflow["permissions"]["actions"] == "write"
     assert workflow["concurrency"]["cancel-in-progress"] is False
@@ -48,7 +49,7 @@ def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
         'gh workflow run publish.yml --ref "$tag" -f release_tag="$tag"' in dispatch_run
     )
     removed_workflow = "publish" "-image"
-    assert removed_workflow not in dispatch_run
+    assert removed_workflow not in str(workflow)
 
 
 def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
