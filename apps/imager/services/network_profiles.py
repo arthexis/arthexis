@@ -131,7 +131,7 @@ def select_host_network_profiles(
                 sorted({alias for _, _, aliases in candidates for alias in aliases})
             )
             raise ImagerBuildError(
-                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'} ."
+                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'}."
             )
         if match not in selected:
             selected.append(match)
