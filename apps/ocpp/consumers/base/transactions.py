@@ -9,6 +9,8 @@ from typing import Protocol
 
 from apps.ocpp.payload_types import HandlerPayload, HandlerResponse
 
+from .historical_transactions import reconcile_historical_start_transaction
+
 
 class TransactionConsumer(Protocol):
     async def _handle_transaction_event_legacy(
@@ -48,6 +50,12 @@ class TransactionHandler:
         self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
     ) -> HandlerResponse:
         """Handle OCPP 1.6 ``StartTransaction`` and persist transaction rows."""
+
+        historical_response = await reconcile_historical_start_transaction(
+            self.consumer, payload, text_data
+        )
+        if historical_response is not None:
+            return historical_response
 
         return await self.consumer._handle_start_transaction_legacy(
             payload, msg_id, raw, text_data
