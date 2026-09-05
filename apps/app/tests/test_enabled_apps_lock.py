@@ -360,7 +360,7 @@ def test_refresh_enabled_apps_lock_uses_role_intent_for_missing_profile_lock(
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.docs", "apps.ocpp", "apps.shop"},
+        lambda: {"apps.nginx", "apps.ocpp", "apps.shop"},
     )
     with override_settings(
         BASE_DIR=tmp_path,
@@ -375,8 +375,8 @@ def test_refresh_enabled_apps_lock_uses_role_intent_for_missing_profile_lock(
     lock_entries = read_enabled_apps_lock(tmp_path)
 
     assert lock_entries is not None
-    assert {"apps.docs", "apps.ocpp", "apps.shop"}.issubset(lock_entries)
-    assert direct_entries == {"apps.docs"}
+    assert {"apps.nginx", "apps.ocpp", "apps.shop"}.issubset(lock_entries)
+    assert direct_entries == {"apps.nginx"}
 
 
 @pytest.mark.django_db
@@ -392,7 +392,7 @@ def test_refresh_enabled_apps_lock_source_tags_profile_seeded_direct_apps(
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.docs", "apps.ocpp", "apps.shop"},
+        lambda: {"apps.nginx", "apps.ocpp", "apps.shop"},
     )
     with override_settings(
         BASE_DIR=tmp_path,
@@ -406,8 +406,8 @@ def test_refresh_enabled_apps_lock_source_tags_profile_seeded_direct_apps(
     direct_entries = read_enabled_apps_lock_direct_entries(tmp_path)
     direct_sources = read_enabled_apps_lock_direct_sources(tmp_path)
 
-    assert direct_entries == {"apps.docs"}
-    assert direct_sources == {"apps.docs": "role-default:watchtower"}
+    assert direct_entries == {"apps.nginx"}
+    assert direct_sources == {"apps.nginx": "role-default:watchtower"}
 
 
 @pytest.mark.django_db
