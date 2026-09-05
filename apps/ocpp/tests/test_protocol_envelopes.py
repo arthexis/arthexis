@@ -66,7 +66,19 @@ def test_validate_call_error_envelope_returns_typed_payload():
 
 def test_validated_protocol_scalars_use_domain_brands_without_runtime_wrappers():
     call_hints = get_type_hints(OCPPCallEnvelope)
+    result_hints = get_type_hints(OCPPCallResultEnvelope)
     error_hints = get_type_hints(OCPPCallErrorEnvelope)
+
+    assert result_hints["message_id"] is OCPPMessageId
+
+    result = validate_call_result_envelope([3, "call-result", {}])
+    assert result is not None
+    assert type(result.message_id) is str
+
+    error = validate_call_error_envelope([4, "call-error", "NotSupported", "", {}])
+    assert error is not None
+    assert type(error.message_id) is str
+    assert type(error.error_code) is str
 
     assert call_hints["message_id"] is OCPPMessageId
     assert call_hints["action"] is OCPPAction
