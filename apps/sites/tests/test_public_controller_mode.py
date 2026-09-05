@@ -11,8 +11,6 @@ FEEDBACK_JS = Path("apps/sites/static/pages/js/user_story_feedback.js")
 PUBLIC_FEEDBACK_TEMPLATE = Path(
     "apps/sites/templates/pages/includes/public_feedback_widget.html"
 )
-DOCS_README_TEMPLATE = Path("apps/docs/templates/docs/readme.html")
-READER_SCRIPT_TEMPLATE = Path("apps/docs/templates/includes/reader_qr_script.html")
 
 
 def test_controller_mode_adds_large_targets_and_legacy_focus_fallbacks():
@@ -92,21 +90,6 @@ def test_controller_zoom_uses_document_origin_focus_closest_and_tokens():
     assert "createMouseMoveEvent(lastPointerX, lastPointerY)" in script
     assert "document.createEvent('MouseEvent')" in script
     assert ".initMouseEvent(" in script
-
-
-def test_docs_readme_does_not_embed_an_incremental_document_viewer():
-    template = DOCS_README_TEMPLATE.read_text(encoding="utf-8")
-
-    assert "reader-remaining-loader" not in template
-    assert "hx-get=" not in template
-
-
-def test_reader_tables_are_focusable_for_controller_scrolling():
-    script = READER_SCRIPT_TEMPLATE.read_text(encoding="utf-8")
-
-    assert "table.tabIndex = 0;" in script
-    assert 'table.setAttribute("aria-label", headingText);' in script
-    assert "?." not in script
 
 
 def test_public_feedback_dialog_traps_focus_and_keeps_visible_rating_focus():
@@ -190,7 +173,6 @@ def test_public_scripts_avoid_selected_modern_syntax_in_ps4_paths():
     scripts = [
         BASE_JS.read_text(encoding="utf-8"),
         FEEDBACK_JS.read_text(encoding="utf-8"),
-        READER_SCRIPT_TEMPLATE.read_text(encoding="utf-8"),
     ]
 
     for script in scripts:

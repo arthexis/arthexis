@@ -12,7 +12,6 @@ PRODUCT_DEVELOPER_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
     ("app", "application"),
     ("release", "packagerelease"),
     ("repos", "repositoryissue"),
-    ("tests", "suitetest"),
 )
 SITE_OPERATOR_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
     ("cards", "rfidattempt"),
