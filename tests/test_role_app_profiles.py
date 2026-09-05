@@ -75,7 +75,7 @@ EXPECTED_PROFILE_APP_DEPENDENCIES = {
         "apps.protocols",
     ),
     "apps.odoo": ("apps.discovery",),
-    "apps.sites": ("apps.docs", "apps.modules"),
+    "apps.sites": ("apps.modules",),
 }
 
 
@@ -1007,7 +1007,6 @@ def test_settings_resolver_uses_enabled_app_lock_with_dependency_closure():
     assert "ops" not in apps
     assert "unknownlabel" not in apps
     assert "apps.ocpp" in apps
-    assert "apps.docs" in apps
     assert "apps.ops" not in apps
     assert "apps.repos" in apps
     assert "apps.sites" in apps
