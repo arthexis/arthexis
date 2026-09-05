@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, NewType, TypeAlias
 
-from ...payload_types import JSONObject
+from ...payload_types import JSONObject, JSONValue
+
+# JSONValue is intentionally present in this module's globals so get_type_hints()
+# can resolve JSONObject's recursive alias.
 
 
 OCPPMessageType: TypeAlias = Literal[2, 3, 4]
