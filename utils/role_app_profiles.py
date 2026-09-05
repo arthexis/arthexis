@@ -137,7 +137,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
     RoleProfile.WATCHTOWER: (
         "apps.actions",
         "apps.certs",
-        "apps.docs",
         "apps.dns",
         "apps.emails",
         "apps.nginx",
@@ -164,7 +163,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
         "apps.serialbridge",
     ),
     RoleProfile.TERMINAL: (
-        "apps.docs",
         IMAGER_APP_SELECTOR,
         "apps.repos",
         "apps.skills",

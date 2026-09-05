@@ -2995,7 +2995,10 @@ def test_select_host_network_profiles_skips_symlinked_profiles(tmp_path: Path) -
         copy_all=True,
     )
 
-    assert [profile.name for profile in selected_profiles] == ["Home WiFi"]
+    assert [profile.name for profile in selected_profiles] == [
+        "Home WiFi",
+        "arthexis-charger-eth0",
+    ]
 
 
 def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(
