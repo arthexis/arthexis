@@ -12,6 +12,7 @@ from .release_publish_regressions import (
 # corpus collected from release_publish_regressions.py under the stable test
 # module path.
 globals().pop("test_install_health_workflow_is_manual_only_not_scheduled", None)
+globals().pop("test_install_health_workflow_does_not_manage_github_issues", None)
 globals().pop("test_host_redis_workflows_use_native_service", None)
 globals().pop("test_linux_ci_and_security_scans_run_on_pull_requests", None)
 globals().pop(
@@ -210,6 +211,7 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
         == "${{ always() && needs.install.result == 'failure' && github.ref == 'refs/heads/main' }}"
     )
     assert notify_failure["runs-on"] == "ubuntu-latest"
+    assert notify_failure["permissions"]["actions"] == "read"
     assert notify_failure["permissions"]["contents"] == "read"
     assert notify_failure["permissions"]["issues"] == "write"
     assert notify_failure["env"]["GH_TOKEN"] == "${{ github.token }}"
@@ -218,6 +220,12 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
         notify_failure, "Create or update failure issue"
     )["run"]
     assert "gh api --paginate" in failure_script
+    assert "actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" in failure_script
+    assert 'select(.conclusion == "failure")' in failure_script
+    assert ".steps[]? | select(.conclusion == \"failure\") | .name" in failure_script
+    assert ".html_url" in failure_script
+    assert "### Latest failure" in failure_script
+    assert "### Failed jobs" in failure_script
     assert "<!-- install-health-failure -->" in failure_script
     assert "gh issue create" in failure_script
     assert "gh issue edit" in failure_script

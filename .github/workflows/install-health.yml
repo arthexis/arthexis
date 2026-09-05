@@ -236,6 +236,7 @@ jobs:
     if: ${{ always() && needs.install.result == 'failure' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       issues: write
     env:
@@ -253,15 +254,30 @@ jobs:
               --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- install-health-failure -->"))) | .number' \
               | sed -n '1p'
           )"
+          if ! failed_jobs="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" \
+              --jq '.jobs[]
+                | select(.conclusion == "failure")
+                | ([.steps[]? | select(.conclusion == "failure") | .name] | join(", ")) as $failed_steps
+                | "- [" + .name + "](" + .html_url + ") — failed at `" + (if $failed_steps == "" then "unknown step" else $failed_steps end) + "`"'
+          )"; then
+            failed_jobs="- Failed job details unavailable; see [workflow run](${run_url})."
+          elif [[ -z "${failed_jobs}" ]]; then
+            failed_jobs="- Failed job details unavailable; see [workflow run](${run_url})."
+          fi
           body="$(cat <<EOF
           ${ISSUE_MARKER}
           Install Health Check is failing on main.
 
-          - Commit: ${GITHUB_SHA}
-          - Run: ${run_url}
-          - Event: ${GITHUB_EVENT_NAME}
+          ### Latest failure
+          - Commit: [\`${GITHUB_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})
+          - Run: [${GITHUB_RUN_ID}](${run_url})
+          - Event: \`${GITHUB_EVENT_NAME}\`
 
-          This issue is managed automatically. Subsequent failures update this issue, and a successful Install Health run closes it.
+          ### Failed jobs
+          ${failed_jobs}
+
+          This issue is managed automatically. Its body is replaced with the latest failure details on each failed Install Health run, while comments retain failure history. A successful Install Health run closes it.
           EOF
           )"
           if [[ -z "${issue_number}" ]]; then
@@ -276,7 +292,7 @@ jobs:
               --body "${body}"
             gh issue comment "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --body "Install Health failed again for ${GITHUB_SHA}: ${run_url}"
+              --body "Install Health failed again for ${GITHUB_SHA}: ${run_url}. The issue body now reflects the latest failed jobs and steps."
           fi
 
   notify_recovery:
