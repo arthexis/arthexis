@@ -1,11 +1,11 @@
 """Reconcile clearly historical OCPP transaction starts.
 
 Some charge points buffer OCPP messages while disconnected and replay them once a
-CSMS is reachable again.  A stale StartTransaction should be recorded as history,
+CSMS is reachable again. A stale StartTransaction should be recorded as history,
 not subjected to the authorization policy that applies to a transaction starting
 now.
 
-The charger timestamp is telemetry rather than proof of age.  A configurable
+The charger timestamp is telemetry rather than proof of age. A configurable
 minimum age keeps ordinary clock skew and network latency on the live path.
 """
 
@@ -19,6 +19,7 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from django.utils import timezone
 
+from apps.cards.models import RFID as CoreRFID
 from apps.cards.models import RFIDAttempt
 
 from ... import store
@@ -73,6 +74,18 @@ def is_historical_transaction_timestamp(
     return parsed <= cutoff
 
 
+async def _existing_rfid(id_tag: str) -> CoreRFID | None:
+    """Return a previously known RFID without creating a new card record."""
+
+    if not id_tag:
+        return None
+
+    def _lookup() -> CoreRFID | None:
+        return CoreRFID.matching_queryset(id_tag).first()
+
+    return await database_sync_to_async(_lookup)()
+
+
 async def reconcile_historical_start_transaction(
     consumer: Any,
     payload: dict[str, Any],
@@ -91,6 +104,26 @@ async def reconcile_historical_start_transaction(
 
     id_tag = str(payload.get("idTag") or "").strip()
     account = await consumer._get_account(id_tag)
+
+    # Retain an existing fallback-account association when the live policy would
+    # have produced one, but never create an RFID merely because history was
+    # replayed. The historical outcome itself remains Accepted regardless of the
+    # current live authorization decision.
+    tag = await _existing_rfid(id_tag)
+    if tag is not None:
+        decision = await consumer._evaluate_authorization_policy(
+            id_tag=id_tag,
+            account=account,
+            tag=tag,
+            tag_created=False,
+        )
+        if decision.reason == "rfid_fallback_account_authorized":
+            account = await consumer._bind_fallback_account_for_decision(
+                decision,
+                tag=tag,
+                account=account,
+            )
+
     await consumer._assign_connector(payload.get("connectorId"))
     vid_value, vin_value = _extract_vehicle_identifier(payload)
 
