@@ -4,6 +4,7 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
   PYTEST_WORKERS: 'auto'
+  PYTEST_MAXFAIL: '5'
 
 concurrency:
   group: install-health-check-${{ github.ref }}
@@ -218,7 +219,7 @@ jobs:
           if [[ -n "${{ matrix.pytest_args }}" ]]; then
             read -r -a target_args <<< "${{ matrix.pytest_args }}"
           fi
-          python -m pytest "${target_args[@]}" "${xdist_args[@]}" --maxfail=1 --disable-warnings --durations=25 -q --timeout=300 --junitxml=pytest-junit.xml | tee pytest.log
+          python -m pytest "${target_args[@]}" "${xdist_args[@]}" --maxfail="${PYTEST_MAXFAIL}" --disable-warnings --durations=25 -q --timeout=300 --junitxml=pytest-junit.xml | tee pytest.log
       - name: Upload pytest log
         if: ${{ always() && matrix.full_pytest }}
         continue-on-error: true
