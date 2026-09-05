@@ -165,6 +165,7 @@ _validate_remote_base_image_url_impl = _validate_remote_base_image_url
 
 
 def _sync_compatibility_globals() -> None:
+    """Sync module-level compatibility function pointers for circular import resolution."""
     _build_engine_module._customize_image = globals()["_customize_image"]
     _build_engine_module._download_remote_base_image = globals()[
         "_download_remote_base_image"
@@ -202,50 +203,60 @@ def _sync_compatibility_globals() -> None:
 
 
 def _customize_image(*args, **kwargs):
+    """Customize a Raspberry Pi image by injecting scripts and configuration files."""
     _sync_compatibility_globals()
     return _customize_image_impl(*args, **kwargs)
 
 
 def _download_remote_base_image(*args, **kwargs):
+    """Download a remote base image while validating redirect targets."""
     _sync_compatibility_globals()
     return _download_remote_base_image_impl(*args, **kwargs)
 
 
 def _ensure_image_minimum_size(*args, **kwargs):
+    """Ensure image meets minimum size requirements by expanding if necessary."""
     _sync_compatibility_globals()
     return _ensure_image_minimum_size_impl(*args, **kwargs)
 
 
 def _guestfish_remove_file(*args, **kwargs):
+    """Remove a file from the image using guestfish."""
     _sync_compatibility_globals()
     return _guestfish_remove_file_impl(*args, **kwargs)
 
 
 def _guestfish_symlink(*args, **kwargs):
+    """Create a symbolic link in the image using guestfish."""
     _sync_compatibility_globals()
     return _guestfish_symlink_impl(*args, **kwargs)
 
 
 def _guestfish_write(*args, **kwargs):
+    """Write content to a file in the image using guestfish."""
     _sync_compatibility_globals()
     return _guestfish_write_impl(*args, **kwargs)
 
 
 def _validate_remote_base_image_url(*args, **kwargs):
+    """Validate remote image URL host policy prior to fetching."""
     _sync_compatibility_globals()
     return _validate_remote_base_image_url_impl(*args, **kwargs)
 
 
 def build_rpi4b_image(*args, **kwargs):
+    """Build a customized Raspberry Pi 4B image artifact."""
     _sync_compatibility_globals()
     return _build_rpi4b_image_impl(*args, **kwargs)
 
 
 def test_rpi_access(*args, **kwargs):
+    """Test SSH and HTTP access to a deployed Raspberry Pi."""
     _sync_compatibility_globals()
     return _test_rpi_access_impl(*args, **kwargs)
 
 
 def write_image_to_device(*args, **kwargs):
+    """Write an image artifact to a block device with safety checks and verification."""
     _sync_compatibility_globals()
     return _write_image_to_device_impl(*args, **kwargs)

@@ -929,6 +929,7 @@ class Command(BaseCommand):
         self._queue_gway_burn_if_configured(result, options)
 
     def _resolve_gway_burn_base_image_uri(self, options: dict[str, object]) -> str:
+        """Resolve base image URI from CLI option, environment variable, or default."""
         return (
             str(options["base_image_uri"]).strip()
             or os.environ.get("IMAGER_GWAY_BASE_IMAGE_URI", "").strip()
@@ -942,6 +943,7 @@ class Command(BaseCommand):
         minimum_image_size_bytes: int | None,
         output_dir: Path,
     ) -> None:
+        """Preflight the base image by resolving, extracting, and verifying its minimum size."""
         try:
             effective_minimum_size_bytes = minimum_image_size_bytes
             if effective_minimum_size_bytes is None:
@@ -973,6 +975,7 @@ class Command(BaseCommand):
         *,
         upstream_base_url: str,
     ) -> tuple[int, str]:
+        """Resolve GWAY reservation number from CLI option or by requesting the next available number."""
         reserve_number = options.get("reserve_number")
         if reserve_number is not None:
             resolved_number = int(reserve_number)
@@ -991,6 +994,7 @@ class Command(BaseCommand):
     def _gway_burn_artifact_name(
         self, options: dict[str, object], resolved_number: int
     ) -> str:
+        """Determine artifact name from CLI option or generate from GWAY reservation number."""
         return (
             str(options["name"]).strip()
             or f"{GWAY_HOSTNAME_PREFIX}-{resolved_number:03d}"
@@ -1010,6 +1014,7 @@ class Command(BaseCommand):
         reservation_claim_token: str,
         minimum_image_size_bytes: int | None,
     ):
+        """Build a reserved GWAY image with the resolved configuration."""
         try:
             return build_rpi4b_image(
                 name=artifact_name,
@@ -1046,6 +1051,7 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
     def _write_gway_burn_result(self, result, resolved_number: int) -> None:
+        """Write GWAY burn result summary and reservation details to stdout."""
         self.stdout.write(self.style.SUCCESS(f"Built GWAY image: {result.output_path}"))
         self.stdout.write(f"gway_number={resolved_number}")
         self.stdout.write(f"gway_hostname={GWAY_HOSTNAME_PREFIX}-{resolved_number:03d}")
@@ -1061,6 +1067,7 @@ class Command(BaseCommand):
             )
 
     def _resolve_gway_burn_device(self, options: dict[str, object]) -> str:
+        """Resolve burn device path from CLI option or environment variables."""
         return (
             str(options["device"]).strip()
             or os.environ.get("IMAGER_GWAY_BURN_DEVICE", "").strip()
@@ -1070,6 +1077,7 @@ class Command(BaseCommand):
     def _queue_gway_burn_if_configured(
         self, result, options: dict[str, object]
     ) -> None:
+        """Queue a GWAY burn job if a burner device is configured."""
         device_path = self._resolve_gway_burn_device(options)
         if not device_path:
             self.stdout.write("burn_job=not queued (no burner device configured)")
@@ -1293,6 +1301,7 @@ class Command(BaseCommand):
     def _connect_release_profile_manifest(
         self, artifact: RaspberryPiImageArtifact
     ) -> dict[str, object]:
+        """Extract and validate profile manifest from connect-ota artifact metadata."""
         metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
         profile_manifest = metadata.get("profile_manifest")
         if not isinstance(profile_manifest, dict):
@@ -1324,6 +1333,7 @@ class Command(BaseCommand):
         profile_manifest: dict[str, object],
         extra_tags: tuple[str, ...],
     ) -> list[str]:
+        """Build compatibility tag list from artifact metadata, profile manifest, and extra tags."""
         tags = [
             "universal-connect-update",
             artifact.target,
@@ -1345,6 +1355,7 @@ class Command(BaseCommand):
         return list(dict.fromkeys(tag for tag in tags if tag))
 
     def _split_cli_values(self, values: object) -> tuple[str, ...]:
+        """Split and deduplicate CLI values separated by commas, semicolons, or whitespace."""
         split_values: list[str] = []
         for value in values if isinstance(values, list) else []:
             split_values.extend(
@@ -1626,6 +1637,7 @@ class Command(BaseCommand):
                 return
 
     def _parse_ports(self, raw_value: str) -> tuple[int, ...]:
+        """Parse and validate comma-separated port numbers."""
         ports: list[int] = []
         for token in raw_value.split(","):
             token = token.strip()
