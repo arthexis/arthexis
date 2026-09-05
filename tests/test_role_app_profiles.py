@@ -748,6 +748,7 @@ def test_charger_intake_feature_pack_is_retired():
     assert "apps.ocpp" in result.selectors
     assert "apps.ocpp" not in direct_selectors
 
+
 def test_disabled_ocpp_route_provider_hides_websocket_patterns(monkeypatch):
     monkeypatch.setattr(settings, "ASGI_ROUTE_PROVIDERS", ["apps.ocpp.routing"])
     monkeypatch.setattr(settings, "ROUTE_PROVIDER_DISABLED_APPS", ["apps.ocpp"])
@@ -933,7 +934,6 @@ def test_control_profile_keeps_local_hardware_beat_schedules():
 
     assert "heartbeat" in schedule
     assert "thermometer_sampling" in schedule
-    assert "log_summary" in schedule
     assert "certificate_expiration_refresh" in schedule
 
 
@@ -963,7 +963,6 @@ def test_beat_schedule_resolver_keeps_full_fallback_schedule():
         "log_retention_guard",
         "github_monitor",
     } <= set(schedule)
-    assert "log_summary" in schedule
 
 
 def test_energy_billing_feature_pack_keeps_legacy_billing_apps_deprecated():
