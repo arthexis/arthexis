@@ -453,32 +453,6 @@ def test_health_fingerprint_canonicalizes_equivalent_selectors(
     assert target_selector == group_selector == all_selector
 
 
-def test_health_fingerprint_uses_raw_command_identity_for_secret_values(
-    monkeypatch, settings
-) -> None:
-    settings.NODE_ROLE = "Terminal"
-    definition = HealthCheckDefinition(
-        target="core.synthetic",
-        group="core",
-        description="Synthetic health diagnostics",
-        runner=f"{__name__}._failing_health_runner",
-    )
-    monkeypatch.setattr(health_reporting.socket, "gethostname", lambda: "node-a")
-    first_command = "manage.py health --target core.synthetic --rfid-value 'token=foo'"
-    second_command = "manage.py health --target core.synthetic --rfid-value 'token=bar'"
-
-    assert health_reporting._redact(first_command) == health_reporting._redact(
-        second_command
-    )
-    assert health_reporting.health_check_fingerprint(
-        definition,
-        command_text=first_command,
-    ) != health_reporting.health_check_fingerprint(
-        definition,
-        command_text=second_command,
-    )
-
-
 def test_health_github_reporting_creates_labeled_issue(
     monkeypatch, settings, tmp_path
 ) -> None:

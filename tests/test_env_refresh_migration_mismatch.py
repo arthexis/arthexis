@@ -441,6 +441,7 @@ def test_successful_auto_reconcile_attempt_removes_unused_snapshot(
         lambda **kwargs: (snapshot_path, tmp_path / "db.sqlite3", None),
     )
     monkeypatch.setattr(env_refresh_module, "_pending_migration_graph", lambda: False)
+    monkeypatch.setattr(env_refresh_module, "_ensure_content_types", lambda **kwargs: None)
     monkeypatch.setattr(env_refresh_module, "_fixture_files", lambda: [])
     monkeypatch.setattr(env_refresh_module, "load_local_seed_zips", lambda: 0)
     monkeypatch.setattr(
@@ -495,8 +496,8 @@ def test_dashboard_rule_fixture_upsert_reconciles_name_and_content_type(
     from django.contrib.contenttypes.models import ContentType
 
     from apps.counters.models import DashboardRule
+    from apps.nginx.models import SiteConfiguration
     from apps.nodes.models import Node
-    from apps.sites.models import SiteConfiguration
 
     node_content_type = ContentType.objects.get_for_model(Node)
     site_content_type = ContentType.objects.get_for_model(SiteConfiguration)

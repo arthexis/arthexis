@@ -286,7 +286,7 @@ def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
 
 
 def test_dev_env_auto_mode_uses_local_path() -> None:
-    script = _read("dev-env.sh")
+    script = _read("scripts/dev/dev-env.sh")
     _, mode_dispatch = script.split('case "$MODE" in', 1)
     auto_case = re.search(
         r"auto\)\n(?P<body>.*?)\n    ;;\n  local\)",
