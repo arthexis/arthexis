@@ -46,6 +46,7 @@ def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
 
 
 def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
+    """Verify Linux CI and security scanning workflows trigger on pull requests."""
     pr_workflows: list[str] = []
     for workflow_path in _workflow_files():
         workflow = _workflow_data(workflow_path.name)
@@ -64,6 +65,7 @@ def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
 
 
 def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
+    """Verify install health workflow runs on main branch pushes and manual dispatch."""
     workflow = _workflow_data("install-health.yml")
     on_section = _workflow_on(workflow)
 
@@ -250,6 +252,7 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
 def test_host_redis_release_workflows_use_native_service(
     workflow_filename: str, job_name: str
 ) -> None:
+    """Verify release workflows use native Redis service instead of containers."""
     workflow = _workflow_data(workflow_filename)
     job = workflow["jobs"][job_name]
     env = {**workflow.get("env", {}), **job.get("env", {})}
