@@ -326,6 +326,8 @@ Create or reuse one or more Django Models to model a business process and its in
 
 In general, to reduce complexity and duplication, improve accessibility, and remove old unused cruft, plus any other specific goals, that targets a set or class of code.
 
+---
+
 ### Cleave
 
 Remove **all words contained in parentheses**.
