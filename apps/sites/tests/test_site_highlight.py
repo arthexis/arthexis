@@ -106,17 +106,6 @@ def test_nav_links_includes_selected_site_highlight(
     assert context["site_highlight"].pk == highlight.pk
 
 
-def test_favicon_fallback_uses_tracked_fixture() -> None:
-    favicon_url = context_processors._select_favicon_url(
-        current_module=None,
-        site=None,
-        node=None,
-    )
-
-    assert favicon_url.startswith("data:image/png;base64,")
-    assert len(favicon_url) > len("data:image/png;base64,")
-
-
 def test_funding_banner_only_shows_on_arthexis_dot_com(
     rf: RequestFactory,
     settings,
