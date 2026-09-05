@@ -12,29 +12,57 @@ from .models import (
     NetworkProfileInfo,
 )
 
+DEFAULT_CHARGER_NETWORK_PROFILE_ID = "arthexis-charger-eth0"
+DEFAULT_CHARGER_NETWORK_PROFILE_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "templates"
+    / "network"
+    / "arthexis-charger-eth0.nmconnection"
+)
+DEFAULT_CHARGER_NETWORK_INTERFACE = "eth0"
 
-def _parse_network_profile_id(profile_path: Path) -> str:
-    """Read a NetworkManager connection id from a keyfile profile when present."""
+
+def _parse_network_profile_value(profile_path: Path, *, section: str, key: str) -> str:
+    """Read one NetworkManager keyfile value when present."""
 
     try:
         lines = profile_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return profile_path.stem
+        return ""
 
-    in_connection_section = False
+    current_section = ""
     for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
             continue
         if line.startswith("[") and line.endswith("]"):
-            in_connection_section = line.lower() == "[connection]"
+            current_section = line[1:-1].strip().lower()
             continue
-        if not in_connection_section or "=" not in line:
+        if current_section != section.lower() or "=" not in line:
             continue
-        key, value = line.split("=", 1)
-        if key.strip().lower() == "id" and value.strip():
+        candidate_key, value = line.split("=", 1)
+        if candidate_key.strip().lower() == key.lower():
             return value.strip()
-    return profile_path.stem
+    return ""
+
+
+def _parse_network_profile_id(profile_path: Path) -> str:
+    """Read a NetworkManager connection id from a keyfile profile when present."""
+
+    return (
+        _parse_network_profile_value(profile_path, section="connection", key="id")
+        or profile_path.stem
+    )
+
+
+def _parse_network_profile_interface(profile_path: Path) -> str:
+    """Read the interface pinned by a NetworkManager keyfile profile."""
+
+    return _parse_network_profile_value(
+        profile_path,
+        section="connection",
+        key="interface-name",
+    )
 
 
 def _network_profile_remote_filename(source_path: Path) -> str:
@@ -52,35 +80,38 @@ def select_host_network_profiles(
     names: list[str] | tuple[str, ...] | None = None,
     copy_all: bool = False,
 ) -> tuple[NetworkProfileInfo, ...]:
-    """Select host NetworkManager profiles for copying into the generated image."""
+    """Select host profiles plus the default charger-facing Ethernet profile.
+
+    Customized images receive a no-gateway ``eth0`` profile at
+    ``192.168.129.10/24`` so a directly attached charger can reach Arthexis.
+    Selecting a host profile explicitly pinned to ``eth0`` replaces that default.
+    """
 
     requested_names = tuple(name.strip() for name in (names or ()) if str(name).strip())
-    if not requested_names and not copy_all:
-        return ()
-
-    source_dir = (
-        (profile_dir or Path(DEFAULT_HOST_NETWORK_PROFILE_DIR)).expanduser().resolve()
-    )
-    if not source_dir.is_dir():
-        raise ImagerBuildError(
-            f"Host NetworkManager profile directory does not exist: {source_dir}"
-        )
-
     candidates: list[tuple[Path, str, set[str]]] = []
-    for path in sorted(source_dir.iterdir(), key=lambda item: item.name):
-        if path.name.startswith(".") or path.is_symlink() or not path.is_file():
-            continue
-        resolved_path = path.resolve()
-        if not resolved_path.is_relative_to(source_dir):
-            continue
-        profile_id = _parse_network_profile_id(path)
-        candidates.append(
-            (
-                path,
-                profile_id,
-                {path.name, path.stem, profile_id},
-            )
+    if requested_names or copy_all:
+        source_dir = (
+            (profile_dir or Path(DEFAULT_HOST_NETWORK_PROFILE_DIR)).expanduser().resolve()
         )
+        if not source_dir.is_dir():
+            raise ImagerBuildError(
+                f"Host NetworkManager profile directory does not exist: {source_dir}"
+            )
+
+        for path in sorted(source_dir.iterdir(), key=lambda item: item.name):
+            if path.name.startswith(".") or path.is_symlink() or not path.is_file():
+                continue
+            resolved_path = path.resolve()
+            if not resolved_path.is_relative_to(source_dir):
+                continue
+            profile_id = _parse_network_profile_id(path)
+            candidates.append(
+                (
+                    path,
+                    profile_id,
+                    {path.name, path.stem, profile_id},
+                )
+            )
 
     selected: list[tuple[Path, str]] = []
     if copy_all:
@@ -100,10 +131,28 @@ def select_host_network_profiles(
                 sorted({alias for _, _, aliases in candidates for alias in aliases})
             )
             raise ImagerBuildError(
-                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'}."
+                f"Host network profile '{requested_name}' was not found. Available profiles: {available or '(none)'} ."
             )
         if match not in selected:
             selected.append(match)
+
+    selected_interfaces = {
+        _parse_network_profile_interface(source_path)
+        for source_path, _profile_id in selected
+    }
+    selected_ids = {profile_id for _source_path, profile_id in selected}
+    if (
+        DEFAULT_CHARGER_NETWORK_INTERFACE not in selected_interfaces
+        and DEFAULT_CHARGER_NETWORK_PROFILE_ID not in selected_ids
+    ):
+        if not DEFAULT_CHARGER_NETWORK_PROFILE_PATH.is_file():
+            raise ImagerBuildError(
+                "Built-in charger Ethernet NetworkManager profile is missing: "
+                f"{DEFAULT_CHARGER_NETWORK_PROFILE_PATH}"
+            )
+        selected.append(
+            (DEFAULT_CHARGER_NETWORK_PROFILE_PATH, DEFAULT_CHARGER_NETWORK_PROFILE_ID)
+        )
 
     used_filenames: set[str] = set()
     profiles: list[NetworkProfileInfo] = []
