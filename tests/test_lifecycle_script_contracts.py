@@ -263,7 +263,6 @@ def test_systemd_user_update_purges_retired_kiosk_cleanup_records() -> None:
 
 
 def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
-    """Verify upgrade script removes retired HDMI kiosk systemd service units."""
     upgrade_script = _read_shell_contract("upgrade.sh")
     assert "retire_legacy_kiosk_units()" in upgrade_script
     assert (
@@ -282,7 +281,6 @@ def test_upgrade_retires_legacy_kiosk_systemd_units() -> None:
 
 
 def test_dev_env_auto_mode_uses_local_path() -> None:
-    """Verify dev-env.sh auto mode uses local path instead of container path."""
     script = _read("dev-env.sh")
     _, mode_dispatch = script.split('case "$MODE" in', 1)
     auto_case = re.search(
@@ -297,7 +295,6 @@ def test_dev_env_auto_mode_uses_local_path() -> None:
 
 
 def test_install_script_supports_explicit_charger_facing_lock() -> None:
-    """Verify install script supports explicit charger-facing and OCPP gateway lock flags."""
     install_script = _read_shell_contract("install.sh")
 
     assert "--charger-facing)" in install_script
@@ -1049,7 +1046,6 @@ def test_systemd_locks_retriggers_configured_attached_burner(
 
 
 def test_watchtower_connect_update_artifact_script_uses_native_imager() -> None:
-    """Verify watchtower connect update artifact script uses native imager with rpi_connect_updates feature pack."""
     script = _read("scripts/watchtower-connect-update-artifact.sh")
 
     assert "ARTHEXIS_ROLE_APP_FEATURE_PACKS" in script
@@ -1197,7 +1193,6 @@ def test_stop_unknown_flag_exits_before_stop_actions(tmp_path: Path) -> None:
 
 
 def test_env_refresh_dependency_refresh_includes_qa_requirements() -> None:
-    """Verify env-refresh.sh dependency refresh includes QA requirements when running in deps-only mode."""
     script_text = _read_shell_contract("env-refresh.sh")
 
     assert "Unsupported env-refresh.sh option: $1" in script_text

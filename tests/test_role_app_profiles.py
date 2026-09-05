@@ -234,14 +234,12 @@ def test_admin_actions_feature_pack_keeps_actions_explicit():
 
 
 def test_watchtower_profile_keeps_admin_actions_for_staff_tasks_template():
-    """Verify watchtower profile includes admin actions app for staff task templates."""
     watchtower_apps = set(resolve_role_app_selectors("watchtower"))
 
     assert "apps.actions" in watchtower_apps
 
 
 def test_hardware_experiments_feature_pack_enables_sensors():
-    """Verify hardware_experiments feature pack enables sensors app for terminal role."""
     hardware_apps = set(
         resolve_role_app_selectors(
             "terminal",
@@ -253,7 +251,6 @@ def test_hardware_experiments_feature_pack_enables_sensors():
 
 
 def test_rpi_connect_updates_feature_pack_enables_native_artifact_builder():
-    """Verify rpi-connect-updates feature pack enables imager and rpiconnect apps for watchtower role."""
     watchtower_apps = set(
         resolve_role_app_selectors("watchtower", feature_packs=("rpi-connect-updates",))
     )
