@@ -20,6 +20,8 @@ from apps.imager.burner import (
 )
 from apps.imager.constants import (
     DEFAULT_ARTHEXIS_GIT_URL,
+    DEFAULT_RPI4B_BASE_IMAGE_DESCRIPTION,
+    DEFAULT_RPI4B_BASE_IMAGE_URI,
     UNIVERSAL_CONNECT_UPDATE_REQUIRED_ARTIFACTS,
     UNIVERSAL_CONNECT_UPDATE_ROLES,
 )
@@ -91,8 +93,11 @@ class Command(BaseCommand):
         )
         build_parser.add_argument(
             "--base-image-uri",
-            required=True,
-            help="Base Raspberry Pi OS image URI (file://, local path, or https://).",
+            default=DEFAULT_RPI4B_BASE_IMAGE_URI,
+            help=(
+                "Base Raspberry Pi OS image URI (file://, local path, or https://). "
+                f"Defaults to {DEFAULT_RPI4B_BASE_IMAGE_DESCRIPTION}."
+            ),
         )
         build_parser.add_argument(
             "--output-dir",
@@ -300,7 +305,10 @@ class Command(BaseCommand):
         gway_parser.add_argument(
             "--base-image-uri",
             default="",
-            help="Base Raspberry Pi OS image URI. Defaults to IMAGER_GWAY_BASE_IMAGE_URI.",
+            help=(
+                "Base Raspberry Pi OS image URI. Defaults to IMAGER_GWAY_BASE_IMAGE_URI "
+                f"or {DEFAULT_RPI4B_BASE_IMAGE_DESCRIPTION}."
+            ),
         )
         gway_parser.add_argument(
             "--name",
@@ -921,15 +929,11 @@ class Command(BaseCommand):
         self._queue_gway_burn_if_configured(result, options)
 
     def _resolve_gway_burn_base_image_uri(self, options: dict[str, object]) -> str:
-        base_image_uri = (
+        return (
             str(options["base_image_uri"]).strip()
             or os.environ.get("IMAGER_GWAY_BASE_IMAGE_URI", "").strip()
+            or DEFAULT_RPI4B_BASE_IMAGE_URI
         )
-        if not base_image_uri:
-            raise CommandError(
-                "GWAY image burns require --base-image-uri or IMAGER_GWAY_BASE_IMAGE_URI."
-            )
-        return base_image_uri
 
     def _validate_gway_burn_base_image(
         self,
