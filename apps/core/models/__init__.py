@@ -1,8 +1,9 @@
 """Model exports for the core app."""
 
-from .admin_notice import AdminNotice
-from .invite_lead import InviteLead
-from .lead_base import LeadBase
+from importlib import import_module
+
+from django.apps import apps as django_apps
+
 from .ownable import (
     Ownable,
     OwnedObjectLink,
@@ -10,12 +11,19 @@ from .ownable import (
     get_owned_objects_for_group,
     get_owned_objects_for_user,
 )
-from .usage_event import UsageEvent
 
-_EMAIL_COMPAT_EXPORTS = {
-    "EmailArtifact",
-    "EmailTransaction",
-    "EmailTransactionAttachment",
+_COMPAT_EXPORTS = {
+    "AdminNotice": ("apps.ops.admin_notice", "AdminNotice", "apps.ops"),
+    "EmailArtifact": ("apps.emails.models", "EmailArtifact", "apps.emails"),
+    "EmailTransaction": ("apps.emails.models", "EmailTransaction", "apps.emails"),
+    "EmailTransactionAttachment": (
+        "apps.emails.models",
+        "EmailTransactionAttachment",
+        "apps.emails",
+    ),
+    "InviteLead": ("apps.sites.models", "InviteLead", "apps.sites"),
+    "LeadBase": ("apps.sites.models", "LeadBase", "apps.sites"),
+    "UsageEvent": ("apps.analytics.models", "UsageEvent", "apps.analytics"),
 }
 
 __all__ = [
@@ -35,10 +43,17 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name in _EMAIL_COMPAT_EXPORTS:
-        from apps.emails import models as email_models
+    target = _COMPAT_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-        value = getattr(email_models, name)
-        globals()[name] = value
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute, required_app = target
+    if not django_apps.is_installed(required_app):
+        raise AttributeError(
+            f"module {__name__!r} has no attribute {name!r}; "
+            f"{required_app} is not installed"
+        )
+
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value

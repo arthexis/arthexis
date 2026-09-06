@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import resolve, reverse
 
+from apps.analytics.views import usage_analytics_summary
 from apps.cards.auth_views import rfid_login
 from apps.cards.core_views import rfid_batch
 from apps.cards.models import RFID
@@ -21,8 +22,10 @@ from apps.users.models import User
     [
         ("apps.core.views.auth", "apps.cards.auth_views"),
         ("apps.core.views.rfid", "apps.cards.core_views"),
+        ("apps.core.views.usage_analytics", "apps.analytics.views"),
         ("apps.core.admin.rfid", "apps.cards.admin_rfid"),
         ("apps.core.admin.rfid_forms", "apps.cards.rfid_forms"),
+        ("apps.core.admin.usage", "apps.analytics.admin"),
         ("apps.core.admin.users", "apps.users.admin_core"),
         (
             "apps.core.views.reports.common",
@@ -88,7 +91,9 @@ def test_legacy_urls_resolve_to_owner_views():
     assert release_url.endswith("/core/releases/7/publish/")
     assert resolve(release_url).func is release_progress
 
-    assert reverse("usage-analytics-summary") == "/core/usage-analytics/summary/"
+    analytics_url = reverse("usage-analytics-summary")
+    assert analytics_url == "/core/usage-analytics/summary/"
+    assert resolve(analytics_url).func is usage_analytics_summary
 
 
 def test_odoo_legacy_urls_resolve_to_odoo_views_when_installed():
@@ -122,12 +127,10 @@ def test_odoo_legacy_urls_resolve_to_odoo_views_when_installed():
 
 
 def test_domain_route_providers_are_explicit_and_core_is_narrow():
+    assert "apps.analytics.routes" in settings.ROUTE_PROVIDERS
     assert "apps.release.routes" in settings.ROUTE_PROVIDERS
     assert "apps.users.routes" in settings.ROUTE_PROVIDERS
 
     from apps.core.routes import ROOT_URLPATTERNS
 
-    assert {pattern.name for pattern in ROOT_URLPATTERNS} == {
-        "usage-analytics-summary",
-        "version-info",
-    }
+    assert {pattern.name for pattern in ROOT_URLPATTERNS} == {"version-info"}

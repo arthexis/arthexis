@@ -3,6 +3,14 @@
 from .base import *  # noqa: F401,F403
 from .security import *  # noqa: F401,F403
 from .apps import *  # noqa: F401,F403
+
+# Usage analytics was historically core-owned and therefore present on every node.
+# Keep that runtime invariant while ownership moves to its dedicated app.
+if "apps.analytics" not in PROJECT_LOCAL_APPS:
+    PROJECT_LOCAL_APPS.append("apps.analytics")
+if "apps.analytics" not in INSTALLED_APPS:
+    INSTALLED_APPS.append("apps.analytics")
+
 from .routing import *  # noqa: F401,F403
 from .extensions import *  # noqa: F401,F403
 from .middleware import *  # noqa: F401,F403

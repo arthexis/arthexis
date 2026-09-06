@@ -1,9 +1,9 @@
 """Manifest entries for Django app loading."""
 
 DJANGO_APPS = [
-    "apps.core",
+    "apps.analytics",
 ]
 
 REQUIRES_APPS = [
-    "apps.discovery",
+    "apps.features",
 ]
