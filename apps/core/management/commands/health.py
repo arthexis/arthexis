@@ -13,7 +13,6 @@ from apps.core.services.health import (
 from apps.core.services.health_checks import (
     run_check_admin,
     run_check_next_upgrade,
-    run_check_rfid,
     run_check_system_user,
     run_check_time,
 )
@@ -35,7 +34,7 @@ HEALTH_CHECKS = {
         target="core.rfid",
         group="core",
         description="Validate an RFID value",
-        runner=run_check_rfid,
+        runner="apps.cards.health_checks.run_check_rfid",
         include_in_group=False,
         app_selector="apps.cards",
         node_roles=("Control",),
