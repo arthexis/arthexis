@@ -1,30 +1,44 @@
+"""Compatibility URL module for the former ``core/`` include.
+
+The root route provider no longer mounts this module.  It remains importable for
+third-party callers while delegating domain endpoints to their owner apps.
+"""
+
 from django.apps import apps as django_apps
 from django.urls import path
 
-from . import views
+from apps.cards.auth_views import rfid_login
+from apps.cards.core_views import rfid_batch
+from apps.core.views.usage_analytics import usage_analytics_summary
 
 urlpatterns = [
-    path("rfid-login/", views.rfid_login, name="rfid-login"),
-    path("rfids/", views.rfid_batch, name="rfid-batch"),
+    path("rfid-login/", rfid_login, name="rfid-login"),
+    path("rfids/", rfid_batch, name="rfid-batch"),
     path(
         "usage-analytics/summary/",
-        views.usage_analytics_summary,
+        usage_analytics_summary,
         name="usage-analytics-summary",
     ),
 ]
 
 if django_apps.is_installed("apps.odoo"):
+    from apps.odoo.core_views import (
+        add_live_subscription,
+        live_subscription_list,
+        product_list,
+    )
+
     urlpatterns.extend(
         [
-            path("products/", views.product_list, name="product-list"),
+            path("products/", product_list, name="product-list"),
             path(
                 "live-subscribe/",
-                views.add_live_subscription,
+                add_live_subscription,
                 name="add-live-subscription",
             ),
             path(
                 "live-list/",
-                views.live_subscription_list,
+                live_subscription_list,
                 name="live-subscription-list",
             ),
         ]
