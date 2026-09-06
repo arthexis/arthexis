@@ -10,19 +10,15 @@ from apps.core.services.health import (
     resolve_targets,
     run_health_checks,
 )
-from apps.core.services.health_checks import (
-    run_check_admin,
-    run_check_next_upgrade,
-    run_check_system_user,
-    run_check_time,
-)
+from apps.core.services.health_checks import run_check_next_upgrade, run_check_time
 
 HEALTH_CHECKS = {
     "core.admin": HealthCheckDefinition(
         target="core.admin",
         group="core",
         description="Verify default admin account health",
-        runner=run_check_admin,
+        runner="apps.users.health_checks.run_check_admin",
+        app_selector="apps.users",
     ),
     "core.next_upgrade": HealthCheckDefinition(
         target="core.next_upgrade",
@@ -43,7 +39,8 @@ HEALTH_CHECKS = {
         target="core.system_user",
         group="core",
         description="Verify system account health",
-        runner=run_check_system_user,
+        runner="apps.users.health_checks.run_check_system_user",
+        app_selector="apps.users",
     ),
     "core.time": HealthCheckDefinition(
         target="core.time",
