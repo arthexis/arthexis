@@ -42,7 +42,7 @@ def request_temp_password(request):
     }
     return TemplateResponse(
         request,
-        "admin/core/request_temp_password.html",
+        "admin/users/request_temp_password.html",
         context,
     )
 
