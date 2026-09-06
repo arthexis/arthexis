@@ -63,8 +63,19 @@ def test_odoo_legacy_modules_are_owner_aliases_when_installed():
 
 
 def test_domain_admin_classes_are_registered_from_owner_apps():
-    assert type(admin.site._registry[User]).__module__ == "apps.users.admin_core"
-    assert type(admin.site._registry[RFID]).__module__ == "apps.cards.admin_rfid"
+    from apps.cards.admin_rfid import RFIDAdmin
+    from apps.users.admin_core import UserAdmin
+
+    user_admin = admin.site._registry[User]
+    rfid_admin = admin.site._registry[RFID]
+
+    # Django's registry contract stores ModelAdmin instances, not their classes.
+    # Checking isinstance() makes cross-test registry pollution fail explicitly
+    # instead of surfacing indirectly through the admin metaclass module.
+    assert isinstance(user_admin, UserAdmin)
+    assert isinstance(rfid_admin, RFIDAdmin)
+    assert type(user_admin).__module__ == "apps.users.admin_core"
+    assert type(rfid_admin).__module__ == "apps.cards.admin_rfid"
 
     if django_apps.is_installed("apps.odoo"):
         from apps.odoo.models import OdooEmployee, OdooProduct
