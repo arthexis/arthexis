@@ -650,5 +650,5 @@ fi
 if [[ "$WRITE_MIGRATIONS" -eq 1 ]]; then
   ARGS="$ARGS --write-migrations"
 fi
-"$PYTHON" env-refresh.py $ARGS database
+"$PYTHON" "$SCRIPT_DIR/scripts/maintenance/env_refresh.py" $ARGS database
 echo "Timing: env-refresh.sh completed in $(elapsed_ms "$SCRIPT_START_MS")ms"

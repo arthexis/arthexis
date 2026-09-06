@@ -54,5 +54,5 @@ if exist "%SCRIPT_DIR%\requirements.txt" (
 set "ARGS="
 if %LATEST%==1 set "ARGS=%ARGS% --latest"
 if %CLEAN%==1 set "ARGS=%ARGS% --clean"
-"%VENV%\Scripts\python.exe" "%SCRIPT_DIR%\env-refresh.py" %ARGS% database
+"%VENV%\Scripts\python.exe" "%SCRIPT_DIR%\scripts\maintenance\env_refresh.py" %ARGS% database
 popd >nul
