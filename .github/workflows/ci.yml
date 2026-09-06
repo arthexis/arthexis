@@ -81,3 +81,52 @@ jobs:
       - name: Run Linux sanity checks
         run: |
           ./scripts/ci/linux-sanity.sh
+
+  core-boundary-regressions:
+    name: Core boundary regressions (manual)
+    # This intentionally never allocates a runner for ordinary PR/push events.
+    # Dispatch Linux CI manually on the branch when the deeper ownership/migration
+    # regression suite is needed.
+    if: github.event_name == 'workflow_dispatch'
+    needs: sanity
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: true
+
+      - name: Clean workspace
+        run: |
+          git clean -ffdx
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Prepare regression environment
+        run: |
+          ./scripts/ci/start-native-redis.sh
+          ./scripts/ci/install-linux-smoke.sh
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+
+      - name: Run core boundary regression tests
+        run: |
+          source .venv/bin/activate
+          python -m pytest \
+            apps/core/tests/test_architecture_boundary.py \
+            apps/core/tests/test_foundation_boundaries.py \
+            apps/core/tests/test_domain_ui_boundaries.py \
+            apps/app/tests/test_registry_ownership.py \
+            apps/emails/tests/test_model_ownership.py \
+            apps/emails/tests/test_admin_ownership.py \
+            apps/release/tests/test_upgrade_ownership.py \
+            apps/release/tests/test_upgrade_permission_ownership.py \
+            apps/release/tests/test_admin_view_ownership.py \
+            apps/analytics/tests/test_model_ownership.py \
+            apps/ops/tests/test_admin_notice_ownership.py \
+            apps/ops/tests/test_universal_installation.py \
+            apps/sites/tests/test_invite_lead_ownership.py \
+            apps/core/tests/test_boundary_migrations.py \
+            -q
