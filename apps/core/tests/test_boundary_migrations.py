@@ -27,7 +27,8 @@ UPGRADE_PERMISSION_CODENAME = "can_trigger_upgrade_checks"
 
 def _apps_for(targets):
     executor = MigrationExecutor(connection)
-    return executor, executor.loader.project_state(targets).apps
+    state_targets = [target for target in targets if target[1] is not None]
+    return executor, executor.loader.project_state(state_targets).apps
 
 
 def _assert_forward_state(apps, expected):
