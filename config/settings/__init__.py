@@ -11,6 +11,13 @@ if "apps.analytics" not in PROJECT_LOCAL_APPS:
 if "apps.analytics" not in INSTALLED_APPS:
     INSTALLED_APPS.append("apps.analytics")
 
+# AdminNotice was historically core-owned and therefore available on every node.
+# Keep ops universal for this transition while AdminNotice ownership lives there.
+if "apps.ops" not in PROJECT_LOCAL_APPS:
+    PROJECT_LOCAL_APPS.append("apps.ops")
+if "apps.ops" not in INSTALLED_APPS:
+    INSTALLED_APPS.append("apps.ops")
+
 from .routing import *  # noqa: F401,F403
 from .extensions import *  # noqa: F401,F403
 from .middleware import *  # noqa: F401,F403
