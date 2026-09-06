@@ -7,4 +7,4 @@ class ReleaseConfig(AppConfig):
     verbose_name = "Releases"
 
     def ready(self):
-        from apps.release import task_compat  # noqa: F401
+        from apps.release import admin_views, task_compat  # noqa: F401
