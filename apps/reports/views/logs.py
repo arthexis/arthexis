@@ -80,23 +80,69 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
             f"Release log directory {fallback} is not writable"
         )
 
-    warning = f"Release log directory {preferred} was not writable; using {fallback}."
+    settings.LOG_DIR = fallback
+    warning = f"Release log directory {preferred} is not writable; using {fallback}"
     logger.warning(warning)
     return fallback, warning
 
 
-def _fetch_github_release_asset(url: str, token: str | None = None) -> bytes:
-    headers = {"Accept": "application/octet-stream"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    response = requests.get(url, headers=headers, timeout=30)
-    response.raise_for_status()
-    return response.content
+def _github_headers(token: str | None) -> dict[str, str]:
+    if not token:
+        raise Exception("GitHub token is required to export artifacts")
+    return {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
 
 
-def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name, data in files:
-            archive.writestr(name, data)
-    return buffer.getvalue()
+def _github_request(
+    method: str,
+    url: str,
+    *,
+    token: str | None,
+    expected_status: set[int],
+    **kwargs,
+) -> requests.Response:
+    headers = kwargs.pop("headers", {})
+    headers.update(_github_headers(token))
+    response = requests.request(method, url, headers=headers, **kwargs)
+    if response.status_code not in expected_status:
+        detail = response.text.strip()
+        raise Exception(f"GitHub API request failed ({response.status_code}): {detail}")
+    return response
+
+
+def _download_publish_workflow_logs(
+    *,
+    owner: str,
+    repo: str,
+    run_id: int,
+    token: str | None,
+) -> str:
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/logs"
+    response = _github_request(
+        "get",
+        url,
+        token=token,
+        expected_status={200},
+        allow_redirects=True,
+        timeout=30,
+    )
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    sections: list[str] = []
+    for name in sorted(archive.namelist()):
+        if not name.endswith(".txt"):
+            continue
+        data = archive.read(name).decode("utf-8", errors="replace")
+        sections.append(f"--- {name} ---\n{data}")
+    return "\n\n".join(sections)
+
+
+def _truncate_publish_log(
+    log_text: str, *, limit: int = MAX_PYPI_PUBLISH_LOG_SIZE
+) -> str:
+    if len(log_text) <= limit:
+        return log_text
+    trimmed = log_text[-limit:]
+    return f"[truncated; last {limit} of {len(log_text)} chars]\n{trimmed}"
