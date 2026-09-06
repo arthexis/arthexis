@@ -6,12 +6,11 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.dispatch import Signal
 
-from apps.groups.security import ensure_default_staff_groups
-
 logger = logging.getLogger(__name__)
 
 
 user_data_flag_updated = Signal()
+superuser_provisioned = Signal()
 
 
 class EntityQuerySet(models.QuerySet):
@@ -70,7 +69,7 @@ class EntityUserManager(DjangoUserManager):
                 username=username, email=email, password=password, **extra_fields
             )
 
-        ensure_default_staff_groups(user)
+        superuser_provisioned.send(sender=self.model, user=user)
         return user
 
 
@@ -209,5 +208,6 @@ __all__ = [
     "EntityManager",
     "EntityQuerySet",
     "EntityUserManager",
+    "superuser_provisioned",
     "user_data_flag_updated",
 ]
