@@ -13,14 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 def _poll_emails() -> None:
-    """Poll all configured email collectors for new messages."""
-    try:
-        from apps.emails.models import EmailCollector
-    except Exception:  # pragma: no cover - app not ready
-        return
+    """Compatibility entry point for the email-owned polling task."""
+    from apps.emails.tasks import _poll_emails as poll_emails_impl
 
-    for collector in EmailCollector.objects.filter(is_enabled=True):
-        collector.collect()
+    poll_emails_impl()
 
 
 poll_emails = shared_task(_poll_emails)
