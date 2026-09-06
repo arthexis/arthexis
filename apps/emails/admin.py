@@ -5,8 +5,8 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin import EmailCollectorAdmin, EmailInboxAdmin
 from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, max_attr
 from apps.locals.user_data import EntityModelAdmin
-from apps.nodes.admin import EmailOutboxAdmin
 
+from .admin_outbox import EmailOutboxAdmin
 from .models import EmailBridge, EmailCollector, EmailInbox, EmailOutbox
 
 
