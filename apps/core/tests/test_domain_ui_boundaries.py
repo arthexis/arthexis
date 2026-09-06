@@ -69,19 +69,24 @@ def test_domain_admin_classes_are_registered_from_owner_apps():
     user_admin = admin.site._registry[User]
     rfid_admin = admin.site._registry[RFID]
 
-    # Django's registry contract stores ModelAdmin instances, not their classes.
-    # Checking isinstance() makes cross-test registry pollution fail explicitly
-    # instead of surfacing indirectly through the admin metaclass module.
+    # The registry contract is behavioral: Django stores ModelAdmin instances.
+    # Assert that those instances derive from the canonical owner classes, then
+    # inspect the canonical classes themselves for source ownership. The runtime
+    # instance class can be an implementation wrapper and its __module__ is not
+    # a stable ownership contract.
     assert isinstance(user_admin, UserAdmin)
     assert isinstance(rfid_admin, RFIDAdmin)
-    assert type(user_admin).__module__ == "apps.users.admin_core"
-    assert type(rfid_admin).__module__ == "apps.cards.admin_rfid"
+    assert UserAdmin.__module__ == "apps.users.admin_core"
+    assert RFIDAdmin.__module__ == "apps.cards.admin_rfid"
 
     if django_apps.is_installed("apps.odoo"):
+        from apps.odoo.admin_core import OdooEmployeeAdmin, OdooProductAdmin
         from apps.odoo.models import OdooEmployee, OdooProduct
 
-        assert type(admin.site._registry[OdooEmployee]).__module__ == "apps.odoo.admin_core"
-        assert type(admin.site._registry[OdooProduct]).__module__ == "apps.odoo.admin_core"
+        assert isinstance(admin.site._registry[OdooEmployee], OdooEmployeeAdmin)
+        assert isinstance(admin.site._registry[OdooProduct], OdooProductAdmin)
+        assert OdooEmployeeAdmin.__module__ == "apps.odoo.admin_core"
+        assert OdooProductAdmin.__module__ == "apps.odoo.admin_core"
 
 
 def test_legacy_urls_resolve_to_owner_views():
