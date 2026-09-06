@@ -82,36 +82,8 @@ jobs:
         run: |
           ./scripts/ci/linux-sanity.sh
 
-  core-boundary-regressions:
-    name: Core boundary regressions (manual)
-    # This intentionally never allocates a runner for ordinary PR/push events.
-    # Dispatch Linux CI manually on the branch when the deeper ownership/migration
-    # regression suite is needed.
-    if: github.event_name == 'workflow_dispatch'
-    needs: sanity
-    runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          clean: true
-
-      - name: Clean workspace
-        run: |
-          git clean -ffdx
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
-
-      - name: Prepare regression environment
-        run: |
-          ./scripts/ci/start-native-redis.sh
-          ./scripts/ci/install-linux-smoke.sh
-          source .venv/bin/activate
-          python -m pip install --only-binary=:all: -r requirements-ci.txt
-
-      - name: Run core boundary regression tests
+      - name: Run core boundary regression tests (manual)
+        if: github.event_name == 'workflow_dispatch'
         run: |
           source .venv/bin/activate
           python -m pytest \
