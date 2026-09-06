@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
@@ -38,7 +39,6 @@ def _assert_forward_state(apps, expected):
     ContentType = apps.get_model("contenttypes", "ContentType")
     Permission = apps.get_model("auth", "Permission")
     Group = apps.get_model("auth", "Group")
-    LogEntry = apps.get_model("admin", "LogEntry")
 
     usage = UsageEvent.objects.get(pk=expected["usage_pk"])
     invite = InviteLead.objects.get(pk=expected["invite_pk"])
@@ -84,7 +84,6 @@ def _assert_rollback_state(apps, expected):
     ContentType = apps.get_model("contenttypes", "ContentType")
     Permission = apps.get_model("auth", "Permission")
     Group = apps.get_model("auth", "Group")
-    LogEntry = apps.get_model("admin", "LogEntry")
 
     assert UsageEvent.objects.filter(pk=expected["usage_pk"]).exists()
     assert InviteLead.objects.filter(pk=expected["invite_pk"]).exists()
@@ -138,7 +137,6 @@ def test_remaining_core_model_ownership_upgrade_and_rollback_preserve_identity()
         ContentType = old_apps.get_model("contenttypes", "ContentType")
         Permission = old_apps.get_model("auth", "Permission")
         Group = old_apps.get_model("auth", "Group")
-        LogEntry = old_apps.get_model("admin", "LogEntry")
 
         usage = UsageEvent.objects.create(
             app_label="core",
@@ -175,6 +173,9 @@ def test_remaining_core_model_ownership_upgrade_and_rollback_preserve_identity()
             permission_id=permission.pk,
         )
 
+        # django.contrib.admin is intentionally outside OLD_TARGETS/NEW_TARGETS.
+        # Use its unchanged runtime model as an external FK-reference fixture while
+        # keeping all models whose migration state changes on the historical apps.
         log_entry = LogEntry.objects.create(
             action_flag=1,
             change_message="migration regression",
