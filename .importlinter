@@ -51,9 +51,7 @@ name = Emails admin should not depend on nodes admin internals
 type = forbidden
 source_modules =
     apps.emails.admin
+    apps.emails.admin_impl
 forbidden_modules =
     apps.nodes.admin
 allow_indirect_imports = True
-ignore_imports =
-    # Legacy coupling in apps.emails.admin; remove once EmailOutbox admin is moved out of nodes.
-    apps.emails.admin -> apps.nodes.admin
