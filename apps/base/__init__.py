@@ -1,3 +1,3 @@
-"""Base application containing shared model and fixture primitives."""
+"""Base application containing shared Entity model."""
 
-__all__ = ["fixtures", "models", "ownership"]
+__all__ = ["models"]
