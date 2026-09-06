@@ -13,6 +13,7 @@ from .release_publish_regressions import (
 globals().pop("test_install_health_workflow_is_manual_only_not_scheduled", None)
 globals().pop("test_host_redis_workflows_use_native_service", None)
 globals().pop("test_linux_ci_and_security_scans_run_on_pull_requests", None)
+globals().pop("test_security_workflows_keep_scheduled_baseline_scans", None)
 
 
 def test_tag_from_version_workflow_is_manual_and_dispatches_publish() -> None:
@@ -61,6 +62,21 @@ def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
         "public-release-audit.yml",
         "secret-scan.yml",
     ]
+
+
+def test_security_workflows_keep_scheduled_baseline_scans() -> None:
+    scheduled_workflows = {
+        workflow_path.name
+        for workflow_path in _workflow_files()
+        if isinstance(_workflow_on(_workflow_data(workflow_path.name)), dict)
+        and "schedule" in _workflow_on(_workflow_data(workflow_path.name))
+    }
+
+    assert {
+        "codeql.yml",
+        "secret-scan.yml",
+        "security-scan.yml",
+    } <= scheduled_workflows
 
 
 def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
