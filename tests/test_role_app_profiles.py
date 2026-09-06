@@ -1435,7 +1435,7 @@ def test_control_role_profile_env_refresh_startup_succeeds():
     result = subprocess.run(
         [
             sys.executable,
-            "env-refresh.py",
+            "scripts/maintenance/env_refresh.py",
             "--help",
         ],
         cwd=REPO_ROOT,

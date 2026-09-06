@@ -18,7 +18,7 @@ pytestmark = [gate.upgrade]
 
 @pytest.fixture
 def env_refresh_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
-    module_path = Path(__file__).resolve().parents[1] / "env-refresh.py"
+    module_path = Path(__file__).resolve().parents[1] / "scripts/maintenance/env_refresh.py"
     spec = importlib.util.spec_from_file_location("env_refresh_under_test", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load env-refresh module")
