@@ -5,7 +5,6 @@ from django.apps import apps as django_apps
 from apps.locals.user_data import EntityModelAdmin
 
 from . import site as site  # noqa: F401
-from . import users as users  # noqa: F401
 from .mixins import (
     OwnableAdminForm,
     OwnableAdminMixin,
@@ -17,7 +16,6 @@ from .mixins import (
 _EAGER_ADMIN_MODULES = (
     ("apps.core", ".admin_notice_admin"),
     ("apps.core", ".usage"),
-    ("apps.odoo", ".odoo"),
 )
 
 for app_config_name, module_name in _EAGER_ADMIN_MODULES:
