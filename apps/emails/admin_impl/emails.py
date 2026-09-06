@@ -293,10 +293,14 @@ class EmailInboxAdmin(
         return custom + urls
 
     def _setup_collector_url(self, inbox) -> str:
+        """Return the setup collector URL for the provided inbox."""
+
         return reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
 
     @admin.action(description=_("Setup Collector"))
     def setup_collector(self, request, queryset=None):
+        """Open the collector setup wizard for a selected inbox."""
+
         selected_ids = request.POST.getlist("_selected_action")
         if len(selected_ids) > 1:
             self.message_user(request, _("Select exactly one inbox to start setup."), messages.ERROR)
@@ -318,12 +322,16 @@ class EmailInboxAdmin(
     setup_collector.requires_queryset = False
 
     def setup_collector_action(self, request, obj):
+        """Open the collector setup wizard from the inbox change form."""
+
         return redirect(self._setup_collector_url(obj))
 
     setup_collector_action.label = _("Setup Collector")
     setup_collector_action.short_description = _("Setup Collector")
 
     def setup_collector_view(self, request, object_id):
+        """Render and process the interactive collector setup wizard."""
+
         inbox = self.get_object(request, object_id)
         if not inbox:
             self.message_user(request, _("Unknown inbox."), messages.ERROR)
@@ -394,6 +402,8 @@ class EmailInboxAdmin(
         return redirect("..")
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """Inject admin utility links into the inbox change form context."""
+
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
@@ -459,37 +469,29 @@ class EmailInboxAdmin(
             if form.is_valid():
                 results = []
                 for inbox in queryset:
-                    try:
-                        found = inbox.search_messages(
-                            subject=form.cleaned_data["subject"],
-                            from_address=form.cleaned_data["from_address"],
-                            body=form.cleaned_data["body"],
-                        )
-                        results.append((inbox, found, None))
-                    except Exception as exc:  # pragma: no cover - admin feedback
-                        results.append((inbox, [], str(exc)))
+                    messages = inbox.search_messages(
+                        subject=form.cleaned_data["subject"].replace("\r", "").replace("\n", ""),
+                        from_address=form.cleaned_data["from_address"].replace("\r", "").replace("\n", ""),
+                        body=form.cleaned_data["body"].replace("\r", "").replace("\n", ""),
+                        use_regular_expressions=False,
+                    )
+                    results.append({"inbox": inbox, "messages": messages})
                 context = {
-                    "title": "Email search results",
+                    "form": form,
                     "results": results,
                     "queryset": queryset,
+                    "action": "search_inbox",
                     "opts": self.model._meta,
                 }
-                return TemplateResponse(request, "admin/core/email_search_results.html", context)
+                return TemplateResponse(
+                    request, "admin/core/emailinbox/search.html", context
+                )
         else:
             form = EmailSearchForm()
-
         context = {
-            "title": "Search selected inboxes",
             "form": form,
             "queryset": queryset,
+            "action": "search_inbox",
             "opts": self.model._meta,
         }
-        return TemplateResponse(request, "admin/core/email_search_form.html", context)
-
-
-__all__ = [
-    "EmailCollectorAdmin",
-    "EmailInboxAdmin",
-    "EmailSearchForm",
-    "SETUP_COLLECTOR_TEXT",
-]
+        return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
