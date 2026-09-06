@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./status.sh [--wait]
+# Reports installation, service, feature, startup, and reachability status; --wait polls until the application becomes reachable or times out.
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"

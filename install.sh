@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./install.sh [options]
+# Bootstraps or repairs an Arthexis installation; run with no options for defaults, or pass service, role, feature, channel, and start/repair flags as needed.
 set -e
 
 # Bootstrap logging and helper utilities used throughout the installation.
@@ -711,7 +713,6 @@ enabled_entries = read_enabled_apps_lock(base_dir)
 if enabled_entries is None:
     print("No enabled-apps lock present; route metadata unchanged.")
     raise SystemExit(0)
-
 direct_entries = read_enabled_apps_lock_direct_entries(base_dir)
 direct_sources = read_enabled_apps_lock_direct_sources(base_dir)
 next_direct_entries = set(direct_entries or ())

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./upgrade.sh [options]
+# Upgrades Arthexis on the stable channel by default; use --latest for newest changes, --pre-check for a read-only check, or pinned/branch options for a specific target.
 set -eE
 
 # Initialize logging and helper functions shared across upgrade steps.
@@ -2397,7 +2399,6 @@ can_prompt_for_confirmation() {
   if ! [ -t 0 ]; then
     return 1
   fi
-
   local process_state=""
   process_state="$(ps -o stat= -p "$$" 2>/dev/null | tr -d '[:space:]')" || return 1
 

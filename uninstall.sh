@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./uninstall.sh [--service NAME] [--no-warn] [--rfid-service|--no-rfid-service]
+# Stops and removes the Arthexis installation state; it prompts before proceeding and may delete db.sqlite3.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

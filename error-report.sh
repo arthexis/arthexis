@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./error-report.sh [options]
+# Generates an Arthexis diagnostic report zip; use --analyze to analyze diagnostics instead, or --help for all options.
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"

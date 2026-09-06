@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./command.sh <operational-command> [args...] or ./command.sh list
+# Runs operator-facing runtime commands through the Arthexis command API; run ./install.sh first to create .venv.
 # Run this script directly (ensure the executable bit is set).
 set -e
 
