@@ -33,6 +33,30 @@ def test_installed_mode_uses_standard_linux_defaults(tmp_path: Path) -> None:
     assert paths.run_dir == Path("/run/arthexis")
 
 
+def test_standalone_installed_mode_requires_no_gway_state(tmp_path: Path) -> None:
+    paths = resolve_arthexis_paths(
+        project_root=tmp_path,
+        environ={"ARTHEXIS_MODE": "installed"},
+    )
+
+    assert paths.mode is ArthexisMode.INSTALLED
+    assert paths.app_dir == Path("/opt/arthexis/current")
+    assert paths.data_dir == Path("/var/lib/arthexis")
+
+
+def test_gway_environment_does_not_select_arthexis_install_mode(tmp_path: Path) -> None:
+    paths = resolve_arthexis_paths(
+        project_root=tmp_path,
+        environ={
+            "GWAY_CONFIG_DIR": str(tmp_path / "gway-config"),
+            "GWAY_DATA_DIR": str(tmp_path / "gway-data"),
+        },
+    )
+
+    assert paths.mode is ArthexisMode.CHECKOUT
+    assert paths.app_dir == tmp_path
+
+
 def test_mode_can_be_selected_from_environment(tmp_path: Path) -> None:
     paths = resolve_arthexis_paths(
         project_root=tmp_path,
