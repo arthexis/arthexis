@@ -4,54 +4,26 @@ import logging
 
 from celery import shared_task
 
-from apps.release import release_workflow
-
-from .utils import _get_package_release_model
+from apps.release.tasks.maintenance import (
+    _run_release_data_transform,
+    _run_scheduled_release,
+    execute_scheduled_release,
+    run_release_data_transform,
+    run_scheduled_release,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
 def _poll_emails() -> None:
-    """Poll all configured email collectors for new messages."""
-    try:
-        from apps.emails.models import EmailCollector
-    except Exception:  # pragma: no cover - app not ready
-        return
+    """Compatibility entry point for the email-owned polling task."""
+    from apps.emails.tasks import _poll_emails as poll_emails_impl
 
-    for collector in EmailCollector.objects.filter(is_enabled=True):
-        collector.collect()
+    poll_emails_impl()
 
 
 poll_emails = shared_task(_poll_emails)
-
-
-def execute_scheduled_release(release_id: int) -> None:
-    """Run the automated release flow for a scheduled PackageRelease."""
-
-    model = _get_package_release_model()
-    if model is None:
-        logger.warning("Scheduled release %s skipped: model unavailable", release_id)
-        return
-
-    release = model.objects.filter(pk=release_id).first()
-    if release is None:
-        logger.warning("Scheduled release %s skipped: release not found", release_id)
-        return
-
-    try:
-        release_workflow.run_headless_publish(release, auto_release=True)
-    finally:
-        release.clear_schedule(save=True)
-
-
-def _run_scheduled_release(release_id: int) -> None:
-    """Entrypoint used by django-celery-beat to trigger scheduled releases."""
-
-    execute_scheduled_release(release_id)
-
-
-run_scheduled_release = shared_task(_run_scheduled_release)
 
 
 def _run_client_report_schedule(schedule_id: int) -> None:
@@ -74,24 +46,14 @@ def _run_client_report_schedule(schedule_id: int) -> None:
 run_client_report_schedule = shared_task(_run_client_report_schedule)
 
 
-def _run_release_data_transform(transform_name: str) -> None:
-    """Execute one deferred release data transform."""
-
-    from apps.release.domain import run_transform
-
-    try:
-        result = run_transform(transform_name)
-    except KeyError:
-        logger.warning("Unknown release transform %s", transform_name)
-        return
-
-    logger.info(
-        "Release transform %s processed=%s updated=%s complete=%s",
-        transform_name,
-        result.processed,
-        result.updated,
-        result.complete,
-    )
-
-
-run_release_data_transform = shared_task(_run_release_data_transform)
+__all__ = [
+    "_poll_emails",
+    "_run_client_report_schedule",
+    "_run_release_data_transform",
+    "_run_scheduled_release",
+    "execute_scheduled_release",
+    "poll_emails",
+    "run_client_report_schedule",
+    "run_release_data_transform",
+    "run_scheduled_release",
+]

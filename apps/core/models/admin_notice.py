@@ -1,32 +1,15 @@
-from __future__ import annotations
+from importlib import import_module
+import sys
 
-from django.conf import settings
-from django.db import models
+from django.apps import apps as django_apps
 
-from apps.base.models import Entity
-
-
-class AdminNotice(Entity):
-    """Administrative notices shown at the top of the admin dashboard."""
-
-    message = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    dismissed_at = models.DateTimeField(null=True, blank=True)
-    dismissed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dismissed_admin_notices",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
-        permissions = [
-            ("can_trigger_upgrade_checks", "Can trigger upgrade checks"),
-        ]
-        verbose_name = "Admin Notice"
-        verbose_name_plural = "Admin Notices"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"Admin Notice {self.pk}"
+if django_apps.is_installed("apps.ops"):
+    _module = import_module("apps.ops.admin_notice")
+    sys.modules[__name__] = _module
+else:
+    def __getattr__(name: str):
+        if name == "AdminNotice":
+            raise AttributeError(
+                f"module {__name__!r} has no attribute {name!r}; apps.ops is not installed"
+            )
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

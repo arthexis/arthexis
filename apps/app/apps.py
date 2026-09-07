@@ -1,5 +1,4 @@
 from django.apps import AppConfig as BaseAppConfig
-from django.db import models
 
 
 class AppConfig(BaseAppConfig):
@@ -8,3 +7,4 @@ class AppConfig(BaseAppConfig):
 
     def ready(self):
         from apps.app import signals  # noqa: F401
+        from apps.app.checks import apps_registry  # noqa: F401

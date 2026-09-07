@@ -1,10 +1,11 @@
 import json
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.db import connection
 
-from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
+from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.groups.security import ensure_security_groups_exist
 
@@ -90,3 +91,15 @@ def test_security_group_fixture_loads_when_group_name_already_exists(db):
     )
 
     assert SecurityGroup.objects.filter(name=SITE_OPERATOR_GROUP_NAME).count() == 1
+
+
+def test_superuser_provisioning_applies_groups_owned_defaults(db):
+    """Groups should subscribe to the base provisioning event and own group policy."""
+
+    user_model = get_user_model()
+    username = "groups-signal-superuser"
+    user_model.all_objects.filter(username=username).delete()
+
+    user = user_model.objects.create_superuser(username=username, password=None)
+
+    assert user.groups.filter(name=EXTERNAL_AGENT_GROUP_NAME).exists()

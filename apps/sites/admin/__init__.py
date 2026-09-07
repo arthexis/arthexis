@@ -3,6 +3,7 @@
 from . import (
     admin_badge_admin,
     application_admin,
+    invites,
     landing_admin,
     reports_admin,
     site_admin,
@@ -14,6 +15,7 @@ from . import (
 __all__ = [
     "admin_badge_admin",
     "application_admin",
+    "invites",
     "landing_admin",
     "reports_admin",
     "site_admin",

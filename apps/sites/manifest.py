@@ -5,5 +5,6 @@ DJANGO_APPS = [
 ]
 
 REQUIRES_APPS = [
+    "apps.emails",
     "apps.modules",
 ]

@@ -81,3 +81,39 @@ jobs:
       - name: Run Linux sanity checks
         run: |
           ./scripts/ci/linux-sanity.sh
+
+      - name: Run core boundary regression tests (manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+
+          # Keep boundary files process-isolated. Several checks intentionally
+          # exercise Django startup/module compatibility state, so one file must
+          # not leave global registries or imported compatibility modules behind
+          # for the next file.
+          boundary_tests=(
+            apps/core/tests/test_architecture_boundary.py
+            apps/core/tests/test_foundation_boundaries.py
+            apps/core/tests/test_domain_ui_boundaries.py
+            apps/app/tests/test_registry_ownership.py
+            apps/emails/tests/test_model_ownership.py
+            apps/emails/tests/test_admin_ownership.py
+            apps/release/tests/test_upgrade_ownership.py
+            apps/release/tests/test_upgrade_permission_ownership.py
+            apps/release/tests/test_admin_view_ownership.py
+            apps/analytics/tests/test_model_ownership.py
+            apps/ops/tests/test_admin_notice_ownership.py
+            apps/ops/tests/test_universal_installation.py
+            apps/sites/tests/test_invite_lead_ownership.py
+          )
+
+          for test_file in "${boundary_tests[@]}"; do
+            python -m pytest "$test_file" -q
+          done
+
+          # The normal pytest bootstrap disables migrations for speed. This
+          # regression explicitly needs Django's real migration graph, so start
+          # a fresh process with migrations enabled from bootstrap onward.
+          PYTEST_DISABLE_MIGRATIONS=0 \
+            python -m pytest apps/core/tests/test_boundary_migrations.py -q

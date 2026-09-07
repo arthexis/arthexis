@@ -51,9 +51,19 @@ name = Emails admin should not depend on nodes admin internals
 type = forbidden
 source_modules =
     apps.emails.admin
+    apps.emails.admin_impl
 forbidden_modules =
     apps.nodes.admin
 allow_indirect_imports = True
-ignore_imports =
-    # Legacy coupling in apps.emails.admin; remove once EmailOutbox admin is moved out of nodes.
-    apps.emails.admin -> apps.nodes.admin
+
+[importlinter:contract:app-registry-no-core]
+name = Application registry implementation must not depend on core
+type = forbidden
+source_modules =
+    apps.app.checks.apps_registry
+    apps.app.services.profile_apps
+    apps.app.management.commands.apps
+    apps.app.management.commands.enabled_apps_lock
+forbidden_modules =
+    apps.core
+allow_indirect_imports = True

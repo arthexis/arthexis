@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from apps.core.tasks import log_retention
+from apps.nodes import log_retention
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +28,7 @@ def test_run_log_retention_applies_two_year_default_to_archived_logs(settings, t
     _write_file(tmp_path / "archive" / "station.log.1", days_old=731)
     _write_file(tmp_path / "archive" / "station.log.1.recent", days_old=10)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not (tmp_path / "archive" / "station.log.1").exists()
@@ -39,7 +39,7 @@ def test_run_log_retention_preserves_active_transactional_logs(settings, tmp_pat
     settings.LOG_DIR = str(tmp_path)
     _write_file(tmp_path / "error.log", days_old=365)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 0
     assert (tmp_path / "error.log").exists()
@@ -58,7 +58,7 @@ def test_run_log_retention_preserves_managed_active_artifacts(
     )
     _write_file(tmp_path / "rfid-scans.ndjson", days_old=365)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 0
     assert (tmp_path / "rfid-scans.ndjson").exists()
@@ -69,7 +69,7 @@ def test_run_log_retention_preserves_dynamic_root_active_app_logs(settings, tmp_
     _write_file(tmp_path / "front-desk.log", days_old=365)
     _write_file(tmp_path / "back-office.log", days_old=365)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 0
     assert (tmp_path / "front-desk.log").exists()
@@ -80,7 +80,7 @@ def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
     _write_file(tmp_path / "content-drops" / "sample.json", days_old=900)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 0
     assert (tmp_path / "content-drops" / "sample.json").exists()
@@ -91,7 +91,7 @@ def test_run_log_retention_trims_stale_unmanaged_rotated_logs(settings, tmp_path
     _write_file(tmp_path / "command.log.1", days_old=731)
     _write_file(tmp_path / "error.log", days_old=365)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not (tmp_path / "command.log.1").exists()
@@ -109,7 +109,7 @@ def test_run_log_retention_trims_stale_scan_and_session_logs(settings, tmp_path)
     )
     _write_file(tmp_path / "content-drops" / "sample.json", days_old=900)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 3
     assert not (tmp_path / "rfid-scans.ndjson").exists()
@@ -131,7 +131,7 @@ def test_run_log_retention_scopes_session_json_to_log_dir_sessions_subtree(
     )
     _write_file(log_dir / "content-drops" / "sample.json", days_old=900)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not (log_dir / "sessions" / "CID" / "202404240001.json").exists()
@@ -152,7 +152,7 @@ def test_run_log_retention_preserves_in_progress_session_json_during_disk_pressu
     levels = iter([85.0, 85.0, 70.0])
     monkeypatch.setattr(log_retention, "_disk_usage_percent", lambda _path: next(levels))
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 0
     assert result.disk_percent == 70.0
@@ -170,7 +170,7 @@ def test_run_log_retention_trims_stale_malformed_session_json_bytes(
     stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not session_log.exists()
@@ -187,7 +187,7 @@ def test_run_log_retention_trims_completed_session_json_with_invalid_bytes(
     stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not session_log.exists()
@@ -203,17 +203,25 @@ def test_run_log_retention_trims_large_completed_session_json(settings, tmp_path
     stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.deleted_files == 1
     assert not session_log.exists()
 
 
-def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path, monkeypatch):
+def test_run_log_retention_sends_alert_when_disk_remains_high(
+    settings,
+    tmp_path,
+    monkeypatch,
+):
     settings.LOG_DIR = str(tmp_path)
 
     monkeypatch.setattr(log_retention, "_trim_with_policy", lambda _log_dir: (0, 0))
-    monkeypatch.setattr(log_retention, "_delete_candidates", lambda _log_dir, max_age_days: (1, 10))
+    monkeypatch.setattr(
+        log_retention,
+        "_delete_candidates",
+        lambda _log_dir, max_age_days: (1, 10),
+    )
 
     levels = iter([85.0, 85.0, 85.0, 85.0, 85.0, 85.0])
     monkeypatch.setattr(log_retention, "_disk_usage_percent", lambda _path: next(levels))
@@ -226,7 +234,7 @@ def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path
 
     monkeypatch.setattr(log_retention, "_send_disk_pressure_alert", _record_alert)
 
-    result = log_retention._run_log_retention()
+    result = log_retention.run_log_retention()
 
     assert result.alert_sent is True
     assert calls == [(85.0, 85.0)]
