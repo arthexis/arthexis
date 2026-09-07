@@ -83,6 +83,20 @@ jobs:
         run: |
           ./scripts/ci/linux-sanity.sh
 
+      - name: Validate GWAY Django adapter
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/gway-config
+          XDG_DATA_HOME: ${{ runner.temp }}/gway-data
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          python -m pip install --disable-pip-version-check \
+            "git+https://github.com/arthexis/gway.git@main"
+          gway register .
+          gway arthexis --help
+          gway arthexis check
+          gway arthexis migrate --plan
+
       - name: Run core boundary regression tests (manual)
         if: github.event_name == 'workflow_dispatch'
         run: |
