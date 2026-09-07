@@ -4,6 +4,11 @@ from .base import *  # noqa: F401,F403
 from .security import *  # noqa: F401,F403
 from .apps import *  # noqa: F401,F403
 
+# Events is a local Arthexis app and may be enabled by the install app lock.
+# Keep the assembled registry aware of it until the app registry is consolidated.
+if "apps.events" not in PROJECT_LOCAL_APPS:
+    PROJECT_LOCAL_APPS.append("apps.events")
+
 # Usage analytics was historically core-owned and therefore present on every node.
 # Keep that runtime invariant while ownership moves to its dedicated app.
 if "apps.analytics" not in PROJECT_LOCAL_APPS:
