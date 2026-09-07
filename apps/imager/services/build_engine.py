@@ -42,6 +42,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from apps.imager.ap_addressing import recovery_ap_address
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.reservations import (
     RESERVATION_ENV_PATH,
@@ -417,10 +418,18 @@ bootstrap_enable_recovery_ap() {
   ap_psk="$(bootstrap_recovery_ap_psk)" || return 0
   [ -n "$ap_psk" ] || return 0
   local ap_channel="${ARTHEXIS_RECOVERY_AP_CHANNEL:-1}"
+  local ap_address="${ARTHEXIS_RECOVERY_AP_ADDRESS:-}"
+  local ipv4_args=(ipv4.method shared)
+  if [ -n "$ap_address" ]; then
+    ipv4_args+=(ipv4.addresses "$ap_address")
+  else
+    # Legacy fallback for images built without a reserved node identity.
+    ipv4_args+=(ipv4.addresses 10.42.0.1/16)
+  fi
   nmcli radio wifi on >/dev/null 2>&1 || true
   nmcli con delete "$ap_ssid" >/dev/null 2>&1 || true
   nmcli con add type wifi ifname "$ap_iface" con-name "$ap_ssid" autoconnect yes ssid "$ap_ssid" >/dev/null 2>&1 || return 0
-  if ! nmcli con mod "$ap_ssid" connection.interface-name "$ap_iface" connection.autoconnect yes connection.autoconnect-priority 100 802-11-wireless.mode ap 802-11-wireless.hidden yes 802-11-wireless.band bg 802-11-wireless.channel "$ap_channel" ipv4.method shared ipv4.addresses 10.42.0.1/16 wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$ap_psk" >/dev/null 2>&1; then
+  if ! nmcli con mod "$ap_ssid" connection.interface-name "$ap_iface" connection.autoconnect yes connection.autoconnect-priority 100 802-11-wireless.mode ap 802-11-wireless.hidden yes 802-11-wireless.band bg 802-11-wireless.channel "$ap_channel" "${ipv4_args[@]}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$ap_psk" >/dev/null 2>&1; then
     nmcli con delete "$ap_ssid" >/dev/null 2>&1 || true
     return 0
   fi
@@ -1245,7 +1254,17 @@ def _customize_image(
             error_message="guestfish failed while injecting bootstrap files",
         )
         if reservation is not None:
-            _write_linux_text(reservation_env, render_reservation_env(reservation))
+            try:
+                reserved_ap_address = recovery_ap_address(
+                    reservation.hostname_prefix, reservation.number
+                )
+            except ValueError as exc:
+                raise ImagerBuildError(str(exc)) from exc
+            _write_linux_text(
+                reservation_env,
+                render_reservation_env(reservation)
+                + f"ARTHEXIS_RECOVERY_AP_ADDRESS={shlex.quote(reserved_ap_address)}\n",
+            )
             _write_linux_text(reservation_json, render_reservation_json(reservation))
             _guestfish_run_commands(
                 image_path,
