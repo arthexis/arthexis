@@ -7,7 +7,7 @@ from apps.ocpp.consumers.csms.actions.authorization import AuthorizationActionHa
 
 
 class AuthorizationEventTests(SimpleTestCase):
-    async def test_authorize_emits_masked_result_event(self):
+    async def test_authorize_emits_full_result_and_original_request(self):
         account = object()
         decision = SimpleNamespace(
             status="Accepted",
@@ -26,13 +26,15 @@ class AuthorizationEventTests(SimpleTestCase):
             ),
             _record_rfid_attempt=AsyncMock(),
         )
+        payload = {"idTag": "04A1B2C3", "vendorReplayMarker": "buffered"}
+        raw = '[2,"msg-123","Authorize",{"idTag":"04A1B2C3"}]'
 
         with patch(
             "apps.ocpp.consumers.csms.actions.authorization.aemit_event",
             new_callable=AsyncMock,
         ) as emit_event:
             response = await AuthorizationActionHandler(consumer).handle(
-                {"idTag": "04A1B2C3"}, None, None, None
+                payload, "msg-123", raw, raw
             )
 
         self.assertEqual(response, {"idTagInfo": {"status": "Accepted"}})
@@ -40,7 +42,10 @@ class AuthorizationEventTests(SimpleTestCase):
             "ocpp.authorization",
             charger_id="gway-001",
             connector_id=1,
-            id_tag="****B2C3",
+            id_tag="04A1B2C3",
+            message_id="msg-123",
+            original=payload,
+            raw=raw,
             status="Accepted",
             policy="registered",
             reason="allowed",
