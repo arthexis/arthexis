@@ -9,7 +9,6 @@ class UsersConfig(AppConfig):
     def ready(self):
         from django.core.signals import got_request_exception
 
-        from . import admin_core  # noqa: F401
         from .diagnostics import attach_exception_signal
 
         got_request_exception.connect(
