@@ -157,9 +157,7 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
         if obj is not None:
-            change_password_url = reverse(
-                "admin:auth_user_password_change", args=[request.user.pk]
-            )
+            change_password_url = reverse("admin:password_change")
             fieldsets.append(
                 (
                     _("Current user"),
