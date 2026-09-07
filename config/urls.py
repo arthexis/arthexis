@@ -7,10 +7,12 @@ from django.urls import include, path
 from django.views.generic.base import RedirectView
 
 from apps.media.views import serve_media_file
+from apps.users import admin_core as _users_admin_core  # noqa: F401
 from config.admin_urls import admin_route
 from config.route_providers import autodiscovered_route_patterns
 
-# Ensure admin registrations are loaded before URL resolution.
+# Load all admin registrations before materializing admin.site.urls. UserAdmin
+# still lives in admin_core during the core-boundary transition.
 admin.autodiscover()
 
 admin.site.site_header = settings.ADMIN_SITE_HEADER
