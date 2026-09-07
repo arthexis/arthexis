@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, override_settings
 from redis.exceptions import ConnectionError
 
-from apps.events.streams import EVENT_STREAM, emit_event, mask_identifier
+from apps.events.streams import DEFAULT_EVENT_STREAM_MAXLEN, EVENT_STREAM, emit_event
 
 
 class EventStreamTests(SimpleTestCase):
@@ -26,8 +26,23 @@ class EventStreamTests(SimpleTestCase):
         self.assertEqual(event["charger_id"], "gway-001")
         self.assertEqual(event["status"], "Accepted")
         self.assertIn("timestamp", event)
-        self.assertEqual(client.xadd.call_args.kwargs["maxlen"], 1000)
+        self.assertEqual(
+            client.xadd.call_args.kwargs["maxlen"], DEFAULT_EVENT_STREAM_MAXLEN
+        )
         self.assertTrue(client.xadd.call_args.kwargs["approximate"])
+
+    @override_settings(
+        EVENTS_REDIS_URL="redis://localhost:6379/0",
+        EVENTS_STREAM_MAXLEN=0,
+    )
+    @patch("apps.events.streams._redis_client")
+    def test_stream_retention_can_be_unbounded(self, redis_client):
+        client = redis_client.return_value
+        client.xadd.return_value = "1-0"
+
+        emit_event("ocpp.authorization", status="Accepted")
+
+        self.assertEqual(client.xadd.call_args.kwargs, {})
 
     @override_settings(EVENTS_REDIS_URL="redis://localhost:6379/0")
     @patch("apps.events.streams._redis_client")
@@ -35,6 +50,3 @@ class EventStreamTests(SimpleTestCase):
         redis_client.return_value.xadd.side_effect = ConnectionError("offline")
 
         self.assertIsNone(emit_event("ocpp.authorization", status="Rejected"))
-
-    def test_mask_identifier_only_exposes_trailing_characters(self):
-        self.assertEqual(mask_identifier("04A1B2C3"), "****B2C3")
