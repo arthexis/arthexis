@@ -55,9 +55,10 @@ MANIFEST_COMPANION_APP_SELECTORS = {
     "apps.celery.beat_app.CeleryBeatConfig",
 }
 EXPECTED_PROFILE_APP_DEPENDENCIES = {
+    "apps.analytics": ("apps.features",),
     "apps.celery": ("apps.celery.beat_app.CeleryBeatConfig",),
     "apps.clocks": ("apps.discovery",),
-    "apps.core": ("apps.discovery", "apps.emails"),
+    "apps.core": ("apps.discovery",),
     "apps.dns": ("apps.nmcli",),
     "apps.energy": ("apps.cards", "apps.maps"),
     "apps.maps": ("apps.energy",),
@@ -75,7 +76,7 @@ EXPECTED_PROFILE_APP_DEPENDENCIES = {
         "apps.protocols",
     ),
     "apps.odoo": ("apps.discovery",),
-    "apps.sites": ("apps.modules",),
+    "apps.sites": ("apps.emails", "apps.modules"),
 }
 
 
@@ -1449,7 +1450,7 @@ def test_control_role_profile_env_refresh_startup_succeeds():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_control_role_profile_admin_base_template_tolerates_missing_ops(tmp_path):
+def test_control_role_profile_admin_base_template_keeps_required_ops(tmp_path):
     env = os.environ.copy()
     env["ARTHEXIS_ROLE_APP_PROFILES"] = "true"
     env["ARTHEXIS_SQLITE_PATH"] = str(tmp_path / "control-profile.sqlite3")
@@ -1486,7 +1487,7 @@ def test_control_role_profile_admin_base_template_tolerates_missing_ops(tmp_path
             "    'site_header': 'Django administration',",
             "    'has_permission': False,",
             "}",
-            "assert not apps.is_installed('apps.ops')",
+            "assert apps.is_installed('apps.ops')",
             "template = get_template('admin/base_site.html').template",
             "settings_override = override_settings(STORAGES=storages)",
             "settings_override.enable()",
