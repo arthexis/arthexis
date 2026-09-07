@@ -28,9 +28,10 @@ on:
       - ready_for_review
     paths:
       - '**'
+  # Main pushes are covered by Install Health Check. Keep release branches here
+  # because they can receive changes independently of the normal PR-to-main flow.
   push:
     branches:
-      - main
       - 'release/**'
     paths:
       - '**/*.py'
