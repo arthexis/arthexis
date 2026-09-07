@@ -6,6 +6,7 @@ from channels.db import database_sync_to_async
 
 from apps.cards.models import RFID as CoreRFID
 from apps.cards.models import RFIDAttempt
+from apps.events import aemit_event
 
 
 class AuthorizationActionHandler:
@@ -52,6 +53,18 @@ class AuthorizationActionHandler:
                 else RFIDAttempt.Status.REJECTED
             ),
             account=account,
+            policy=decision.policy,
+            reason=decision.reason,
+        )
+        await aemit_event(
+            "ocpp.authorization",
+            charger_id=getattr(self.consumer, "charger_id", None),
+            connector_id=getattr(self.consumer, "connector_value", None),
+            id_tag=id_tag,
+            message_id=_msg_id,
+            original=payload,
+            raw=_raw,
+            status=decision.status,
             policy=decision.policy,
             reason=decision.reason,
         )
