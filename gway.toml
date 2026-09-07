@@ -1,0 +1,7 @@
+[project]
+name = "arthexis"
+
+[adapter]
+type = "django"
+manage = "manage.py"
+settings = "config.settings"
