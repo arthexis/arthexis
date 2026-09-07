@@ -18,18 +18,28 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Recover superseded Install Health run
+      - name: Recover cancelled Install Health run
         shell: bash
         run: |
           set -Eeuo pipefail
 
+          cancelled_run_id='${{ github.event.workflow_run.id }}'
+          cancelled_attempt='${{ github.event.workflow_run.run_attempt }}'
           cancelled_sha='${{ github.event.workflow_run.head_sha }}'
           current_main_sha="$(
             gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha'
           )"
 
           if [[ "${cancelled_sha}" == "${current_main_sha}" ]]; then
-            echo "Cancelled Install Health run is still current main; treating it as an explicit/manual cancellation."
+            if (( cancelled_attempt >= 2 )); then
+              echo "Current-main Install Health run ${cancelled_run_id} was cancelled again on attempt ${cancelled_attempt}; not retrying further."
+              exit 0
+            fi
+
+            echo "Cancelled Install Health run ${cancelled_run_id} is still current main ${current_main_sha}; rerunning it once."
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${cancelled_run_id}/rerun"
             exit 0
           fi
 
