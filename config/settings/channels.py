@@ -12,6 +12,7 @@ CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "").strip()
 OCPP_STATE_REDIS_URL = os.environ.get("OCPP_STATE_REDIS_URL", "").strip()
 if not OCPP_STATE_REDIS_URL:
     OCPP_STATE_REDIS_URL = CHANNEL_REDIS_URL or resolve_celery_broker_url()
+EVENTS_REDIS_URL = os.environ.get("EVENTS_REDIS_URL", "").strip() or OCPP_STATE_REDIS_URL
 
 OCPP_AUTHORIZATION_POLICY = (
     os.environ.get("OCPP_AUTHORIZATION_POLICY", "").strip().lower()
