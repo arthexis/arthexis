@@ -7,6 +7,7 @@ from django.urls import include, path
 from django.views.generic.base import RedirectView
 
 from apps.media.views import serve_media_file
+from apps.users import admin_core as _users_admin_core  # noqa: F401
 from config.admin_urls import admin_route
 from config.route_providers import autodiscovered_route_patterns
 
