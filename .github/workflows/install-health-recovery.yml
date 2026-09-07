@@ -1,0 +1,55 @@
+name: Install Health Recovery
+
+on:
+  workflow_run:
+    workflows:
+      - Install Health Check
+    types:
+      - completed
+
+jobs:
+  ensure-latest-main-run:
+    name: Ensure latest main Install Health run exists
+    if: ${{ github.event.workflow_run.conclusion == 'cancelled' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Recover superseded Install Health run
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cancelled_sha='${{ github.event.workflow_run.head_sha }}'
+          current_main_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha'
+          )"
+
+          if [[ "${cancelled_sha}" == "${current_main_sha}" ]]; then
+            echo "Cancelled Install Health run is still current main; treating it as an explicit/manual cancellation."
+            exit 0
+          fi
+
+          # Give the newer push-triggered run time to register before deciding
+          # that recovery dispatch is necessary.
+          sleep 10
+
+          current_run_id="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/install-health.yml/runs?branch=main&per_page=100" \
+              --jq --arg sha "${current_main_sha}" \
+              '.workflow_runs[] | select(.head_sha == $sha) | .id' \
+              | sed -n '1p'
+          )"
+
+          if [[ -n "${current_run_id}" ]]; then
+            echo "Install Health run ${current_run_id} already exists for current main ${current_main_sha}."
+            exit 0
+          fi
+
+          echo "No Install Health run found for current main ${current_main_sha}; dispatching recovery run."
+          gh workflow run install-health.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main
