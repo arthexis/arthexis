@@ -1,7 +1,9 @@
 """Central filesystem path contract for checkout and installed Arthexis modes.
 
-This module is intentionally side-effect free: resolving paths never creates directories
-and never infers installed mode from filesystem state. Consumers can adopt it incrementally.
+This module is intentionally side-effect free: resolving paths never creates directories,
+never infers installed mode from filesystem state, and does not depend on GWAY or any
+other external project manager. Consumers can adopt it incrementally, whether Arthexis
+is installed directly or managed as a convenience by GWAY.
 """
 
 from __future__ import annotations
@@ -105,7 +107,8 @@ def resolve_arthexis_paths(
 
     Every logical path can be overridden independently with its ``ARTHEXIS_*_DIR``
     environment variable. This makes writable locations redirectable in CI and tests
-    without requiring root privileges.
+    without requiring root privileges. Selection is intentionally Arthexis-owned and
+    requires no GWAY-specific environment, registry, or installation state.
     """
 
     env = os.environ if environ is None else environ
