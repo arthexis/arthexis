@@ -44,4 +44,8 @@ def test_release_publish_steps_share_canonical_order() -> None:
 
 def test_core_release_publish_pipeline_path_is_adapter() -> None:
     assert UI_PIPELINE is RELEASE_PIPELINE
-    assert UI_PUBLISH_STEPS is RELEASE_PIPELINE.PUBLISH_STEPS
+    assert UI_PUBLISH_STEPS is DOMAIN_PUBLISH_STEPS
+    assert [
+        (name, handler.__name__)
+        for name, handler in RELEASE_PIPELINE.PUBLISH_STEPS
+    ] == DOMAIN_PUBLISH_STEPS
