@@ -14,16 +14,7 @@ from redis.exceptions import RedisError
 logger = logging.getLogger(__name__)
 
 EVENT_STREAM = "arthexis:events"
-EVENT_STREAM_MAXLEN = 1000
-
-
-def mask_identifier(value: str | None, *, visible: int = 4) -> str:
-    text = str(value or "")
-    if not text:
-        return ""
-    if len(text) <= visible:
-        return "*" * len(text)
-    return "*" * (len(text) - visible) + text[-visible:]
+DEFAULT_EVENT_STREAM_MAXLEN = 100_000
 
 
 def _redis_url() -> str:
@@ -32,6 +23,15 @@ def _redis_url() -> str:
         or getattr(settings, "OCPP_STATE_REDIS_URL", "")
         or ""
     ).strip()
+
+
+def _stream_maxlen() -> int:
+    value = getattr(settings, "EVENTS_STREAM_MAXLEN", DEFAULT_EVENT_STREAM_MAXLEN)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_EVENT_STREAM_MAXLEN
+    return max(parsed, 0)
 
 
 @lru_cache(maxsize=4)
@@ -61,13 +61,12 @@ def emit_event(event_type: str, /, **fields: Any) -> str | None:
             if value is not None
         },
     }
+    maxlen = _stream_maxlen()
+    kwargs: dict[str, object] = {}
+    if maxlen:
+        kwargs = {"maxlen": maxlen, "approximate": True}
     try:
-        return _redis_client(url).xadd(
-            EVENT_STREAM,
-            event,
-            maxlen=EVENT_STREAM_MAXLEN,
-            approximate=True,
-        )
+        return _redis_client(url).xadd(EVENT_STREAM, event, **kwargs)
     except RedisError:
         logger.exception("events.redis_publish_failed", extra={"event_type": event_type})
         return None
