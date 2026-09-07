@@ -85,6 +85,24 @@ def test_staff_users_can_change_existing_security_groups(db, is_site_operator):
     assert managed_group.name == "managed-group-updated"
 
 
+def test_security_group_change_page_links_to_current_admin_password_change(db):
+    user = create_staff_user_with_security_group_permissions(
+        "regular-staff",
+        "change_securitygroup",
+    )
+    managed_group = SecurityGroup.objects.create(name="managed-group")
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.get(
+        reverse("admin:groups_securitygroup_change", args=[managed_group.pk])
+    )
+
+    assert response.status_code == 200
+    assert reverse("admin:password_change") in response.content.decode()
+
+
 def test_site_operator_cannot_rename_own_group_to_bypass_add_restriction(db):
     user = create_staff_user_with_security_group_permissions(
         "local-admin",
