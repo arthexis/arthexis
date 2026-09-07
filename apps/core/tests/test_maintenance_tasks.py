@@ -5,8 +5,8 @@ from __future__ import annotations
 from celery import current_app
 
 
-def test_maintenance_tasks_register_only_canonical_names():
-    """Maintenance tasks should be registered only under canonical task names."""
+def test_maintenance_tasks_register_canonical_and_compatibility_names():
+    """Maintenance tasks retain historical names during the compatibility window."""
 
     from apps.core.tasks import maintenance as _maintenance
 
@@ -25,18 +25,7 @@ def test_maintenance_tasks_register_only_canonical_names():
         in registered_task_names
     )
 
-    assert "apps.core.tasks.poll_emails" not in registered_task_names
-    assert "apps.core.tasks.run_scheduled_release" not in registered_task_names
-    assert "apps.core.tasks.run_client_report_schedule" not in registered_task_names
-    assert "apps.core.tasks.run_release_data_transform" not in registered_task_names
-
-    assert "apps.core.tasks.maintenance.poll_emails" not in registered_task_names
-    assert "apps.core.tasks.maintenance.run_scheduled_release" not in registered_task_names
-    assert (
-        "apps.core.tasks.maintenance.run_client_report_schedule"
-        not in registered_task_names
-    )
-    assert (
-        "apps.core.tasks.maintenance.run_release_data_transform"
-        not in registered_task_names
-    )
+    # Historical names remain registered for persisted django-celery-beat rows
+    # and queued tasks throughout the core-boundary compatibility window.
+    assert "apps.core.tasks.run_scheduled_release" in registered_task_names
+    assert "apps.core.tasks.run_release_data_transform" in registered_task_names
