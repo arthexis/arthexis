@@ -33,6 +33,11 @@ def test_status_is_good_when_role_database_and_migrations_are_healthy(monkeypatc
         def fetchone(self):
             return (1,)
 
+    class Connection:
+        @staticmethod
+        def cursor():
+            return Cursor()
+
     class Graph:
         @staticmethod
         def leaf_nodes():
@@ -49,7 +54,7 @@ def test_status_is_good_when_role_database_and_migrations_are_healthy(monkeypatc
             return []
 
     monkeypatch.setattr(identity, "node_role", lambda: "Control")
-    monkeypatch.setattr(identity.connection, "cursor", lambda: Cursor())
+    monkeypatch.setattr(identity, "connection", Connection())
     monkeypatch.setattr(identity, "MigrationExecutor", lambda _connection: Executor())
 
     assert identity.status() == "GOOD"
