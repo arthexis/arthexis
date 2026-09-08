@@ -1,7 +1,20 @@
 [project]
 name = "arthexis"
+aliases = ["constellation"]
 
 [adapter]
 type = "django"
 manage = "manage.py"
 settings = "config.settings"
+
+# Declarative target for GWAY-managed deployments. Arthexis lifecycle helpers
+# use these same defaults today; GWAY can consume this table as install-root
+# support lands without changing the application-side contract.
+[install]
+root = "/opt/arthexis"
+checkout = "app"
+environment = ".venv"
+
+[lifecycle]
+install = "apps.core.system.lifecycle:install"
+upgrade = "apps.core.system.lifecycle:upgrade"
