@@ -141,6 +141,24 @@ def prepare(
     return current
 
 
+def install(
+    *,
+    layout: InstallationLayout | None = None,
+    editable: bool = False,
+) -> InstallationLayout:
+    """Application preparation hook for a GWAY installation."""
+    return prepare(layout=layout, editable=editable)
+
+
+def upgrade(
+    *,
+    layout: InstallationLayout | None = None,
+    editable: bool = False,
+) -> InstallationLayout:
+    """Application preparation hook for a GWAY upgrade."""
+    return prepare(layout=layout, editable=editable)
+
+
 def prepare_managed_install(
     *,
     layout: InstallationLayout | None = None,
