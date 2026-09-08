@@ -5,7 +5,6 @@ from django.apps import apps as django_apps
 from apps.locals.user_data import EntityModelAdmin
 
 from . import site as site  # noqa: F401
-from . import users as users  # noqa: F401
 from .mixins import (
     OwnableAdminForm,
     OwnableAdminMixin,
@@ -14,11 +13,7 @@ from .mixins import (
     _build_credentials_actions,
 )
 
-_EAGER_ADMIN_MODULES = (
-    ("apps.core", ".admin_notice_admin"),
-    ("apps.core", ".usage"),
-    ("apps.odoo", ".odoo"),
-)
+_EAGER_ADMIN_MODULES = ()
 
 for app_config_name, module_name in _EAGER_ADMIN_MODULES:
     if django_apps.is_installed(app_config_name):
@@ -71,6 +66,7 @@ _LAZY_EXPORTS = {
 }
 
 _OPTIONAL_EXPORT_REQUIRED_APPS = {
+    "AdminNoticeAdmin": "apps.ops",
     "CustomerAccountRFIDForm": "apps.energy",
     "CustomerAccountRFIDInline": "apps.energy",
     "OdooCustomerSearchForm": "apps.odoo",

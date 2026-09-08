@@ -6,5 +6,4 @@ DJANGO_APPS = [
 
 REQUIRES_APPS = [
     "apps.discovery",
-    "apps.emails",
 ]

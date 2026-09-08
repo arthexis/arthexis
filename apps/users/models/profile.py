@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models.ownable import Ownable
+from apps.base.ownership import Ownable
 
 
 class Profile(Ownable):

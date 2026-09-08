@@ -28,9 +28,10 @@ on:
       - ready_for_review
     paths:
       - '**'
+  # Main pushes are covered by Install Health Check. Keep release branches here
+  # because they can receive changes independently of the normal PR-to-main flow.
   push:
     branches:
-      - main
       - 'release/**'
     paths:
       - '**/*.py'
@@ -81,3 +82,53 @@ jobs:
       - name: Run Linux sanity checks
         run: |
           ./scripts/ci/linux-sanity.sh
+
+      - name: Validate GWAY Django adapter
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/gway-config
+          XDG_DATA_HOME: ${{ runner.temp }}/gway-data
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          python -m pip install --disable-pip-version-check \
+            "git+https://github.com/arthexis/gway.git@main"
+          gway register .
+          gway arthexis --help
+          gway arthexis check
+          gway arthexis migrate --plan
+
+      - name: Run core boundary regression tests (manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+
+          # Keep boundary files process-isolated. Several checks intentionally
+          # exercise Django startup/module compatibility state, so one file must
+          # not leave global registries or imported compatibility modules behind
+          # for the next file.
+          boundary_tests=(
+            apps/core/tests/test_architecture_boundary.py
+            apps/core/tests/test_foundation_boundaries.py
+            apps/core/tests/test_domain_ui_boundaries.py
+            apps/app/tests/test_registry_ownership.py
+            apps/emails/tests/test_model_ownership.py
+            apps/emails/tests/test_admin_ownership.py
+            apps/release/tests/test_upgrade_ownership.py
+            apps/release/tests/test_upgrade_permission_ownership.py
+            apps/release/tests/test_admin_view_ownership.py
+            apps/analytics/tests/test_model_ownership.py
+            apps/ops/tests/test_admin_notice_ownership.py
+            apps/ops/tests/test_universal_installation.py
+            apps/sites/tests/test_invite_lead_ownership.py
+          )
+
+          for test_file in "${boundary_tests[@]}"; do
+            python -m pytest "$test_file" -q
+          done
+
+          # The normal pytest bootstrap disables migrations for speed. This
+          # regression explicitly needs Django's real migration graph, so start
+          # a fresh process with migrations enabled from bootstrap onward.
+          PYTEST_DISABLE_MIGRATIONS=0 \
+            python -m pytest apps/core/tests/test_boundary_migrations.py -q

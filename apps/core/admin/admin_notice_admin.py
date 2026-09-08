@@ -1,12 +1,15 @@
-from django.contrib import admin
+from importlib import import_module
+import sys
 
-from apps.locals.user_data import EntityModelAdmin
+from django.apps import apps as django_apps
 
-from apps.core.models.admin_notice import AdminNotice
-
-
-@admin.register(AdminNotice)
-class AdminNoticeAdmin(EntityModelAdmin):
-    list_display = ("created_at", "dismissed_at", "dismissed_by")
-    search_fields = ("message",)
-    readonly_fields = ("created_at", "dismissed_at", "dismissed_by")
+if django_apps.is_installed("apps.ops"):
+    _module = import_module("apps.ops.admin_notice_admin")
+    sys.modules[__name__] = _module
+else:
+    def __getattr__(name: str):
+        if name == "AdminNoticeAdmin":
+            raise AttributeError(
+                f"module {__name__!r} has no attribute {name!r}; apps.ops is not installed"
+            )
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

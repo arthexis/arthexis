@@ -45,7 +45,7 @@ from .upgrade import (
 )
 
 logger = logging.getLogger(__name__)
-UPGRADE_CHECK_PERMISSION = "core.can_trigger_upgrade_checks"
+UPGRADE_CHECK_PERMISSION = "release.can_trigger_upgrade_checks"
 
 
 def _actions_app_installed() -> bool:
