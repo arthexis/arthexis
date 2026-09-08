@@ -49,9 +49,8 @@ jobs:
 
           current_run_id="$(
             gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/install-health.yml/runs?branch=main&per_page=100" \
-              --jq --arg sha "${current_main_sha}" \
-              '.workflow_runs[] | select(.head_sha == $sha) | .id' \
-              | sed -n '1p'
+              --jq '.workflow_runs[] | [.head_sha, (.id | tostring)] | @tsv' \
+              | awk -v sha="${current_main_sha}" '$1 == sha { print $2; exit }'
           )"
 
           if [[ -n "${current_run_id}" ]]; then
