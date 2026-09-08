@@ -70,7 +70,7 @@ qrcode==8.2
 redis==8.1.0
 reportlab==5.0.1
 requests==2.34.2
-ruff==0.16.5
+ruff==0.16.6
 setuptools==84.0.0
 smbus2==0.6.1; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
 sqlparse==0.6.0

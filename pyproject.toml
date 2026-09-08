@@ -98,7 +98,7 @@ ci = [
   "django-stubs-ext==6.1.0",
   "django-stubs==6.0.9",
   "import-linter==2.15",
-  "ruff==0.16.5",
+  "ruff==0.16.6",
   "twine==7.0.0",
   "types-requests==2.33.0.20260712",
 ]
