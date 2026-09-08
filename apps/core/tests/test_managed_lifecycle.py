@@ -8,6 +8,7 @@ from apps.core.system import lifecycle
 
 
 def test_layout_defaults_to_opt(monkeypatch):
+    monkeypatch.delenv("ARTHEXIS_INSTALL_ROOT", raising=False)
     monkeypatch.delenv("ARTHEXIS_MANAGED_ROOT", raising=False)
 
     current = lifecycle.layout()
@@ -18,13 +19,33 @@ def test_layout_defaults_to_opt(monkeypatch):
 
 
 def test_layout_accepts_environment_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("ARTHEXIS_MANAGED_ROOT", str(tmp_path))
+    monkeypatch.setenv("ARTHEXIS_INSTALL_ROOT", str(tmp_path))
 
     current = lifecycle.layout()
 
     assert current.root == tmp_path
     assert current.checkout == tmp_path / "app"
     assert current.environment == tmp_path / ".venv"
+
+
+def test_layout_accepts_legacy_environment_override(monkeypatch, tmp_path):
+    monkeypatch.delenv("ARTHEXIS_INSTALL_ROOT", raising=False)
+    monkeypatch.setenv("ARTHEXIS_MANAGED_ROOT", str(tmp_path))
+
+    current = lifecycle.layout()
+
+    assert current.root == tmp_path
+
+
+def test_install_root_override_precedes_legacy_override(monkeypatch, tmp_path):
+    legacy_root = tmp_path / "legacy"
+    install_root = tmp_path / "install"
+    monkeypatch.setenv("ARTHEXIS_MANAGED_ROOT", str(legacy_root))
+    monkeypatch.setenv("ARTHEXIS_INSTALL_ROOT", str(install_root))
+
+    current = lifecycle.layout()
+
+    assert current.root == install_root
 
 
 def test_prepare_runs_canonical_steps(monkeypatch, tmp_path):
@@ -103,11 +124,3 @@ def test_gway_manifest_lifecycle_hooks_are_importable():
         module_name, function_name = target.split(":", 1)
         function = getattr(import_module(module_name), function_name)
         assert callable(function)
-
-
-def test_managed_names_remain_compatibility_aliases(tmp_path):
-    current = lifecycle.managed_layout(tmp_path)
-
-    assert isinstance(current, lifecycle.InstallationLayout)
-    assert lifecycle.ManagedLayout is lifecycle.InstallationLayout
-    assert lifecycle.DEFAULT_MANAGED_ROOT == lifecycle.DEFAULT_INSTALL_ROOT
