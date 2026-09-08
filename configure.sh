@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./configure.sh [options]
+# Reconfigures an existing Arthexis installation, including service/port, node role, features, upgrade channel, debug, and repair settings.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

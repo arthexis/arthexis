@@ -1,4 +1,6 @@
 @echo off
+REM Usage: env-refresh.bat [--latest] [--clean]
+REM Refreshes an existing Windows Arthexis environment; --latest requests the newest refresh path and --clean removes local db*.sqlite3 files first.
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 set "PIP_HELPER=%SCRIPT_DIR%scripts\helpers\pip_install.py"

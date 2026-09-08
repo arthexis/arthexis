@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./start.sh [--silent] [--debug] [--show LEVEL] [--log-follow] [--clear-logs] [service args...]
+# Starts the configured Arthexis service stack; run with no options for the normal start path, or pass logging/debug options as needed.
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"

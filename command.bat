@@ -1,4 +1,6 @@
 @echo off
+REM Usage: command.bat <operational-command> [args...] or command.bat list
+REM Runs operator-facing runtime commands through the Arthexis command API; run install.bat first to create .venv.
 setlocal
 set "VENV=.venv"
 if not exist "%VENV%\Scripts\python.exe" (
