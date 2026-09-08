@@ -50,9 +50,13 @@ def managed_layout(root: str | Path | None = None) -> InstallationLayout:
     return layout(root)
 
 
+def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
+    return selected or layout()
+
+
 def ensure_environment(layout: InstallationLayout | None = None) -> Path:
     """Create the application virtual environment if it does not already exist."""
-    current = layout or globals()["layout"]()
+    current = _resolve_layout(layout)
     if not current.python.exists():
         current.root.mkdir(parents=True, exist_ok=True)
         venv.EnvBuilder(with_pip=True).create(current.environment)
@@ -67,7 +71,7 @@ def run_python(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run the installation Python interpreter with a deterministic working directory."""
-    current = layout or globals()["layout"]()
+    current = _resolve_layout(layout)
     python = ensure_environment(current)
     return subprocess.run(
         [str(python), *arguments],
@@ -83,7 +87,7 @@ def install_project(
     editable: bool = False,
 ) -> None:
     """Install the checkout into its dedicated virtual environment."""
-    current = layout or globals()["layout"]()
+    current = _resolve_layout(layout)
     arguments = ["-m", "pip", "install"]
     if editable:
         arguments.extend(["-e", str(current.checkout)])
@@ -98,7 +102,7 @@ def run_manage(
     layout: InstallationLayout | None = None,
 ) -> None:
     """Run one Django management command from the installation checkout."""
-    current = layout or globals()["layout"]()
+    current = _resolve_layout(layout)
     run_python(
         ["manage.py", command, *arguments],
         layout=current,
@@ -125,7 +129,7 @@ def prepare(
 
     Git checkout/update and service restart deliberately remain GWAY-owned.
     """
-    current = layout or globals()["layout"]()
+    current = _resolve_layout(layout)
     if not current.checkout.is_dir():
         raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
     ensure_environment(current)
