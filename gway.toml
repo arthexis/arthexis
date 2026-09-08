@@ -17,3 +17,38 @@ environment = ".venv"
 [lifecycle]
 install = "apps.core.system.lifecycle:install"
 upgrade = "apps.core.system.lifecycle:upgrade"
+
+# Runtime topology is selected with GWAY_SERVICE_PROFILE using the canonical
+# Arthexis node roles. GWAY owns the resulting systemd units and uses the
+# managed project interpreter for every Python service.
+[services.web-local]
+description = "Arthexis local web service"
+command = ["{python}", "manage.py", "runserver", "127.0.0.1:8888", "--noreload"]
+working_directory = "{project}"
+profiles = ["Terminal", "Watchtower"]
+restart = "on-failure"
+restart_sec = 5
+
+[services.web-edge]
+description = "Arthexis charger-facing web service"
+command = ["{python}", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
+working_directory = "{project}"
+profiles = ["Control", "Satellite"]
+restart = "on-failure"
+restart_sec = 5
+
+[services.worker]
+description = "Arthexis Celery worker"
+command = ["{python}", "-m", "celery", "-A", "config.celery:app", "worker", "--loglevel=INFO"]
+working_directory = "{project}"
+profiles = ["Control", "Satellite", "Watchtower"]
+restart = "on-failure"
+restart_sec = 5
+
+[services.beat]
+description = "Arthexis Celery beat scheduler"
+command = ["{python}", "-m", "celery", "-A", "config.celery:app", "beat", "--loglevel=INFO"]
+working_directory = "{project}"
+profiles = ["Control", "Satellite", "Watchtower"]
+restart = "on-failure"
+restart_sec = 5
