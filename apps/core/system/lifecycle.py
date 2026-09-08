@@ -12,9 +12,6 @@ DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
 DEFAULT_ENVIRONMENT_NAME = ".venv"
 
-# Compatibility name retained while callers introduced by #120 migrate.
-DEFAULT_MANAGED_ROOT = DEFAULT_INSTALL_ROOT
-
 
 @dataclass(frozen=True)
 class InstallationLayout:
@@ -29,25 +26,19 @@ class InstallationLayout:
         return self.environment / "bin" / "python"
 
 
-# Compatibility type alias retained while callers introduced by #120 migrate.
-ManagedLayout = InstallationLayout
-
-
 def layout(root: str | Path | None = None) -> InstallationLayout:
     """Return the canonical filesystem layout for an Arthexis installation."""
     selected_root = Path(
-        root or os.environ.get("ARTHEXIS_MANAGED_ROOT") or DEFAULT_INSTALL_ROOT
+        root
+        or os.environ.get("ARTHEXIS_INSTALL_ROOT")
+        or os.environ.get("ARTHEXIS_MANAGED_ROOT")
+        or DEFAULT_INSTALL_ROOT
     ).expanduser()
     return InstallationLayout(
         root=selected_root,
         checkout=selected_root / DEFAULT_CHECKOUT_NAME,
         environment=selected_root / DEFAULT_ENVIRONMENT_NAME,
     )
-
-
-def managed_layout(root: str | Path | None = None) -> InstallationLayout:
-    """Compatibility alias for :func:`layout`."""
-    return layout(root)
 
 
 def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
@@ -157,22 +148,6 @@ def upgrade(
 ) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
     return prepare(layout=layout, editable=editable)
-
-
-def prepare_managed_install(
-    *,
-    layout: InstallationLayout | None = None,
-    editable: bool = False,
-    run_migrations: bool = True,
-    run_collectstatic: bool = True,
-) -> InstallationLayout:
-    """Compatibility alias for :func:`prepare`."""
-    return prepare(
-        layout=layout,
-        editable=editable,
-        run_migrations=run_migrations,
-        run_collectstatic=run_collectstatic,
-    )
 
 
 def current_python() -> str:
