@@ -8,13 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-DEFAULT_MANAGED_ROOT = Path("/opt/arthexis")
+DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
 DEFAULT_ENVIRONMENT_NAME = ".venv"
 
+# Compatibility name retained while callers introduced by #120 migrate.
+DEFAULT_MANAGED_ROOT = DEFAULT_INSTALL_ROOT
+
 
 @dataclass(frozen=True)
-class ManagedLayout:
+class InstallationLayout:
     root: Path
     checkout: Path
     environment: Path
@@ -26,21 +29,30 @@ class ManagedLayout:
         return self.environment / "bin" / "python"
 
 
-def managed_layout(root: str | Path | None = None) -> ManagedLayout:
-    """Return the canonical filesystem layout for a GWAY-managed install."""
+# Compatibility type alias retained while callers introduced by #120 migrate.
+ManagedLayout = InstallationLayout
+
+
+def layout(root: str | Path | None = None) -> InstallationLayout:
+    """Return the canonical filesystem layout for an Arthexis installation."""
     selected_root = Path(
-        root or os.environ.get("ARTHEXIS_MANAGED_ROOT") or DEFAULT_MANAGED_ROOT
+        root or os.environ.get("ARTHEXIS_MANAGED_ROOT") or DEFAULT_INSTALL_ROOT
     ).expanduser()
-    return ManagedLayout(
+    return InstallationLayout(
         root=selected_root,
         checkout=selected_root / DEFAULT_CHECKOUT_NAME,
         environment=selected_root / DEFAULT_ENVIRONMENT_NAME,
     )
 
 
-def ensure_environment(layout: ManagedLayout | None = None) -> Path:
-    """Create the managed virtual environment if it does not already exist."""
-    current = layout or managed_layout()
+def managed_layout(root: str | Path | None = None) -> InstallationLayout:
+    """Compatibility alias for :func:`layout`."""
+    return layout(root)
+
+
+def ensure_environment(layout: InstallationLayout | None = None) -> Path:
+    """Create the application virtual environment if it does not already exist."""
+    current = layout or globals()["layout"]()
     if not current.python.exists():
         current.root.mkdir(parents=True, exist_ok=True)
         venv.EnvBuilder(with_pip=True).create(current.environment)
@@ -50,12 +62,12 @@ def ensure_environment(layout: ManagedLayout | None = None) -> Path:
 def run_python(
     arguments: Iterable[str],
     *,
-    layout: ManagedLayout | None = None,
+    layout: InstallationLayout | None = None,
     cwd: str | Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the managed Python interpreter with a deterministic working directory."""
-    current = layout or managed_layout()
+    """Run the installation Python interpreter with a deterministic working directory."""
+    current = layout or globals()["layout"]()
     python = ensure_environment(current)
     return subprocess.run(
         [str(python), *arguments],
@@ -67,11 +79,11 @@ def run_python(
 
 def install_project(
     *,
-    layout: ManagedLayout | None = None,
+    layout: InstallationLayout | None = None,
     editable: bool = False,
 ) -> None:
-    """Install the managed checkout into its dedicated virtual environment."""
-    current = layout or managed_layout()
+    """Install the checkout into its dedicated virtual environment."""
+    current = layout or globals()["layout"]()
     arguments = ["-m", "pip", "install"]
     if editable:
         arguments.extend(["-e", str(current.checkout)])
@@ -83,10 +95,10 @@ def install_project(
 def run_manage(
     command: str,
     *arguments: str,
-    layout: ManagedLayout | None = None,
+    layout: InstallationLayout | None = None,
 ) -> None:
-    """Run one Django management command from the managed checkout."""
-    current = layout or managed_layout()
+    """Run one Django management command from the installation checkout."""
+    current = layout or globals()["layout"]()
     run_python(
         ["manage.py", command, *arguments],
         layout=current,
@@ -94,28 +106,28 @@ def run_manage(
     )
 
 
-def migrate(*, layout: ManagedLayout | None = None) -> None:
+def migrate(*, layout: InstallationLayout | None = None) -> None:
     run_manage("migrate", "--noinput", layout=layout)
 
 
-def collectstatic(*, layout: ManagedLayout | None = None) -> None:
+def collectstatic(*, layout: InstallationLayout | None = None) -> None:
     run_manage("collectstatic", "--noinput", layout=layout)
 
 
-def prepare_managed_install(
+def prepare(
     *,
-    layout: ManagedLayout | None = None,
+    layout: InstallationLayout | None = None,
     editable: bool = False,
     run_migrations: bool = True,
     run_collectstatic: bool = True,
-) -> ManagedLayout:
-    """Prepare dependencies and Django state for a managed checkout.
+) -> InstallationLayout:
+    """Prepare dependencies and Django state for an installation checkout.
 
     Git checkout/update and service restart deliberately remain GWAY-owned.
     """
-    current = layout or managed_layout()
+    current = layout or globals()["layout"]()
     if not current.checkout.is_dir():
-        raise FileNotFoundError(f"managed checkout does not exist: {current.checkout}")
+        raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
     ensure_environment(current)
     install_project(layout=current, editable=editable)
     if run_migrations:
@@ -123,6 +135,22 @@ def prepare_managed_install(
     if run_collectstatic:
         collectstatic(layout=current)
     return current
+
+
+def prepare_managed_install(
+    *,
+    layout: InstallationLayout | None = None,
+    editable: bool = False,
+    run_migrations: bool = True,
+    run_collectstatic: bool = True,
+) -> InstallationLayout:
+    """Compatibility alias for :func:`prepare`."""
+    return prepare(
+        layout=layout,
+        editable=editable,
+        run_migrations=run_migrations,
+        run_collectstatic=run_collectstatic,
+    )
 
 
 def current_python() -> str:
