@@ -1,3 +1,5 @@
+import tomllib
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -5,36 +7,57 @@ import pytest
 from apps.core.system import lifecycle
 
 
-def test_managed_layout_defaults_to_opt(monkeypatch):
+def test_layout_defaults_to_opt(monkeypatch):
+    monkeypatch.delenv("ARTHEXIS_INSTALL_ROOT", raising=False)
     monkeypatch.delenv("ARTHEXIS_MANAGED_ROOT", raising=False)
 
-    layout = lifecycle.managed_layout()
+    current = lifecycle.layout()
 
-    assert layout.root == Path("/opt/arthexis")
-    assert layout.checkout == Path("/opt/arthexis/app")
-    assert layout.environment == Path("/opt/arthexis/.venv")
+    assert current.root == Path("/opt/arthexis")
+    assert current.checkout == Path("/opt/arthexis/app")
+    assert current.environment == Path("/opt/arthexis/.venv")
 
 
-def test_managed_layout_accepts_environment_override(monkeypatch, tmp_path):
+def test_layout_accepts_environment_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARTHEXIS_INSTALL_ROOT", str(tmp_path))
+
+    current = lifecycle.layout()
+
+    assert current.root == tmp_path
+    assert current.checkout == tmp_path / "app"
+    assert current.environment == tmp_path / ".venv"
+
+
+def test_layout_accepts_legacy_environment_override(monkeypatch, tmp_path):
+    monkeypatch.delenv("ARTHEXIS_INSTALL_ROOT", raising=False)
     monkeypatch.setenv("ARTHEXIS_MANAGED_ROOT", str(tmp_path))
 
-    layout = lifecycle.managed_layout()
+    current = lifecycle.layout()
 
-    assert layout.root == tmp_path
-    assert layout.checkout == tmp_path / "app"
-    assert layout.environment == tmp_path / ".venv"
+    assert current.root == tmp_path
 
 
-def test_prepare_managed_install_runs_canonical_steps(monkeypatch, tmp_path):
-    layout = lifecycle.ManagedLayout(
+def test_install_root_override_precedes_legacy_override(monkeypatch, tmp_path):
+    legacy_root = tmp_path / "legacy"
+    install_root = tmp_path / "install"
+    monkeypatch.setenv("ARTHEXIS_MANAGED_ROOT", str(legacy_root))
+    monkeypatch.setenv("ARTHEXIS_INSTALL_ROOT", str(install_root))
+
+    current = lifecycle.layout()
+
+    assert current.root == install_root
+
+
+def test_prepare_runs_canonical_steps(monkeypatch, tmp_path):
+    current = lifecycle.InstallationLayout(
         root=tmp_path,
         checkout=tmp_path / "app",
         environment=tmp_path / ".venv",
     )
-    layout.checkout.mkdir()
+    current.checkout.mkdir()
     calls = []
 
-    monkeypatch.setattr(lifecycle, "ensure_environment", lambda current: calls.append("venv"))
+    monkeypatch.setattr(lifecycle, "ensure_environment", lambda value: calls.append("venv"))
     monkeypatch.setattr(
         lifecycle,
         "install_project",
@@ -51,18 +74,53 @@ def test_prepare_managed_install_runs_canonical_steps(monkeypatch, tmp_path):
         lambda *, layout: calls.append("collectstatic"),
     )
 
-    result = lifecycle.prepare_managed_install(layout=layout)
+    result = lifecycle.prepare(layout=current)
 
-    assert result == layout
+    assert result == current
     assert calls == ["venv", ("install", False), "migrate", "collectstatic"]
 
 
-def test_prepare_managed_install_requires_checkout(tmp_path):
-    layout = lifecycle.ManagedLayout(
+def test_prepare_requires_checkout(tmp_path):
+    current = lifecycle.InstallationLayout(
         root=tmp_path,
         checkout=tmp_path / "missing",
         environment=tmp_path / ".venv",
     )
 
     with pytest.raises(FileNotFoundError):
-        lifecycle.prepare_managed_install(layout=layout)
+        lifecycle.prepare(layout=current)
+
+
+def test_install_and_upgrade_are_semantic_prepare_hooks(monkeypatch, tmp_path):
+    current = lifecycle.InstallationLayout(
+        root=tmp_path,
+        checkout=tmp_path / "app",
+        environment=tmp_path / ".venv",
+    )
+    calls = []
+
+    def fake_prepare(*, layout, editable=False, **_kwargs):
+        calls.append((layout, editable))
+        return layout
+
+    monkeypatch.setattr(lifecycle, "prepare", fake_prepare)
+
+    assert lifecycle.install(layout=current) is current
+    assert lifecycle.upgrade(layout=current, editable=True) is current
+    assert calls == [(current, False), (current, True)]
+
+
+def test_gway_manifest_lifecycle_hooks_are_importable():
+    repository_root = Path(__file__).resolve().parents[3]
+    manifest = tomllib.loads((repository_root / "gway.toml").read_text())
+
+    hooks = manifest["lifecycle"]
+    assert hooks == {
+        "install": "apps.core.system.lifecycle:install",
+        "upgrade": "apps.core.system.lifecycle:upgrade",
+    }
+
+    for target in hooks.values():
+        module_name, function_name = target.split(":", 1)
+        function = getattr(import_module(module_name), function_name)
+        assert callable(function)
