@@ -34,6 +34,8 @@ Replacement: GWAY should invoke an importable Arthexis lifecycle function direct
 - `InstallationLayout`
 - `layout()`
 - `prepare()`
+- `install()`
+- `upgrade()`
 - `ensure_environment()`
 - `run_python()`
 - `install_project()`
@@ -41,6 +43,8 @@ Replacement: GWAY should invoke an importable Arthexis lifecycle function direct
 - `migrate()`
 - `collectstatic()`
 - `current_python()`
+
+`install()` and `upgrade()` are semantic GWAY hook entry points. They intentionally share the same preparation sequence today while leaving room for install- and upgrade-specific behavior later.
 
 Compatibility aliases remain temporarily for callers introduced by #120:
 
@@ -55,7 +59,7 @@ Git checkout/update and service management remain outside this module and contin
 
 ## Manifest surface
 
-`gway.toml` currently declares the target installation layout:
+`gway.toml` declares the target installation layout:
 
 ```toml
 [install]
@@ -64,19 +68,7 @@ checkout = "app"
 environment = ".venv"
 ```
 
-This is the desired deployment contract and should remain declarative.
-
-The current lifecycle table leaks Django command names:
-
-```toml
-[lifecycle]
-layout = "managed_layout"
-prepare = "managed_prepare"
-```
-
-Classification: **replace**.
-
-Target direction: lifecycle entries should reference importable Python callables directly, for example:
+It now declares direct Python lifecycle hooks rather than Django command names:
 
 ```toml
 [lifecycle]
@@ -84,7 +76,9 @@ install = "apps.core.system.lifecycle:install"
 upgrade = "apps.core.system.lifecycle:upgrade"
 ```
 
-The exact hook schema must be implemented and validated in GWAY before it becomes authoritative.
+Classification: **application-side contract established**.
+
+The hook targets are importable and tested in Arthexis. GWAY core still needs to learn how to consume the `[install]` and `[lifecycle]` tables; until that lands, these entries are declarative/forward-compatible and do not change GWAY runtime behavior by themselves.
 
 ## Compatibility bridge
 
@@ -96,17 +90,19 @@ It can remain while legacy repository-install administration scripts are migrate
 
 ## Tests
 
-`apps/core/tests/test_managed_lifecycle.py` now verifies the canonical lifecycle API:
+`apps/core/tests/test_managed_lifecycle.py` now verifies the canonical lifecycle API and manifest contract:
 
 - `/opt/arthexis` as the default root through `layout()`
 - the `ARTHEXIS_MANAGED_ROOT` override
 - canonical preparation ordering through `prepare()`
 - failure when the checkout is absent
+- `install()` and `upgrade()` delegate to the common preparation sequence
+- manifest lifecycle targets resolve to importable callables
 - compatibility aliases remain available during migration
 
-Classification: **behavior preserved; tests now target canonical internal names**.
+Classification: **behavior preserved; tests target canonical internal names and the direct-hook contract**.
 
-The next test migration should cover the direct manifest hook contract. Tests should not require `managed_layout` or `managed_prepare` to remain public Django commands.
+Tests do not require `managed_layout` or `managed_prepare` to remain public Django commands.
 
 ## Reference audit
 
@@ -119,13 +115,13 @@ The six lifecycle-related files introduced by #120 are:
 - `gway.toml`
 - `scripts/managed_lifecycle.py`
 
-The two public commands and the compatibility bridge still use the old compatibility names. That is intentional in chunk 2 so no public or shell behavior changes yet.
+The two public commands and the compatibility bridge still use the old compatibility names. That remains intentional until the later cleanup chunks remove those public/internal deployment-oriented surfaces.
 
 ## Cleanup sequence for this draft PR
 
 - [x] Normalize the internal lifecycle API and remove unnecessary `managed_*` terminology from the canonical implementation.
-- [ ] Switch `gway.toml` from public Django lifecycle commands to direct Python hooks once the GWAY hook contract is defined.
-- [x] Migrate lifecycle tests to the canonical internal API while preserving compatibility coverage.
+- [x] Switch `gway.toml` from public Django lifecycle commands to direct Python hooks.
+- [x] Migrate lifecycle tests to the canonical internal API and direct-hook contract while preserving compatibility coverage.
 - [ ] Remove the public `managed_layout` and `managed_prepare` Django commands.
 - [ ] Retire or narrow `scripts/managed_lifecycle.py` after legacy admin callers no longer require it.
 - [ ] Validate that the public `gway arthexis ...` surface contains application capabilities rather than deployment internals.
