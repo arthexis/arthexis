@@ -78,7 +78,7 @@ tablib==3.10.0
 tinycss2==1.5.1
 toml==0.10.2
 twine==7.0.0
-Twisted==25.5.0
+Twisted==26.4.0
 txaio==25.9.2
 types-requests==2.33.0.20260712
 typing_extensions==4.16.0
