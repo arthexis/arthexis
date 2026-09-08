@@ -6,15 +6,34 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from utils.arthexis_paths import ArthexisMode, resolve_arthexis_paths
+
 from .apps import ARTHEXIS_EXTERNAL_APPS
 from .base import BASE_DIR
 from .external_dbs import external_app_database_alias_mapping
 
 
-def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[str, Path | str]]:
-    """Return external-app SQLite database entries rooted in ``work/dbs``."""
+_ARTHEXIS_PATHS = resolve_arthexis_paths(project_root=BASE_DIR)
+_USE_DATA_DIR = (
+    _ARTHEXIS_PATHS.mode is ArthexisMode.INSTALLED
+    or "ARTHEXIS_DATA_DIR" in os.environ
+)
 
-    external_dbs_dir = BASE_DIR / "work" / "dbs"
+
+def _database_data_path(relative_path: str, checkout_legacy: Path) -> Path:
+    """Return a mutable database path without changing checkout defaults."""
+
+    if _USE_DATA_DIR:
+        return _ARTHEXIS_PATHS.data_dir / relative_path
+    return checkout_legacy
+
+
+def build_external_sqlite_databases(
+    external_apps: list[str],
+) -> dict[str, dict[str, Path | str]]:
+    """Return external-app SQLite database entries in mutable Arthexis data."""
+
+    external_dbs_dir = _database_data_path("dbs", BASE_DIR / "work" / "dbs")
     external_dbs_dir.mkdir(parents=True, exist_ok=True)
 
     configs: dict[str, dict[str, Path | str]] = {}
@@ -26,6 +45,7 @@ def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[
         }
 
     return configs
+
 
 FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
@@ -61,7 +81,7 @@ else:
     if _sqlite_override:
         SQLITE_DB_PATH = Path(_sqlite_override)
     else:
-        SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
+        SQLITE_DB_PATH = _database_data_path("db.sqlite3", BASE_DIR / "db.sqlite3")
 
     def _sqlite_parent_is_writable(path: Path) -> bool:
         """Return whether ``path.parent`` supports SQLite sidecar writes."""
