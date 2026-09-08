@@ -1,4 +1,6 @@
+from importlib import import_module
 from pathlib import Path
+import tomllib
 
 import pytest
 
@@ -66,6 +68,41 @@ def test_prepare_requires_checkout(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         lifecycle.prepare(layout=current)
+
+
+def test_install_and_upgrade_are_semantic_prepare_hooks(monkeypatch, tmp_path):
+    current = lifecycle.InstallationLayout(
+        root=tmp_path,
+        checkout=tmp_path / "app",
+        environment=tmp_path / ".venv",
+    )
+    calls = []
+
+    def fake_prepare(*, layout, editable=False, **_kwargs):
+        calls.append((layout, editable))
+        return layout
+
+    monkeypatch.setattr(lifecycle, "prepare", fake_prepare)
+
+    assert lifecycle.install(layout=current) is current
+    assert lifecycle.upgrade(layout=current, editable=True) is current
+    assert calls == [(current, False), (current, True)]
+
+
+def test_gway_manifest_lifecycle_hooks_are_importable():
+    repository_root = Path(__file__).resolve().parents[3]
+    manifest = tomllib.loads((repository_root / "gway.toml").read_text())
+
+    hooks = manifest["lifecycle"]
+    assert hooks == {
+        "install": "apps.core.system.lifecycle:install",
+        "upgrade": "apps.core.system.lifecycle:upgrade",
+    }
+
+    for target in hooks.values():
+        module_name, function_name = target.split(":", 1)
+        function = getattr(import_module(module_name), function_name)
+        assert callable(function)
 
 
 def test_managed_names_remain_compatibility_aliases(tmp_path):
