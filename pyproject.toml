@@ -51,7 +51,7 @@ dependencies = [
   "prompt_toolkit==3.0.53",
   "psutil==7.2.2",
   "psycopg-binary==3.3.5",
-  "psycopg==3.3.4",
+  "psycopg==3.3.5",
   "pycparser==3.0",
   "pyOpenSSL==26.3.0",
   "PySocks==1.7.1",
