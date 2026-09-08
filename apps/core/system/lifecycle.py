@@ -9,24 +9,16 @@ from typing import Iterable
 
 DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
-DEFAULT_ENVIRONMENT_NAME = ".venv"
 
 
 @dataclass(frozen=True)
 class InstallationLayout:
     root: Path
     checkout: Path
-    environment: Path
-
-    @property
-    def python(self) -> Path:
-        if os.name == "nt":
-            return self.environment / "Scripts" / "python.exe"
-        return self.environment / "bin" / "python"
 
 
 def layout(root: str | Path | None = None) -> InstallationLayout:
-    """Return the canonical filesystem layout for an Arthexis installation."""
+    """Return the application-visible layout for a GWAY-managed installation."""
     selected_root = Path(
         root
         or os.environ.get("ARTHEXIS_INSTALL_ROOT")
@@ -36,7 +28,6 @@ def layout(root: str | Path | None = None) -> InstallationLayout:
     return InstallationLayout(
         root=selected_root,
         checkout=selected_root / DEFAULT_CHECKOUT_NAME,
-        environment=selected_root / DEFAULT_ENVIRONMENT_NAME,
     )
 
 
@@ -51,7 +42,7 @@ def run_python(
     cwd: str | Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the managed interpreter with a deterministic working directory."""
+    """Run the current interpreter with a deterministic working directory."""
     current = _resolve_layout(layout)
     return subprocess.run(
         [current_python(), *arguments],
@@ -89,10 +80,11 @@ def prepare(
     run_migrations: bool = True,
     run_collectstatic: bool = True,
 ) -> InstallationLayout:
-    """Prepare Django state for a GWAY-managed installation checkout.
+    """Prepare application state for a GWAY-managed installation checkout.
 
-    Checkout/update, environment preparation, package installation, and service
-    restart deliberately remain GWAY-owned.
+    GWAY owns checkout/update, environment preparation, package installation,
+    lifecycle invocation, and service mechanics. Arthexis owns application
+    preparation performed by this hook.
     """
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():

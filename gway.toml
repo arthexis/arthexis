@@ -7,9 +7,8 @@ type = "django"
 manage = "manage.py"
 settings = "config.settings"
 
-# Declarative target for GWAY-managed deployments. Arthexis lifecycle helpers
-# use these same defaults today; GWAY can consume this table as install-root
-# support lands without changing the application-side contract.
+# GWAY owns the managed checkout and Python environment described here.
+# Arthexis lifecycle hooks only perform application-specific preparation.
 [install]
 root = "/opt/arthexis"
 checkout = "app"
