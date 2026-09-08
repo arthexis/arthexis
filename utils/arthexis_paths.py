@@ -74,7 +74,7 @@ def _coerce_mode(value: ArthexisMode | str | None) -> ArthexisMode:
 def _default_paths(mode: ArthexisMode, project_root: Path) -> dict[str, Path]:
     if mode is ArthexisMode.INSTALLED:
         return {
-            "app_dir": Path("/opt/arthexis/current"),
+            "app_dir": Path("/opt/arthexis/app"),
             "config_dir": Path("/etc/arthexis"),
             "data_dir": Path("/var/lib/arthexis"),
             "log_dir": Path("/var/log/arthexis"),
