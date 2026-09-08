@@ -16,5 +16,5 @@ checkout = "app"
 environment = ".venv"
 
 [lifecycle]
-layout = "managed_layout"
-prepare = "managed_prepare"
+install = "apps.core.system.lifecycle:install"
+upgrade = "apps.core.system.lifecycle:upgrade"
