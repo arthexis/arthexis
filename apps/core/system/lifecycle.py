@@ -72,12 +72,12 @@ def install_project(
 ) -> None:
     """Install the managed checkout into its dedicated virtual environment."""
     current = layout or managed_layout()
-    target = str(current.checkout)
+    arguments = ["-m", "pip", "install"]
     if editable:
-        target = f"-e {target}"
-        run_python(["-m", "pip", "install", "-e", str(current.checkout)], layout=current)
-        return
-    run_python(["-m", "pip", "install", "--upgrade", str(current.checkout)], layout=current)
+        arguments.extend(["-e", str(current.checkout)])
+    else:
+        arguments.extend(["--upgrade", str(current.checkout)])
+    run_python(arguments, layout=current)
 
 
 def run_manage(
