@@ -1,4 +1,6 @@
 @echo off
+REM Usage: install.bat
+REM Bootstraps the Windows .venv, installs dependencies, runs migrations, and refreshes the local Arthexis environment.
 set "SCRIPT_DIR=%~dp0"
 set "PIP_HELPER=%SCRIPT_DIR%scripts\helpers\pip_install.py"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (

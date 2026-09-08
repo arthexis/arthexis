@@ -1,4 +1,6 @@
 @echo off
+REM Usage: stop.bat [PORT] [--all] [--force] [--confirm] [--help]
+REM Stops the configured Arthexis server for PORT, or all matching local runserver processes with --all; use --help for details.
 set SCRIPT_DIR=%~dp0
 if not "%SCRIPT_DIR%"=="" pushd "%SCRIPT_DIR%"
 

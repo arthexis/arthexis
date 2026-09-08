@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./stop.sh [PORT] [--all] [--force] [--confirm] [--help]
+# Stops managed Arthexis services or local development processes; use --all for all runservers and --help for guarded-stop details.
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -1,4 +1,6 @@
 @echo off
+REM Usage: start.bat [--port PORT] [--reload] [--debug] [--show LEVEL]
+REM Starts the local Arthexis Django server; omit options for the configured/default port, or use --show LEVEL to stream logs at that level.
 set SCRIPT_DIR=%~dp0
 if not "%SCRIPT_DIR%"=="" pushd "%SCRIPT_DIR%"
 

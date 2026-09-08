@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./env-refresh.sh [options]
+# Refreshes the local Arthexis environment; run with no options for a normal refresh, or use --deps-only to refresh dependencies without the full maintenance pass.
 
 # Enable strict error handling with consistent POSIX newlines to avoid
 

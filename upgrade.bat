@@ -1,4 +1,6 @@
 @echo off
+REM Usage: upgrade.bat [options]
+REM Upgrades the Windows checkout; use --latest or --unstable for newest changes, --branch NAME to select a branch, or pinned --target-* options for a release target.
 setlocal EnableExtensions EnableDelayedExpansion
 set "BASE_DIR=%~dp0"
 set "PIP_HELPER=%BASE_DIR%scripts\helpers\pip_install.py"

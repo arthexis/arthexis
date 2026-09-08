@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Usage: ./command.sh <operational-command> [args...] or ./command.sh list
+# Legacy/compatibility operator command entrypoint; run ./install.sh first to create .venv while GWAY becomes canonical.
 # Run this script directly (ensure the executable bit is set).
 set -e
 
