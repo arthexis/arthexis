@@ -119,3 +119,19 @@ def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():
         module_name, function_name = target.split(":", 1)
         function = getattr(import_module(module_name), function_name)
         assert callable(function)
+
+
+def test_gway_manifest_declares_role_aware_service_topology():
+    repository_root = Path(__file__).resolve().parents[3]
+    manifest = tomllib.loads((repository_root / "gway.toml").read_text())
+    services = manifest["services"]
+
+    assert set(services) == {"web-local", "web-edge", "worker", "beat"}
+    assert services["web-local"]["profiles"] == ["Terminal", "Watchtower"]
+    assert services["web-edge"]["profiles"] == ["Control", "Satellite"]
+    assert services["worker"]["profiles"] == ["Control", "Satellite", "Watchtower"]
+    assert services["beat"]["profiles"] == ["Control", "Satellite", "Watchtower"]
+
+    for service in services.values():
+        assert service["command"][0] == "{python}"
+        assert service["working_directory"] == "{project}"
