@@ -50,7 +50,7 @@ dependencies = [
   "plyer==2.1.0; sys_platform == \"win32\"",
   "prompt_toolkit==3.0.53",
   "psutil==7.2.2",
-  "psycopg-binary==3.3.4",
+  "psycopg-binary==3.3.5",
   "psycopg==3.3.4",
   "pycparser==3.0",
   "pyOpenSSL==26.3.0",
@@ -95,7 +95,7 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.5.1",
-  "django-stubs-ext==6.0.9",
+  "django-stubs-ext==6.1.0",
   "django-stubs==6.0.9",
   "import-linter==2.14",
   "ruff==0.16.5",
