@@ -25,7 +25,7 @@ def test_installed_mode_uses_standard_linux_defaults(tmp_path: Path) -> None:
     )
 
     assert paths.mode is ArthexisMode.INSTALLED
-    assert paths.app_dir == Path("/opt/arthexis/current")
+    assert paths.app_dir == Path("/opt/arthexis/app")
     assert paths.config_dir == Path("/etc/arthexis")
     assert paths.data_dir == Path("/var/lib/arthexis")
     assert paths.log_dir == Path("/var/log/arthexis")
@@ -40,7 +40,7 @@ def test_standalone_installed_mode_requires_no_gway_state(tmp_path: Path) -> Non
     )
 
     assert paths.mode is ArthexisMode.INSTALLED
-    assert paths.app_dir == Path("/opt/arthexis/current")
+    assert paths.app_dir == Path("/opt/arthexis/app")
     assert paths.data_dir == Path("/var/lib/arthexis")
 
 
