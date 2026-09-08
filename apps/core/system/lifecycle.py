@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-DEFAULT_MANAGED_ROOT = Path("/opt/arthexis")
+DEFAULT_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
 DEFAULT_ENVIRONMENT_NAME = ".venv"
 
 
 @dataclass(frozen=True)
-class ManagedLayout:
+class InstallationLayout:
     root: Path
     checkout: Path
     environment: Path
@@ -26,40 +26,40 @@ class ManagedLayout:
         return self.environment / "bin" / "python"
 
 
-def managed_layout(root: str | Path | None = None) -> ManagedLayout:
-    """Return the canonical filesystem layout for a GWAY-managed install."""
+def layout(root: str | Path | None = None) -> InstallationLayout:
+    """Return the canonical filesystem layout for an Arthexis installation."""
     selected_root = Path(
-        root or os.environ.get("ARTHEXIS_MANAGED_ROOT") or DEFAULT_MANAGED_ROOT
+        root or os.environ.get("ARTHEXIS_INSTALL_ROOT") or DEFAULT_ROOT
     ).expanduser()
-    return ManagedLayout(
+    return InstallationLayout(
         root=selected_root,
         checkout=selected_root / DEFAULT_CHECKOUT_NAME,
         environment=selected_root / DEFAULT_ENVIRONMENT_NAME,
     )
 
 
-def ensure_environment(layout: ManagedLayout | None = None) -> Path:
-    """Create the managed virtual environment if it does not already exist."""
-    current = layout or managed_layout()
-    if not current.python.exists():
-        current.root.mkdir(parents=True, exist_ok=True)
-        venv.EnvBuilder(with_pip=True).create(current.environment)
-    return current.python
+def ensure_environment(current: InstallationLayout | None = None) -> Path:
+    """Create the application virtual environment if it does not already exist."""
+    selected = current or layout()
+    if not selected.python.exists():
+        selected.root.mkdir(parents=True, exist_ok=True)
+        venv.EnvBuilder(with_pip=True).create(selected.environment)
+    return selected.python
 
 
 def run_python(
     arguments: Iterable[str],
     *,
-    layout: ManagedLayout | None = None,
+    current: InstallationLayout | None = None,
     cwd: str | Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the managed Python interpreter with a deterministic working directory."""
-    current = layout or managed_layout()
-    python = ensure_environment(current)
+    """Run the installation's Python interpreter from a deterministic directory."""
+    selected = current or layout()
+    python = ensure_environment(selected)
     return subprocess.run(
         [str(python), *arguments],
-        cwd=Path(cwd) if cwd is not None else current.checkout,
+        cwd=Path(cwd) if cwd is not None else selected.checkout,
         check=check,
         text=True,
     )
@@ -67,62 +67,73 @@ def run_python(
 
 def install_project(
     *,
-    layout: ManagedLayout | None = None,
+    current: InstallationLayout | None = None,
     editable: bool = False,
 ) -> None:
-    """Install the managed checkout into its dedicated virtual environment."""
-    current = layout or managed_layout()
+    """Install the checkout into its dedicated virtual environment."""
+    selected = current or layout()
     arguments = ["-m", "pip", "install"]
     if editable:
-        arguments.extend(["-e", str(current.checkout)])
+        arguments.extend(["-e", str(selected.checkout)])
     else:
-        arguments.extend(["--upgrade", str(current.checkout)])
-    run_python(arguments, layout=current)
+        arguments.extend(["--upgrade", str(selected.checkout)])
+    run_python(arguments, current=selected)
 
 
 def run_manage(
     command: str,
     *arguments: str,
-    layout: ManagedLayout | None = None,
+    current: InstallationLayout | None = None,
 ) -> None:
-    """Run one Django management command from the managed checkout."""
-    current = layout or managed_layout()
+    """Run one Django management command from the installed checkout."""
+    selected = current or layout()
     run_python(
         ["manage.py", command, *arguments],
-        layout=current,
-        cwd=current.checkout,
+        current=selected,
+        cwd=selected.checkout,
     )
 
 
-def migrate(*, layout: ManagedLayout | None = None) -> None:
-    run_manage("migrate", "--noinput", layout=layout)
+def migrate(*, current: InstallationLayout | None = None) -> None:
+    run_manage("migrate", "--noinput", current=current)
 
 
-def collectstatic(*, layout: ManagedLayout | None = None) -> None:
-    run_manage("collectstatic", "--noinput", layout=layout)
+def collectstatic(*, current: InstallationLayout | None = None) -> None:
+    run_manage("collectstatic", "--noinput", current=current)
 
 
-def prepare_managed_install(
+def _prepare(
     *,
-    layout: ManagedLayout | None = None,
+    current: InstallationLayout | None = None,
     editable: bool = False,
     run_migrations: bool = True,
     run_collectstatic: bool = True,
-) -> ManagedLayout:
-    """Prepare dependencies and Django state for a managed checkout.
-
-    Git checkout/update and service restart deliberately remain GWAY-owned.
-    """
-    current = layout or managed_layout()
-    if not current.checkout.is_dir():
-        raise FileNotFoundError(f"managed checkout does not exist: {current.checkout}")
-    ensure_environment(current)
-    install_project(layout=current, editable=editable)
+) -> InstallationLayout:
+    """Prepare dependencies and Django state after GWAY has placed the checkout."""
+    selected = current or layout()
+    if not selected.checkout.is_dir():
+        raise FileNotFoundError(f"installation checkout does not exist: {selected.checkout}")
+    ensure_environment(selected)
+    install_project(current=selected, editable=editable)
     if run_migrations:
-        migrate(layout=current)
+        migrate(current=selected)
     if run_collectstatic:
-        collectstatic(layout=current)
-    return current
+        collectstatic(current=selected)
+    return selected
+
+
+def install(
+    *,
+    root: str | Path | None = None,
+    editable: bool = False,
+) -> InstallationLayout:
+    """Run Arthexis application preparation after a GWAY install."""
+    return _prepare(current=layout(root), editable=editable)
+
+
+def upgrade(*, root: str | Path | None = None) -> InstallationLayout:
+    """Run Arthexis application preparation after GWAY updates the checkout."""
+    return _prepare(current=layout(root))
 
 
 def current_python() -> str:
