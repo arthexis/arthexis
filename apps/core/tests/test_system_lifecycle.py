@@ -50,17 +50,16 @@ def test_collectstatic_runs_noninteractive_manage_command(monkeypatch) -> None:
 
 
 def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> None:
-    calls: list[tuple[lifecycle.InstallationLayout | None, bool]] = []
+    calls: list[lifecycle.InstallationLayout | None] = []
 
     def prepare(
         *,
         layout: lifecycle.InstallationLayout | None = None,
-        editable: bool = False,
         run_migrations: bool = True,
         run_collectstatic: bool = True,
     ) -> lifecycle.InstallationLayout:
         del run_migrations, run_collectstatic
-        calls.append((layout, editable))
+        calls.append(layout)
         assert layout is not None
         return layout
 
@@ -74,4 +73,36 @@ def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> N
 
     assert lifecycle.install(layout=selected) is selected
     assert lifecycle.upgrade(layout=selected) is selected
-    assert calls == [(selected, False), (selected, False)]
+    assert calls == [selected, selected]
+
+
+def test_run_python_uses_interpreter_that_invoked_lifecycle(monkeypatch) -> None:
+    calls: list[tuple[list[str], Path, bool, bool]] = []
+
+    def run(arguments, *, cwd, check, text):
+        calls.append((arguments, cwd, check, text))
+        return object()
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", run)
+    monkeypatch.setattr(lifecycle, "current_python", lambda: "/managed/.venv/bin/python")
+
+    selected = lifecycle.InstallationLayout(
+        root=Path("/managed"),
+        checkout=Path("/managed/app"),
+        environment=Path("/managed/.venv"),
+    )
+    lifecycle.run_python(["manage.py", "check"], layout=selected)
+
+    assert calls == [
+        (
+            ["/managed/.venv/bin/python", "manage.py", "check"],
+            Path("/managed/app"),
+            True,
+            True,
+        )
+    ]
+
+
+def test_lifecycle_does_not_own_environment_or_package_installation() -> None:
+    assert not hasattr(lifecycle, "ensure_environment")
+    assert not hasattr(lifecycle, "install_project")

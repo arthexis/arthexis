@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import venv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -45,15 +44,6 @@ def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
     return selected or layout()
 
 
-def ensure_environment(layout: InstallationLayout | None = None) -> Path:
-    """Create the application virtual environment if it does not already exist."""
-    current = _resolve_layout(layout)
-    if not current.python.exists():
-        current.root.mkdir(parents=True, exist_ok=True)
-        venv.EnvBuilder(with_pip=True).create(current.environment)
-    return current.python
-
-
 def run_python(
     arguments: Iterable[str],
     *,
@@ -61,30 +51,14 @@ def run_python(
     cwd: str | Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the installation Python interpreter with a deterministic working directory."""
+    """Run the managed interpreter with a deterministic working directory."""
     current = _resolve_layout(layout)
-    python = ensure_environment(current)
     return subprocess.run(
-        [str(python), *arguments],
+        [current_python(), *arguments],
         cwd=Path(cwd) if cwd is not None else current.checkout,
         check=check,
         text=True,
     )
-
-
-def install_project(
-    *,
-    layout: InstallationLayout | None = None,
-    editable: bool = False,
-) -> None:
-    """Install the checkout into its dedicated virtual environment."""
-    current = _resolve_layout(layout)
-    arguments = ["-m", "pip", "install"]
-    if editable:
-        arguments.extend(["-e", str(current.checkout)])
-    else:
-        arguments.extend(["--upgrade", str(current.checkout)])
-    run_python(arguments, layout=current)
 
 
 def run_manage(
@@ -112,19 +86,17 @@ def collectstatic(*, layout: InstallationLayout | None = None) -> None:
 def prepare(
     *,
     layout: InstallationLayout | None = None,
-    editable: bool = False,
     run_migrations: bool = True,
     run_collectstatic: bool = True,
 ) -> InstallationLayout:
-    """Prepare dependencies and Django state for an installation checkout.
+    """Prepare Django state for a GWAY-managed installation checkout.
 
-    Git checkout/update and service restart deliberately remain GWAY-owned.
+    Checkout/update, environment preparation, package installation, and service
+    restart deliberately remain GWAY-owned.
     """
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():
         raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
-    ensure_environment(current)
-    install_project(layout=current, editable=editable)
     if run_migrations:
         migrate(layout=current)
     if run_collectstatic:
@@ -132,22 +104,14 @@ def prepare(
     return current
 
 
-def install(
-    *,
-    layout: InstallationLayout | None = None,
-    editable: bool = False,
-) -> InstallationLayout:
+def install(*, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
-    return prepare(layout=layout, editable=editable)
+    return prepare(layout=layout)
 
 
-def upgrade(
-    *,
-    layout: InstallationLayout | None = None,
-    editable: bool = False,
-) -> InstallationLayout:
+def upgrade(*, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
-    return prepare(layout=layout, editable=editable)
+    return prepare(layout=layout)
 
 
 def current_python() -> str:
