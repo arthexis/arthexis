@@ -11,9 +11,12 @@ from .apps import *  # noqa: F401,F403,E402
 
 CELERY_RUNTIME_ENABLED = role_requires_shared_channel_layer(NODE_ROLE)
 if not CELERY_RUNTIME_ENABLED:
+    # Reports currently stores schedule relations to django-celery-beat models,
+    # so it cannot be loaded in the lightweight Terminal dependency set.
     _CELERY_APP_ENTRIES = {
         "apps.celery",
         "apps.celery.beat_app.CeleryBeatConfig",
+        "apps.reports",
     }
     PROJECT_LOCAL_APPS[:] = [
         app for app in PROJECT_LOCAL_APPS if app not in _CELERY_APP_ENTRIES
