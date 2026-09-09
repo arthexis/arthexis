@@ -116,8 +116,18 @@ def _load_dpapi_env_secrets() -> None:
             os.environ[target_key] = secret
 
 
+def _apply_gway_service_profile() -> None:
+    """Expose GWAY's managed service profile through Arthexis's role interface."""
+    if os.environ.get("NODE_ROLE", "").strip():
+        return
+    profile = os.environ.get("GWAY_SERVICE_PROFILE", "").strip()
+    if profile:
+        os.environ["NODE_ROLE"] = profile
+
+
 def loadenv() -> None:
     """Load all .env files from the repository root."""
     for env_file in sorted(BASE_DIR.glob("*.env")):
         load_dotenv(env_file, override=False)
     _load_dpapi_env_secrets()
+    _apply_gway_service_profile()
