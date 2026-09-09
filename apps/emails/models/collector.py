@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
-from apps.core.models import EmailArtifact
+from apps.emails.models.email import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
 
 logger = logging.getLogger(__name__)
