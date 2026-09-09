@@ -1,7 +1,7 @@
+from django.conf import settings
+
 from .billing import CustomerAccount, EnergyTariff, EnergyTariffManager, Location
 from .transactions import EnergyTransaction, generate_missing_reports
-from .scheduling import ClientReportSchedule
-from .reporting import ClientReport
 
 __all__ = [
     "CustomerAccount",
@@ -9,7 +9,11 @@ __all__ = [
     "EnergyTariffManager",
     "Location",
     "EnergyTransaction",
-    "ClientReportSchedule",
-    "ClientReport",
     "generate_missing_reports",
 ]
+
+if getattr(settings, "CELERY_RUNTIME_ENABLED", True):
+    from .reporting import ClientReport
+    from .scheduling import ClientReportSchedule
+
+    __all__.extend(["ClientReportSchedule", "ClientReport"])
