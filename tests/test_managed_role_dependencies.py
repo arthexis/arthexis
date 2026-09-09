@@ -10,19 +10,10 @@ CELERY_RUNTIME_DEPENDENCIES = {
 }
 
 
-def test_managed_roles_select_migration_compatible_celery_extra() -> None:
+def test_managed_install_has_no_dependency_extras() -> None:
     manifest = tomllib.loads((ROOT / "gway.toml").read_text(encoding="utf-8"))
-    extras = manifest["install"]["extras"]
 
-    assert extras["argument"] == "--role"
-    assert extras["default"] == "Terminal"
-    assert extras["state"] == ".locks/role.lck"
-    assert extras["values"] == {
-        "Control": ["celery"],
-        "Satellite": ["celery"],
-        "Terminal": ["celery"],
-        "Watchtower": ["celery"],
-    }
+    assert "extras" not in manifest["install"]
 
 
 def test_celery_runtime_dependencies_are_mandatory() -> None:
