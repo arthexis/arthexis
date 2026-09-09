@@ -58,7 +58,7 @@ def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> str | None:
 
 
 def _role_lock(current: InstallationLayout) -> Path:
-    return current.checkout / ".locks" / "role.lck"
+    return current.root / ".locks" / "role.lck"
 
 
 def _persist_role(role: str, current: InstallationLayout) -> None:
