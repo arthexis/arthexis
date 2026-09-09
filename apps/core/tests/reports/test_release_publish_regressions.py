@@ -60,6 +60,7 @@ def test_linux_ci_and_security_scans_run_on_pull_requests() -> None:
         "ci.yml",
         "codeql.yml",
         "public-release-audit.yml",
+        "ruff-autofix.yml",
         "secret-scan.yml",
     ]
 
