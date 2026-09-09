@@ -27,6 +27,7 @@ def test_role_argument_is_persisted_before_prepare(
         observed.append((tmp_path / ".locks" / "role.lck").read_text().strip())
 
     monkeypatch.setattr(lifecycle, "migrate", fake_migrate)
+    monkeypatch.setattr(lifecycle, "ensure_local_node", lambda **kwargs: None)
     monkeypatch.setattr(lifecycle, "collectstatic", lambda **kwargs: None)
 
     lifecycle.install("--role", requested, layout=selected)
@@ -36,7 +37,9 @@ def test_role_argument_is_persisted_before_prepare(
     assert not (checkout / ".locks" / "role.lck").exists()
 
 
-def test_upgrade_without_role_preserves_existing_role(monkeypatch, tmp_path: Path) -> None:
+def test_upgrade_without_role_preserves_existing_role(
+    monkeypatch, tmp_path: Path
+) -> None:
     checkout = tmp_path / "app"
     checkout.mkdir()
     role_lock = tmp_path / ".locks" / "role.lck"
@@ -44,6 +47,7 @@ def test_upgrade_without_role_preserves_existing_role(monkeypatch, tmp_path: Pat
     role_lock.write_text("Satellite\n")
     selected = lifecycle.InstallationLayout(root=tmp_path, checkout=checkout)
     monkeypatch.setattr(lifecycle, "migrate", lambda **kwargs: None)
+    monkeypatch.setattr(lifecycle, "ensure_local_node", lambda **kwargs: None)
     monkeypatch.setattr(lifecycle, "collectstatic", lambda **kwargs: None)
 
     lifecycle.upgrade(layout=selected)
