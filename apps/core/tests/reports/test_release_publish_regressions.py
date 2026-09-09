@@ -178,7 +178,9 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
     ]
     assert ".venv" not in cache_paths
 
-    install_run = _workflow_step(install_job, "Install suite from clean repository")["run"]
+    install_run = _workflow_step(install_job, "Install suite from clean repository")[
+        "run"
+    ]
     assert "rm -rf .venv" in install_run
     assert "./install.sh --no-start" in install_run
     assert "--embedded" not in install_run
@@ -223,13 +225,16 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
     assert notify_failure["permissions"]["issues"] == "write"
     assert notify_failure["env"]["GH_TOKEN"] == "${{ github.token }}"
     assert notify_failure["env"]["ISSUE_MARKER"] == "<!-- install-health-failure -->"
-    failure_script = _workflow_step(
-        notify_failure, "Create or update failure issue"
-    )["run"]
+    failure_script = _workflow_step(notify_failure, "Create or update failure issue")[
+        "run"
+    ]
     assert "gh api --paginate" in failure_script
-    assert "actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" in failure_script
+    assert (
+        "actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100"
+        in failure_script
+    )
     assert 'select(.conclusion == "failure")' in failure_script
-    assert ".steps[]? | select(.conclusion == \"failure\") | .name" in failure_script
+    assert '.steps[]? | select(.conclusion == "failure") | .name' in failure_script
     assert ".html_url" in failure_script
     assert "### Latest failure" in failure_script
     assert "### Failed jobs" in failure_script
@@ -248,9 +253,9 @@ def test_install_health_workflow_runs_on_main_and_manual_dispatch() -> None:
     assert notify_recovery["permissions"]["contents"] == "read"
     assert notify_recovery["permissions"]["issues"] == "write"
     assert notify_recovery["env"]["GH_TOKEN"] == "${{ github.token }}"
-    recovery_script = _workflow_step(
-        notify_recovery, "Close recovered failure issue"
-    )["run"]
+    recovery_script = _workflow_step(notify_recovery, "Close recovered failure issue")[
+        "run"
+    ]
     assert "gh api --paginate" in recovery_script
     assert "<!-- install-health-failure -->" in recovery_script
     assert "gh issue comment" in recovery_script
