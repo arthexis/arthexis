@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-
 pytestmark = [pytest.mark.gate_upgrade]
 
 
@@ -41,7 +40,14 @@ raise SystemExit(0)
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run_preflight(tmp_path: Path, *, fingerprint: str, metadata: str, db_identity: str, env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run_preflight(
+    tmp_path: Path,
+    *,
+    fingerprint: str,
+    metadata: str,
+    db_identity: str,
+    env_extra: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     base_dir = tmp_path / "project"
     lock_dir = base_dir / ".locks"
     apps_dir = base_dir / "apps" / "demo" / "migrations"
@@ -49,7 +55,12 @@ def _run_preflight(tmp_path: Path, *, fingerprint: str, metadata: str, db_identi
     (apps_dir / "0001_initial.py").write_text("# migration fixture\n", encoding="utf-8")
     _write_fake_manage(base_dir / "manage.py")
 
-    script_path = Path(__file__).resolve().parents[3] / "scripts" / "helpers" / "runserver_preflight.sh"
+    script_path = (
+        Path(__file__).resolve().parents[3]
+        / "scripts"
+        / "helpers"
+        / "runserver_preflight.sh"
+    )
     script = f"""
 set -euo pipefail
 source {script_path}
@@ -85,26 +96,45 @@ def _manage_calls(lock_dir: Path) -> list[str]:
     log_file = lock_dir / "manage.log"
     if not log_file.exists():
         return []
-    return [line.strip() for line in log_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        line.strip()
+        for line in log_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 @pytest.mark.parametrize(
-    ("cached_fingerprint", "runtime_fingerprint", "cached_metadata", "runtime_metadata", "db_identity"),
+    (
+        "cached_fingerprint",
+        "runtime_fingerprint",
+        "cached_metadata",
+        "runtime_metadata",
+        "db_identity",
+    ),
     [
         pytest.param(
             "fingerprint-v1",
             "fingerprint-v1",
-            json.dumps({"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True),
-            json.dumps({"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True),
+            json.dumps(
+                {"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True
+            ),
+            json.dumps(
+                {"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True
+            ),
             "db-id-v1",
             id="verified-state-matches",
         ),
         pytest.param(
             "old-fingerprint",
             "new-fingerprint",
-            json.dumps({"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True),
             json.dumps(
-                {"version": 1, "entries": [["apps/demo/migrations/0001_initial.py", 2, 20]]},
+                {"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True
+            ),
+            json.dumps(
+                {
+                    "version": 1,
+                    "entries": [["apps/demo/migrations/0001_initial.py", 2, 20]],
+                },
                 separators=(",", ":"),
                 sort_keys=True,
             ),
@@ -125,7 +155,9 @@ def test_preflight_runs_migrate_check_for_verified_and_changed_states(
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
 
-    (lock_dir / "migrations.sha").write_text(f"{cached_fingerprint}\n", encoding="utf-8")
+    (lock_dir / "migrations.sha").write_text(
+        f"{cached_fingerprint}\n", encoding="utf-8"
+    )
     (lock_dir / "migrations.meta").write_text(f"{cached_metadata}\n", encoding="utf-8")
     (lock_dir / "migrations.verified.json").write_text(
         json.dumps(
@@ -153,8 +185,12 @@ def test_preflight_runs_migrate_check_for_verified_and_changed_states(
     assert _manage_calls(lock_dir) == ["check"]
 
 
-def test_preflight_check_policy_fails_fast_for_pending_migrations(tmp_path: Path) -> None:
-    metadata = json.dumps({"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True)
+def test_preflight_check_policy_fails_fast_for_pending_migrations(
+    tmp_path: Path,
+) -> None:
+    metadata = json.dumps(
+        {"version": 1, "entries": []}, separators=(",", ":"), sort_keys=True
+    )
 
     result = _run_preflight(
         tmp_path,

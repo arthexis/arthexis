@@ -13,4 +13,3 @@ class SiteConfigurationAdmin(
     CertificateGenerationMixin, SiteConfigurationViewMixin, admin.ModelAdmin
 ):
     form = SiteConfigurationForm
-

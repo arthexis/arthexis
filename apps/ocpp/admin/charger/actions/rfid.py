@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-
 class RFIDActionsMixin:
     """Delegate RFID action behavior to the registered charger admin."""
 

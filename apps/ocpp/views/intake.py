@@ -63,4 +63,3 @@ class ChargerVendorSubmissionThanksView(TemplateView):
     """Show a lightweight confirmation page after a vendor submission."""
 
     template_name = "ocpp/intake/charger_vendor_submission_thanks.html"
-

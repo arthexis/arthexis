@@ -4,6 +4,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
+
 def _run_lcd_configured_check(
     tmp_path: Path,
     *,
@@ -38,4 +39,3 @@ fi
         capture_output=True,
         check=False,
     )
-

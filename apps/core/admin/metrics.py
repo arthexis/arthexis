@@ -1,4 +1,5 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
+from datetime import timezone as dt_timezone
 
 from django.db.models import Count, Q
 
@@ -23,7 +24,11 @@ def format_enabled_total(obj, *, enabled_attr, total_attr):
 
 
 def max_attr(obj, *attrs):
-    values = [value for value in (getattr(obj, attr, None) for attr in attrs) if value is not None]
+    values = [
+        value
+        for value in (getattr(obj, attr, None) for attr in attrs)
+        if value is not None
+    ]
     return max(values) if values else None
 
 
@@ -40,6 +45,6 @@ def normalize_timestamp(value):
         timestamp = timestamp / 1000
 
     try:
-        return datetime.fromtimestamp(timestamp, tz=dt_timezone.utc)
+        return datetime.fromtimestamp(timestamp, tz=UTC)
     except (OverflowError, OSError, ValueError):
         return None

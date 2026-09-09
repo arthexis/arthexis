@@ -10,9 +10,17 @@ from apps.ocpp.payload_types import PendingCallMetadata
 
 from . import (
     logs as logs_module,
+)
+from . import (
     pending_calls as pending_calls_module,
+)
+from . import (
     scheduler as scheduler_module,
+)
+from . import (
     state as state_module,
+)
+from . import (
     transactions as transactions_module,
 )
 
@@ -36,9 +44,7 @@ pending_calls = pending_calls_module.pending_calls
 transactions = state_module.transactions
 
 
-def register_pending_call(
-    message_id: str, metadata: Mapping[str, object]
-) -> None:
+def register_pending_call(message_id: str, metadata: Mapping[str, object]) -> None:
     """Store metadata about an outstanding CSMS call."""
 
     pending_calls_module.register_pending_call(message_id, dict(metadata))

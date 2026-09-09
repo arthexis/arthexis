@@ -9,7 +9,9 @@ import pytest
 from scripts.devtools import migration_server
 
 
-def _completed(*, returncode: int, stderr: str = "", stdout: str = "") -> subprocess.CompletedProcess[str]:
+def _completed(
+    *, returncode: int, stderr: str = "", stdout: str = ""
+) -> subprocess.CompletedProcess[str]:
     """Build a completed-process payload matching migration runner contracts."""
 
     return subprocess.CompletedProcess(

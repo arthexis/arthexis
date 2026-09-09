@@ -11,5 +11,7 @@ class OpsConfig(AppConfig):
     label = "ops"
 
     def ready(self):  # pragma: no cover - Django startup hook
-        from . import admin_notice  # noqa: F401
-        from . import admin_notice_admin  # noqa: F401
+        from . import (
+            admin_notice,  # noqa: F401
+            admin_notice_admin,  # noqa: F401
+        )

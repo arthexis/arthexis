@@ -13,7 +13,9 @@ async def get_log(ctx: HandlerContext) -> bool:
     Persistence updates: updates ``ChargerLogRequest`` and log capture session state.
     """
 
-    return await legacy.handle_get_log_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_log_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_diagnostics(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def get_diagnostics(ctx: HandlerContext) -> bool:
     Persistence updates: updates charger diagnostics timestamp/location.
     """
 
-    return await legacy.handle_get_diagnostics_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_diagnostics_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_get_log_result = legacy_adapter(get_log)

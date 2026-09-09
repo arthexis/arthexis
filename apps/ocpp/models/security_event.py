@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class SecurityEvent(Entity):
     """Security-related events reported by a charge point."""
 

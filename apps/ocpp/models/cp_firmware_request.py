@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .data_transfer_message import DataTransferMessage
 
+
 class CPFirmwareRequest(Entity):
     """Temporary record tracking CP firmware requests."""
 

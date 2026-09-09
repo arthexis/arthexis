@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import logging
 import subprocess
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime, timezone
 
 from django.conf import settings
 from django.core.cache import cache
@@ -83,7 +83,9 @@ def get_initial_page(initial_count: int = _INITIAL_SECTION_COUNT) -> ChangelogPa
     return ChangelogPage(initial_sections, next_page, has_more)
 
 
-def get_page(page: int, per_page: int, *, offset: int = _INITIAL_SECTION_COUNT) -> ChangelogPage:
+def get_page(
+    page: int, per_page: int, *, offset: int = _INITIAL_SECTION_COUNT
+) -> ChangelogPage:
     if page < 1:
         raise ChangelogError("Invalid page index.")
     if per_page < 1:
@@ -200,10 +202,12 @@ def _gather_release_markers() -> Iterable[_ReleaseMarker]:
         if not version:
             continue
         try:
-            committed_at = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+            committed_at = datetime.fromtimestamp(int(timestamp), tz=UTC)
         except ValueError:
-            committed_at = datetime.now(tz=timezone.utc)
-        markers.append(_ReleaseMarker(sha=sha, version=version, committed_at=committed_at))
+            committed_at = datetime.now(tz=UTC)
+        markers.append(
+            _ReleaseMarker(sha=sha, version=version, committed_at=committed_at)
+        )
     return markers
 
 
@@ -252,9 +256,9 @@ def _gather_commits(
         if not sha:
             continue
         try:
-            authored_at = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+            authored_at = datetime.fromtimestamp(int(timestamp), tz=UTC)
         except ValueError:
-            authored_at = datetime.now(tz=timezone.utc)
+            authored_at = datetime.now(tz=UTC)
         commit_url = _github_commit_url(sha)
         yield ChangelogCommit(
             sha=sha,
@@ -287,7 +291,9 @@ def _cache_key() -> str:
 
 
 def _latest_commits_cache_key(limit: int, prefixes: Sequence[str]) -> str:
-    prefix_key = ",".join(prefix.strip().lower() for prefix in prefixes if prefix.strip())
+    prefix_key = ",".join(
+        prefix.strip().lower() for prefix in prefixes if prefix.strip()
+    )
     return f"{_cache_key()}:latest:{limit}:{prefix_key}"
 
 
@@ -297,6 +303,9 @@ def _summary_is_excluded(summary: str, prefixes: Sequence[str]) -> bool:
         return False
     for prefix in prefixes:
         key = prefix.strip().lower()
-        if key and (normalized == key or normalized.startswith((f"{key}:", f"{key}(", f"{key} "))):
+        if key and (
+            normalized == key
+            or normalized.startswith((f"{key}:", f"{key}(", f"{key} "))
+        ):
             return True
     return False

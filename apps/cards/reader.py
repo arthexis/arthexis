@@ -4,7 +4,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as datetime_timezone
 from pathlib import Path
 from typing import Any
@@ -1185,9 +1185,7 @@ def _save_tag_layout_metadata(tag, metadata: dict[str, Any]) -> None:
 
 def _parse_writer_timestamp(value: str):
     try:
-        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=datetime_timezone.utc
-        )
+        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
     except ValueError:
         return None
 

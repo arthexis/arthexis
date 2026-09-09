@@ -13,7 +13,6 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from django_otp.util import random_hex
 

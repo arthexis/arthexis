@@ -3,8 +3,9 @@ from __future__ import annotations
 import calendar
 import datetime
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from apps.energy.models import ClientReport, ClientReportSchedule
 

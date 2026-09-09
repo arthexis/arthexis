@@ -83,9 +83,13 @@ def run_before_prompt_hooks(
 ) -> PromptGuardOutcome:
     runner = runner or subprocess.run
     selected_platform = platform or current_hook_platform()
-    hook_records = list(hooks) if hooks is not None else list_hooks(
-        event=Hook.Event.BEFORE_PROMPT,
-        platform=selected_platform,
+    hook_records = (
+        list(hooks)
+        if hooks is not None
+        else list_hooks(
+            event=Hook.Event.BEFORE_PROMPT,
+            platform=selected_platform,
+        )
     )
     current_prompt = prompt
     steps: list[PromptHookStep] = []
@@ -153,7 +157,9 @@ def run_before_prompt_hooks(
             current_prompt = rewritten_prompt
             continue
         if decision == REFUSE_DECISION:
-            reason = str(hook_output.get("reason") or "Prompt refused by before_prompt hook.")
+            reason = str(
+                hook_output.get("reason") or "Prompt refused by before_prompt hook."
+            )
             return PromptGuardOutcome(
                 status=REFUSE_DECISION,
                 prompt=current_prompt,

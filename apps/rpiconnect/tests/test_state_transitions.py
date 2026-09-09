@@ -27,7 +27,9 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.STOPPED)
         self.assertTrue(campaign.completed_at)
         statuses = list(
-            campaign.events.filter(event_type__startswith="campaign.").values_list("event_type", flat=True)
+            campaign.events.filter(event_type__startswith="campaign.").values_list(
+                "event_type", flat=True
+            )
         )
         self.assertIn("campaign.paused", statuses)
         self.assertIn("campaign.resumed", statuses)
@@ -68,10 +70,14 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         with self.assertRaises(CampaignServiceError):
             self.service.resume_campaign(campaign, created_by=self.user)
 
-    def test_running_campaign_auto_queues_next_canary_stage_when_first_stage_finished(self) -> None:
+    def test_running_campaign_auto_queues_next_canary_stage_when_first_stage_finished(
+        self,
+    ) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -91,7 +97,9 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
     def test_running_campaign_stops_stage_progression_after_failed_canary(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -113,7 +121,9 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
     def test_running_campaign_marks_complete_after_final_stage_finishes(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -137,12 +147,16 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         campaign.refresh_from_db()
         self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.COMPLETED)
         self.assertTrue(campaign.completed_at)
-        self.assertTrue(campaign.events.filter(event_type="campaign.completed").exists())
+        self.assertTrue(
+            campaign.events.filter(event_type="campaign.completed").exists()
+        )
 
     def test_running_campaign_fails_if_next_stage_devices_were_deleted(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -160,7 +174,9 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         campaign.refresh_from_db()
         self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.FAILED)
         self.assertTrue(
-            campaign.events.filter(event_type="campaign.stage_queue_failed_missing_devices").exists()
+            campaign.events.filter(
+                event_type="campaign.stage_queue_failed_missing_devices"
+            ).exists()
         )
         self.assertEqual(campaign.deployments.count(), 1)
 

@@ -22,7 +22,9 @@ def resolve_charger_target(
 
     target = (
         Charger.objects.filter(charger_id=charger_id, connector_id=connector_id).first()
-        or Charger.objects.filter(charger_id=charger_id, connector_id__isnull=True).first()
+        or Charger.objects.filter(
+            charger_id=charger_id, connector_id__isnull=True
+        ).first()
     )
     if target is not None:
         return target

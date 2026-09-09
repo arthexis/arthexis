@@ -84,9 +84,7 @@ def test_release_transforms_link_ocpp_charging_stations(tmp_path) -> None:
     """Deferred transforms should link charge points to charging stations."""
 
     charger = Charger.objects.create(charger_id="STATION-1", connector_id=1)
-    Charger.objects.filter(pk=charger.pk).update(
-        charging_station=None
-    )
+    Charger.objects.filter(pk=charger.pk).update(charging_station=None)
 
     _run_until_complete("ocpp.link_charging_stations", base_dir=tmp_path)
 
@@ -213,7 +211,7 @@ def test_release_transforms_remove_retired_feature_surfaces(tmp_path) -> None:
             "/repos/tracker/",
             "/shop/",
             "/video/cameras/",
-        )
+        ),
     ).exists()
     assert not Feature.all_objects.filter(
         is_deleted=False,
@@ -285,7 +283,9 @@ def test_release_transforms_remove_retired_feature_surfaces(tmp_path) -> None:
 
 
 @pytest.mark.django_db
-def test_release_transform_removes_calculator_journal_and_simulator_pills(tmp_path) -> None:
+def test_release_transform_removes_calculator_journal_and_simulator_pills(
+    tmp_path,
+) -> None:
     """The public-surface cleanup includes the later retired entry points."""
 
     calculator_module = Module.objects.create(path="/awg/", is_seed_data=True)

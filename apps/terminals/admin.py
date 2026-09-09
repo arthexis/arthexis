@@ -14,7 +14,13 @@ class AgentTerminalAdminForm(OwnableAdminForm):
 class AgentTerminalAdmin(OwnableAdminMixin, admin.ModelAdmin):
     ownable_fieldset = ("Owner", {"fields": ("user", "group")})
     ownable_form_class = AgentTerminalAdminForm
-    list_display = ("name", "owner_display", "effective_node_role", "auto_close_on_exit", "updated_at")
+    list_display = (
+        "name",
+        "owner_display",
+        "effective_node_role",
+        "auto_close_on_exit",
+        "updated_at",
+    )
     list_filter = ("auto_close_on_exit", "prompt_block_mode", "node_role")
     search_fields = ("name", "executable", "launch_command", "launch_prompt")
     readonly_fields = (
@@ -36,9 +42,11 @@ class AgentTerminalAdmin(OwnableAdminMixin, admin.ModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request).select_related("node_role")
-        terminal_role = queryset.model._meta.get_field("node_role").remote_field.model.objects.filter(
-            name="Terminal"
-        ).first()
+        terminal_role = (
+            queryset.model._meta.get_field("node_role")
+            .remote_field.model.objects.filter(name="Terminal")
+            .first()
+        )
         for terminal in queryset:
             terminal._cached_terminal_role = terminal.node_role or terminal_role
         return queryset

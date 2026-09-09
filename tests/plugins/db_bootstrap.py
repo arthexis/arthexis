@@ -6,14 +6,15 @@ from typing import Any
 
 import pytest
 
-
 _PYTEST_DJANGO_MISSING_ERROR = (
     "Database-backed tests require pytest-django. Install test dependencies "
     "(for example: `pip install -r requirements-ci.txt`) before running pytest."
 )
 
 
-def _require_pytest_django_fixture(request: pytest.FixtureRequest, fixture_name: str) -> Any:
+def _require_pytest_django_fixture(
+    request: pytest.FixtureRequest, fixture_name: str
+) -> Any:
     """Return a pytest-django fixture or raise a clear usage error when unavailable."""
 
     try:

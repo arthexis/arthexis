@@ -41,7 +41,9 @@ def test_node_login_uses_admin_path_and_verifies_session():
     node.login("user", "pass")
 
     assert node.is_authenticated is False
-    session.get.assert_any_call("https://example.com/control-panel/login/", timeout=30.0)
+    session.get.assert_any_call(
+        "https://example.com/control-panel/login/", timeout=30.0
+    )
     session.get.assert_any_call(
         "https://example.com/control-panel/",
         timeout=30.0,
@@ -120,11 +122,7 @@ def test_login_wraps_post_request_errors():
 
 
 def test_extract_csrf_token_handles_attribute_order_and_quotes():
-    html = (
-        "<form>"
-        "<input value='token123' class='x' name='csrfmiddlewaretoken'>"
-        "</form>"
-    )
+    html = "<form><input value='token123' class='x' name='csrfmiddlewaretoken'></form>"
 
     assert Node._extract_csrf_token(html) == "token123"
 

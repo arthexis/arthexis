@@ -1,9 +1,9 @@
 """Admin registrations for Celery models."""
+
 from django.contrib import admin
 from django.contrib.admin.sites import NotRegistered
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
 from django_celery_beat import admin as celery_admin
 from django_celery_beat.models import (
     ClockedSchedule,
@@ -81,7 +81,14 @@ def _unregister(model):
 
 
 # Remove the default django-celery-beat model registrations to avoid duplicates.
-for model in (PeriodicTask, PeriodicTasks, IntervalSchedule, CrontabSchedule, SolarSchedule, ClockedSchedule):
+for model in (
+    PeriodicTask,
+    PeriodicTasks,
+    IntervalSchedule,
+    CrontabSchedule,
+    SolarSchedule,
+    ClockedSchedule,
+):
     _unregister(model)
 
 

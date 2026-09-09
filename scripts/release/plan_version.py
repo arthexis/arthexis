@@ -79,8 +79,6 @@ class Version:
         return f"{self.major}.{self.minor}.{self.patch}"
 
 
-
-
 @dataclass(frozen=True)
 class FileChange:
     """One changed file as reported by git diff --name-status."""
@@ -207,7 +205,9 @@ def determine_required_bump(
     return BumpLevel.from_name(impact_report.required_bump), impact_report.reasons
 
 
-def collect_git_changes(*, root: Path, base_ref: str, head_ref: str) -> list[FileChange]:
+def collect_git_changes(
+    *, root: Path, base_ref: str, head_ref: str
+) -> list[FileChange]:
     """Collect changed files between base_ref and head_ref."""
 
     if not base_ref:
@@ -301,7 +301,9 @@ def fetch_pypi_versions(
     """Return parseable existing versions from the PyPI JSON API."""
 
     if not math.isfinite(timeout) or timeout <= 0:
-        raise SystemExit(f"PyPI timeout must be a finite value greater than zero seconds: {timeout}.")
+        raise SystemExit(
+            f"PyPI timeout must be a finite value greater than zero seconds: {timeout}."
+        )
     pypi_url = f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
     request = Request(
         pypi_url,
@@ -328,7 +330,9 @@ def fetch_pypi_versions(
         raise SystemExit(f"Unexpected PyPI payload type: {type(payload).__name__}.")
     releases = payload.get("releases") or {}
     if not isinstance(releases, dict):
-        raise SystemExit(f"Unexpected 'releases' payload type from PyPI: {type(releases).__name__}.")
+        raise SystemExit(
+            f"Unexpected 'releases' payload type from PyPI: {type(releases).__name__}."
+        )
 
     versions = set()
     for value in releases:
@@ -418,7 +422,9 @@ def emit_plan(
 
 
 def _collect_app_manifests(*, root: Path, ref: str) -> set[str]:
-    output = _git_stdout(["git", "ls-tree", "-r", "--name-only", ref, "--", "apps"], cwd=root)
+    output = _git_stdout(
+        ["git", "ls-tree", "-r", "--name-only", ref, "--", "apps"], cwd=root
+    )
     apps = set()
     for line in output.splitlines():
         match = re.fullmatch(r"apps/([^/]+)/manifest\.py", _normalize_path(line))
@@ -486,7 +492,9 @@ def _github_output_delimiter(markdown: str) -> str:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Plan the next reviewed release VERSION.")
+    parser = argparse.ArgumentParser(
+        description="Plan the next reviewed release VERSION."
+    )
     parser.add_argument("--root", default=".", help="Repository root.")
     parser.add_argument("--package-name", default=DEFAULT_PACKAGE_NAME)
     parser.add_argument("--version-file", default="VERSION")
@@ -536,7 +544,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         skip_pypi=bool(args.skip_pypi),
     )
     if args.write_version and plan.version_bumped:
-        write_version_file(root=root, version_file=Path(args.version_file), version=plan.next_version)
+        write_version_file(
+            root=root, version_file=Path(args.version_file), version=plan.next_version
+        )
     emit_plan(
         plan,
         github_output=Path(args.github_output) if args.github_output else None,

@@ -22,7 +22,9 @@ class FakeRedis:
         self._data: dict[str, str] = {}
         self._sets: defaultdict[str, set[str]] = defaultdict(set)
 
-    def set(self, key: str, value: str, ex: int | None = None):  # pragma: no cover - trivial
+    def set(
+        self, key: str, value: str, ex: int | None = None
+    ):  # pragma: no cover - trivial
         self._data[key] = value
 
     def get(self, key: str):  # pragma: no cover - trivial
@@ -194,8 +196,6 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-
-
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store_dirs):
     async def run_scenario():
@@ -238,7 +238,9 @@ def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_unexpected_message_does_not_drop_restored_pending(fake_state_redis, temp_store_dirs):
+def test_unexpected_message_does_not_drop_restored_pending(
+    fake_state_redis, temp_store_dirs
+):
     async def run_scenario():
         serial = "CP-UNEXPECTED"
         message_id = "unexpected-1"

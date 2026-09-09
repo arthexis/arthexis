@@ -6,7 +6,9 @@ from apps.ocpp.services import certificate_status
 
 
 class _FakeResponse:
-    def __init__(self, *, status_code: int, payload=None, json_error: Exception | None = None):
+    def __init__(
+        self, *, status_code: int, payload=None, json_error: Exception | None = None
+    ):
         self.status_code = status_code
         self._payload = payload
         self._json_error = json_error
@@ -75,7 +77,9 @@ def test_check_ocsp_timeout_path_is_unchanged(monkeypatch):
     monkeypatch.setattr(
         certificate_status.requests,
         "Session",
-        lambda: _FakeSession(request_error=certificate_status.requests.Timeout("timed out")),
+        lambda: _FakeSession(
+            request_error=certificate_status.requests.Timeout("timed out")
+        ),
     )
 
     ocsp_data, ocsp_error = certificate_status._check_ocsp(
@@ -124,7 +128,9 @@ def test_check_crl_invalid_json_path_is_unchanged(monkeypatch):
         certificate_status.requests,
         "Session",
         lambda: _FakeSession(
-            response=_FakeResponse(status_code=200, json_error=ValueError("invalid json"))
+            response=_FakeResponse(
+                status_code=200, json_error=ValueError("invalid json")
+            )
         ),
     )
 

@@ -1,10 +1,9 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -85,7 +84,9 @@ def _handle_get_display_messages(
             try:
                 normalized_ids.append(int(entry))
             except (TypeError, ValueError):
-                return JsonResponse({"detail": "id values must be integers"}, status=400)
+                return JsonResponse(
+                    {"detail": "id values must be integers"}, status=400
+                )
         payload["id"] = normalized_ids
     priority = data.get("priority")
     if priority not in (None, ""):
@@ -131,7 +132,9 @@ def _handle_set_display_message(
     message_payload = data.get("message")
     if message_payload is None:
         message_payload = {}
-        message_id_value = data.get("id") or data.get("messageId") or data.get("message_id")
+        message_id_value = (
+            data.get("id") or data.get("messageId") or data.get("message_id")
+        )
         if message_id_value not in (None, ""):
             message_payload["id"] = message_id_value
         priority = data.get("priority")
@@ -176,14 +179,20 @@ def _handle_set_display_message(
     priority = message_payload.get("priority")
     if priority in (None, ""):
         return JsonResponse({"detail": "message.priority required"}, status=400)
-    content_payload = message_payload.get("message") or message_payload.get("messageContent")
+    content_payload = message_payload.get("message") or message_payload.get(
+        "messageContent"
+    )
     if isinstance(content_payload, dict):
-        if content_payload.get("format") in (None, "") or content_payload.get("content") in (
+        if content_payload.get("format") in (None, "") or content_payload.get(
+            "content"
+        ) in (
             None,
             "",
         ):
             return JsonResponse(
-                {"detail": "message.message.format and message.message.content required"},
+                {
+                    "detail": "message.message.format and message.message.content required"
+                },
                 status=400,
             )
     else:

@@ -22,6 +22,7 @@ else:
     class FeedbackIssueConfigurationAdminMixin:
         """No-op mixin used when Repos admin tooling is unavailable."""
 
+
 from ..models import UserStory, UserStoryAttachment
 
 logger = logging.getLogger(__name__)

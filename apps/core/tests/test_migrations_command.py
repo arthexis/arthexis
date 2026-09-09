@@ -193,8 +193,6 @@ def test_migrations_benchmark_reports_plan_without_applying(monkeypatch, tmp_pat
     assert payload["execution"]["applied"] is False
 
 
-
-
 def test_migrations_impact_emits_json(monkeypatch, settings, tmp_path):
     """migrations impact should emit structured JSON for changed migrations."""
 
@@ -528,7 +526,9 @@ def test_migrations_benchmark_maps_zero_target(monkeypatch):
                 "Loader",
                 (),
                 {
-                    "graph": type("Graph", (), {"nodes": set(), "leaf_nodes": lambda *_: []})(),
+                    "graph": type(
+                        "Graph", (), {"nodes": set(), "leaf_nodes": lambda *_: []}
+                    )(),
                     "migrated_apps": {"catalog"},
                     "replacements": {},
                 },

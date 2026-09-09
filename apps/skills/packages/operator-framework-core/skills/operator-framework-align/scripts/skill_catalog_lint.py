@@ -38,7 +38,9 @@ def iter_skill_dirs(root: Path, include_system: bool) -> list[Path]:
     ]
 
 
-def lint_skill_dir(skill_dir: Path, max_chars: int) -> tuple[dict[str, Any] | None, list[dict[str, str]], str]:
+def lint_skill_dir(
+    skill_dir: Path, max_chars: int
+) -> tuple[dict[str, Any] | None, list[dict[str, str]], str]:
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         return None, [], ""
@@ -61,11 +63,15 @@ def lint_skill_dir(skill_dir: Path, max_chars: int) -> tuple[dict[str, Any] | No
     if name and skill_dir.name != name:
         item["errors"].append(f"folder/name mismatch: {skill_dir.name} != {name}")
     if total_len > max_chars:
-        item["errors"].append(f"name+description length {total_len} exceeds {max_chars}")
+        item["errors"].append(
+            f"name+description length {total_len} exceeds {max_chars}"
+        )
     if not item["errors"]:
         return item, [], name
     item["ok"] = False
-    errors = [{"skill": name or skill_dir.name, "error": error} for error in item["errors"]]
+    errors = [
+        {"skill": name or skill_dir.name, "error": error} for error in item["errors"]
+    ]
     return item, errors, name
 
 
@@ -89,16 +95,26 @@ def lint(root: Path, max_chars: int, include_system: bool) -> dict[str, Any]:
         errors.extend(item_errors)
         items.append(item)
     errors.extend(duplicate_name_errors(names))
-    return {"root": str(root), "maxNameDescriptionChars": max_chars, "skills": items, "errors": errors, "ok": not errors}
+    return {
+        "root": str(root),
+        "maxNameDescriptionChars": max_chars,
+        "skills": items,
+        "errors": errors,
+        "ok": not errors,
+    }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skills-root", type=Path, default=Path.home() / ".codex" / "skills")
+    parser.add_argument(
+        "--skills-root", type=Path, default=Path.home() / ".codex" / "skills"
+    )
     parser.add_argument("--max-description-chars", type=int, default=720)
     parser.add_argument("--include-system", action="store_true")
     args = parser.parse_args()
-    result = lint(args.skills_root.expanduser(), args.max_description_chars, args.include_system)
+    result = lint(
+        args.skills_root.expanduser(), args.max_description_chars, args.include_system
+    )
     print(json.dumps(result, indent=2))
     return 0 if result["ok"] else 1
 

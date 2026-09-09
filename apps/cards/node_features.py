@@ -104,7 +104,11 @@ def _service_detection(*, base_dir: Path | None = None) -> dict[str, Any]:
         return {"detected": True, "assumed": True, "reason": "RFID service enabled"}
     try:
         if service_available():
-            return {"detected": True, "assumed": True, "reason": "RFID service available"}
+            return {
+                "detected": True,
+                "assumed": True,
+                "reason": "RFID service available",
+            }
     except Exception as exc:  # pragma: no cover - hardware/runtime dependent
         return {"detected": False, "reason": str(exc)}
     return {"detected": False, "reason": "RFID scanner not detected"}
@@ -172,7 +176,10 @@ def detect_scanner_capability(
     if service_result.get("detected"):
         return service_result
 
-    return {"detected": False, "reason": irq_result.get("error") or service_result.get("reason")}
+    return {
+        "detected": False,
+        "reason": irq_result.get("error") or service_result.get("reason"),
+    }
 
 
 def check_node_feature(

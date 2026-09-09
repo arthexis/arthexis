@@ -11,7 +11,15 @@ from django.db import models
 from apps.base.models import Entity
 
 EVENT_NAME_TOKENS = ("event", "log", "history", "audit", "snapshot")
-VALUE_NAME_TOKENS = ("item", "entry", "link", "mapping", "through", "value", "parameter")
+VALUE_NAME_TOKENS = (
+    "item",
+    "entry",
+    "link",
+    "mapping",
+    "through",
+    "value",
+    "parameter",
+)
 
 
 @dataclass
@@ -51,13 +59,19 @@ class Command(BaseCommand):
         admin.autodiscover()
 
         scorecards = sorted(
-            (self._score_model(model) for model in apps.get_models() if not model._meta.proxy),
+            (
+                self._score_model(model)
+                for model in apps.get_models()
+                if not model._meta.proxy
+            ),
             key=lambda item: item.label,
         )
 
         output_format = options["format"]
         if output_format == "json":
-            self.stdout.write(json.dumps([asdict(item) for item in scorecards], indent=2))
+            self.stdout.write(
+                json.dumps([asdict(item) for item in scorecards], indent=2)
+            )
             return
         if output_format == "markdown":
             self._render_markdown(scorecards)
@@ -67,14 +81,23 @@ class Command(BaseCommand):
 
     def _score_model(self, model: type[models.Model]) -> ModelScorecard:
         opts = model._meta
-        direct_relations = [field for field in opts.get_fields() if field.is_relation and not field.auto_created]
-        one_to_one_count = sum(1 for field in direct_relations if isinstance(field, models.OneToOneField))
+        direct_relations = [
+            field
+            for field in opts.get_fields()
+            if field.is_relation and not field.auto_created
+        ]
+        one_to_one_count = sum(
+            1 for field in direct_relations if isinstance(field, models.OneToOneField)
+        )
         fk_count = sum(
             1
             for field in direct_relations
-            if isinstance(field, models.ForeignKey) and not isinstance(field, models.OneToOneField)
+            if isinstance(field, models.ForeignKey)
+            and not isinstance(field, models.OneToOneField)
         )
-        many_to_many_count = sum(1 for field in direct_relations if isinstance(field, models.ManyToManyField))
+        many_to_many_count = sum(
+            1 for field in direct_relations if isinstance(field, models.ManyToManyField)
+        )
         reverse_fk_count = sum(
             1
             for field in opts.get_fields()
@@ -84,12 +107,17 @@ class Command(BaseCommand):
             and getattr(field, "one_to_many", False)
         )
 
-        model_name_tokens = [token.lower() for token in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", opts.object_name)]
+        model_name_tokens = [
+            token.lower()
+            for token in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", opts.object_name)
+        ]
         event_like_name = any(token in model_name_tokens for token in EVENT_NAME_TOKENS)
         child_like_name = any(token in model_name_tokens for token in VALUE_NAME_TOKENS)
 
         has_independent_signals = reverse_fk_count > 0 or many_to_many_count > 0
-        is_dependency_shaped = fk_count > 0 and reverse_fk_count == 0 and many_to_many_count == 0
+        is_dependency_shaped = (
+            fk_count > 0 and reverse_fk_count == 0 and many_to_many_count == 0
+        )
 
         if event_like_name:
             suggested_bucket = "do_not_adopt"
@@ -104,7 +132,9 @@ class Command(BaseCommand):
             suggested_bucket = "adopt_later"
             rationale = ["Model needs manual review for lifecycle independence."]
 
-        compatibility_risk = self._compatibility_risk(fk_count, reverse_fk_count, many_to_many_count, one_to_one_count)
+        compatibility_risk = self._compatibility_risk(
+            fk_count, reverse_fk_count, many_to_many_count, one_to_one_count
+        )
 
         if issubclass(model, Entity):
             rationale.append("Already inherits Entity.")
@@ -128,8 +158,19 @@ class Command(BaseCommand):
             rationale=rationale,
         )
 
-    def _compatibility_risk(self, fk_count: int, reverse_fk_count: int, many_to_many_count: int, one_to_one_count: int) -> str:
-        relation_weight = (fk_count * 2) + reverse_fk_count + (many_to_many_count * 2) + one_to_one_count
+    def _compatibility_risk(
+        self,
+        fk_count: int,
+        reverse_fk_count: int,
+        many_to_many_count: int,
+        one_to_one_count: int,
+    ) -> str:
+        relation_weight = (
+            (fk_count * 2)
+            + reverse_fk_count
+            + (many_to_many_count * 2)
+            + one_to_one_count
+        )
         if relation_weight >= 8:
             return "high"
         if relation_weight >= 4:
@@ -142,7 +183,9 @@ class Command(BaseCommand):
         return model in admin.site._registry
 
     def _render_markdown(self, scorecards: list[ModelScorecard]) -> None:
-        self.stdout.write("| Model | Inherits Entity | Suggested Bucket | Compatibility Risk | Rationale |")
+        self.stdout.write(
+            "| Model | Inherits Entity | Suggested Bucket | Compatibility Risk | Rationale |"
+        )
         self.stdout.write("|---|---|---|---|---|")
         for item in scorecards:
             inherits_entity = "yes" if item.inherits_entity else "no"
@@ -151,7 +194,18 @@ class Command(BaseCommand):
             )
 
     def _render_table(self, scorecards: list[ModelScorecard]) -> None:
-        header = ("label", "entity", "admin", "fk", "o2o", "m2m", "revfk", "bucket", "risk", "rationale")
+        header = (
+            "label",
+            "entity",
+            "admin",
+            "fk",
+            "o2o",
+            "m2m",
+            "revfk",
+            "bucket",
+            "risk",
+            "rationale",
+        )
         rows = [
             (
                 item.label,
@@ -168,7 +222,10 @@ class Command(BaseCommand):
             for item in scorecards
         ]
 
-        widths = [max([len(part)] + [len(row[idx]) for row in rows]) for idx, part in enumerate(header)]
+        widths = [
+            max([len(part)] + [len(row[idx]) for row in rows])
+            for idx, part in enumerate(header)
+        ]
 
         def _line(parts: tuple[str, ...]) -> str:
             return " | ".join(part.ljust(widths[idx]) for idx, part in enumerate(parts))

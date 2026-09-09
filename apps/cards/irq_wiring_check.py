@@ -70,7 +70,11 @@ def check_irq_pin():
     if error_message:
         if _is_resource_busy(error_message, errno_value):
             response = {"irq_pin": None, "busy": True}
-            reason = error_message.strip() if isinstance(error_message, str) else error_message
+            reason = (
+                error_message.strip()
+                if isinstance(error_message, str)
+                else error_message
+            )
             if reason:
                 response["reason"] = reason
             if errno_value is not None:

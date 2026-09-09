@@ -1,4 +1,4 @@
-from .constants import OCPP_VERSION_16, OCPP_VERSION_201, OCPP_VERSION_21, OCPPVersion
+from .constants import OCPP_VERSION_16, OCPP_VERSION_21, OCPP_VERSION_201, OCPPVersion
 from .csms import CSMSConsumer, SinkConsumer
 
 __all__ = [

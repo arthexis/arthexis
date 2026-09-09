@@ -197,7 +197,9 @@ def restore_postgres_snapshot_to_temp_database(
     _run_psql_command(restore_command, default_db=default_db)
 
 
-def drop_postgres_temp_database(*, default_db: dict[str, Any], temp_db_name: str) -> None:
+def drop_postgres_temp_database(
+    *, default_db: dict[str, Any], temp_db_name: str
+) -> None:
     """Drop the temporary reconciliation database if present."""
     safe_temp_db_name = _validated_db_name(temp_db_name)
 
@@ -236,7 +238,9 @@ def reconcile_postgres_tables(
         psycopg.connect(
             **_cleanup_kwargs(_connection_kwargs(target_db, dbname=source_db_name))
         ) as source_conn,
-        psycopg.connect(**_cleanup_kwargs(_connection_kwargs(target_db))) as target_conn,
+        psycopg.connect(
+            **_cleanup_kwargs(_connection_kwargs(target_db))
+        ) as target_conn,
     ):
         source_tables = _table_names(source_conn)
         target_tables = _table_names(target_conn)

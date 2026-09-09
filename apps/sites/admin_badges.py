@@ -8,7 +8,9 @@ def site_badge_data(*, site=None, **_kwargs) -> dict[str, object]:
 
     return {
         "value": (site.name or site.domain) if site else "Unknown",
-        "url": reverse("admin:pages_siteproxy_change", args=[site.pk]) if site else None,
+        "url": reverse("admin:pages_siteproxy_change", args=[site.pk])
+        if site
+        else None,
         "present": bool(site),
     }
 

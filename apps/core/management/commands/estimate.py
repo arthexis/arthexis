@@ -4,7 +4,7 @@ import json
 import subprocess
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -36,7 +36,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--apps-dir",
             type=Path,
-            default=Path(getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps")),
+            default=Path(
+                getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps")
+            ),
             help="Directory that contains Django apps (default: settings.APPS_DIR).",
         )
         parser.add_argument(
@@ -63,7 +65,9 @@ class Command(BaseCommand):
         if not migration_files:
             raise CommandError(f"No migration files found in {apps_dir}")
 
-        file_dates = self._resolve_file_dates(migration_files=migration_files, apps_dir=apps_dir)
+        file_dates = self._resolve_file_dates(
+            migration_files=migration_files, apps_dir=apps_dir
+        )
         snapshots = self._build_snapshots(
             migration_files=migration_files,
             file_dates=file_dates,
@@ -71,7 +75,9 @@ class Command(BaseCommand):
         )
 
         if options["format"] == "json":
-            self.stdout.write(json.dumps([asdict(snapshot) for snapshot in snapshots], indent=2))
+            self.stdout.write(
+                json.dumps([asdict(snapshot) for snapshot in snapshots], indent=2)
+            )
             return
 
         self._write_table(snapshots)
@@ -85,7 +91,9 @@ class Command(BaseCommand):
             if path.name != "__init__.py"
         )
 
-    def _resolve_file_dates(self, migration_files: list[Path], apps_dir: Path) -> dict[Path, datetime]:
+    def _resolve_file_dates(
+        self, migration_files: list[Path], apps_dir: Path
+    ) -> dict[Path, datetime]:
         """Resolve creation timestamps for migration files from git history."""
 
         repo_root = Path(settings.BASE_DIR)
@@ -93,12 +101,14 @@ class Command(BaseCommand):
         file_dates: dict[Path, datetime] = {}
 
         for migration_path in migration_files:
-            relative = migration_path.resolve().relative_to(apps_dir.resolve()).as_posix()
+            relative = (
+                migration_path.resolve().relative_to(apps_dir.resolve()).as_posix()
+            )
             if relative in git_dates:
                 file_dates[migration_path] = git_dates[relative]
                 continue
 
-            modified = datetime.fromtimestamp(migration_path.stat().st_mtime, tz=timezone.utc)
+            modified = datetime.fromtimestamp(migration_path.stat().st_mtime, tz=UTC)
             file_dates[migration_path] = modified
             self.stderr.write(
                 self.style.WARNING(
@@ -108,7 +118,9 @@ class Command(BaseCommand):
 
         return file_dates
 
-    def _load_git_created_dates(self, repo_root: Path, apps_dir: Path) -> dict[str, datetime]:
+    def _load_git_created_dates(
+        self, repo_root: Path, apps_dir: Path
+    ) -> dict[str, datetime]:
         """Load migration creation dates from git ``--diff-filter=A`` history."""
 
         resolved_apps_dir = apps_dir.resolve()
@@ -158,10 +170,19 @@ class Command(BaseCommand):
                 pass
             if current_date is None:
                 continue
-            if not line.endswith(".py") or "/migrations/" not in line or line.endswith("/__init__.py"):
+            if (
+                not line.endswith(".py")
+                or "/migrations/" not in line
+                or line.endswith("/__init__.py")
+            ):
                 continue
             try:
-                relative_to_apps = (resolved_repo_root / line).resolve().relative_to(resolved_apps_dir).as_posix()
+                relative_to_apps = (
+                    (resolved_repo_root / line)
+                    .resolve()
+                    .relative_to(resolved_apps_dir)
+                    .as_posix()
+                )
             except ValueError:
                 continue
             creation_dates.setdefault(relative_to_apps, current_date)
@@ -179,7 +200,11 @@ class Command(BaseCommand):
         grouped_sizes: dict[str, list[int]] = defaultdict(list)
         for path in migration_files:
             created_at = file_dates[path]
-            period = created_at.strftime("%Y-%m") if group_by == "month" else created_at.strftime("%Y")
+            period = (
+                created_at.strftime("%Y-%m")
+                if group_by == "month"
+                else created_at.strftime("%Y")
+            )
             grouped_sizes[period].append(path.stat().st_size)
 
         snapshots: list[MigrationSnapshot] = []
@@ -215,5 +240,9 @@ class Command(BaseCommand):
 
         if len(snapshots) >= 2:
             periods = len(snapshots) - 1
-            avg_growth = (snapshots[-1].total_bytes - snapshots[0].total_bytes) / periods
-            self.stdout.write(f"\nAverage cumulative growth per period: {avg_growth:.2f} bytes")
+            avg_growth = (
+                snapshots[-1].total_bytes - snapshots[0].total_bytes
+            ) / periods
+            self.stdout.write(
+                f"\nAverage cumulative growth per period: {avg_growth:.2f} bytes"
+            )

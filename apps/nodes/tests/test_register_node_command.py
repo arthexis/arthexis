@@ -323,7 +323,9 @@ def test_discover_skips_local_node_without_remote_uuid(monkeypatch):
     monkeypatch.setattr(command, "_parse_ports", lambda _: [8888])
     monkeypatch.setattr(command, "_parse_interfaces", lambda _: ["eth0"])
     monkeypatch.setattr(command, "_collect_local_ip_addresses", lambda: set())
-    monkeypatch.setattr(command, "_iter_interface_hosts", lambda *_args: iter(["198.51.100.60"]))
+    monkeypatch.setattr(
+        command, "_iter_interface_hosts", lambda *_args: iter(["198.51.100.60"])
+    )
     monkeypatch.setattr(command, "_iter_known_interface_hosts", lambda *_args: iter(()))
     monkeypatch.setattr(
         command,

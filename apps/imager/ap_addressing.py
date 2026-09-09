@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 # The second octet identifies the hostname/customer namespace. Gway keeps the
 # historical 42 allocation; customer-chosen namespaces can be assigned fixed
 # values from 43 onward without changing the addressing algorithm.

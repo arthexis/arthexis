@@ -22,9 +22,7 @@ from django.views.static import serve as serve_static
 
 from .models import MediaBucket, MediaFile
 
-PUBLIC_MEDIA_PREFIXES = (
-    "ocpp/public_pages/qr/",
-)
+PUBLIC_MEDIA_PREFIXES = ("ocpp/public_pages/qr/",)
 
 
 def _first_file(files: dict[str, object]) -> UploadedFile | None:

@@ -4,13 +4,15 @@
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
-from scripts.check_migration_conflicts import run_checks as run_migration_conflict_checks
+from scripts.check_migration_conflicts import (
+    run_checks as run_migration_conflict_checks,
+)
 
 
 def _local_app_labels(apps_module, settings_module) -> list[str]:
@@ -77,7 +79,9 @@ def _check_migrations(labels: Iterable[str]) -> int:
             "Conflicting migrations detected; attempting automatic merge.",
             file=sys.stderr,
         )
-        merge_result = _run_manage("makemigrations", *labels_list, "--merge", "--noinput")
+        merge_result = _run_manage(
+            "makemigrations", *labels_list, "--merge", "--noinput"
+        )
         if merge_result.returncode != 0:
             print("Automatic merge failed.", file=sys.stderr)
             merge_output = _combine_process_output(merge_result)

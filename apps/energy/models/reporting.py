@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import formats, timezone
 from django.utils.dateparse import parse_datetime
-from django.utils.translation import gettext, gettext_lazy as _, override
+from django.utils.translation import gettext, override
+from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.locale.language import (
@@ -151,6 +152,7 @@ class ClientReport(Entity):
         """Persist the report data and optional HTML rendering to disk."""
 
         import json as _json
+
         from django.template.loader import render_to_string
 
         base_dir = Path(settings.BASE_DIR)
@@ -272,7 +274,9 @@ class ClientReport(Entity):
 
     @staticmethod
     def _build_dataset(start_date=None, end_date=None, *, chargers=None):
-        from datetime import datetime, time, timedelta, timezone as pytimezone
+        from datetime import datetime, time, timedelta
+        from datetime import timezone as pytimezone
+
         from apps.ocpp.models import Transaction, annotate_transaction_energy_bounds
 
         Charger = apps.get_model("ocpp", "Charger")
@@ -283,11 +287,11 @@ class ClientReport(Entity):
         start_dt = None
         end_dt = None
         if start_date:
-            start_dt = datetime.combine(start_date, time.min, tzinfo=pytimezone.utc)
+            start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
             qs = qs.filter(start_time__gte=start_dt)
         if end_date:
             end_dt = datetime.combine(
-                end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
+                end_date + timedelta(days=1), time.min, tzinfo=UTC
             )
             qs = qs.filter(start_time__lt=end_dt)
 
@@ -353,7 +357,7 @@ class ClientReport(Entity):
         def _sort_key(tx):
             anchor = getattr(tx, "start_time", None)
             if anchor is None:
-                anchor = datetime.min.replace(tzinfo=pytimezone.utc)
+                anchor = datetime.min.replace(tzinfo=UTC)
             return (anchor, tx.pk or 0)
 
         for base_id, info in sorted(groups.items(), key=lambda item: item[0]):
@@ -490,9 +494,11 @@ class ClientReport(Entity):
                     first_energy = qs.values_list("energy", flat=True).first()
                     start_value = _coerce_energy(first_energy)
                 if end_value is None:
-                    last_energy = qs.order_by("-timestamp").values_list(
-                        "energy", flat=True
-                    ).first()
+                    last_energy = (
+                        qs.order_by("-timestamp")
+                        .values_list("energy", flat=True)
+                        .first()
+                    )
                     end_value = _coerce_energy(last_energy)
 
         return start_value, end_value
@@ -505,9 +511,7 @@ class ClientReport(Entity):
         date_part = formats.date_format(
             localized, format="MONTH_DAY_FORMAT", use_l10n=True
         )
-        time_part = formats.time_format(
-            localized, format="TIME_FORMAT", use_l10n=True
-        )
+        time_part = formats.time_format(localized, format="TIME_FORMAT", use_l10n=True)
         return gettext("%(date)s, %(time)s") % {
             "date": date_part,
             "time": time_part,
@@ -736,7 +740,9 @@ class ClientReport(Entity):
                 data = json.loads(rendered)
             except json.JSONDecodeError:
                 logger.warning(
-                    "Invalid client report PDF template %s", template_name, exc_info=True
+                    "Invalid client report PDF template %s",
+                    template_name,
+                    exc_info=True,
                 )
                 continue
             if isinstance(data, dict):
@@ -888,9 +894,7 @@ class ClientReport(Entity):
             )
             charge_point_label = label("charge_point", "Charge Point")
             serial_template = (
-                labels.get("charge_point_serial")
-                if isinstance(labels, dict)
-                else None
+                labels.get("charge_point_serial") if isinstance(labels, dict) else None
             )
 
             def format_datetime(value):
@@ -968,10 +972,7 @@ class ClientReport(Entity):
                                     format_datetime(start_dt),
                                     format_datetime(end_dt),
                                     format_duration(duration_value),
-                                    (
-                                        row.get("connector_label")
-                                        or row.get("connector")
-                                    )
+                                    (row.get("connector_label") or row.get("connector"))
                                     if row.get("connector") is not None
                                     or row.get("connector_label")
                                     else "—",
@@ -981,7 +982,9 @@ class ClientReport(Entity):
                             )
 
                         column_count = len(table_data[0])
-                        col_width = document.width / column_count if column_count else None
+                        col_width = (
+                            document.width / column_count if column_count else None
+                        )
                         table = Table(
                             table_data,
                             repeatRows=1,

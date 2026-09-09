@@ -7,8 +7,8 @@ from django.conf import settings
 
 def resolve_ws_scheme(
     *,
-    ws_scheme: Optional[str] = None,
-    use_tls: Optional[bool] = None,
+    ws_scheme: str | None = None,
+    use_tls: bool | None = None,
     request=None,
 ) -> str:
     """Return the websocket scheme based on explicit settings or site config."""

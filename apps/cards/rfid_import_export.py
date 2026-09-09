@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
-from apps.energy.models import CustomerAccount
 from apps.cards.models import RFID
+from apps.energy.models import CustomerAccount
 
 ACCOUNT_ID_COLUMN = "customer_accounts"
 ACCOUNT_NAME_COLUMN = "customer_account_names"
@@ -68,7 +68,9 @@ def _accounts_from_ids(values: Iterable[str]) -> list[CustomerAccount]:
     return [existing[idx] for idx in identifiers if idx in existing]
 
 
-def parse_accounts(row: Mapping[str, object], account_field: str) -> list[CustomerAccount]:
+def parse_accounts(
+    row: Mapping[str, object], account_field: str
+) -> list[CustomerAccount]:
     """Resolve customer accounts for an RFID import row.
 
     Args:
@@ -109,9 +111,7 @@ def parse_accounts(row: Mapping[str, object], account_field: str) -> list[Custom
             legacy_columns.get(fallback_column, "")
         )
         if raw_value:
-            effective_field = (
-                "name" if fallback_column == ACCOUNT_NAME_COLUMN else "id"
-            )
+            effective_field = "name" if fallback_column == ACCOUNT_NAME_COLUMN else "id"
 
     if not raw_value:
         return []
@@ -125,4 +125,3 @@ def parse_accounts(row: Mapping[str, object], account_field: str) -> list[Custom
         return accounts
 
     return _accounts_from_ids(parts)
-

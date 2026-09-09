@@ -191,7 +191,9 @@ def _ensure_reset_baseline_features() -> None:
 def apply_suite_feature_baseline_defaults(*, current_version: str | None = None) -> int:
     """Disable suite features whose baseline version is above the running version."""
 
-    resolved_current = current_suite_version() if current_version is None else current_version
+    resolved_current = (
+        current_suite_version() if current_version is None else current_version
+    )
     features_to_disable_pks: list[int] = []
     for feature in Feature.objects.filter(is_enabled=True).exclude(baseline_version=""):
         if is_baseline_version_reached(
@@ -204,7 +206,9 @@ def apply_suite_feature_baseline_defaults(*, current_version: str | None = None)
     if not features_to_disable_pks:
         return 0
 
-    return Feature.objects.filter(pk__in=features_to_disable_pks).update(is_enabled=False)
+    return Feature.objects.filter(pk__in=features_to_disable_pks).update(
+        is_enabled=False
+    )
 
 
 def reset_all_suite_features() -> tuple[int, int, int]:
@@ -228,9 +232,7 @@ def reset_all_suite_features() -> tuple[int, int, int]:
         feature_manager.update(is_seed_data=False, is_enabled=False)
         feature_manager.all().delete()
         _ensure_fixture_applications_exist(fixture_paths=fixture_paths)
-        call_command(
-            "loaddata", *(str(path) for path in fixture_paths), verbosity=0
-        )
+        call_command("loaddata", *(str(path) for path in fixture_paths), verbosity=0)
         baseline_disabled_count = apply_suite_feature_baseline_defaults()
         _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths), baseline_disabled_count

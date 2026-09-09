@@ -40,8 +40,12 @@ def sign_certificate_request(
     if not isinstance(data, dict):
         message = str(data).strip()
         if response.status_code >= 400:
-            raise CertificateSigningError(message or "Signing service rejected request.")
-        raise CertificateSigningError("Signing service returned invalid response payload.")
+            raise CertificateSigningError(
+                message or "Signing service rejected request."
+            )
+        raise CertificateSigningError(
+            "Signing service returned invalid response payload."
+        )
 
     if response.status_code >= 400:
         message = data.get("detail") or data.get("error") or response.reason
@@ -52,4 +56,3 @@ def sign_certificate_request(
         raise CertificateSigningError("Signing service returned no certificate chain.")
 
     return certificate_chain.strip()
-

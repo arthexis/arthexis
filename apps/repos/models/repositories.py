@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -46,12 +46,12 @@ class GitHubRepository(Entity):
         return self.slug
 
     @classmethod
-    def from_url(cls, repository_url: str) -> "GitHubRepository":
+    def from_url(cls, repository_url: str) -> GitHubRepository:
         owner, repo = github.parse_repository_url(repository_url)
         return cls(owner=owner, name=repo)
 
     @classmethod
-    def resolve_active_repository(cls) -> "GitHubRepository":
+    def resolve_active_repository(cls) -> GitHubRepository:
         """Return the ``(owner, repo)`` for the active package or default."""
 
         return github.resolve_active_repository(cls)
@@ -86,7 +86,9 @@ class GitHubRepository(Entity):
 class PackageRepository(Entity):
     """Represents a package upload target such as PyPI."""
 
-    objects: ClassVar[github.PackageRepositoryManager] = github.PackageRepositoryManager()
+    objects: ClassVar[github.PackageRepositoryManager] = (
+        github.PackageRepositoryManager()
+    )
 
     name = models.CharField(max_length=255, unique=True)
     repository_url = models.URLField(blank=True, default="")

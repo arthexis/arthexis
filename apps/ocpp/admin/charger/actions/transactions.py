@@ -9,7 +9,9 @@ class TransactionsActionsMixin:
     def _prepare_remote_credentials(self, request):
         return super()._prepare_remote_credentials(request)
 
-    def _call_remote_action(self, request, local_node, private_key, charger, action: str, extra=None):
+    def _call_remote_action(
+        self, request, local_node, private_key, charger, action: str, extra=None
+    ):
         return super()._call_remote_action(
             request,
             local_node,

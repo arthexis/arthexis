@@ -10,7 +10,9 @@ from apps.repos.models.issues import RepositoryIssue
 from apps.repos.models.repositories import GitHubRepository
 
 
-def test_repository_issue_configure_view_returns_403_without_change_permission(client, db):
+def test_repository_issue_configure_view_returns_403_without_change_permission(
+    client, db
+):
     user = get_user_model().objects.create_user(
         username="staff-no-change",
         email="staff@example.com",
@@ -29,6 +31,8 @@ def test_repository_issue_configure_view_returns_403_without_change_permission(c
         updated_at=timezone.now(),
     )
 
-    response = client.get(reverse("admin:repos_repositoryissue_configure", args=[issue.pk]))
+    response = client.get(
+        reverse("admin:repos_repositoryissue_configure", args=[issue.pk])
+    )
 
     assert response.status_code == 403

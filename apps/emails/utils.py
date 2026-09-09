@@ -58,7 +58,9 @@ def resolve_recipient_fallbacks(
     owner_email = ""
     if owner is not None and getattr(owner, "email", None):
         owner_email = (owner.email or "").strip()
-    owner_list = normalize_recipients([owner_email] if owner_email else [], validator=validator)
+    owner_list = normalize_recipients(
+        [owner_email] if owner_email else [], validator=validator
+    )
 
     if to:
         if include_owner_cc and owner_list:

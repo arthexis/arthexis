@@ -11,8 +11,11 @@ loadenv()
 bootstrap_sqlite_driver()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-from apps.core.checks.apps_registry import enforce_apps_registry_configuration  # noqa: E402
 from django.conf import settings  # noqa: E402
+
+from apps.core.checks.apps_registry import (
+    enforce_apps_registry_configuration,  # noqa: E402
+)
 
 # When running on production-oriented nodes, avoid Celery debug mode.
 node_role = str(getattr(settings, "NODE_ROLE", "")).strip().lower()

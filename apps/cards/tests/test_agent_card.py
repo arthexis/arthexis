@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from apps.cards.agent_card import (
-    _expected_reader_proof,
     AgentCardError,
+    _expected_reader_proof,
     build_agent_card_sector_payloads,
     parse_agent_card,
     plan_agent_activation,
@@ -99,8 +99,13 @@ def test_build_agent_card_sector_payloads_returns_valid_complete_payload():
     )
 
     assert sorted(build.sector_records) == list(range(1, 16))
-    assert all(len(record.encode("ascii")) <= 48 for record in build.sector_records.values())
-    assert all(len(record.encode("ascii")) == 48 for record in build.padded_sector_records.values())
+    assert all(
+        len(record.encode("ascii")) <= 48 for record in build.sector_records.values()
+    )
+    assert all(
+        len(record.encode("ascii")) == 48
+        for record in build.padded_sector_records.values()
+    )
     parsed = parse_agent_card(build.sector_records)
     assert parsed.fingerprint == build.fingerprint
     assert parsed.capability_sigils() == ["[AGENT.SKILL:rfid-triage]"]
@@ -108,7 +113,12 @@ def test_build_agent_card_sector_payloads_returns_valid_complete_payload():
 
 def test_build_agent_card_sector_payloads_omits_oversized_skill_sigils():
     build = build_agent_card_sector_payloads(
-        identity_sources={"intent": "intent", "bundle": "bundle", "interface": "interface", "card": "AABB"},
+        identity_sources={
+            "intent": "intent",
+            "bundle": "bundle",
+            "interface": "interface",
+            "card": "AABB",
+        },
         skill_slugs=["skill-" + "x" * 80, "rfid-triage"],
     )
 
@@ -121,7 +131,12 @@ def test_build_agent_card_sector_payloads_omits_oversized_skill_sigils():
 
 def test_build_agent_card_sector_payloads_reports_overflow_once():
     build = build_agent_card_sector_payloads(
-        identity_sources={"intent": "intent", "bundle": "bundle", "interface": "interface", "card": "AABB"},
+        identity_sources={
+            "intent": "intent",
+            "bundle": "bundle",
+            "interface": "interface",
+            "card": "AABB",
+        },
         skill_slugs=[f"s{index}" for index in range(12)],
     )
 
@@ -146,7 +161,7 @@ def test_plan_agent_activation_rejects_unknown_reader_trust():
 
 def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface():
     card = parse_agent_card(valid_agent_card_records())
-    observed_at = datetime.now(timezone.utc).isoformat()
+    observed_at = datetime.now(UTC).isoformat()
 
     plan = plan_agent_activation(
         card,
@@ -174,7 +189,7 @@ def test_plan_agent_activation_accepts_trusted_reader_with_bundle_and_interface(
 
 def test_plan_agent_activation_accepts_datetime_reader_timestamp():
     card = parse_agent_card(valid_agent_card_records())
-    observed_at = datetime.now(timezone.utc)
+    observed_at = datetime.now(UTC)
 
     plan = plan_agent_activation(
         card,
@@ -201,7 +216,7 @@ def test_plan_agent_activation_accepts_datetime_reader_timestamp():
 
 def test_plan_agent_activation_rejects_future_reader_timestamp():
     card = parse_agent_card(valid_agent_card_records())
-    observed_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    observed_at = (datetime.now(UTC) + timedelta(minutes=10)).isoformat()
 
     plan = plan_agent_activation(
         card,
@@ -236,7 +251,7 @@ def test_plan_agent_activation_rejects_unbound_reader_proof():
             "reader_id": "reader-1",
             "node_id": "node-1",
             "trust_tier": "trusted_operator_console",
-            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "observed_at": datetime.now(UTC).isoformat(),
             "proof": "not-a-signature",
         },
         skill_bundle_id=1,
@@ -250,7 +265,7 @@ def test_plan_agent_activation_rejects_unbound_reader_proof():
 
 def test_plan_agent_activation_rejects_plain_hash_reader_proof():
     card = parse_agent_card(valid_agent_card_records())
-    observed_at = datetime.now(timezone.utc).isoformat()
+    observed_at = datetime.now(UTC).isoformat()
     payload = "|".join(
         (
             "trusted_operator_console",

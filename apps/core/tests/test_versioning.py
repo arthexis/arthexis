@@ -43,10 +43,7 @@ def test_auto_upgrade_bump_rules_match_channel_tiers():
         auto_upgrade_bump_cadence_minutes("stable", VERSION_BUMP_PATCH)
         == AUTO_UPGRADE_WEEK_MINUTES
     )
-    assert (
-        auto_upgrade_bump_cadence_minutes("stable", VERSION_BUMP_MINOR)
-        is None
-    )
+    assert auto_upgrade_bump_cadence_minutes("stable", VERSION_BUMP_MINOR) is None
     assert (
         auto_upgrade_bump_cadence_minutes("regular", VERSION_BUMP_MINOR)
         == AUTO_UPGRADE_DAY_MINUTES

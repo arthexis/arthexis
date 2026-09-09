@@ -29,7 +29,9 @@ DIAGNOSTICS_UPLOAD_TTL = timedelta(days=30)
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStopTransaction")
-def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+def _handle_remote_stop(
+    context: ActionContext, _data: dict
+) -> JsonResponse | ActionCall:
     tx_obj = store.get_transaction(context.cid, context.connector_value)
     if not tx_obj:
         return JsonResponse({"detail": "no transaction"}, status=404)
@@ -64,7 +66,9 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStartTransaction")
-def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_remote_start(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     id_tag = data.get("idTag")
     if not isinstance(id_tag, str) or not id_tag.strip():
         return JsonResponse({"detail": "idTag required"}, status=400)
@@ -145,7 +149,9 @@ def _handle_request_start_transaction(
         try:
             remote_start_id = int(remote_start_value)
         except (TypeError, ValueError):
-            return JsonResponse({"detail": "remoteStartId must be an integer"}, status=400)
+            return JsonResponse(
+                {"detail": "remoteStartId must be an integer"}, status=400
+            )
 
     evse_value = data.get("evseId")
     if evse_value in (None, ""):
@@ -247,7 +253,9 @@ def _handle_get_transaction_status(
     if transaction_id not in (None, ""):
         transaction_text = str(transaction_id).strip()
         if not transaction_text:
-            return JsonResponse({"detail": "transactionId must not be blank"}, status=400)
+            return JsonResponse(
+                {"detail": "transactionId must not be blank"}, status=400
+            )
         payload["transactionId"] = transaction_text
     message_id = uuid.uuid4().hex
     ocpp_action = "GetTransactionStatus"
@@ -284,7 +292,9 @@ def _handle_get_diagnostics(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
     expires_at = None
-    stop_time_raw = data.get("stopTime") or data.get("expiresAt") or data.get("expires_at")
+    stop_time_raw = (
+        data.get("stopTime") or data.get("expiresAt") or data.get("expires_at")
+    )
     if stop_time_raw not in (None, ""):
         parsed_stop_time = parse_datetime(str(stop_time_raw))
         if parsed_stop_time is None:
@@ -347,11 +357,15 @@ def _handle_get_diagnostics(
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
-def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_change_availability(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     availability_type = data.get("type")
     if availability_type not in {"Operative", "Inoperative"}:
         return JsonResponse({"detail": "invalid availability type"}, status=400)
-    connector_payload = context.connector_value if context.connector_value is not None else 0
+    connector_payload = (
+        context.connector_value if context.connector_value is not None else 0
+    )
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     if "connectorId" in data:
         candidate = data.get("connectorId")
@@ -410,7 +424,9 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
-def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+def _handle_clear_cache(
+    context: ActionContext, _data: dict
+) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearCache"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
@@ -503,7 +519,9 @@ def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | Action
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
-def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_unlock_connector(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     connector_value = data.get("connectorId")
     if connector_value is None:
         connector_value = context.connector_value
@@ -551,7 +569,9 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
-def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_data_transfer(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     vendor_id = data.get("vendorId") or data.get("vendor_id")
     if not isinstance(vendor_id, str) or not vendor_id.strip():
         return JsonResponse({"detail": "vendorId required"}, status=400)
@@ -626,7 +646,9 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
-def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_trigger_message(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     trigger_target = data.get("target") or data.get("triggerTarget")
     if not isinstance(trigger_target, str) or not trigger_target.strip():
         return JsonResponse({"detail": "target required"}, status=400)
@@ -652,7 +674,9 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
         try:
             trigger_connector = int(connector_field)
         except (TypeError, ValueError):
-            return JsonResponse({"detail": "connectorId must be an integer"}, status=400)
+            return JsonResponse(
+                {"detail": "connectorId must be an integer"}, status=400
+            )
         if trigger_connector <= 0:
             return JsonResponse({"detail": "connectorId must be positive"}, status=400)
         payload["connectorId"] = trigger_connector
@@ -684,19 +708,27 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
-def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_send_local_list(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     entries = data.get("localAuthorizationList")
     if entries is None:
         entries = data.get("local_authorization_list")
     if entries is None:
         entries = []
     if not isinstance(entries, list):
-        return JsonResponse({"detail": "localAuthorizationList must be a list"}, status=400)
+        return JsonResponse(
+            {"detail": "localAuthorizationList must be a list"}, status=400
+        )
     version_candidate = data.get("listVersion")
     if version_candidate is None:
         version_candidate = data.get("list_version")
     if version_candidate is None:
-        list_version = ((context.charger.local_auth_list_version or 0) + 1) if context.charger else 1
+        list_version = (
+            ((context.charger.local_auth_list_version or 0) + 1)
+            if context.charger
+            else 1
+        )
     else:
         try:
             list_version = int(version_candidate)
@@ -705,7 +737,8 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
         if list_version <= 0:
             return JsonResponse({"detail": "invalid listVersion"}, status=400)
     update_type = (
-        str(data.get("updateType") or data.get("update_type") or "Full").strip() or "Full"
+        str(data.get("updateType") or data.get("update_type") or "Full").strip()
+        or "Full"
     )
     payload = {
         "listVersion": list_version,
@@ -747,7 +780,9 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
-def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+def _handle_get_local_list_version(
+    context: ActionContext, _data: dict
+) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
     ocpp_action = "GetLocalListVersion"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
@@ -813,12 +848,21 @@ def _handle_customer_information(
     clear_flag, error = _coerce_bool(clear_value, "clear")
     if error:
         return JsonResponse({"detail": error}, status=400)
-    customer_identifier = data.get("customerIdentifier") or data.get("customer_identifier")
+    customer_identifier = data.get("customerIdentifier") or data.get(
+        "customer_identifier"
+    )
     id_token = data.get("idToken") or data.get("id_token")
-    customer_certificate = data.get("customerCertificate") or data.get("customer_certificate")
-    if customer_identifier in (None, "") and id_token in (None, "") and customer_certificate in (
-        None,
-        "",
+    customer_certificate = data.get("customerCertificate") or data.get(
+        "customer_certificate"
+    )
+    if (
+        customer_identifier in (None, "")
+        and id_token in (None, "")
+        and customer_certificate
+        in (
+            None,
+            "",
+        )
     ):
         return JsonResponse(
             {"detail": "customerIdentifier, idToken, or customerCertificate required"},
@@ -835,14 +879,22 @@ def _handle_customer_information(
         if not isinstance(id_token, dict):
             return JsonResponse({"detail": "idToken must be an object"}, status=400)
         token_value = id_token.get("idToken") or id_token.get("id_token")
-        token_type = id_token.get("type") or id_token.get("tokenType") or id_token.get("token_type")
+        token_type = (
+            id_token.get("type")
+            or id_token.get("tokenType")
+            or id_token.get("token_type")
+        )
         if token_value in (None, "") or token_type in (None, ""):
-            return JsonResponse({"detail": "idToken.idToken and idToken.type required"}, status=400)
+            return JsonResponse(
+                {"detail": "idToken.idToken and idToken.type required"}, status=400
+            )
         token_payload: dict[str, object] = {
             "idToken": token_value,
             "type": token_type,
         }
-        additional_info = id_token.get("additionalInfo") or id_token.get("additional_info")
+        additional_info = id_token.get("additionalInfo") or id_token.get(
+            "additional_info"
+        )
         if additional_info not in (None, ""):
             token_payload["additionalInfo"] = additional_info
         payload["idToken"] = token_payload
@@ -877,7 +929,9 @@ def _handle_customer_information(
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     msg = json.dumps([2, message_id, ocpp_action, payload])
     async_to_sync(context.ws.send)(msg)
-    charger = context.charger or _get_or_create_charger(context.cid, context.connector_value)
+    charger = context.charger or _get_or_create_charger(
+        context.cid, context.connector_value
+    )
     if charger is None:
         return JsonResponse({"detail": "charger not found"}, status=404)
     request_record = CustomerInformationRequest.objects.create(

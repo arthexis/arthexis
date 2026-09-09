@@ -10,6 +10,7 @@ from django.test import RequestFactory
 
 from apps.nodes.views.registration import register_node
 
+
 @pytest.mark.django_db
 def test_register_node_rejects_invalid_signature_without_authenticated_user():
     """Unsigned requests with malformed signature must be rejected."""
@@ -32,6 +33,7 @@ def test_register_node_rejects_invalid_signature_without_authenticated_user():
     assert response.status_code == 403
     assert json.loads(response.content.decode())["detail"] == "invalid signature"
 
+
 def test_get_host_port_parses_forwarded_port_and_falls_back_to_proto():
     """Forwarded port should win when valid and fall back when malformed."""
 
@@ -52,6 +54,7 @@ def test_get_host_port_parses_forwarded_port_and_falls_back_to_proto():
     )
     assert _get_host_port(request_with_invalid_port) == 443
 
+
 def test_get_host_port_ignores_disallowed_host_and_uses_proto_fallback(monkeypatch):
     """Port derivation should not trust HTTP_HOST when get_host() is disallowed."""
 
@@ -69,6 +72,7 @@ def test_get_host_port_ignores_disallowed_host_and_uses_proto_fallback(monkeypat
     monkeypatch.setattr(request, "get_host", _raise_disallowed_host)
 
     assert _get_host_port(request) == 443
+
 
 def test_iter_port_fallback_urls_handles_malformed_inputs():
     """Fallback URL iterator should tolerate malformed URL values."""

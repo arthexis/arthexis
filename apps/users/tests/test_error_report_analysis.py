@@ -20,7 +20,10 @@ def _write_report(path, *, summary="", logs=None, warnings=None):
     logs = logs or {}
     warnings = warnings or []
     with ZipFile(path, "w") as zf:
-        zf.writestr("manifest.json", json.dumps({"warnings": warnings, "entries": list(logs.keys())}))
+        zf.writestr(
+            "manifest.json",
+            json.dumps({"warnings": warnings, "entries": list(logs.keys())}),
+        )
         zf.writestr("summary.txt", summary)
         for name, text in logs.items():
             zf.writestr(name, text)
@@ -44,7 +47,9 @@ def test_analyze_error_report_package_detects_high_severity(tmp_path):
 
 def test_analyze_error_report_package_detects_unredacted_secret_values(tmp_path):
     package_path = tmp_path / "error-report.zip"
-    _write_report(package_path, logs={"logs/runtime.log": "AWS_SECRET_ACCESS_KEY=real-secret"})
+    _write_report(
+        package_path, logs={"logs/runtime.log": "AWS_SECRET_ACCESS_KEY=real-secret"}
+    )
 
     result = analyze_error_report_package(package_path)
 
@@ -61,7 +66,9 @@ def test_analyze_error_report_package_detects_unredacted_secret_values(tmp_path)
         "***",
     ],
 )
-def test_analyze_error_report_package_ignores_redacted_secret_values(tmp_path, redacted_value):
+def test_analyze_error_report_package_ignores_redacted_secret_values(
+    tmp_path, redacted_value
+):
     package_path = tmp_path / "error-report.zip"
     _write_report(
         package_path,
@@ -88,7 +95,9 @@ def test_analyze_error_report_package_handles_empty_findings(tmp_path):
 
 def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
     package_path = tmp_path / "error-report.zip"
-    _write_report(package_path, logs={"logs/startup.txt": "Traceback (most recent call last):"})
+    _write_report(
+        package_path, logs={"logs/startup.txt": "Traceback (most recent call last):"}
+    )
 
     result = analyze_error_report_package(package_path)
 
@@ -97,7 +106,10 @@ def test_analyze_error_report_package_scans_top_level_logs_directory(tmp_path):
 
 def test_analyze_error_report_package_scans_in_repo_log_text_paths(tmp_path):
     package_path = tmp_path / "error-report.zip"
-    _write_report(package_path, logs={"work/app-logs/server.txt": "Traceback (most recent call last):"})
+    _write_report(
+        package_path,
+        logs={"work/app-logs/server.txt": "Traceback (most recent call last):"},
+    )
 
     result = analyze_error_report_package(package_path)
 
@@ -106,16 +118,24 @@ def test_analyze_error_report_package_scans_in_repo_log_text_paths(tmp_path):
 
 def test_analyze_error_report_package_scans_external_text_logs(tmp_path):
     package_path = tmp_path / "error-report.zip"
-    _write_report(package_path, logs={"external/tmp/log.txt": "Traceback (most recent call last):"})
+    _write_report(
+        package_path,
+        logs={"external/tmp/log.txt": "Traceback (most recent call last):"},
+    )
 
     result = analyze_error_report_package(package_path)
 
     assert any(f["category"] == "startup" for f in result["findings"])
 
 
-def test_analyze_error_report_package_scans_external_text_logs_case_insensitively(tmp_path):
+def test_analyze_error_report_package_scans_external_text_logs_case_insensitively(
+    tmp_path,
+):
     package_path = tmp_path / "error-report.zip"
-    _write_report(package_path, logs={"external/tmp/error.TXT": "Traceback (most recent call last):"})
+    _write_report(
+        package_path,
+        logs={"external/tmp/error.TXT": "Traceback (most recent call last):"},
+    )
 
     result = analyze_error_report_package(package_path)
 
@@ -130,7 +150,9 @@ def test_analyze_error_report_package_scans_external_text_logs_case_insensitivel
         {"warnings": [1], "entries": []},
     ],
 )
-def test_analyze_error_report_package_rejects_malformed_manifest_lists(tmp_path, manifest):
+def test_analyze_error_report_package_rejects_malformed_manifest_lists(
+    tmp_path, manifest
+):
     package_path = tmp_path / "error-report.zip"
     with ZipFile(package_path, "w") as zf:
         zf.writestr("manifest.json", json.dumps(manifest))
@@ -150,7 +172,9 @@ def test_analyze_error_report_package_rejects_large_summary(tmp_path):
         analyze_error_report_package(package_path)
 
 
-def test_analyze_error_report_package_limits_log_entries_without_rejecting(monkeypatch, tmp_path):
+def test_analyze_error_report_package_limits_log_entries_without_rejecting(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRIES_SCANNED", 2)
     package_path = tmp_path / "error-report.zip"
     logs = {
@@ -176,7 +200,9 @@ def test_analyze_error_report_package_rejects_large_log_entry(monkeypatch, tmp_p
         analyze_error_report_package(package_path)
 
 
-def test_analyze_error_report_package_rejects_log_bytes_over_total(monkeypatch, tmp_path):
+def test_analyze_error_report_package_rejects_log_bytes_over_total(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(error_report_analysis, "MAX_LOG_ENTRY_BYTES", 20)
     monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_LOG_BYTES", 5)
     package_path = tmp_path / "error-report.zip"
@@ -186,7 +212,9 @@ def test_analyze_error_report_package_rejects_log_bytes_over_total(monkeypatch, 
         analyze_error_report_package(package_path)
 
 
-def test_analyze_error_report_package_rejects_too_many_total_entries(monkeypatch, tmp_path):
+def test_analyze_error_report_package_rejects_too_many_total_entries(
+    monkeypatch, tmp_path
+):
     monkeypatch.setattr(error_report_analysis, "MAX_TOTAL_ENTRIES", 3)
     package_path = tmp_path / "error-report.zip"
     with ZipFile(package_path, "w") as zf:
@@ -239,7 +267,9 @@ def test_diagnostics_analyze_json_output_and_write_file(monkeypatch, tmp_path):
         "package": "x.zip",
         "entry_count": 1,
         "warnings": [],
-        "findings": [{"severity": "medium", "category": "service", "message": "m", "source": "s"}],
+        "findings": [
+            {"severity": "medium", "category": "service", "message": "m", "source": "s"}
+        ],
         "max_severity": "medium",
         "max_severity_rank": 2,
         "risk_score": 22,
@@ -297,15 +327,17 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
         f"-----BEGIN {private_key_label}-----\n"
         "real-key-material\n"
         f"-----END {private_key_label}-----\n"
-        "password=\"my secret password\"\n"
+        'password="my secret password"\n'
         "token='visible-token'\n"
-        "{\"token\":\"abc\\\"def\"}\n"
+        '{"token":"abc\\"def"}\n'
         "token='abc\\''def'\n"
-        r"token=backslash\trail" "\n"
+        r"token=backslash\trail"
+        "\n"
         "client_secret=client-value\n"
         "refresh_token=refresh-value\n"
-        "refresh_token=abc\\\"def\n"
-        r"refresh_token=double\\\"escaped" "\n"
+        'refresh_token=abc\\"def\n'
+        r"refresh_token=double\\\"escaped"
+        "\n"
         "db_password=db-value\n"
         "api_key=bare-secret"
     )
@@ -323,7 +355,7 @@ def test_redact_sensitive_text_handles_pem_variants_and_quoted_values():
     assert "client-value" not in redacted
     assert "refresh-value" not in redacted
     assert 'abc\\"def' not in redacted
-    assert r'double\\\"escaped' not in redacted
+    assert r"double\\\"escaped" not in redacted
     assert "db-value" not in redacted
     assert "bare-secret" not in redacted
     assert "[redacted private key]" in redacted
@@ -361,11 +393,11 @@ def test_redact_sensitive_text_preserves_structural_delimiters_after_unquoted_va
 
 
 def test_redact_sensitive_text_handles_unterminated_quoted_backslash_sequence():
-    text = 'password="' + ('\\' * 64)
+    text = 'password="' + ("\\" * 64)
 
     redacted = redact_sensitive_text(text)
 
-    assert redacted == 'password=[redacted]'
+    assert redacted == "password=[redacted]"
 
 
 def test_redact_analysis_payload_preserves_tuple_type():
@@ -460,7 +492,13 @@ def test_diagnostics_analyze_fail_on_threshold(monkeypatch):
             "max_severity": "high",
             "max_severity_rank": 3,
             "risk_score": 30,
-            "severity_order": {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4},
+            "severity_order": {
+                "none": 0,
+                "low": 1,
+                "medium": 2,
+                "high": 3,
+                "critical": 4,
+            },
         },
     )
 

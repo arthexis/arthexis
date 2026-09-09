@@ -13,12 +13,19 @@ from typing import Any
 
 
 def default_checkout() -> Path:
-    return Path(os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")).expanduser()
+    return Path(
+        os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")
+    ).expanduser()
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> dict[str, Any]:
     proc = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
-    return {"cmd": cmd, "returncode": proc.returncode, "stdout": proc.stdout.strip(), "stderr": proc.stderr.strip()}
+    return {
+        "cmd": cmd,
+        "returncode": proc.returncode,
+        "stdout": proc.stdout.strip(),
+        "stderr": proc.stderr.strip(),
+    }
 
 
 def gh_json(args: list[str]) -> Any:
@@ -39,7 +46,17 @@ def normalize_tag(version: str) -> str:
 def tag_remote_exists(version: str, repo: str | None, checkout: Path) -> dict[str, Any]:
     tag = normalize_tag(version)
     if repo and shutil.which("gh"):
-        data = gh_json(["release", "view", tag, "--repo", repo, "--json", "tagName,url,isDraft,isPrerelease"])
+        data = gh_json(
+            [
+                "release",
+                "view",
+                tag,
+                "--repo",
+                repo,
+                "--json",
+                "tagName,url,isDraft,isPrerelease",
+            ]
+        )
         if isinstance(data, dict) and not data.get("error"):
             return {"exists": True, "source": "gh release", "data": data}
     remote = git(checkout, ["ls-remote", "--tags", "origin", tag])
@@ -70,10 +87,44 @@ def main() -> int:
     }
     if shutil.which("gh"):
         result["authStatus"] = run(["gh", "auth", "status"])
-        result["latestRelease"] = gh_json(["release", "list", "--repo", args.repo, "--limit", "1", "--json", "tagName,name,isDraft,isPrerelease,publishedAt"])
-        result["openPullRequests"] = gh_json(["pr", "list", "--repo", args.repo, "--state", "open", "--limit", "100", "--json", "number,title,isDraft,mergeStateStatus,reviewDecision,url"])
+        result["latestRelease"] = gh_json(
+            [
+                "release",
+                "list",
+                "--repo",
+                args.repo,
+                "--limit",
+                "1",
+                "--json",
+                "tagName,name,isDraft,isPrerelease,publishedAt",
+            ]
+        )
+        result["openPullRequests"] = gh_json(
+            [
+                "pr",
+                "list",
+                "--repo",
+                args.repo,
+                "--state",
+                "open",
+                "--limit",
+                "100",
+                "--json",
+                "number,title,isDraft,mergeStateStatus,reviewDecision,url",
+            ]
+        )
         if args.issue:
-            result["issue"] = gh_json(["issue", "view", args.issue, "--repo", args.repo, "--json", "number,title,state,comments,url"])
+            result["issue"] = gh_json(
+                [
+                    "issue",
+                    "view",
+                    args.issue,
+                    "--repo",
+                    args.repo,
+                    "--json",
+                    "number,title,state,comments,url",
+                ]
+            )
     if args.version:
         result["tag"] = tag_remote_exists(args.version, args.repo, checkout)
         result["tag"]["tagName"] = normalize_tag(args.version)

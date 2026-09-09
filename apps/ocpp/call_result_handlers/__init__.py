@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from .common import CallResultContext, build_context as _build_context
+from .common import CallResultContext
+from .common import build_context as _build_context
 from .registry import CALL_RESULT_HANDLER_REGISTRY
 
 

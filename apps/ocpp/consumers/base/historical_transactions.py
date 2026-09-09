@@ -64,7 +64,11 @@ def is_historical_transaction_timestamp(
 ) -> bool:
     """Return whether ``timestamp`` is clearly older than the live grace window."""
 
-    parsed = timestamp if isinstance(timestamp, datetime) else _parse_ocpp_timestamp(timestamp)
+    parsed = (
+        timestamp
+        if isinstance(timestamp, datetime)
+        else _parse_ocpp_timestamp(timestamp)
+    )
     if parsed is None:
         return False
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone as dt_timezone
 import threading
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from datetime import timezone as dt_timezone
 
 from . import state
 
@@ -20,7 +21,9 @@ def _normalize_transaction_id(value: object | None) -> str | None:
     return str(value)
 
 
-def _transaction_connector_key(charger_id: str | None, connector: int | str | None) -> str | None:
+def _transaction_connector_key(
+    charger_id: str | None, connector: int | str | None
+) -> str | None:
     if not charger_id:
         return None
     return state.identity_key(charger_id, connector)
@@ -58,10 +61,10 @@ def _update_transaction_request_locked(
 ) -> dict[str, object]:
     if status:
         entry["status"] = status
-        entry["status_at"] = datetime.now(dt_timezone.utc)
-    if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
-        connector_id
-    ):
+        entry["status_at"] = datetime.now(UTC)
+    if connector_id is not None and state.connector_slug(
+        entry.get("connector_id")
+    ) != state.connector_slug(connector_id):
         old_key = _transaction_connector_key(
             str(entry.get("charger_id") or ""), entry.get("connector_id")
         )
@@ -98,7 +101,7 @@ def register_transaction_request(message_id: str, metadata: dict[str, object]) -
 
     entry = dict(metadata)
     entry.setdefault("status", "requested")
-    entry.setdefault("status_at", datetime.now(dt_timezone.utc))
+    entry.setdefault("status_at", datetime.now(UTC))
     connector_key = _transaction_connector_key(
         str(entry.get("charger_id") or ""), entry.get("connector_id")
     )
@@ -170,9 +173,9 @@ def find_transaction_requests(
                 continue
             if entry.get("charger_id") != charger_id:
                 continue
-            if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
-                connector_id
-            ):
+            if connector_id is not None and state.connector_slug(
+                entry.get("connector_id")
+            ) != state.connector_slug(connector_id):
                 continue
             if transaction_key:
                 entry_tx_key = _normalize_transaction_id(
@@ -186,9 +189,11 @@ def find_transaction_requests(
                 continue
             results.append((message_id, dict(entry)))
     results.sort(
-        key=lambda item: item[1].get("requested_at")
-        or item[1].get("status_at")
-        or datetime.min.replace(tzinfo=dt_timezone.utc),
+        key=lambda item: (
+            item[1].get("requested_at")
+            or item[1].get("status_at")
+            or datetime.min.replace(tzinfo=UTC)
+        ),
         reverse=True,
     )
     return results
@@ -230,9 +235,9 @@ def mark_transaction_requests(
                 continue
             if entry.get("charger_id") != charger_id:
                 continue
-            if connector_id is not None and state.connector_slug(entry.get("connector_id")) != state.connector_slug(
-                connector_id
-            ):
+            if connector_id is not None and state.connector_slug(
+                entry.get("connector_id")
+            ) != state.connector_slug(connector_id):
                 continue
             if transaction_key:
                 entry_tx_key = _normalize_transaction_id(

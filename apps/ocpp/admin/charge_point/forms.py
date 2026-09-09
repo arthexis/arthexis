@@ -15,9 +15,7 @@ class ChargerLocationSetupForm(forms.Form):
         max_length=200,
         required=False,
         label=_("Location name"),
-        help_text=_(
-            "Provide a name for a new location or update the existing name."
-        ),
+        help_text=_("Provide a name for a new location or update the existing name."),
     )
     latitude = forms.DecimalField(
         max_digits=9,

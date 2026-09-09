@@ -4,9 +4,10 @@ import json
 import os
 import statistics
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -61,7 +62,7 @@ class _ProcessStats:
     samples: int = 0
     io_read: int = 0
     io_write: int = 0
-    _last_io: Tuple[int, int] | None = field(default=None, repr=False)
+    _last_io: tuple[int, int] | None = field(default=None, repr=False)
 
     def update(self, cpu: float, memory: int, io_counters) -> None:
         self.samples += 1
@@ -126,8 +127,8 @@ def _process_name(proc, info: dict) -> str:
         return f"pid {info.get('pid')}"
 
 
-def _collect_processes(base_dir: Path) -> Dict[int, Tuple[psutil.Process, dict]]:
-    results: Dict[int, Tuple[psutil.Process, dict]] = {}
+def _collect_processes(base_dir: Path) -> dict[int, tuple[psutil.Process, dict]]:
+    results: dict[int, tuple[psutil.Process, dict]] = {}
     base_dir_lower = str(base_dir).lower()
     normalized_base_dir = _normalize_path_text(base_dir_lower)
     normalized_base_dir_no_drive = normalized_base_dir.split(":", 1)[-1]
@@ -208,7 +209,7 @@ class Command(BaseCommand):
                 f"(interval {interval:.1f} seconds). Press Ctrl+C to stop early."
             )
 
-        stats_map: Dict[int, _ProcessStats] = {}
+        stats_map: dict[int, _ProcessStats] = {}
         suite_cpu_samples: list[float] = []
         suite_memory_samples: list[int] = []
         system_cpu_samples: list[float] = []
@@ -240,7 +241,11 @@ class Command(BaseCommand):
                         )
                     try:
                         proc.cpu_percent(interval=None)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    except (
+                        psutil.NoSuchProcess,
+                        psutil.AccessDenied,
+                        psutil.ZombieProcess,
+                    ):
                         continue
 
                 psutil.cpu_percent(interval=None)
@@ -259,7 +264,9 @@ class Command(BaseCommand):
                 swap_total = getattr(swap_info, "total", swap_total)
 
                 system_cpu_samples.append(float(total_cpu))
-                system_memory_percent_samples.append(float(getattr(mem_info, "percent", 0.0)))
+                system_memory_percent_samples.append(
+                    float(getattr(mem_info, "percent", 0.0))
+                )
                 system_memory_used_samples.append(int(getattr(mem_info, "used", 0)))
                 swap_percent_samples.append(float(getattr(swap_info, "percent", 0.0)))
                 swap_used_samples.append(int(getattr(swap_info, "used", 0)))
@@ -283,8 +290,16 @@ class Command(BaseCommand):
                         suite_cpu += float(cpu_value)
                         suite_memory += int(getattr(memory_info, "rss", 0))
 
-                        stats.update(float(cpu_value), int(getattr(memory_info, "rss", 0)), io_counters)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        stats.update(
+                            float(cpu_value),
+                            int(getattr(memory_info, "rss", 0)),
+                            io_counters,
+                        )
+                    except (
+                        psutil.NoSuchProcess,
+                        psutil.AccessDenied,
+                        psutil.ZombieProcess,
+                    ):
                         continue
 
                 suite_cpu_samples.append(suite_cpu)
@@ -296,7 +311,9 @@ class Command(BaseCommand):
         elapsed = max(0.0, time.monotonic() - start_time)
         sample_count = len(system_cpu_samples)
 
-        suite_cpu_average = sum(stats.avg_cpu for stats in stats_map.values() if stats.samples)
+        suite_cpu_average = sum(
+            stats.avg_cpu for stats in stats_map.values() if stats.samples
+        )
         suite_memory_average = sum(
             stats.avg_memory for stats in stats_map.values() if stats.samples
         )
@@ -329,9 +346,13 @@ class Command(BaseCommand):
                 },
                 "swap": {
                     "average_percent": _average(swap_percent_samples),
-                    "max_percent": max(swap_percent_samples) if swap_percent_samples else 0.0,
+                    "max_percent": max(swap_percent_samples)
+                    if swap_percent_samples
+                    else 0.0,
                     "average_used_bytes": _average(swap_used_samples),
-                    "max_used_bytes": max(swap_used_samples) if swap_used_samples else 0,
+                    "max_used_bytes": max(swap_used_samples)
+                    if swap_used_samples
+                    else 0,
                     "total_bytes": swap_total,
                 },
             },
@@ -342,13 +363,17 @@ class Command(BaseCommand):
                 },
                 "memory": {
                     "average_bytes": suite_memory_average,
-                    "max_bytes": max(suite_memory_samples) if suite_memory_samples else 0,
+                    "max_bytes": max(suite_memory_samples)
+                    if suite_memory_samples
+                    else 0,
                 },
                 "io": {
                     "read_bytes": suite_io_read,
                     "write_bytes": suite_io_write,
                 },
-                "processes": [stats.to_dict() for stats in stats_map.values() if stats.samples],
+                "processes": [
+                    stats.to_dict() for stats in stats_map.values() if stats.samples
+                ],
             },
         }
 
@@ -357,7 +382,11 @@ class Command(BaseCommand):
             return
 
         if interrupted:
-            self.stdout.write(self.style.WARNING("Sampling interrupted early; partial results follow."))
+            self.stdout.write(
+                self.style.WARNING(
+                    "Sampling interrupted early; partial results follow."
+                )
+            )
 
         if sample_count == 0:
             self.stdout.write(
@@ -429,7 +458,9 @@ class Command(BaseCommand):
 
         self.stdout.write("")
         self.stdout.write("Observed processes:")
-        for stats in sorted(process_summaries, key=lambda item: item.avg_cpu, reverse=True):
+        for stats in sorted(
+            process_summaries, key=lambda item: item.avg_cpu, reverse=True
+        ):
             self.stdout.write(
                 f"  PID {stats.pid} {stats.name}: "
                 f"avg CPU {_format_percent(stats.avg_cpu)}, "

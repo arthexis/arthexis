@@ -111,7 +111,9 @@ def _enqueue_event_id(event_id: int) -> bool:
     return queued
 
 
-def record_watchlist_events_for_attempt(attempt: RFIDAttempt) -> list[RFIDWatchlistEvent]:
+def record_watchlist_events_for_attempt(
+    attempt: RFIDAttempt,
+) -> list[RFIDWatchlistEvent]:
     """Create durable watchlist events for a recorded RFID attempt."""
 
     if not rfid_watchlists_enabled():
@@ -156,7 +158,9 @@ def record_watchlist_events_for_attempt(attempt: RFIDAttempt) -> list[RFIDWatchl
     return events
 
 
-def _action_text(config: dict[str, Any], key: str, fallback: str, max_length: int) -> str:
+def _action_text(
+    config: dict[str, Any], key: str, fallback: str, max_length: int
+) -> str:
     value = str(config.get(key) or fallback).strip()
     return value[:max_length]
 
@@ -168,7 +172,9 @@ def _process_audit_event(event: RFIDWatchlistEvent) -> str:
 def _process_local_notification_event(event: RFIDWatchlistEvent) -> str:
     from apps.core.notifications import notify
 
-    config = event.entry.action_config if isinstance(event.entry.action_config, dict) else {}
+    config = (
+        event.entry.action_config if isinstance(event.entry.action_config, dict) else {}
+    )
     subject = _action_text(config, "subject", "RFID watchlist", 64)
     body = _action_text(config, "body", event.rfid, 160)
     notify(subject, body)
@@ -178,7 +184,9 @@ def _process_local_notification_event(event: RFIDWatchlistEvent) -> str:
 def _process_net_message_event(event: RFIDWatchlistEvent) -> str:
     from apps.nodes.models import NetMessage
 
-    config = event.entry.action_config if isinstance(event.entry.action_config, dict) else {}
+    config = (
+        event.entry.action_config if isinstance(event.entry.action_config, dict) else {}
+    )
     subject = _action_text(config, "subject", "RFID watchlist", 64)
     body = _action_text(config, "body", event.rfid, 256)
     NetMessage.broadcast(
@@ -200,9 +208,7 @@ def process_watchlist_event(event_id: int) -> str:
     """Deliver one pending watchlist event through its allowlisted action."""
 
     event = (
-        RFIDWatchlistEvent.objects.select_related("entry")
-        .filter(pk=event_id)
-        .first()
+        RFIDWatchlistEvent.objects.select_related("entry").filter(pk=event_id).first()
     )
     if event is None:
         return "missing"

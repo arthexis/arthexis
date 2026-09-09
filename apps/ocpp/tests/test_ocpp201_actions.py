@@ -30,7 +30,9 @@ class DummyWebSocket:
         self.sent: list[str] = []
         self.ocpp_version = "ocpp2.0.1"
 
-    async def send(self, message: str) -> None:  # pragma: no cover - exercised via async_to_sync
+    async def send(
+        self, message: str
+    ) -> None:  # pragma: no cover - exercised via async_to_sync
         self.sent.append(message)
 
 
@@ -74,12 +76,15 @@ def reset_store_state(tmp_path, monkeypatch):
     yield
     _clear_state()
 
+
 def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
     class ProfileStub:
         connector_id = 1
         charging_profile_id = 7
 
-        def as_set_charging_profile_request(self, *, connector_id=None, schedule_payload=None):
+        def as_set_charging_profile_request(
+            self, *, connector_id=None, schedule_payload=None
+        ):
             return {
                 "connectorId": connector_id,
                 "csChargingProfiles": {"chargingProfileId": self.charging_profile_id},
@@ -98,19 +103,26 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
             return profile
 
     monkeypatch.setattr(
-        charging_profiles, "ChargingProfile", type("CPModel", (), {"objects": QueryStub()})
+        charging_profiles,
+        "ChargingProfile",
+        type("CPModel", (), {"objects": QueryStub()}),
     )
 
     log_key = store.identity_key("CID", 1)
     context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
-    result = actions._handle_set_charging_profile(context, {"profileId": profile.charging_profile_id})
+    result = actions._handle_set_charging_profile(
+        context, {"profileId": profile.charging_profile_id}
+    )
 
     assert isinstance(result, ActionCall)
     message = json.loads(ws.sent[0])
     assert message[2] == "SetChargingProfile"
     message_id = message[1]
     assert message_id in store.pending_calls
-    assert store.pending_calls[message_id]["charging_profile_id"] == profile.charging_profile_id
+    assert (
+        store.pending_calls[message_id]["charging_profile_id"]
+        == profile.charging_profile_id
+    )
     assert message_id in store._pending_call_handles
 
 
@@ -123,15 +135,13 @@ def test_clear_charging_profile_requires_identifier(ws):
     assert response.status_code == 400
 
 
-
-
-
-
 def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     action_registry = build_action_registry(consumer)
 
-    assert action_registry["BootNotification"] == consumer._handle_boot_notification_action
+    assert (
+        action_registry["BootNotification"] == consumer._handle_boot_notification_action
+    )
     assert action_registry["Authorize"] == consumer._handle_authorize_action
     assert action_registry["CostUpdated"] == consumer._handle_cost_updated_action
     assert (
@@ -142,7 +152,9 @@ def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
     boot_calls = consumer._handle_boot_notification_action.__protocol_calls__
     authorize_calls = consumer._handle_authorize_action.__protocol_calls__
     cost_calls = consumer._handle_cost_updated_action.__protocol_calls__
-    reservation_calls = consumer._handle_reservation_status_update_action.__protocol_calls__
+    reservation_calls = (
+        consumer._handle_reservation_status_update_action.__protocol_calls__
+    )
 
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification") in boot_calls
     assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Authorize") in authorize_calls
@@ -233,6 +245,7 @@ async def test_authorize_keeps_id_token_info_shape_for_ocpp2x():
 
     assert result == {"idTokenInfo": {"status": "Accepted"}}
 
+
 @pytest.mark.anyio
 async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -261,8 +274,6 @@ async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
 
 
 @pytest.mark.anyio
-
-
 def test_firmware_actions_register_ocpp201_and_ocpp21():
     update_calls = actions._handle_update_firmware.__protocol_calls__
     publish_calls = actions._handle_publish_firmware.__protocol_calls__
@@ -272,8 +283,16 @@ def test_firmware_actions_register_ocpp201_and_ocpp21():
     assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware") in update_calls
     assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware") in publish_calls
     assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware") in publish_calls
-    assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware") in unpublish_calls
-    assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware") in unpublish_calls
+    assert (
+        "ocpp201",
+        ProtocolCallModel.CSMS_TO_CP,
+        "UnpublishFirmware",
+    ) in unpublish_calls
+    assert (
+        "ocpp21",
+        ProtocolCallModel.CSMS_TO_CP,
+        "UnpublishFirmware",
+    ) in unpublish_calls
 
 
 @pytest.mark.parametrize(
@@ -388,10 +407,13 @@ def test_install_certificate_registers_pending_call_metadata(ws):
     assert store.pending_calls[message_id]["installed_certificate_pk"] is not None
     assert message_id in store._pending_call_handles
 
+
 @pytest.mark.django_db
 def test_get_log_supports_ocpp201(monkeypatch, ws):
     monkeypatch.setattr(Charger, "get_absolute_url", lambda self: "/charger/")
-    monkeypatch.setattr(Charger, "_full_url", lambda self: "https://example.com/charger/")
+    monkeypatch.setattr(
+        Charger, "_full_url", lambda self: "https://example.com/charger/"
+    )
 
     charger = Charger.objects.create(charger_id="CID-LOG")
     connector_value = charger.connector_id
@@ -573,7 +595,7 @@ def test_stub():
             "function": "keyword_stub",
             "line": 13,
             "path": "handlers.py",
-        }
+        },
     ]
 
 
@@ -651,7 +673,11 @@ def test_run_coverage_ocpp201_keeps_decorator_only_cp_to_csms(monkeypatch, tmp_p
 @pytest.mark.parametrize(
     ("protocol_slug", "coverage_path", "load_spec"),
     (
-        ("ocpp201", Path("apps/ocpp/coverage201.json"), coverage_ocpp201_impl._load_spec),
+        (
+            "ocpp201",
+            Path("apps/ocpp/coverage201.json"),
+            coverage_ocpp201_impl._load_spec,
+        ),
         ("ocpp21", Path("apps/ocpp/coverage21.json"), coverage_ocpp21_impl._load_spec),
     ),
 )
@@ -664,18 +690,27 @@ def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
     spec_cp_to_csms = set(load_spec()["cp_to_csms"])
     decorated_cp_to_csms, _ = _collect_real_decorated_actions(app_dir, protocol_slug)
     if protocol_slug == "ocpp21":
-        decorated_cp_to_csms_201, _ = _collect_real_decorated_actions(app_dir, "ocpp201")
+        decorated_cp_to_csms_201, _ = _collect_real_decorated_actions(
+            app_dir, "ocpp201"
+        )
         decorated_cp_to_csms |= decorated_cp_to_csms_201
     expected_supported = sorted(spec_cp_to_csms & decorated_cp_to_csms)
 
-    report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
+    report = json.loads(
+        (app_dir.parent.parent / coverage_path).read_text(encoding="utf-8")
+    )
     assert report["coverage"]["cp_to_csms"]["supported"] == expected_supported
 
 
-@pytest.mark.parametrize("coverage_path", (Path("apps/ocpp/coverage201.json"), Path("apps/ocpp/coverage21.json")))
+@pytest.mark.parametrize(
+    "coverage_path",
+    (Path("apps/ocpp/coverage201.json"), Path("apps/ocpp/coverage21.json")),
+)
 def test_coverage_artifacts_include_core_cp_to_csms_notifications(coverage_path):
     app_dir = Path(__file__).resolve().parents[1]
-    report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
+    report = json.loads(
+        (app_dir.parent.parent / coverage_path).read_text(encoding="utf-8")
+    )
     assert "BootNotification" in report["implemented"]["cp_to_csms"]
     assert "BootNotification" in report["coverage"]["cp_to_csms"]["supported"]
 

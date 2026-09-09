@@ -44,15 +44,27 @@ def code_reference_line(line: str, normalized: str) -> bool:
     if stripped.startswith(("return ", "def ", "class ", "import ", "from ")):
         return True
     if stripped.startswith(("if ", "elif ", "for ", "while ")) and (
-        (stripped.rstrip().endswith(":") and (stripped.count('"') >= 2 or stripped.count("'") >= 2))
+        (
+            stripped.rstrip().endswith(":")
+            and (stripped.count('"') >= 2 or stripped.count("'") >= 2)
+        )
         or bool(re.search(r"\bin\s+(normalized|lower)(?:\(\))?\b", normalized))
     ):
         return True
-    if stripped.startswith(('"', "'")) and stripped.endswith(('"', "'")) and ":" not in stripped:
+    if (
+        stripped.startswith(('"', "'"))
+        and stripped.endswith(('"', "'"))
+        and ":" not in stripped
+    ):
         return True
     if re.search(r"\.write_text\s*\(\s*['\"].*?['\"]", stripped):
         return True
-    return bool(re.search(r"\bin\s+(normalized|lower)(?:\(\))?\b(?=\s*(?:[:),\]]|\bfor\b))", normalized))
+    return bool(
+        re.search(
+            r"\bin\s+(normalized|lower)(?:\(\))?\b(?=\s*(?:[:),\]]|\bfor\b))",
+            normalized,
+        )
+    )
 
 
 def stale_language_needle(line: str) -> str:

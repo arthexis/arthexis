@@ -4,7 +4,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 _BASH_PATH_STYLE: str | None = None
 
 

@@ -158,7 +158,9 @@ def test_get_or_create_crontab_schedule_notifies_when_promoting_timezone(
     CrontabSchedule.objects.filter(**cron_fields).delete()
     legacy_schedule = CrontabSchedule.objects.create(**cron_fields, timezone="UTC")
     update_calls = []
-    monkeypatch.setattr(PeriodicTasks, "update_changed", lambda: update_calls.append(True))
+    monkeypatch.setattr(
+        PeriodicTasks, "update_changed", lambda: update_calls.append(True)
+    )
 
     schedule, created = get_or_create_crontab_schedule(
         CrontabSchedule.objects,

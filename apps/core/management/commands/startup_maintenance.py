@@ -41,6 +41,7 @@ class Command(BaseCommand):
             default=15,
             help="Delete view history entries older than this many days (default: 15).",
         )
+
     def handle(self, *args, **options):
         if skip_reason := profile_skip_reason(app_selector="apps.ocpp"):
             self.stdout.write(f"OCPP cached statuses skipped: {skip_reason}")

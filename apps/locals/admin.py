@@ -3,15 +3,13 @@ from __future__ import annotations
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
-from django.db import IntegrityError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import NoReverseMatch
-from django.urls import path
-from django.urls import reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from config.request_utils import is_https_request
+
 from .favorites_cache import clear_user_favorites_cache
 from .models import Favorite
 
@@ -156,7 +154,9 @@ def favorite_toggle(request, ct_id):
                     priority=priority,
                 )
             except IntegrityError:
-                fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
+                fav = Favorite.objects.filter(
+                    user=request.user, content_type=ct
+                ).first()
                 if fav:
                     update_fields = []
                     if fav.custom_label != label:
@@ -255,7 +255,9 @@ def patch_admin_favorites() -> None:
                 admin.site.admin_view(favorite_toggle),
                 name="favorite_toggle",
             ),
-            path("favorites/", admin.site.admin_view(favorite_list), name="favorite_list"),
+            path(
+                "favorites/", admin.site.admin_view(favorite_list), name="favorite_list"
+            ),
             path(
                 "favorites/delete/<int:pk>/",
                 admin.site.admin_view(favorite_delete),

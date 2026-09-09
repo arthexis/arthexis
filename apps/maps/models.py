@@ -34,7 +34,9 @@ class Location(Entity):
         max_length=16,
         choices=EnergyTariff.ContractType.choices,
         blank=True,
-        help_text=_("CFE service contract type required to match energy tariff pricing."),
+        help_text=_(
+            "CFE service contract type required to match energy tariff pricing."
+        ),
     )
     address_line1 = models.CharField(
         _("Street address"),

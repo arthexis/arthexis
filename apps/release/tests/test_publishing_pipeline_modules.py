@@ -40,7 +40,9 @@ def test_private_askpass_restores_execute_permission_masked_by_umask(tmp_path) -
         assert stat.S_IMODE(path.stat().st_mode) == 0o700
 
 
-def test_private_askpass_falls_back_when_fchmod_is_unavailable(tmp_path, monkeypatch) -> None:
+def test_private_askpass_falls_back_when_fchmod_is_unavailable(
+    tmp_path, monkeypatch
+) -> None:
     path = tmp_path / "askpass.sh"
     monkeypatch.delattr(uploader.os, "fchmod", raising=False)
 
@@ -68,4 +70,7 @@ def test_pipeline_adapter_modules_reexport_expected_helpers() -> None:
 
 def test_pipeline_progress_module_exports_expected_helpers() -> None:
     assert progress.build_release_guidance is actions.build_release_guidance
-    assert progress._build_release_progress_context is actions._build_release_progress_context
+    assert (
+        progress._build_release_progress_context
+        is actions._build_release_progress_context
+    )

@@ -1,6 +1,7 @@
 import json
-from django.contrib.admin.options import ModelAdmin
+
 from django.contrib.admin.models import LogEntry
+from django.contrib.admin.options import ModelAdmin
 from django.utils.encoding import smart_str
 
 

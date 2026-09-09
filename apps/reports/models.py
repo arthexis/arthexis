@@ -18,7 +18,10 @@ class SQLReport(Entity):
     """
 
     class ReportType(models.TextChoices):
-        REPORT_PRODUCT_ACTIVITY = "report_product_activity", _("Report product activity")
+        REPORT_PRODUCT_ACTIVITY = (
+            "report_product_activity",
+            _("Report product activity"),
+        )
         SCHEDULED_REPORTS = "scheduled_reports", _("Scheduled reports overview")
         SIGIL_ROOTS = "sigil_roots", _("Sigil roots catalog")
 
@@ -183,7 +186,9 @@ class SQLReportProduct(Entity):
     parameters = models.JSONField(default=dict, blank=True)
     renderer_template_name = models.CharField(max_length=255)
     execution_details = models.JSONField(default=dict, blank=True)
-    database_alias = models.CharField(max_length=128, blank=True, default="", editable=False)
+    database_alias = models.CharField(
+        max_length=128, blank=True, default="", editable=False
+    )
     resolved_sql = models.TextField(blank=True, default="", editable=False)
     row_count = models.PositiveIntegerField(default=0)
     duration_ms = models.FloatField(blank=True, null=True)

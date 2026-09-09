@@ -157,9 +157,9 @@ def build_payload(data) -> NodeRegistrationPayload:
 
     raw_relation = data.get("current_relation")
     raw_mesh_state = data.get("mesh_enrollment_state")
-    relation_present = (
-        hasattr(data, "getlist") and "current_relation" in data
-    ) or ("current_relation" in data)
+    relation_present = (hasattr(data, "getlist") and "current_relation" in data) or (
+        "current_relation" in data
+    )
 
     return NodeRegistrationPayload(
         hostname=(data.get("hostname") or "").strip(),
@@ -187,7 +187,9 @@ def build_payload(data) -> NodeRegistrationPayload:
         mesh_key_fingerprint_metadata=_extract_mesh_key_fingerprint_metadata(data),
         last_mesh_heartbeat=_extract_mesh_last_heartbeat(data),
         mesh_capability_flags=_extract_mesh_capability_flags(data),
-        relation_value=Node.normalize_relation(raw_relation) if relation_present else None,
+        relation_value=Node.normalize_relation(raw_relation)
+        if relation_present
+        else None,
         trusted_requested=data.get("trusted"),
         role_name=str(data.get("role") or data.get("role_name") or "").strip(),
         deactivate_user=_coerce_bool(data.get("deactivate_user")),

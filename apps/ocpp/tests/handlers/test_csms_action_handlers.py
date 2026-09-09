@@ -117,7 +117,9 @@ async def test_notify_charging_limit_handler_contract_updates_charger():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_notify_display_messages_handler_contract_persists_messages():
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-HDISP")
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-HDISP"
+    )
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-HDISP"
     consumer.charger_id = charger.charger_id
@@ -180,7 +182,12 @@ async def test_notify_monitoring_report_handler_contract_persists_rules():
                 "component": {"name": "EVSE", "instance": "1", "evse": {"id": 1}},
                 "variable": {"name": "Voltage", "instance": "L1"},
                 "variableMonitoring": [
-                    {"id": 9001, "severity": 7, "type": "UpperThreshold", "value": "250"}
+                    {
+                        "id": 9001,
+                        "severity": 7,
+                        "type": "UpperThreshold",
+                        "value": "250",
+                    }
                 ],
             }
         ],

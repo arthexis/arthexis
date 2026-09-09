@@ -105,7 +105,9 @@ def test_create_order_combines_template_and_factor_lines(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_factor_with_template_restrictions_applies_only_to_selected_template(monkeypatch):
+def test_factor_with_template_restrictions_applies_only_to_selected_template(
+    monkeypatch,
+):
     user = get_user_model().objects.create_user(username="agent-2")
     profile = OdooEmployee.objects.create(
         user=user,
@@ -205,6 +207,5 @@ def test_create_order_reuses_existing_partner(monkeypatch):
 
     assert result.customer_id == 888
     assert not any(
-        model == "res.partner" and method == "create"
-        for model, method, _, _ in calls
+        model == "res.partner" and method == "create" for model, method, _, _ in calls
     )

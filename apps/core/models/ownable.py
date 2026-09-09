@@ -41,12 +41,16 @@ def _ownable_admin_url(obj: Ownable) -> str | None:
     """Return the admin change URL for a owned object when available."""
     opts = obj._meta
     try:
-        return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk])
+        return reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk]
+        )
     except NoReverseMatch:
         return None
 
 
-def _build_links(objects: Iterable[Ownable], via: str | None = None) -> list[OwnedObjectLink]:
+def _build_links(
+    objects: Iterable[Ownable], via: str | None = None
+) -> list[OwnedObjectLink]:
     """Build admin links for owned objects."""
     links: list[OwnedObjectLink] = []
     for obj in objects:
@@ -73,7 +77,9 @@ def _build_links_if_table_exists(
         return []
 
 
-def get_owned_objects_for_user(user) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
+def get_owned_objects_for_user(
+    user,
+) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
     """Return owned object links grouped by direct and group ownership."""
     direct: list[OwnedObjectLink] = []
     via_groups: list[OwnedObjectLink] = []
@@ -94,7 +100,9 @@ def get_owned_objects_for_user(user) -> tuple[list[OwnedObjectLink], list[OwnedO
     return direct, via_groups
 
 
-def get_owned_objects_for_group(group) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
+def get_owned_objects_for_group(
+    group,
+) -> tuple[list[OwnedObjectLink], list[OwnedObjectLink]]:
     """Return owned objects for a group and its members."""
     direct: list[OwnedObjectLink] = []
     member_owned: list[OwnedObjectLink] = []

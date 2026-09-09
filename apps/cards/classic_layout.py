@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as datetime_timezone
 from typing import Any
 
@@ -43,7 +43,7 @@ class CardLayoutError(ValueError):
 
 
 def utc_now() -> datetime:
-    return datetime.now(datetime_timezone.utc)
+    return datetime.now(UTC)
 
 
 def random_classic_key() -> str:
@@ -117,7 +117,9 @@ def clean_ascii_text(value: object, *, allow_newlines: bool = False) -> str:
     return _ASCII_CONTROL_RE.sub("", text)
 
 
-def encode_fixed_ascii(value: object, length: int, *, allow_newlines: bool = False) -> list[int]:
+def encode_fixed_ascii(
+    value: object, length: int, *, allow_newlines: bool = False
+) -> list[int]:
     text = clean_ascii_text(value, allow_newlines=allow_newlines)
     encoded = text.encode("ascii", errors="ignore")
     if len(encoded) > length:
@@ -145,9 +147,9 @@ def normalize_lcd_label(value: object) -> str:
 
 def encode_lcd_label(value: object) -> list[int]:
     line_1, line_2 = lcd_label_lines(value)
-    return list(line_1.encode("ascii", errors="ignore").ljust(LCD_LINE_BYTES, b"\x00")) + list(
-        line_2.encode("ascii", errors="ignore").ljust(LCD_LINE_BYTES, b"\x00")
-    )
+    return list(
+        line_1.encode("ascii", errors="ignore").ljust(LCD_LINE_BYTES, b"\x00")
+    ) + list(line_2.encode("ascii", errors="ignore").ljust(LCD_LINE_BYTES, b"\x00"))
 
 
 def decode_lcd_label(data: list[int] | tuple[int, ...] | bytes | bytearray) -> str:
@@ -194,8 +196,8 @@ def encode_writer_id(value: object | None = None) -> list[int]:
 def encode_writer_date(value: datetime | None = None) -> list[int]:
     timestamp = value or utc_now()
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=datetime_timezone.utc)
-    timestamp = timestamp.astimezone(datetime_timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = timestamp.astimezone(UTC)
     return list(timestamp.strftime("%Y%m%dT%H%M%SZ").encode("ascii"))
 
 
@@ -290,7 +292,9 @@ def encode_trait_value(value: object) -> list[int]:
     )
 
 
-def build_trait_block_payloads(start_sector: int, key: object, value: object) -> dict[int, list[int]]:
+def build_trait_block_payloads(
+    start_sector: int, key: object, value: object
+) -> dict[int, list[int]]:
     pair = (start_sector, start_sector + 1)
     if pair not in trait_sector_pairs():
         raise CardLayoutError("trait must start on a configured trait sector pair")
@@ -387,7 +391,9 @@ def decode_traits_from_dump(dump: object) -> dict[str, dict[str, Any]]:
         value_data.extend(blocks.get(sector_block(start_sector, 1), zero_block()))
         value_data.extend(blocks.get(sector_block(start_sector, 2), zero_block()))
         for offset in range(SECTOR_DATA_BLOCKS):
-            value_data.extend(blocks.get(sector_block(continuation_sector, offset), zero_block()))
+            value_data.extend(
+                blocks.get(sector_block(continuation_sector, offset), zero_block())
+            )
         value = decode_fixed_ascii(value_data[:TRAIT_VALUE_BYTES])
         traits[key] = {
             "value": value,
@@ -417,7 +423,9 @@ def normalize_trait_records(value: object) -> dict[str, dict[str, Any]]:
         try:
             trait_value = normalize_trait_value(raw_value)
         except CardLayoutError:
-            trait_value = clean_ascii_text(raw_value, allow_newlines=True)[:TRAIT_VALUE_BYTES]
+            trait_value = clean_ascii_text(raw_value, allow_newlines=True)[
+                :TRAIT_VALUE_BYTES
+            ]
         record: dict[str, Any] = {"value": trait_value}
         try:
             if sector is not None:
@@ -458,6 +466,5 @@ def trait_values(records: object) -> dict[str, str]:
 
 def trait_sigils(records: object) -> dict[str, str]:
     return {
-        trait_sigil_name(key): value
-        for key, value in trait_values(records).items()
+        trait_sigil_name(key): value for key, value in trait_values(records).items()
     }

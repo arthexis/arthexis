@@ -253,10 +253,7 @@ def _run_upgrade_command(
         )
         append_auto_upgrade_log(
             base_dir,
-            (
-                "Inline auto-upgrade launch failed "
-                f"({exc}); will retry on next cycle"
-            ),
+            (f"Inline auto-upgrade launch failed ({exc}); will retry on next cycle"),
         )
         return None, False
 

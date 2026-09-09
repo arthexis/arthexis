@@ -158,9 +158,7 @@ def test_funding_banner_is_hidden_when_issue_url_setting_is_blank(
     monkeypatch.setattr(context_processors, "_is_github_issue_open", fail_issue_lookup)
 
     assert (
-        context_processors._build_funding_banner(
-            rf.get("/", HTTP_HOST="arthexis.com")
-        )
+        context_processors._build_funding_banner(rf.get("/", HTTP_HOST="arthexis.com"))
         is None
     )
 
@@ -177,9 +175,7 @@ def test_funding_banner_is_hidden_when_issue_url_is_not_parseable(
     monkeypatch.setattr(context_processors, "_is_github_issue_open", fail_issue_lookup)
 
     assert (
-        context_processors._build_funding_banner(
-            rf.get("/", HTTP_HOST="arthexis.com")
-        )
+        context_processors._build_funding_banner(rf.get("/", HTTP_HOST="arthexis.com"))
         is None
     )
 
@@ -222,12 +218,7 @@ def test_github_issue_state_uses_json_response(monkeypatch) -> None:
         context_processors, "urlopen", lambda *_args, **_kwargs: Response()
     )
 
-    assert (
-        context_processors._read_github_issue_state(
-            FUNDING_ISSUE_URL
-        )
-        == "closed"
-    )
+    assert context_processors._read_github_issue_state(FUNDING_ISSUE_URL) == "closed"
 
 
 def test_github_issue_state_treats_incomplete_read_as_unknown(monkeypatch) -> None:
@@ -245,12 +236,7 @@ def test_github_issue_state_treats_incomplete_read_as_unknown(monkeypatch) -> No
         context_processors, "urlopen", lambda *_args, **_kwargs: Response()
     )
 
-    assert (
-        context_processors._read_github_issue_state(
-            FUNDING_ISSUE_URL
-        )
-        is None
-    )
+    assert context_processors._read_github_issue_state(FUNDING_ISSUE_URL) is None
 
 
 def test_github_issue_state_treats_remote_disconnect_as_unknown(monkeypatch) -> None:
@@ -262,12 +248,7 @@ def test_github_issue_state_treats_remote_disconnect_as_unknown(monkeypatch) -> 
         ),
     )
 
-    assert (
-        context_processors._read_github_issue_state(
-            FUNDING_ISSUE_URL
-        )
-        is None
-    )
+    assert context_processors._read_github_issue_state(FUNDING_ISSUE_URL) is None
 
 
 def test_github_issue_state_treats_socket_os_error_as_unknown(monkeypatch) -> None:
@@ -285,12 +266,7 @@ def test_github_issue_state_treats_socket_os_error_as_unknown(monkeypatch) -> No
         context_processors, "urlopen", lambda *_args, **_kwargs: Response()
     )
 
-    assert (
-        context_processors._read_github_issue_state(
-            FUNDING_ISSUE_URL
-        )
-        is None
-    )
+    assert context_processors._read_github_issue_state(FUNDING_ISSUE_URL) is None
 
 
 def test_github_issue_open_hides_banner_on_fetch_failure(monkeypatch) -> None:
@@ -301,22 +277,12 @@ def test_github_issue_open_hides_banner_on_fetch_failure(monkeypatch) -> None:
         calls += 1
         return None
 
-    cache_key = "sites:funding_issue_state:" f"{FUNDING_ISSUE_URL}"
+    cache_key = f"sites:funding_issue_state:{FUNDING_ISSUE_URL}"
     context_processors.cache.delete(cache_key)
     monkeypatch.setattr(context_processors, "_read_github_issue_state", failing_reader)
 
-    assert (
-        context_processors._is_github_issue_open(
-            FUNDING_ISSUE_URL
-        )
-        is False
-    )
-    assert (
-        context_processors._is_github_issue_open(
-            FUNDING_ISSUE_URL
-        )
-        is False
-    )
+    assert context_processors._is_github_issue_open(FUNDING_ISSUE_URL) is False
+    assert context_processors._is_github_issue_open(FUNDING_ISSUE_URL) is False
     assert calls == 1
 
 

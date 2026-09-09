@@ -12,4 +12,3 @@ def has_graphical_display() -> bool:
     if not sys.platform.startswith("linux"):
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-

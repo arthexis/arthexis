@@ -43,7 +43,9 @@ class EntityUserManager(DjangoUserManager):
     def get_queryset(self):
         return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
 
-    def create_superuser(self, username=None, email=None, password=None, **extra_fields):
+    def create_superuser(
+        self, username=None, email=None, password=None, **extra_fields
+    ):
         """Create or update a superuser, reusing existing records when present."""
 
         extra_fields.setdefault("is_staff", True)

@@ -25,7 +25,9 @@ def default_repo() -> Path:
 
 def run_git(repo: Path, args: list[str]) -> str:
     try:
-        proc = subprocess.run(["git", "-C", str(repo), *args], text=True, capture_output=True, check=True)
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args], text=True, capture_output=True, check=True
+        )
         return proc.stdout.strip()
     except Exception as exc:
         return f"ERROR: {exc}"
@@ -56,10 +58,19 @@ def inspect(repo: Path) -> dict[str, Any]:
         "exists": repo.exists(),
         "venv_python": str(py),
         "venv_python_exists": py.exists(),
-        "scripts": {name: {"path": str(path), "exists": path.exists()} for name, path in scripts.items()},
-        "git_branch": run_git(repo, ["branch", "--show-current"]) if repo.exists() else "",
-        "git_status_short": run_git(repo, ["status", "--short"]) if repo.exists() else "",
-        "head": run_git(repo, ["rev-parse", "--short", "HEAD"]) if repo.exists() else "",
+        "scripts": {
+            name: {"path": str(path), "exists": path.exists()}
+            for name, path in scripts.items()
+        },
+        "git_branch": run_git(repo, ["branch", "--show-current"])
+        if repo.exists()
+        else "",
+        "git_status_short": run_git(repo, ["status", "--short"])
+        if repo.exists()
+        else "",
+        "head": run_git(repo, ["rev-parse", "--short", "HEAD"])
+        if repo.exists()
+        else "",
     }
 
 

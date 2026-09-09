@@ -17,9 +17,7 @@ def _split_disabled_apps() -> set[str]:
     values: list[str] = []
     for name in ("ARTHEXIS_ROLE_APP_DISABLED_APPS", "ARTHEXIS_DISABLED_APPS"):
         values.extend(
-            part
-            for part in re.split(r"[,;\s]+", os.environ.get(name, ""))
-            if part
+            part for part in re.split(r"[,;\s]+", os.environ.get(name, "")) if part
         )
     aliases: set[str] = set()
     for value in values:

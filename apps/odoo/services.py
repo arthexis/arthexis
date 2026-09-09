@@ -3,9 +3,9 @@ from __future__ import annotations
 import configparser
 import importlib.util
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from django.utils import timezone
 
@@ -103,7 +103,9 @@ def _default_config_locations() -> list[Path]:
 
 
 def _candidate_paths(
-    additional_candidates: Iterable[Path | str] | None = None, *, scan_filesystem: bool = True
+    additional_candidates: Iterable[Path | str] | None = None,
+    *,
+    scan_filesystem: bool = True,
 ) -> list[Path]:
     defaults: list[Path | str] = []
     if additional_candidates is None:
@@ -193,7 +195,9 @@ def discover_odoo_configs(
     discovered: list[DiscoveredOdooConfig] = []
     errors: list[str] = []
 
-    for path in _candidate_paths(additional_candidates, scan_filesystem=scan_filesystem):
+    for path in _candidate_paths(
+        additional_candidates, scan_filesystem=scan_filesystem
+    ):
         try:
             options = _read_config(path)
         except OdooConfigError as exc:
@@ -210,7 +214,9 @@ def _deployment_defaults(entry: DiscoveredOdooConfig) -> dict[str, object]:
     options = entry.options
 
     http_port = _parse_int(
-        options.get("http_port") or options.get("xmlrpc_port") or options.get("xmlrpcs_port")
+        options.get("http_port")
+        or options.get("xmlrpc_port")
+        or options.get("xmlrpcs_port")
     )
 
     defaults: dict[str, object] = {

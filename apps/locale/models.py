@@ -42,7 +42,7 @@ class Language(Entity):
         return (self.code,)
 
     @classmethod
-    def default(cls) -> "Language | None":
+    def default(cls) -> Language | None:
         return cls.objects.filter(is_default=True).first()
 
 

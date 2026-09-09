@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from datetime import timezone as datetime_timezone
 
 from django.utils import timezone
@@ -54,7 +54,7 @@ def _system_boot_time(now: datetime | None = None) -> datetime | None:
     if not boot_timestamp:
         return None
 
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=UTC)
     if boot_time > current_time:
         return None
 
@@ -145,7 +145,9 @@ def _parse_last_history_line(line: str) -> dict[str, datetime | str | None] | No
         return None
 
     try:
-        start_index = next(index for index, token in enumerate(tokens) if token in _DAY_NAMES)
+        start_index = next(
+            index for index, token in enumerate(tokens) if token in _DAY_NAMES
+        )
     except StopIteration:
         return None
 
@@ -178,7 +180,9 @@ def _parse_last_history_line(line: str) -> dict[str, datetime | str | None] | No
     return {"type": tokens[0], "start": start_dt, "end": end_dt}
 
 
-def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str | None]:
+def _load_shutdown_periods() -> tuple[
+    list[tuple[datetime, datetime | None]], str | None
+]:
     """Return shutdown periods parsed from ``last -x -F`` output."""
 
     try:
@@ -192,7 +196,9 @@ def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], st
     except FileNotFoundError:
         return [], _as_str(_("The `last` command is not available on this node."))
     except subprocess.TimeoutExpired:
-        return [], _as_str(_("Timed out while reading uptime history from the system log."))
+        return [], _as_str(
+            _("Timed out while reading uptime history from the system log.")
+        )
 
     if result.returncode not in (0, 1):
         return [], _as_str(_("Unable to read uptime history from the system log."))
@@ -210,13 +216,17 @@ def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], st
     return shutdown_periods, None
 
 
-def load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str | None]:
+def load_shutdown_periods() -> tuple[
+    list[tuple[datetime, datetime | None]], str | None
+]:
     """Return shutdown periods parsed from ``last -x -F`` output."""
 
     return _load_shutdown_periods()
 
 
-def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+def _merge_shutdown_periods(
+    periods: Iterable[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
     normalized: list[tuple[datetime, datetime]] = []
     for start, end in periods:
         if end < start:
@@ -238,7 +248,10 @@ def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> lis
 
 
 def _build_uptime_segments(
-    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    shutdown_periods: list[tuple[datetime, datetime]],
 ) -> list[UptimeSegmentPayload]:
     """Build alternating up/down segments across a reporting window."""
 
@@ -289,7 +302,10 @@ def _build_uptime_segments(
 
 
 def build_uptime_segments(
-    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    shutdown_periods: list[tuple[datetime, datetime]],
 ) -> list[UptimeSegmentPayload]:
     """Public wrapper for uptime segment generation."""
 
@@ -357,9 +373,13 @@ def _build_uptime_report(*, now: datetime | None = None) -> UptimeReportPayload:
     for label, start in windows:
         window_duration = (current_time - start).total_seconds()
         segments = _build_uptime_segments(
-            window_start=start, window_end=current_time, shutdown_periods=shutdown_periods
+            window_start=start,
+            window_end=current_time,
+            shutdown_periods=shutdown_periods,
         )
-        serialized_segments = _serialize_segments(segments, window_duration=window_duration)
+        serialized_segments = _serialize_segments(
+            segments, window_duration=window_duration
+        )
         uptime_seconds = sum(
             segment["duration"].total_seconds()
             for segment in serialized_segments
@@ -397,7 +417,9 @@ def _build_uptime_report(*, now: datetime | None = None) -> UptimeReportPayload:
         "uptime": suite_details.get("uptime", ""),
         "boot_time": suite_details.get("boot_time"),
         "boot_time_label": suite_details.get("boot_time_label", ""),
-        "available": bool(suite_details.get("available") or suite_details.get("uptime")),
+        "available": bool(
+            suite_details.get("available") or suite_details.get("uptime")
+        ),
     }
 
     return {

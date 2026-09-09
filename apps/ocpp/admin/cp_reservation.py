@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class CPReservationForm(forms.ModelForm):
     class Meta:
         model = CPReservation
@@ -35,6 +36,7 @@ class CPReservationForm(forms.ModelForm):
             self.add_error("rfid", message)
             raise forms.ValidationError(message)
         return cleaned
+
 
 class CPReservationAdmin(EntityModelAdmin):
     form = CPReservationForm
@@ -107,6 +109,7 @@ class CPReservationAdmin(EntityModelAdmin):
             {"fields": ("created_on", "updated_on")},
         ),
     )
+
     def save_model(self, request, obj, form, change):
         trigger_fields = {
             "start_time",

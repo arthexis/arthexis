@@ -10,21 +10,21 @@ from django.contrib.admin.sites import NotRegistered
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
-from django.urls import path, reverse
 from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
-
 from django_object_actions import DjangoObjectActions
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.users.models import User
 
-from .services import generate_totp_key
-from .services import generate_totp_name
-from .services import render_totp_qr_data_uri
-from .services import totp_base32_key
-from .services import totp_provisioning_uri
-
+from .services import (
+    generate_totp_key,
+    generate_totp_name,
+    render_totp_qr_data_uri,
+    totp_base32_key,
+    totp_provisioning_uri,
+)
 
 try:
     admin.site.unregister(TOTPDevice)
@@ -107,8 +107,8 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
             request.POST or None, instance=device if device else None
         )
         confirm_form = None
-        qr_data_uri: Optional[str] = None
-        manual_key: Optional[str] = None
+        qr_data_uri: str | None = None
+        manual_key: str | None = None
 
         if request.method == "POST" and "start" in request.POST:
             if setup_form.is_valid():
@@ -122,11 +122,13 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
                     device.save()
                 except IntegrityError:
                     setup_form.add_error(
-                        "name", _("A device with this name already exists for the user."),
+                        "name",
+                        _("A device with this name already exists for the user."),
                     )
                 else:
                     messages.success(
-                        request, _("Authenticator secret generated. Scan to continue."),
+                        request,
+                        _("Authenticator secret generated. Scan to continue."),
                     )
                     return redirect(
                         reverse("admin:otp_totp_totpdevice_register")
@@ -140,8 +142,19 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
                 if device.verify_token(confirm_form.cleaned_data["token"]):
                     if not device.confirmed:
                         device.confirmed = True
-                        device.save(update_fields=["confirmed", "last_t", "drift", "last_used_at", "throttling_failure_count", "throttling_failure_timestamp"])
-                    messages.success(request, _("TOTP device confirmed and ready to use."))
+                        device.save(
+                            update_fields=[
+                                "confirmed",
+                                "last_t",
+                                "drift",
+                                "last_used_at",
+                                "throttling_failure_count",
+                                "throttling_failure_timestamp",
+                            ]
+                        )
+                    messages.success(
+                        request, _("TOTP device confirmed and ready to use.")
+                    )
                     return redirect(
                         reverse("admin:otp_totp_totpdevice_change", args=[device.pk])
                     )
@@ -174,7 +187,7 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         }
         return TemplateResponse(request, "admin/totp/device_wizard.html", context)
 
-    def _get_requested_device(self, request: HttpRequest) -> Optional[TOTPDevice]:
+    def _get_requested_device(self, request: HttpRequest) -> TOTPDevice | None:
         device_id = request.GET.get("device") or request.POST.get("device")
         if not device_id:
             return None
@@ -191,9 +204,9 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         return redirect(reverse("admin:index"))
 
     def has_add_permission(self, request):
-        return request.user.has_perm("otp_totp.add_totpdevice") or request.user.has_perm(
-            "totp.add_totpdevice"
-        )
+        return request.user.has_perm(
+            "otp_totp.add_totpdevice"
+        ) or request.user.has_perm("totp.add_totpdevice")
 
     def has_change_permission(self, request, obj=None):
         return request.user.has_perm(

@@ -57,7 +57,9 @@ def _record_collector_failure_event(*, source_name: str, detail: str) -> None:
             ),
         )
     except Exception:
-        logger.debug("Unable to record collector failure for %s", source_name, exc_info=True)
+        logger.debug(
+            "Unable to record collector failure for %s", source_name, exc_info=True
+        )
 
 
 def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
@@ -74,10 +76,10 @@ def error_event_security_alerts(*, now=None) -> list[SecurityAlert]:
     for event in active_events.order_by("-last_occurred_at", "-updated_at")[:10]:
         if event.last_occurred_at is None:
             continue
-        summary = _(
-            "Last seen: %(timestamp)s · Count: %(count)s"
-        ) % {
-            "timestamp": timezone.localtime(event.last_occurred_at).strftime("%Y-%m-%d %H:%M:%S"),
+        summary = _("Last seen: %(timestamp)s · Count: %(count)s") % {
+            "timestamp": timezone.localtime(event.last_occurred_at).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
             "count": event.occurrence_count,
         }
         alerts.append(
@@ -105,9 +107,13 @@ def build_security_alerts() -> list[dict[str, str]]:
         except Exception as exc:
             logger.exception("Security alert source %s failed", source_name)
             try:
-                _record_collector_failure_event(source_name=source_name, detail=str(exc))
+                _record_collector_failure_event(
+                    source_name=source_name, detail=str(exc)
+                )
             except Exception:
-                logger.debug("Secondary collector failure recording failed", exc_info=True)
+                logger.debug(
+                    "Secondary collector failure recording failed", exc_info=True
+                )
 
     severity_order = {"error": 0, "warning": 1, "info": 2}
     return [

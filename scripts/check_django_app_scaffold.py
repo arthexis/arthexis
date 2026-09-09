@@ -8,8 +8,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from config.settings.base import APPS_DIR
 from config.settings.apps import NON_DJANGO_UTILITY_PACKAGES, _to_module_path
+from config.settings.base import APPS_DIR
 
 REQUIRED_TOP_LEVEL_APP_FILES = ("__init__.py", "apps.py")
 REQUIRED_TOP_LEVEL_APP_DIRS = ("migrations/__init__.py",)

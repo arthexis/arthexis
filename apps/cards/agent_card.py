@@ -6,7 +6,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from django.conf import settings
@@ -463,9 +463,9 @@ def validate_reader_event(
     except ValueError:
         return ReaderTrustResult(False, trust_tier, "reader event timestamp is invalid")
     if observed.tzinfo is None:
-        observed = observed.replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
-    observed = observed.astimezone(timezone.utc)
+        observed = observed.replace(tzinfo=UTC)
+    now = datetime.now(UTC)
+    observed = observed.astimezone(UTC)
     if observed - now > timedelta(seconds=FUTURE_READER_EVENT_SKEW_SECONDS):
         return ReaderTrustResult(
             False, trust_tier, "reader event timestamp is in the future"

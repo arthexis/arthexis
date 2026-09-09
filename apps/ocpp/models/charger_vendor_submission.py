@@ -37,7 +37,9 @@ class ChargerVendorSubmission(Entity):
     website = models.URLField(
         _("Company website"),
         blank=True,
-        help_text=_("Public website or product landing page for the charger portfolio."),
+        help_text=_(
+            "Public website or product landing page for the charger portfolio."
+        ),
     )
     charger_brand = models.CharField(
         _("Charger brand"),
@@ -55,7 +57,9 @@ class ChargerVendorSubmission(Entity):
     )
     connectivity_summary = models.TextField(
         _("Connectivity and network summary"),
-        help_text=_("Summarize LTE, Ethernet, Wi-Fi, VPN, or SIM/network requirements."),
+        help_text=_(
+            "Summarize LTE, Ethernet, Wi-Fi, VPN, or SIM/network requirements."
+        ),
     )
     api_documentation_url = models.URLField(
         _("API or documentation URL"),
@@ -73,7 +77,9 @@ class ChargerVendorSubmission(Entity):
         _("Deployment regions"),
         max_length=255,
         blank=True,
-        help_text=_("Countries or markets where these chargers are currently deployed."),
+        help_text=_(
+            "Countries or markets where these chargers are currently deployed."
+        ),
     )
     deployment_volume = models.CharField(
         _("Installed base"),
@@ -138,4 +144,3 @@ class ChargerVendorSubmission(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.company_name} - {self.charger_brand}"
-

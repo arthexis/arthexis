@@ -285,7 +285,9 @@ async def handle_get_composite_schedule_result(
 ) -> bool:
     projection_pk = metadata.get("projection_pk")
     status_value = str(payload_data.get("status") or "").strip()
-    schedule_payload = payload_data.get("chargingSchedule") if isinstance(payload_data, dict) else {}
+    schedule_payload = (
+        payload_data.get("chargingSchedule") if isinstance(payload_data, dict) else {}
+    )
     schedule_start = _parse_ocpp_timestamp(payload_data.get("scheduleStart"))
     duration_value: int | None = None
     rate_unit_value = ""
@@ -375,9 +377,7 @@ async def handle_get_log_result(
     capture_key = metadata.get("capture_key")
     status_value = str(payload_data.get("status") or "").strip()
     filename_value = str(
-        payload_data.get("filename")
-        or payload_data.get("location")
-        or ""
+        payload_data.get("filename") or payload_data.get("location") or ""
     ).strip()
     location_value = str(payload_data.get("location") or "").strip()
     fragments: list[str] = []
@@ -608,9 +608,9 @@ async def handle_get_configuration_result(
             log_type="charger",
         )
     else:
-        configuration = await database_sync_to_async(consumer._persist_configuration_result)(
-            payload_data, metadata.get("connector_id")
-        )
+        configuration = await database_sync_to_async(
+            consumer._persist_configuration_result
+        )(payload_data, metadata.get("connector_id"))
     if configuration:
         if getattr(consumer, "charger", None) and getattr(consumer, "charger_id", None):
             if getattr(consumer.charger, "charger_id", None) == consumer.charger_id:
@@ -807,14 +807,10 @@ async def handle_get_diagnostics_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     file_name = str(
-        payload_data.get("fileName")
-        or payload_data.get("filename")
-        or ""
+        payload_data.get("fileName") or payload_data.get("filename") or ""
     ).strip()
     location_value = str(
-        payload_data.get("location")
-        or metadata.get("location")
-        or ""
+        payload_data.get("location") or metadata.get("location") or ""
     ).strip()
     message = "GetDiagnostics result"
     if status_value:
@@ -1182,8 +1178,8 @@ async def handle_set_variable_monitoring_result(
             request_entry = request_lookup.get(monitoring_id)
             if not request_entry:
                 continue
-            component_name, component_instance, variable_name, variable_instance = _extract_component_variable(
-                request_entry["entry"]
+            component_name, component_instance, variable_name, variable_instance = (
+                _extract_component_variable(request_entry["entry"])
             )
             if not component_name or not variable_name:
                 continue
@@ -1200,7 +1196,9 @@ async def handle_set_variable_monitoring_result(
             threshold_text = str(threshold_value) if threshold_value is not None else ""
             monitor_type = str(monitor.get("type") or "").strip()
             transaction_value = monitor.get("transaction")
-            is_transaction = bool(transaction_value) if transaction_value is not None else False
+            is_transaction = (
+                bool(transaction_value) if transaction_value is not None else False
+            )
             MonitoringRule.objects.update_or_create(
                 charger=charger,
                 monitoring_id=monitoring_id,
@@ -1265,7 +1263,10 @@ async def handle_get_monitoring_report_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     request_id = metadata.get("request_id")
-    if status_value.casefold() in {"rejected", "notsupported"} and request_id is not None:
+    if (
+        status_value.casefold() in {"rejected", "notsupported"}
+        and request_id is not None
+    ):
         try:
             store.pop_monitoring_report_request(int(request_id))
         except (TypeError, ValueError):
@@ -1328,9 +1329,7 @@ async def handle_set_monitoring_level_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     status_info_text = _format_status_info(payload_data.get("statusInfo"))
-    monitoring_level = metadata.get("monitoring_level") or payload_data.get(
-        "severity"
-    )
+    monitoring_level = metadata.get("monitoring_level") or payload_data.get("severity")
 
     fragments: list[str] = []
     if status_value:

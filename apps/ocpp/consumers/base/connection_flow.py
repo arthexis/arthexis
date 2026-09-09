@@ -125,7 +125,9 @@ class ConnectionFlowMixin:
             )
             feature_by_slug = {feature.slug: feature for feature in features}
             ordered_features = [
-                feature_by_slug[slug] for slug in feature_slugs if slug in feature_by_slug
+                feature_by_slug[slug]
+                for slug in feature_slugs
+                if slug in feature_by_slug
             ]
             configured_creation_features = [
                 feature_by_slug[slug]
@@ -140,7 +142,10 @@ class ConnectionFlowMixin:
                 return None
 
             feature_candidates = ordered_features
-            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG and not ordered_features:
+            if (
+                requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG
+                and not ordered_features
+            ):
                 logger.info(
                     "Charge point connection blocked: requested creation feature %s is not configured while other charge-point gates remain configured.",
                     requested_feature_slug,
@@ -191,11 +196,13 @@ class ConnectionFlowMixin:
         self._consumption_message_uuid: str | None = None
         self.client_ip = _resolve_client_ip(self.scope)
         existing_charger = await database_sync_to_async(
-            lambda: Charger.objects.select_related(
-                "ws_auth_user", "ws_auth_group", "station_model", "charging_station"
-            )
-            .filter(charger_id=self.charger_id, connector_id=None)
-            .first(),
+            lambda: (
+                Charger.objects.select_related(
+                    "ws_auth_user", "ws_auth_group", "station_model", "charging_station"
+                )
+                .filter(charger_id=self.charger_id, connector_id=None)
+                .first()
+            ),
             thread_sensitive=False,
         )()
         offered_subprotocols = self._get_offered_subprotocols()

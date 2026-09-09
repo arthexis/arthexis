@@ -205,10 +205,16 @@ def _format_interval_minutes(interval_minutes: int) -> str:
         return ""
     if interval_minutes % 1440 == 0:
         days = interval_minutes // 1440
-        return str(ngettext("Every %(count)s day", "Every %(count)s days", days) % {"count": days})
+        return str(
+            ngettext("Every %(count)s day", "Every %(count)s days", days)
+            % {"count": days}
+        )
     if interval_minutes % 60 == 0:
         hours = interval_minutes // 60
-        return str(ngettext("Every %(count)s hour", "Every %(count)s hours", hours) % {"count": hours})
+        return str(
+            ngettext("Every %(count)s hour", "Every %(count)s hours", hours)
+            % {"count": hours}
+        )
     return str(
         ngettext(
             "Every %(count)s minute",
@@ -224,12 +230,20 @@ def _load_upgrade_policy_report() -> dict[str, object]:
     try:  # pragma: no cover - optional dependency
         from apps.nodes.models import Node, NodeUpgradePolicyAssignment
     except Exception:
-        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
+        return {
+            "policies": [],
+            "manual": True,
+            "error": str(_("Upgrade policy data unavailable.")),
+        }
 
     try:
         local = Node.get_local()
     except DatabaseError:
-        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
+        return {
+            "policies": [],
+            "manual": True,
+            "error": str(_("Upgrade policy data unavailable.")),
+        }
 
     if not local:
         return {"policies": [], "manual": True, "error": ""}
@@ -241,7 +255,11 @@ def _load_upgrade_policy_report() -> dict[str, object]:
             .order_by("policy__name")
         )
     except DatabaseError:
-        return {"policies": [], "manual": True, "error": str(_("Upgrade policy data unavailable."))}
+        return {
+            "policies": [],
+            "manual": True,
+            "error": str(_("Upgrade policy data unavailable.")),
+        }
 
     policies: list[dict[str, object]] = []
     channels: set[str] = set()
@@ -250,7 +268,9 @@ def _load_upgrade_policy_report() -> dict[str, object]:
         if not policy:
             continue
         channel = normalize_upgrade_channel(policy.channel or "stable") or "stable"
-        channel_label = str(getattr(policy, "get_channel_display", lambda: policy.channel)())
+        channel_label = str(
+            getattr(policy, "get_channel_display", lambda: policy.channel)()
+        )
         channel_state = "ok" if channel in {"stable", "regular"} else "warning"
         channels.add(channel)
         policies.append(
@@ -279,7 +299,9 @@ def _load_upgrade_policy_report() -> dict[str, object]:
             }
         )
 
-    normalized_channels = {normalize_upgrade_channel(channel) or channel for channel in channels}
+    normalized_channels = {
+        normalize_upgrade_channel(channel) or channel for channel in channels
+    }
     return {
         "policies": policies,
         "manual": not policies,
@@ -332,7 +354,9 @@ def _set_upgrade_policy_channel(channel: str) -> dict[str, object]:
         return _error_response(policy_channel, _("Upgrade policy data unavailable."))
 
     if not assignments:
-        return _error_response(policy_channel, _("No upgrade policies are assigned to the local node."))
+        return _error_response(
+            policy_channel, _("No upgrade policies are assigned to the local node.")
+        )
 
     updated = 0
     for assignment in assignments:
@@ -348,7 +372,9 @@ def _set_upgrade_policy_channel(channel: str) -> dict[str, object]:
     try:
         ensure_auto_upgrade_periodic_task()
     except Exception:
-        logger.exception("Unable to refresh auto-upgrade periodic task after policy channel change")
+        logger.exception(
+            "Unable to refresh auto-upgrade periodic task after policy channel change"
+        )
 
     return {
         "ok": True,
@@ -417,15 +443,12 @@ def _load_upgrade_revision_info(base_dir: Path, branch: str = "main") -> dict[st
     origin_revision_error = ""
 
     try:
-        local_revision = (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=base_dir,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            .strip()
-        )
+        local_revision = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=base_dir,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         local_revision = ""
 
@@ -474,15 +497,12 @@ def _load_upgrade_revision_info(base_dir: Path, branch: str = "main") -> dict[st
         }
 
     try:
-        origin_revision = (
-            subprocess.check_output(
-                ["git", "rev-parse", f"origin/{branch}"],
-                cwd=base_dir,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            .strip()
-        )
+        origin_revision = subprocess.check_output(
+            ["git", "rev-parse", f"origin/{branch}"],
+            cwd=base_dir,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
         origin_revision_error = _format_revision_error(
             str(_("Unable to read origin revision")), exc
@@ -515,14 +535,16 @@ def _prepare_revision_info(
     if not revision_info:
         return details
 
-    details.update({
-        "local_revision": str(revision_info.get("local_revision", "")),
-        "origin_revision": str(revision_info.get("origin_revision", "")),
-        "origin_revision_error": str(
-            revision_info.get("origin_revision_error", "")
-        ),
-        "ci_status": str(revision_info.get("ci_status", "")),
-    })
+    details.update(
+        {
+            "local_revision": str(revision_info.get("local_revision", "")),
+            "origin_revision": str(revision_info.get("origin_revision", "")),
+            "origin_revision_error": str(
+                revision_info.get("origin_revision_error", "")
+            ),
+            "ci_status": str(revision_info.get("ci_status", "")),
+        }
+    )
 
     checked_value = revision_info.get("revision_checked_at") or revision_info.get(
         "checked_at"
@@ -586,7 +608,9 @@ def _parse_log_timestamp(value: str) -> datetime | None:
         try:
             parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
         except Exception as exc:
-            logger.warning("Failed to make timestamp aware in _parse_log_timestamp: %s", exc)
+            logger.warning(
+                "Failed to make timestamp aware in _parse_log_timestamp: %s", exc
+            )
             return None
     return parsed
 
@@ -625,8 +649,7 @@ def _load_auto_upgrade_log_entries(
     except FileNotFoundError:
         return result
     except OSError:
-        result["error"] = str(
-            _("The auto-upgrade log could not be read."))
+        result["error"] = str(_("The auto-upgrade log could not be read."))
         return result
 
     entries: list[dict[str, str]] = []
@@ -727,8 +750,7 @@ def _get_auto_upgrade_periodic_task():
                 return None, False, str(_("Auto-upgrade schedule could not be loaded."))
         except (DatabaseError, FieldError) as exc:
             logger.exception(
-                "Error loading auto-upgrade periodic task "
-                "[stage=query, exception=%s]",
+                "Error loading auto-upgrade periodic task [stage=query, exception=%s]",
                 exc.__class__.__name__,
             )
             if attempt:
@@ -850,7 +872,9 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
 
 
 def _build_auto_upgrade_report(
-    *, limit: int = AUTO_UPGRADE_LOG_LIMIT, revision_info: dict[str, object] | None = None
+    *,
+    limit: int = AUTO_UPGRADE_LOG_LIMIT,
+    revision_info: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
@@ -885,7 +909,9 @@ def _build_auto_upgrade_report(
         "log_path": str(log_info.get("path")),
         "suite_uptime": str(suite_details.get("uptime", "")),
         "suite_uptime_details": {
-            "available": bool(suite_details.get("available") or suite_details.get("uptime")),
+            "available": bool(
+                suite_details.get("available") or suite_details.get("uptime")
+            ),
             "boot_time_label": suite_details.get("boot_time_label", ""),
             "lock_started_at_label": _format_datetime(suite_lock_started_at)
             if isinstance(suite_lock_started_at, datetime)
@@ -900,7 +926,9 @@ def _build_auto_upgrade_report(
     settings_info.update(revision_details)
 
     log_entries = log_info.get("entries", [])
-    recent_cutoff = timezone.localtime() - timedelta(hours=AUTO_UPGRADE_RECENT_ACTIVITY_HOURS)
+    recent_cutoff = timezone.localtime() - timedelta(
+        hours=AUTO_UPGRADE_RECENT_ACTIVITY_HOURS
+    )
     recent_log_entries = _filter_recent_log_entries(log_entries, cutoff=recent_cutoff)
     last_log_entry = recent_log_entries[0] if recent_log_entries else {}
 
@@ -923,13 +951,21 @@ def _build_auto_upgrade_report(
         note(str(policy_error), severity="error")
 
     if settings_info.get("manual"):
-        note(str(_("No upgrade policies apply; upgrades require manual action.")), severity="warning")
+        note(
+            str(_("No upgrade policies apply; upgrades require manual action.")),
+            severity="warning",
+        )
 
     if schedule_info.get("available"):
         if not schedule_info.get("configured"):
-            note(str(_("The auto-upgrade periodic task has not been created yet.")), severity="warning")
+            note(
+                str(_("The auto-upgrade periodic task has not been created yet.")),
+                severity="warning",
+            )
         elif not schedule_info.get("enabled"):
-            note(str(_("The periodic task is present but disabled.")), severity="warning")
+            note(
+                str(_("The periodic task is present but disabled.")), severity="warning"
+            )
     else:
         if schedule_info.get("error"):
             note(str(schedule_info["error"]), severity="error")
@@ -1026,9 +1062,7 @@ def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
         )
 
     if not queued:
-        logger.warning(
-            "Failed to enqueue upgrade check; running synchronously instead"
-        )
+        logger.warning("Failed to enqueue upgrade check; running synchronously instead")
         _run_sync_upgrade_check(channel_override)
         return False
     return True

@@ -80,7 +80,9 @@ def _load_toml(path: Path) -> dict[str, object]:
         with path.open("rb") as handle:
             payload = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ExtensionError(f"Unable to read extension metadata from {path}: {exc}") from exc
+        raise ExtensionError(
+            f"Unable to read extension metadata from {path}: {exc}"
+        ) from exc
     if not isinstance(payload, dict):
         raise ExtensionError(f"{path}: expected a TOML table.")
     return payload
@@ -120,7 +122,9 @@ def _parse_extension_manifest(path: Path) -> ExtensionManifest:
         path=path,
     )
     if not django_apps:
-        raise ExtensionError(f"{path}: extension.django_apps must contain at least one app.")
+        raise ExtensionError(
+            f"{path}: extension.django_apps must contain at least one app."
+        )
 
     return ExtensionManifest(
         name=name,
@@ -321,7 +325,9 @@ def load_declared_extension_repositories(
         for env_name in _EXTENSION_REPOSITORY_ENV_NAMES:
             for value in _split_repository_setting(os.environ.get(env_name, "")):
                 repository = normalize_github_repository(value)
-                declarations.setdefault(extension_key_for_repository(repository), repository)
+                declarations.setdefault(
+                    extension_key_for_repository(repository), repository
+                )
     return declarations
 
 
@@ -356,7 +362,9 @@ def _run_git(args: list[str], *, cwd: Path | None = None) -> None:
             capture_output=True,
         )
     except FileNotFoundError as exc:
-        raise ExtensionError("git is required to manage extension repositories.") from exc
+        raise ExtensionError(
+            "git is required to manage extension repositories."
+        ) from exc
     except subprocess.CalledProcessError as exc:
         message = (exc.stderr or exc.stdout or str(exc)).strip()
         raise ExtensionError(message) from exc
@@ -451,16 +459,18 @@ def discover_available_github_extensions(
             except ValueError:
                 payload = {}
             message = (
-                payload.get("message")
-                if isinstance(payload, dict)
-                else None
-            ) or response.text or "GitHub extension discovery failed."
+                (payload.get("message") if isinstance(payload, dict) else None)
+                or response.text
+                or "GitHub extension discovery failed."
+            )
             raise ExtensionError(str(message))
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ExtensionError("Unable to decode GitHub extension search response.") from exc
+            raise ExtensionError(
+                "Unable to decode GitHub extension search response."
+            ) from exc
         items = payload.get("items", []) if isinstance(payload, dict) else []
         extensions: list[AvailableExtension] = []
         for item in items:

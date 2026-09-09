@@ -16,7 +16,6 @@ from apps.core.auto_upgrade import (
 
 from .locks import _auto_upgrade_ran_recently
 
-
 logger = logging.getLogger(__name__)
 
 STABLE_AUTO_UPGRADE_START = datetime_time(hour=19, minute=30)
@@ -60,9 +59,7 @@ def _is_within_stable_upgrade_window(current: timezone.datetime | None = None) -
     )
 
 
-def _apply_stable_schedule_guard(
-    base_dir, mode, ops, log_appender
-) -> bool:
+def _apply_stable_schedule_guard(base_dir, mode, ops, log_appender) -> bool:
     if mode.mode != "stable" or mode.admin_override:
         return True
 

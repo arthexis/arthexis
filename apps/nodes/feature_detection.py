@@ -153,14 +153,20 @@ class NodeFeatureDetectionRegistry:
         if not isinstance(slug, str) or not slug.strip():
             raise ValueError("Detector slug must be a non-empty string.")
         if check is None and setup is None:
-            raise ValueError(f"Detector for '{slug}' must provide at least one callback.")
+            raise ValueError(
+                f"Detector for '{slug}' must provide at least one callback."
+            )
         if check is not None:
             if not callable(check):
-                raise TypeError(f"Detector 'check' callback for '{slug}' must be callable.")
+                raise TypeError(
+                    f"Detector 'check' callback for '{slug}' must be callable."
+                )
             _validate_detector_callback(check, slug=slug)
         if setup is not None:
             if not callable(setup):
-                raise TypeError(f"Detector 'setup' callback for '{slug}' must be callable.")
+                raise TypeError(
+                    f"Detector 'setup' callback for '{slug}' must be callable."
+                )
             _validate_detector_callback(setup, slug=slug)
 
         detector = NodeFeatureDetector(slug=slug, check=check, setup=setup)

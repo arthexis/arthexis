@@ -22,7 +22,9 @@ def check_charge_point_configuration(charger_pk: int) -> bool:
     try:
         charger = Charger.objects.get(pk=charger_pk)
     except Charger.DoesNotExist:
-        logger.warning("Unable to request configuration for missing charger %s", charger_pk)
+        logger.warning(
+            "Unable to request configuration for missing charger %s", charger_pk
+        )
         return False
 
     connector_value = charger.connector_id
@@ -49,7 +51,9 @@ def check_charge_point_configuration(charger_pk: int) -> bool:
     try:
         async_to_sync(ws.send)(msg)
     except Exception as exc:  # pragma: no cover - network error
-        logger.warning("Failed to send GetConfiguration to %s (%s)", charger.charger_id, exc)
+        logger.warning(
+            "Failed to send GetConfiguration to %s (%s)", charger.charger_id, exc
+        )
         return False
 
     log_key = store.identity_key(charger.charger_id, connector_value)
@@ -94,7 +98,9 @@ def schedule_daily_charge_point_configuration_checks() -> int:
 
     scheduled = 0
     for charger_pk in charger_ids:
-        enqueue_task(check_charge_point_configuration, charger_pk, require_enabled=False)
+        enqueue_task(
+            check_charge_point_configuration, charger_pk, require_enabled=False
+        )
         scheduled += 1
 
     logger.info("Scheduled configuration checks for %s charge point(s)", scheduled)

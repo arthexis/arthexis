@@ -14,7 +14,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -193,7 +193,7 @@ def _read_text(path: Path) -> bytes:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _client_ip_from_headers(headers: Any, fallback: str | None) -> str | None:
@@ -917,7 +917,9 @@ class PortalState:
         try:
             self.activity.record(event_type, **fields)
         except OSError:
-            LOGGER.warning("Unable to record AP registration email event", exc_info=True)
+            LOGGER.warning(
+                "Unable to record AP registration email event", exc_info=True
+            )
 
     def resolve_mac(self, ip_address: str | None) -> str | None:
         if not ip_address:

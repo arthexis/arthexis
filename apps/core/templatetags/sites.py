@@ -31,7 +31,7 @@ register = template.Library()
 SiteLike = Union[Site, RequestSite]
 
 
-def _resolve_site(request: Optional[HttpRequest]) -> Optional[SiteLike]:
+def _resolve_site(request: HttpRequest | None) -> SiteLike | None:
     """Return the best ``Site`` (or ``RequestSite``) for ``request``.
 
     When ``request`` is ``None`` we fall back to the project-wide current site.
@@ -51,7 +51,7 @@ def _resolve_site(request: Optional[HttpRequest]) -> Optional[SiteLike]:
 
 
 @register.simple_tag(takes_context=True)
-def get_current_site(context: template.Context) -> Optional[SiteLike]:
+def get_current_site(context: template.Context) -> SiteLike | None:
     """Return the current site for the provided rendering context.
 
     The tag mirrors the historical behaviour of Django's ``sites`` template
@@ -67,7 +67,7 @@ def get_current_site(context: template.Context) -> Optional[SiteLike]:
 
 
 @register.simple_tag
-def get_site_by_id(site_id: Optional[Union[int, str]]) -> Optional[Site]:
+def get_site_by_id(site_id: int | str | None) -> Site | None:
     """Return the ``Site`` identified by ``site_id`` if it exists."""
 
     if not site_id:
@@ -76,4 +76,3 @@ def get_site_by_id(site_id: Optional[Union[int, str]]) -> Optional[Site]:
         return Site.objects.get(pk=site_id)
     except (Site.DoesNotExist, ValueError, TypeError, DatabaseError):
         return None
-

@@ -20,14 +20,18 @@ class Command(BaseCommand):
 
     help = "Update fixture files from current database state"
 
-    def _load_fixture_data(self, path: Path) -> tuple[list[dict[str, Any]], bool] | None:
+    def _load_fixture_data(
+        self, path: Path
+    ) -> tuple[list[dict[str, Any]], bool] | None:
         """Load fixture JSON and return object list plus natural-key mode flag."""
 
         try:
             with path.open(encoding="utf-8") as fh:
                 data = json.load(fh)
         except (json.JSONDecodeError, OSError) as exc:
-            self.stderr.write(self.style.WARNING(f"Could not process fixture {path}: {exc}"))
+            self.stderr.write(
+                self.style.WARNING(f"Could not process fixture {path}: {exc}")
+            )
             return None
 
         if not isinstance(data, list):
@@ -145,5 +149,7 @@ class Command(BaseCommand):
                 content = ensure_seed_data_flags(content)
                 path.write_text(content, encoding="utf-8")
             except Exception as exc:
-                self.stderr.write(self.style.WARNING(f"Failed to update fixture {path}: {exc}"))
+                self.stderr.write(
+                    self.style.WARNING(f"Failed to update fixture {path}: {exc}")
+                )
                 continue

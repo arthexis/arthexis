@@ -18,6 +18,10 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(result.message))
         if not result.validated:
-            self.stdout.write("nginx configuration test failed; review the system logs for details.")
+            self.stdout.write(
+                "nginx configuration test failed; review the system logs for details."
+            )
         if not result.reloaded:
-            self.stdout.write("nginx could not be reloaded automatically; check the service status.")
+            self.stdout.write(
+                "nginx could not be reloaded automatically; check the service status."
+            )

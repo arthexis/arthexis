@@ -14,7 +14,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         subparsers = parser.add_subparsers(dest="action", required=True)
 
-        inspect_parser = subparsers.add_parser("inspect", help="Parse and validate Agent Card v1 payloads.")
+        inspect_parser = subparsers.add_parser(
+            "inspect", help="Parse and validate Agent Card v1 payloads."
+        )
         inspect_parser.add_argument(
             "--sectors-json",
             help="Path to a JSON object keyed by sector or an array of sectors 1-15.",
@@ -25,7 +27,9 @@ class Command(BaseCommand):
             default=[],
             help="One 48-byte sector record. Provide 15 records for sectors 1-15.",
         )
-        inspect_parser.add_argument("--json", action="store_true", help="Emit JSON output.")
+        inspect_parser.add_argument(
+            "--json", action="store_true", help="Emit JSON output."
+        )
 
     def handle(self, *args, **options):
         if options["action"] != "inspect":

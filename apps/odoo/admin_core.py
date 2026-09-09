@@ -150,7 +150,9 @@ class OdooEmployeeAdmin(
                 return candidate
             counter += 1
 
-    def _create_odoo_employee_profile(self, source_profile, payload: dict[str, object]) -> bool:
+    def _create_odoo_employee_profile(
+        self, source_profile, payload: dict[str, object]
+    ) -> bool:
         """Create one missing employee profile from Odoo user payload data."""
 
         odoo_uid = payload.get("id")
@@ -256,7 +258,9 @@ class OdooEmployeeAdmin(
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(
-                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+                reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+                )
             )
 
         if not is_odoo_sync_integration_enabled(
@@ -269,20 +273,22 @@ class OdooEmployeeAdmin(
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(
-                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+                reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+                )
             )
 
         profile = getattr(request.user, "odoo_employee", None)
         if not profile or not profile.is_verified:
             self.message_user(
                 request,
-                _(
-                    "Configure and verify your Odoo employee before loading employees."
-                ),
+                _("Configure and verify your Odoo employee before loading employees."),
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(
-                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+                reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+                )
             )
 
         try:
@@ -301,7 +307,9 @@ class OdooEmployeeAdmin(
         else:
             self.message_user(
                 request,
-                _("Employee sync completed. Created: %(created)s | Skipped: %(skipped)s")
+                _(
+                    "Employee sync completed. Created: %(created)s | Skipped: %(skipped)s"
+                )
                 % {"created": created, "skipped": skipped},
                 level=messages.SUCCESS,
             )
@@ -690,7 +698,7 @@ class OdooProductAdmin(EntityModelAdmin):
                                 )
                                 return HttpResponseRedirect(
                                     reverse(
-                            f"admin:{existing._meta.app_label}_{existing._meta.model_name}_change",
+                                        f"admin:{existing._meta.app_label}_{existing._meta.model_name}_change",
                                         args=[existing.pk],
                                     )
                                 )
@@ -725,7 +733,7 @@ class OdooProductAdmin(EntityModelAdmin):
                             )
                             return HttpResponseRedirect(
                                 reverse(
-                            f"admin:{product._meta.app_label}_{product._meta.model_name}_change",
+                                    f"admin:{product._meta.app_label}_{product._meta.model_name}_change",
                                     args=[product.pk],
                                 )
                             )

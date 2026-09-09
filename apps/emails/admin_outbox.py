@@ -5,7 +5,11 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
-from apps.core.admin.metrics import annotate_enabled_total, format_enabled_total, max_attr
+from apps.core.admin.metrics import (
+    annotate_enabled_total,
+    format_enabled_total,
+    max_attr,
+)
 from apps.emails.models import EmailOutbox
 from apps.locals.user_data import EntityModelAdmin
 
@@ -66,7 +70,10 @@ class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
 
     @admin.display(description=_("Last used"))
     def last_used_at(self, obj):
-        return max_attr(obj, "last_outbox_transaction_at", "last_inbox_transaction_at") or "-"
+        return (
+            max_attr(obj, "last_outbox_transaction_at", "last_inbox_transaction_at")
+            or "-"
+        )
 
     @admin.action(description="Test selected Outbox")
     def test_outboxes(self, request, queryset):

@@ -4,9 +4,11 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 from .base import *
 
+
 class StationModelManager(EntityManager):
     def get_by_natural_key(self, vendor: str, model_family: str, model: str):
         return self.get(vendor=vendor, model_family=model_family, model=model)
+
 
 class StationModel(Entity):
     """Supported EVCS hardware model."""

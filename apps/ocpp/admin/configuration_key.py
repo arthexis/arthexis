@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class ConfigurationKeyAdmin(admin.ModelAdmin):
     list_display = ("configuration", "key", "position", "readonly")
     ordering = ("configuration", "position", "id")

@@ -1,19 +1,20 @@
 from __future__ import annotations
 
-import importlib.util
-import json
 import hashlib
 import hmac
+import importlib.util
+import json
 import os
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from apps.release import git_utils
 
 RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
 
 def _run(
     cmd: Iterable[str], *, check: bool = True, cwd: Path | str | None = None
@@ -22,11 +23,7 @@ def _run(
 
 
 def _authed_remote_url(remote: str, *, base_dir: Path | None = None) -> str | None:
-    token = (
-        os.environ.get("GITHUB_TOKEN")
-        or os.environ.get("GH_TOKEN")
-        or ""
-    ).strip()
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
     if not token:
         return None
     url = git_utils.git_remote_url(remote, base_dir=base_dir, use_push_url=True)
@@ -120,7 +117,13 @@ def _maybe_create_maintenance_branch(
     maintenance_branch = f"release/v{prev_major}.{prev_minor}"
     exists_locally = (
         subprocess.call(
-            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{maintenance_branch}"],
+            [
+                "git",
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{maintenance_branch}",
+            ],
             cwd=base_dir,
         )
         == 0
@@ -130,7 +133,14 @@ def _maybe_create_maintenance_branch(
 
     remote_exists = (
         subprocess.call(
-            ["git", "ls-remote", "--exit-code", "--heads", "origin", maintenance_branch],
+            [
+                "git",
+                "ls-remote",
+                "--exit-code",
+                "--heads",
+                "origin",
+                maintenance_branch,
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=base_dir,
@@ -139,7 +149,6 @@ def _maybe_create_maintenance_branch(
     )
     if not remote_exists:
         _git_push("origin", maintenance_branch, base_dir=base_dir)
-
 
 
 def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
@@ -161,17 +170,22 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
     )
     (out_dir / "migration-plan.txt").write_text(plan)
 
-    inspect = subprocess.check_output(["python", "manage.py", "inspectdb"], text=True, cwd=base_dir)
+    inspect = subprocess.check_output(
+        ["python", "manage.py", "inspectdb"], text=True, cwd=base_dir
+    )
     (out_dir / "inspectdb.py").write_text(inspect)
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    artifact_paths: list[Path] = [out_dir / "migration-plan.txt", out_dir / "inspectdb.py"]
+    artifact_paths: list[Path] = [
+        out_dir / "migration-plan.txt",
+        out_dir / "inspectdb.py",
+    ]
     if importlib.util.find_spec("django") and shutil.which("pg_dump"):
         import django
         from django.conf import settings
+        from django.db import connections
         from django.db.migrations.loader import MigrationLoader
         from django.db.migrations.operations.special import RunPython, RunSQL
-        from django.db import connections
 
         django.setup()
         connection = connections["default"]
@@ -180,17 +194,23 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
         app_dag: dict[str, dict[str, object]] = {}
         for app_label in sorted(loader.migrated_apps):
             migrations = sorted(
-                name for migration_app, name in loader.disk_migrations if migration_app == app_label
+                name
+                for migration_app, name in loader.disk_migrations
+                if migration_app == app_label
             )
             nodes: dict[str, dict[str, list[str]]] = {}
             for migration_name in migrations:
                 migration = loader.disk_migrations[(app_label, migration_name)]
                 dependencies = [
-                    dep_name for dep_app, dep_name in migration.dependencies if dep_app == app_label
+                    dep_name
+                    for dep_app, dep_name in migration.dependencies
+                    if dep_app == app_label
                 ]
                 children = [
                     child_name
-                    for child_app, child_name in loader.graph.node_map[(app_label, migration_name)].children
+                    for child_app, child_name in loader.graph.node_map[
+                        (app_label, migration_name)
+                    ].children
                     if child_app == app_label
                 ]
                 nodes[migration_name] = {
@@ -199,7 +219,9 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
                 }
 
             app_dag[app_label] = {
-                "leaf_nodes": sorted(name for app, name in loader.graph.leaf_nodes(app_label)),
+                "leaf_nodes": sorted(
+                    name for app, name in loader.graph.leaf_nodes(app_label)
+                ),
                 "nodes": nodes,
             }
 
@@ -208,15 +230,26 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
         snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
         artifact_paths.append(snapshot_path)
 
-        for prior_snapshot in sorted((base_dir / "releases").glob("*/migrations/snapshot.json")):
+        for prior_snapshot in sorted(
+            (base_dir / "releases").glob("*/migrations/snapshot.json")
+        ):
             prior_version = prior_snapshot.parent.parent.name
             if prior_version == version:
                 continue
             prior_payload = json.loads(prior_snapshot.read_text())
             deltas: dict[str, list[str]] = {}
             for app_label, app_payload in app_dag.items():
-                previous_nodes = set(prior_payload.get("apps", {}).get(app_label, {}).get("nodes", {}).keys())
-                delta = sorted(name for name in app_payload["nodes"].keys() if name not in previous_nodes)
+                previous_nodes = set(
+                    prior_payload.get("apps", {})
+                    .get(app_label, {})
+                    .get("nodes", {})
+                    .keys()
+                )
+                delta = sorted(
+                    name
+                    for name in app_payload["nodes"].keys()
+                    if name not in previous_nodes
+                )
                 if delta:
                     deltas[app_label] = delta
 
@@ -227,18 +260,32 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
             }
             manifest_name = f"{prior_version}__to__{version}.json"
             manifest_path = manifests_dir / manifest_name
-            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            )
             artifact_paths.append(manifest_path)
 
             for app_label, migration_names in deltas.items():
                 for migration_name in migration_names:
                     migration = loader.disk_migrations[(app_label, migration_name)]
-                    if any(isinstance(operation, (RunPython, RunSQL)) for operation in migration.operations):
+                    if any(
+                        isinstance(operation, (RunPython, RunSQL))
+                        for operation in migration.operations
+                    ):
                         continue
-                    sql_path = manifests_dir / f"{prior_version}__to__{version}.{app_label}.{migration_name}.sql"
+                    sql_path = (
+                        manifests_dir
+                        / f"{prior_version}__to__{version}.{app_label}.{migration_name}.sql"
+                    )
                     try:
                         sql = subprocess.check_output(
-                            ["python", "manage.py", "sqlmigrate", app_label, migration_name],
+                            [
+                                "python",
+                                "manage.py",
+                                "sqlmigrate",
+                                app_label,
+                                migration_name,
+                            ],
                             text=True,
                             cwd=base_dir,
                         )
@@ -251,7 +298,9 @@ def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
         if db_name:
             schema_path = out_dir / "schema.sql"
             with schema_path.open("w") as fh:
-                subprocess.run(["pg_dump", "--schema-only", db_name], check=True, stdout=fh)
+                subprocess.run(
+                    ["pg_dump", "--schema-only", db_name], check=True, stdout=fh
+                )
             artifact_paths.append(schema_path)
 
     checksum_lines: list[str] = []
@@ -288,14 +337,13 @@ def prepare_release(version: str, *, base_dir: Path | None = None) -> None:
     version_file = base_dir / "VERSION"
 
     if not _is_clean_repository(base_dir):
-        raise RuntimeError("Working tree or index is dirty; please commit or stash changes before releasing.")
-
-    previous_version = (
-        subprocess.run(
-            ["git", "show", "HEAD:VERSION"], capture_output=True, text=True, cwd=base_dir
+        raise RuntimeError(
+            "Working tree or index is dirty; please commit or stash changes before releasing."
         )
-        .stdout.strip()
-    )
+
+    previous_version = subprocess.run(
+        ["git", "show", "HEAD:VERSION"], capture_output=True, text=True, cwd=base_dir
+    ).stdout.strip()
 
     _maybe_create_maintenance_branch(previous_version, version, base_dir=base_dir)
     version_file.write_text(f"{version}\n")

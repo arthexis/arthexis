@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone as datetime_timezone
-from pathlib import Path
 import json
 import re
 import shutil
 import subprocess
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from datetime import timezone as datetime_timezone
+from pathlib import Path
 
 import psutil
 
@@ -166,14 +167,16 @@ def boot_delay_seconds(
     now: datetime | None = None,
 ) -> int | None:
     lock_path = Path(base_dir) / ".locks" / SUITE_UPTIME_LOCK_NAME
-    now_value = now or datetime.now(datetime_timezone.utc)
+    now_value = now or datetime.now(UTC)
 
     try:
         payload = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
 
-    started_at = parse_start_timestamp(payload.get("started_at") or payload.get("boot_time"))
+    started_at = parse_start_timestamp(
+        payload.get("started_at") or payload.get("boot_time")
+    )
     if not started_at:
         return None
 
@@ -182,9 +185,9 @@ def boot_delay_seconds(
     except Exception:
         return None
 
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=UTC)
     try:
-        boot_time = boot_time.astimezone(started_at.tzinfo or datetime_timezone.utc)
+        boot_time = boot_time.astimezone(started_at.tzinfo or UTC)
     except Exception:
         return None
 

@@ -23,7 +23,7 @@ def firmware_download(request, deployment_id: int, token: str):
     content_type = firmware.content_type or "application/octet-stream"
     response = HttpResponse(payload, content_type=content_type)
     filename = firmware.filename or f"firmware_{firmware.pk or deployment.pk}"
-    safe_filename = filename.replace("\r", "").replace("\n", "").replace("\"", "")
+    safe_filename = filename.replace("\r", "").replace("\n", "").replace('"', "")
     response["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     response["Content-Length"] = str(len(payload))
     deployment.downloaded_at = timezone.now()

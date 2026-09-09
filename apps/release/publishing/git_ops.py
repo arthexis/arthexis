@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from apps.core.views.reports.common import DIRTY_STATUS_LABELS
 
@@ -63,7 +64,9 @@ class SubprocessGitAdapter:
 def format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     """Return best-effort stderr/stdout detail for a failed git command."""
 
-    return (getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)).strip()
+    return (
+        getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)
+    ).strip()
 
 
 def git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
@@ -110,7 +113,9 @@ def current_branch(adapter: GitProcessAdapter) -> str | None:
 def has_upstream(adapter: GitProcessAdapter, branch: str) -> bool:
     """Return whether the branch has an upstream tracking reference."""
 
-    proc = adapter.run(["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"], check=False)
+    proc = adapter.run(
+        ["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"], check=False
+    )
     return proc.returncode == 0
 
 
@@ -127,7 +132,13 @@ def collect_dirty_files(adapter: GitProcessAdapter) -> list[dict[str, str]]:
         path = line[3:]
         if "R" in status and " -> " in path:
             path = path.split(" -> ", 1)[1]
-        dirty.append({"path": path, "status": status, "status_label": DIRTY_STATUS_LABELS.get(status, status)})
+        dirty.append(
+            {
+                "path": path,
+                "status": status,
+                "status_label": DIRTY_STATUS_LABELS.get(status, status),
+            }
+        )
     return dirty
 
 
@@ -135,7 +146,9 @@ def push_needed(adapter: GitProcessAdapter, remote: str, branch: str) -> bool:
     """Return true when local branch head differs from remote branch head."""
 
     local = git_stdout(adapter, ["git", "rev-parse", branch])
-    remote_proc = adapter.run(["git", "ls-remote", "--heads", remote, branch], check=False)
+    remote_proc = adapter.run(
+        ["git", "ls-remote", "--heads", remote, branch], check=False
+    )
     if remote_proc.returncode != 0:
         return True
     remote_head = ""

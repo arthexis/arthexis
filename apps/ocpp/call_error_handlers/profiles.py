@@ -36,7 +36,14 @@ async def handle_set_charging_profile_error(
     if parts:
         message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
-    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
     return True
 
 
@@ -88,7 +95,14 @@ async def handle_clear_charging_profile_error(
         )
 
     await database_sync_to_async(_apply_error)()
-    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
     return True
 
 
@@ -114,5 +128,12 @@ async def handle_get_charging_profiles_error(
     if parts:
         message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
-    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
     return True

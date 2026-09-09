@@ -30,7 +30,11 @@ class Command(BaseCommand):
 
         public_base_url = getattr(settings, "PUBLIC_BASE_URL", "").strip()
         if public_base_url:
-            base = public_base_url if public_base_url.endswith("/") else f"{public_base_url}/"
+            base = (
+                public_base_url
+                if public_base_url.endswith("/")
+                else f"{public_base_url}/"
+            )
             return urljoin(base, path.lstrip("/"))
 
         if node and node.hostname:
@@ -75,7 +79,9 @@ class Command(BaseCommand):
                     used_outbox = getattr(result, "outbox", None) or node.email_outbox
                 else:
                     send_mail(subject, body, None, [email])
-            except RuntimeError as exc:  # pragma: no cover - depends on outbox configuration
+            except (
+                RuntimeError
+            ) as exc:  # pragma: no cover - depends on outbox configuration
                 self.stderr.write(self.style.WARNING(f"Email send failed: {exc}"))
                 send_mail(subject, body, None, [email])
 

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import NotRequired, Protocol, TypedDict, TypeAlias
-
+from typing import NotRequired, Protocol, TypeAlias, TypedDict
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | dict[str, "JSONValue"] | list["JSONValue"]

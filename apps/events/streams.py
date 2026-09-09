@@ -68,7 +68,9 @@ def emit_event(event_type: str, /, **fields: Any) -> str | None:
     try:
         return _redis_client(url).xadd(EVENT_STREAM, event, **kwargs)
     except RedisError:
-        logger.exception("events.redis_publish_failed", extra={"event_type": event_type})
+        logger.exception(
+            "events.redis_publish_failed", extra={"event_type": event_type}
+        )
         return None
 
 

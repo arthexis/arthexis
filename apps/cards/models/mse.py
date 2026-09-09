@@ -32,7 +32,7 @@ class CardSet(Entity):
         return self.name
 
     @classmethod
-    def create_from_upload(cls, uploaded_file) -> "CardSet":
+    def create_from_upload(cls, uploaded_file) -> CardSet:
         filename = getattr(uploaded_file, "name", "") or ""
         payload = uploaded_file.read()
         set_text = mse.extract_set_text(payload)
@@ -46,7 +46,7 @@ class CardSet(Entity):
         set_text: str,
         *,
         filename: str = "",
-    ) -> "CardSet":
+    ) -> CardSet:
         meta = mse.extract_set_metadata(parsed)
         default_name = Path(filename).stem if filename else _("Imported Card Set")
         name = mse.extract_set_name(parsed, default=str(default_name))
@@ -106,4 +106,3 @@ class CardDesign(Entity):
         if self.name:
             return self.name
         return f"{self.card_set} #{self.sequence}"
-

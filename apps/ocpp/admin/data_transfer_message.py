@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class DataTransferMessageAdmin(admin.ModelAdmin):
     list_display = (
         "charger",

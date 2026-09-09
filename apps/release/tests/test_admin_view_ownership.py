@@ -3,7 +3,6 @@ from __future__ import annotations
 from apps.core.system import admin_views as core_admin_views
 from apps.release import admin_views as release_admin_views
 
-
 _RELEASE_VIEW_BY_ROUTE = {
     "system-upgrade-report": "_system_upgrade_report_view",
     "system-changelog-report": "_system_changelog_report_view",

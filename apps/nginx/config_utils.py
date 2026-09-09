@@ -280,7 +280,9 @@ def http_proxy_server(
     return _format_server_block(lines)
 
 
-def http_redirect_server(server_names: str, listens: Iterable[str] | None = None) -> str:
+def http_redirect_server(
+    server_names: str, listens: Iterable[str] | None = None
+) -> str:
     """Return an HTTP redirect server block for *server_names*."""
 
     if listens is None:
@@ -353,7 +355,7 @@ def https_proxy_server(
         '"upgrade-insecure-requests; block-all-mixed-content" always;'
     )
     lines.append(
-        '    add_header Strict-Transport-Security '
+        "    add_header Strict-Transport-Security "
         '"max-age=31536000; includeSubDomains; preload" always;'
     )
     lines.append("")
@@ -390,7 +392,9 @@ def write_if_changed(path: Path, content: str, *, sudo: str | None = None) -> bo
             return False
 
     if sudo:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp_file:
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8"
+        ) as temp_file:
             temp_file.write(content)
             temp_path = Path(temp_file.name)
 

@@ -231,7 +231,9 @@ def test_sigil_root_report_uses_orm_backed_results():
         ),
     ],
 )
-def test_catalog_templates_render_with_html_pdf_engine(monkeypatch, report_type, parameters):
+def test_catalog_templates_render_with_html_pdf_engine(
+    monkeypatch, report_type, parameters
+):
     """Catalog report templates should render as HTML tables before PDF conversion."""
 
     captured_html: list[str] = []
@@ -239,7 +241,9 @@ def test_catalog_templates_render_with_html_pdf_engine(monkeypatch, report_type,
     class FakeHTML:
         def __init__(self, string: str, url_fetcher):
             captured_html.append(string)
-            with pytest.raises(ValueError, match="External resource loading is disabled"):
+            with pytest.raises(
+                ValueError, match="External resource loading is disabled"
+            ):
                 url_fetcher("https://example.com/image.png")
 
         def write_pdf(self) -> bytes:
@@ -287,7 +291,9 @@ def test_report_pdf_rendering_can_be_feature_flag_disabled(settings, monkeypatch
 
     class RaisingHTML:
         def __init__(self, string: str):
-            raise AssertionError("HTML renderer should not be instantiated when disabled")
+            raise AssertionError(
+                "HTML renderer should not be instantiated when disabled"
+            )
 
     settings.REPORTS_HTML_TO_PDF_ENABLED = False
     monkeypatch.setattr("apps.reports.services.HTML", RaisingHTML)

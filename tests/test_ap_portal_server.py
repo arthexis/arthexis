@@ -1057,8 +1057,8 @@ def _exercise_get(handler_class, path: str, *, asset_exists: bool = True):
 def test_get_authorized_client_redirects_before_portal_page(tmp_path):
     module = load_portal_module()
     app = module.PortalApplication(make_config(module, tmp_path))
-    app.state.authorized_redirect_for_request = (
-        lambda **_kwargs: "http://arthexis.net:8888/login/"
+    app.state.authorized_redirect_for_request = lambda **_kwargs: (
+        "http://arthexis.net:8888/login/"
     )
     handler_class = app.handler_class()
     handler = object.__new__(handler_class)

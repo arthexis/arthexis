@@ -34,7 +34,9 @@ def test_apps_reload_migrations_invokes_migrate(monkeypatch):
     def _fake_call_command(name, *args, **kwargs):
         calls.append((name, args))
 
-    monkeypatch.setattr("apps.app.management.commands.apps.call_command", _fake_call_command)
+    monkeypatch.setattr(
+        "apps.app.management.commands.apps.call_command", _fake_call_command
+    )
 
     call_command("apps", "--app", "app", "--reload-migrations", "--yes")
 

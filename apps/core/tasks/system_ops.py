@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import psutil
 
 from apps.core.systemctl import _systemctl_command
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,7 @@ def _read_process_start_time(pid: int) -> float | None:
         return None
 
 
-def _wait_for_service_restart(
-    base_dir: Path, service: str, timeout: int = 30
-) -> bool:
+def _wait_for_service_restart(base_dir: Path, service: str, timeout: int = 30) -> bool:
     """Return ``True`` when ``service`` reports active within ``timeout`` seconds."""
 
     if not service:
@@ -277,10 +275,7 @@ def _ensure_development_server(
                 except Exception as exc:  # pragma: no cover - subprocess errors
                     log_appender(
                         base_dir,
-                        (
-                            "Failed to restart development server automatically: "
-                            f"{exc}"
-                        ),
+                        (f"Failed to restart development server automatically: {exc}"),
                     )
                     raise
             else:  # pragma: no cover - installation invariant
@@ -329,10 +324,7 @@ def _ensure_development_server(
     except Exception as exc:  # pragma: no cover - subprocess errors
         log_appender(
             base_dir,
-            (
-                "Failed to restart development server automatically: "
-                f"{exc}"
-            ),
+            (f"Failed to restart development server automatically: {exc}"),
         )
         return False
     return True

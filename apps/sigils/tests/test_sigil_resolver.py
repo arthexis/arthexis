@@ -26,6 +26,7 @@ def user_root():
     )
     return root
 
+
 @pytest.fixture
 def node_root():
     root, _ = SigilRoot.objects.update_or_create(
@@ -38,6 +39,7 @@ def node_root():
     )
     return root
 
+
 @pytest.mark.django_db
 def test_resolve_sigils_filters_and_fetches_field(user_root):
     user_model = get_user_model()
@@ -46,6 +48,7 @@ def test_resolve_sigils_filters_and_fetches_field(user_root):
     result = sigil_resolver.resolve_sigils("[USR:username=sigiluser.email]")
 
     assert result == user.email
+
 
 @pytest.mark.django_db
 def test_pipeline_v2_aggregate_action_payload_resolves(settings, node_root):
@@ -201,7 +204,9 @@ def test_pipeline_v2_random_action(settings, node_root, monkeypatch):
         public_endpoint="SIM-CP-RAND-2",
         role=role,
     )
-    monkeypatch.setattr("apps.sigils.entity_lookup.random.choice", lambda items: items[-1])
+    monkeypatch.setattr(
+        "apps.sigils.entity_lookup.random.choice", lambda items: items[-1]
+    )
 
     resolved = sigil_resolver.resolve_sigils("[CP:|RANDOM:hostname]")
 
@@ -209,7 +214,9 @@ def test_pipeline_v2_random_action(settings, node_root, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_whitespace_action_suffix_and_prefix_resolve_window_actions(settings, node_root):
+def test_whitespace_action_suffix_and_prefix_resolve_window_actions(
+    settings, node_root
+):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
     role = NodeRole.objects.create(name="WhitespaceAction")
     Node.objects.create(
@@ -343,8 +350,12 @@ def test_whitespace_between_two_selectors_acts_as_fallback(settings, node_root):
         role=role,
     )
 
-    existing_first = sigil_resolver.resolve_sigils("[CP.PORT CP.HOSTNAME]", current=node)
-    fallback_second = sigil_resolver.resolve_sigils("[CP.MISSING CP.HOSTNAME]", current=node)
+    existing_first = sigil_resolver.resolve_sigils(
+        "[CP.PORT CP.HOSTNAME]", current=node
+    )
+    fallback_second = sigil_resolver.resolve_sigils(
+        "[CP.MISSING CP.HOSTNAME]", current=node
+    )
 
     assert existing_first == "10111"
     assert fallback_second == "SIM-CP-WS-FALLBACK"
@@ -501,6 +512,7 @@ def test_pipeline_v2_instance_action_on_left_side_degrades(settings, node_root):
 
     assert resolved == token
 
+
 @pytest.mark.django_db
 def test_pipeline_v2_filter_uses_safe_bounded_serialization(settings, user_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -524,6 +536,7 @@ def test_pipeline_v2_filter_uses_safe_bounded_serialization(settings, user_root)
     assert payload[0]["email"] == "filter@example.com"
     assert "password" not in payload[0]
 
+
 @pytest.mark.django_db
 def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -545,6 +558,7 @@ def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_
 
     assert resolved == "[CP:hostname:SIM-CP-3|GET:role]"
 
+
 @pytest.mark.django_db
 def test_pipeline_v2_filter_is_not_user_safe_action(settings, user_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -562,6 +576,7 @@ def test_pipeline_v2_filter_is_not_user_safe_action(settings, user_root):
     )
 
     assert resolved == "[USR:|FILTER:email:safe-filter@example.com]"
+
 
 @pytest.mark.django_db
 def test_pipeline_v2_field_missing_lookup_coerces_to_empty_string(settings, node_root):
@@ -598,6 +613,7 @@ def test_pipeline_v2_feature_flag_can_disable_pipeline_parsing(settings, node_ro
 
     assert resolved == "[CP:hostname:SIM-CP-4|GET:role]"
 
+
 @pytest.mark.django_db
 def test_resolve_sigils_request_values():
     SigilRoot.objects.update_or_create(
@@ -616,6 +632,7 @@ def test_resolve_sigils_request_values():
         assert sigil_resolver.resolve_sigils("[REQ.header=X-Custom-Header]") == "hello"
     finally:
         clear_request()
+
 
 @pytest.mark.django_db
 def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
@@ -641,6 +658,7 @@ def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
     result = sigil_resolver.resolve_sigils("[NODE.ROLE]")
 
     assert result == role.name
+
 
 @pytest.mark.django_db
 def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(
@@ -680,16 +698,24 @@ def test_resolve_sigils_dot_selector_is_strict_by_default():
             "content_type": ContentType.objects.get_for_model(Node),
         },
     )
-    assert sigil_resolver.resolve_sigils("[NODE:hostname=missing.role]") == "[NODE:hostname=missing.role]"
+    assert (
+        sigil_resolver.resolve_sigils("[NODE:hostname=missing.role]")
+        == "[NODE:hostname=missing.role]"
+    )
 
 
 @pytest.mark.django_db
 def test_resolve_sigils_arrow_selector_is_preserved_verbatim():
-    assert sigil_resolver.resolve_sigils("[NODE:hostname=missing->role]") == "[NODE:hostname=missing->role]"
+    assert (
+        sigil_resolver.resolve_sigils("[NODE:hostname=missing->role]")
+        == "[NODE:hostname=missing->role]"
+    )
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_semicolon_fallback_uses_first_truthy_value(monkeypatch, user_root):
+def test_resolve_sigils_semicolon_fallback_uses_first_truthy_value(
+    monkeypatch, user_root
+):
     SigilRoot.objects.update_or_create(
         prefix="NODE",
         defaults={
@@ -726,7 +752,9 @@ def test_resolve_sigils_semicolon_fallback_stops_after_first_truthy_value(user_r
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_semicolon_fallback_evaluates_last_segment_once(monkeypatch, user_root):
+def test_resolve_sigils_semicolon_fallback_evaluates_last_segment_once(
+    monkeypatch, user_root
+):
     calls: list[str] = []
     original = sigil_resolver._resolve_single_token_with_policy
 
@@ -735,9 +763,13 @@ def test_resolve_sigils_semicolon_fallback_evaluates_last_segment_once(monkeypat
         calls.append(token)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(sigil_resolver, "_resolve_single_token_with_policy", counting_resolver)
+    monkeypatch.setattr(
+        sigil_resolver, "_resolve_single_token_with_policy", counting_resolver
+    )
 
-    resolved = sigil_resolver.resolve_sigils("[USR=username=missing.email;USR=username=missing2.email]")
+    resolved = sigil_resolver.resolve_sigils(
+        "[USR=username=missing.email;USR=username=missing2.email]"
+    )
 
     assert resolved == "[USR=username=missing.email;USR=username=missing2.email]"
     assert calls == ["USR=username=missing.email", "USR=username=missing2.email"]
@@ -749,7 +781,9 @@ def test_resolve_sigils_request_param_preserves_semicolon_value(user_root):
     request.GET = QueryDict("return%3Burl=https%3A%2F%2Fexample.com")
     set_request(request)
     try:
-        resolved = sigil_resolver.resolve_sigils("[REQ.query=return;url]", current=request)
+        resolved = sigil_resolver.resolve_sigils(
+            "[REQ.query=return;url]", current=request
+        )
     finally:
         clear_request()
 
@@ -762,7 +796,9 @@ def test_resolve_sigils_request_param_preserves_semicolon_with_punctuation(user_
     request.GET = QueryDict("return%3Burl.path=https%3A%2F%2Fexample.com%2Fa")
     set_request(request)
     try:
-        resolved = sigil_resolver.resolve_sigils("[REQ.query=return;url.path]", current=request)
+        resolved = sigil_resolver.resolve_sigils(
+            "[REQ.query=return;url.path]", current=request
+        )
     finally:
         clear_request()
 
@@ -770,7 +806,9 @@ def test_resolve_sigils_request_param_preserves_semicolon_with_punctuation(user_
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_parameterized_first_branch_still_allows_fallback_split(user_root):
+def test_resolve_sigils_parameterized_first_branch_still_allows_fallback_split(
+    user_root,
+):
     request = HttpRequest()
     request.GET = QueryDict("")
     set_request(request)
@@ -798,13 +836,17 @@ def test_resolve_sigils_semicolon_fallback_allows_filtered_branch(settings, user
     user_model = get_user_model()
     user_model.objects.create(username="filtered-branch")
 
-    resolved = sigil_resolver.resolve_sigils("[USR:username=missing.email;USR:|JSON:username]")
+    resolved = sigil_resolver.resolve_sigils(
+        "[USR:username=missing.email;USR:|JSON:username]"
+    )
 
     assert "filtered-branch" in json.loads(resolved)["results"]
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_semicolon_fallback_resets_split_state_per_branch(settings, user_root):
+def test_resolve_sigils_semicolon_fallback_resets_split_state_per_branch(
+    settings, user_root
+):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
     user_model = get_user_model()
     user_model.objects.create(username="second-branch-user")
@@ -818,7 +860,9 @@ def test_resolve_sigils_semicolon_fallback_resets_split_state_per_branch(setting
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_semicolon_fallback_returns_original_token_when_all_fail(user_root):
+def test_resolve_sigils_semicolon_fallback_returns_original_token_when_all_fail(
+    user_root,
+):
     resolved = sigil_resolver.resolve_sigils(
         "[USR:username=missing.email;USR:username=missing2.email]"
     )
@@ -859,6 +903,7 @@ def test_resolve_sigils_arrow_nested_selector_is_preserved_verbatim(user_root):
 
     assert result == '[NODE="[USR=missing.email]"->role]'
 
+
 @pytest.mark.django_db
 def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_root):
     user_model = get_user_model()
@@ -879,6 +924,7 @@ def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_r
     assert "alpha" in result
     assert "bravo" in result
 
+
 @pytest.mark.django_db
 def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root):
     user_model = get_user_model()
@@ -890,6 +936,7 @@ def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root
 
     with pytest.raises(DatabaseError, match="boom"):
         sigil_resolver.resolve_sigils("[USR=explode]")
+
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
@@ -911,6 +958,7 @@ def test_resolve_sigils_table_driven_manager_method_dispatch(
     parsed = json.loads(resolved) if resolved.startswith("[") else resolved
 
     assert assertion(parsed)
+
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
@@ -941,6 +989,7 @@ def test_resolve_sigils_table_driven_aggregate_requests(
     expected_value = expected(baseline_value, user_ids)
     assert resolved == expected_value
 
+
 @pytest.mark.django_db
 def test_resolve_sigils_allowed_roots_limits_resolution(monkeypatch):
     monkeypatch.setenv("SIGIL_POLICY_TEST", "resolved")
@@ -964,6 +1013,7 @@ def test_resolve_sigils_allowed_roots_limits_resolution(monkeypatch):
         == "resolved"
     )
 
+
 @pytest.mark.django_db
 def test_get_user_safe_sigil_roots_normalizes_prefixes():
     SigilRoot.objects.update_or_create(
@@ -985,6 +1035,7 @@ def test_get_user_safe_sigil_roots_normalizes_prefixes():
     assert "SAFE_ROOT" in safe_roots
     assert "UNSAFE_ROOT" not in safe_roots
 
+
 @pytest.mark.django_db
 def test_sigil_root_prefix_persists_uppercase_and_matches_case_insensitively():
     root, _ = SigilRoot.objects.update_or_create(
@@ -995,6 +1046,7 @@ def test_sigil_root_prefix_persists_uppercase_and_matches_case_insensitively():
 
     assert root.prefix == "XCP"
     assert fetched.pk == root.pk
+
 
 @pytest.mark.django_db
 def test_get_user_safe_sigil_actions_requires_safe_entity_root():
@@ -1019,6 +1071,7 @@ def test_get_user_safe_sigil_actions_requires_safe_entity_root():
     actions = sigil_resolver.get_user_safe_sigil_actions()
     assert actions == {"FIELD", "GET"}
 
+
 @pytest.mark.django_db
 def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(
     monkeypatch,
@@ -1041,6 +1094,7 @@ def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(
 
     assert SigilRoot.objects.get(prefix="REQ_SAFE").is_user_safe is True
     assert SigilRoot.objects.get(prefix="REQ_UNSAFE").is_user_safe is False
+
 
 @pytest.mark.django_db
 def test_generate_model_sigils_updates_existing_builtin_user_safety():

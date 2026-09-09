@@ -1,10 +1,9 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -16,7 +15,9 @@ from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
-def _handle_install_certificate(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_install_certificate(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     certificate = data.get("certificate")
     if not isinstance(certificate, str) or not certificate.strip():
         return JsonResponse({"detail": "certificate required"}, status=400)
@@ -74,7 +75,9 @@ def _handle_install_certificate(context: ActionContext, data: dict) -> JsonRespo
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "DeleteCertificate")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DeleteCertificate")
-def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_delete_certificate(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     hash_data = data.get("certificateHashData")
     if not isinstance(hash_data, dict) or not hash_data:
         return JsonResponse({"detail": "certificateHashData required"}, status=400)
@@ -135,7 +138,9 @@ def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonRespon
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "CertificateSigned")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CertificateSigned")
-def _handle_certificate_signed(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_certificate_signed(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     certificate_chain = data.get("certificateChain")
     if not isinstance(certificate_chain, str) or not certificate_chain.strip():
         return JsonResponse({"detail": "certificateChain required"}, status=400)

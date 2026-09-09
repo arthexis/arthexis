@@ -15,8 +15,16 @@ class _ConfigureHarness(ConfigureMixin):
 
 def test_run_configure_skips_ip_checks_for_remove(monkeypatch):
     command = _ConfigureHarness()
-    monkeypatch.setattr(command, "_detect_public_ips", lambda: (_ for _ in ()).throw(AssertionError("unexpected")))
-    monkeypatch.setattr(command, "_parse_static_ip", lambda _: (_ for _ in ()).throw(AssertionError("unexpected")))
+    monkeypatch.setattr(
+        command,
+        "_detect_public_ips",
+        lambda: (_ for _ in ()).throw(AssertionError("unexpected")),
+    )
+    monkeypatch.setattr(
+        command,
+        "_parse_static_ip",
+        lambda _: (_ for _ in ()).throw(AssertionError("unexpected")),
+    )
 
     class _Config:
         mode = "internal"

@@ -44,7 +44,7 @@ def _to_bash_path(path: Path) -> str:
     drive = resolved.drive.rstrip(":").lower()
     if not drive:
         return resolved.as_posix()
-    return f"/{drive}{resolved.as_posix()[len(resolved.drive):]}"
+    return f"/{drive}{resolved.as_posix()[len(resolved.drive) :]}"
 
 
 def _from_bash_path(value: str) -> Path:
@@ -99,9 +99,7 @@ def test_default_template_path_stays_out_of_repo_root(tmp_path: Path) -> None:
     assert expected_template.parent != ROOT
 
 
-def run_tool(
-    env_file: Path, template_file: Path
-) -> subprocess.CompletedProcess[str]:
+def run_tool(env_file: Path, template_file: Path) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["CHARGER_8900_ENV_FILE"] = _to_bash_path(env_file)
     env["CHARGER_8900_TEMPLATE_FILE"] = _to_bash_path(template_file)
@@ -220,7 +218,10 @@ def test_existing_env_file_permission_hardening_fails_closed(
     )
 
     assert result.returncode != 0
-    assert f"failed to enforce 0600 on env file: {_to_bash_path(env_file)}" in result.stderr
+    assert (
+        f"failed to enforce 0600 on env file: {_to_bash_path(env_file)}"
+        in result.stderr
+    )
 
 
 def test_env_loader_ignores_non_charger_keys(tmp_path: Path) -> None:

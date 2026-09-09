@@ -793,7 +793,9 @@ class ChargersCommandTests(TestCase):
         self.assertFalse(first.require_rfid)
         self.assertFalse(second.require_rfid)
 
-    def test_selector_before_verb_is_not_overwritten_by_subparser_defaults(self) -> None:
+    def test_selector_before_verb_is_not_overwritten_by_subparser_defaults(
+        self,
+    ) -> None:
         """A root selector must still target the intended charger after the verb."""
 
         selected = Charger.objects.create(
@@ -811,7 +813,9 @@ class ChargersCommandTests(TestCase):
 
         selected.refresh_from_db()
         other.refresh_from_db()
-        self.assertEqual(selected.authorization_policy, Charger.AuthorizationPolicy.OPEN)
+        self.assertEqual(
+            selected.authorization_policy, Charger.AuthorizationPolicy.OPEN
+        )
         self.assertFalse(selected.require_rfid)
         self.assertEqual(other.authorization_policy, Charger.AuthorizationPolicy.STRICT)
         self.assertTrue(other.require_rfid)

@@ -28,4 +28,3 @@ class ChargerVendorSubmissionAdmin(EntityModelAdmin):
         "integration_goals",
     )
     raw_id_fields = ("reviewed_by",)
-

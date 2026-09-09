@@ -81,7 +81,10 @@ class RateLimitedConnectionMixin:
             store.release_ip_connection(getattr(existing, "client_ip", None), existing)
             await existing.close()
         should_enforce_rate_limit = True
-        if replacing_existing and getattr(existing, "client_ip", None) == self.client_ip:
+        if (
+            replacing_existing
+            and getattr(existing, "client_ip", None) == self.client_ip
+        ):
             should_enforce_rate_limit = await self._has_rate_limit_rule()
         if should_enforce_rate_limit and not await self.enforce_rate_limit():
             store.add_log(
@@ -122,9 +125,7 @@ class RateLimitedConnectionMixin:
 class SubprotocolConnectionMixin:
     ocpp_version: OCPPVersion
 
-    def _canonicalize_ocpp_subprotocol(
-        self, value: str | None
-    ) -> OCPPVersion | None:
+    def _canonicalize_ocpp_subprotocol(self, value: str | None) -> OCPPVersion | None:
         """Return the canonical OCPP version for a websocket subprotocol token."""
 
         normalized = str(value or "").strip().lower()
@@ -233,9 +234,7 @@ class SubprotocolConnectionMixin:
         """Resolve the wire subprotocol and set the canonical OCPP version."""
 
         preferred_version = (
-            existing_charger.preferred_ocpp_version_value()
-            if existing_charger
-            else ""
+            existing_charger.preferred_ocpp_version_value() if existing_charger else ""
         )
         preferred_canonical = self._canonicalize_ocpp_subprotocol(preferred_version)
         offered = self._get_offered_subprotocols()
@@ -271,9 +270,7 @@ class WebsocketAuthMixin:
             if scheme.lower() != "basic" or not param:
                 return None, "invalid"
             try:
-                decoded = base64.b64decode(param.strip(), validate=True).decode(
-                    "utf-8"
-                )
+                decoded = base64.b64decode(param.strip(), validate=True).decode("utf-8")
             except (binascii.Error, UnicodeDecodeError):
                 return None, "invalid"
             username, sep, password = decoded.partition(":")
@@ -303,14 +300,14 @@ class WebsocketAuthMixin:
         credentials, error_code = self._parse_basic_auth_header()
         rejection_reason: str | None = None
         if error_code == "missing":
-            rejection_reason = "HTTP Basic authentication required (credentials missing)"
+            rejection_reason = (
+                "HTTP Basic authentication required (credentials missing)"
+            )
         elif error_code == "invalid":
             rejection_reason = "HTTP Basic authentication header is invalid"
         else:
             username, password = credentials
-            auth_user = await self._authenticate_basic_credentials(
-                username, password
-            )
+            auth_user = await self._authenticate_basic_credentials(username, password)
             if auth_user is None:
                 rejection_reason = "HTTP Basic authentication failed"
             else:

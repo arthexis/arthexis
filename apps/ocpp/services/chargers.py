@@ -5,11 +5,16 @@ from __future__ import annotations
 from django.http import Http404
 
 from apps.ocpp.models import Charger
-from apps.ocpp.views.actions.common import _ensure_charger_access, _normalize_connector_slug
+from apps.ocpp.views.actions.common import (
+    _ensure_charger_access,
+    _normalize_connector_slug,
+)
 from apps.ocpp.views.common import _connector_set, _live_sessions
 
 
-def get_charger_for_read(serial: str, connector_slug: str | None) -> tuple[Charger, str]:
+def get_charger_for_read(
+    serial: str, connector_slug: str | None
+) -> tuple[Charger, str]:
     """Return an existing charger for read-only flows.
 
     Unlike the view helper, this function never creates missing charger rows.
@@ -47,4 +52,3 @@ def live_sessions(charger: Charger, *, connectors: list[Charger] | None = None):
     """Return active sessions grouped by connector for ``charger``."""
 
     return _live_sessions(charger, connectors=connectors)
-

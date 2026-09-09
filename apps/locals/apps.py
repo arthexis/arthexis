@@ -9,8 +9,8 @@ class LocalsConfig(AppConfig):
         from .admin import patch_admin_favorites
         from .user_data import (
             patch_admin_import_export,
-            patch_admin_user_datum,
             patch_admin_user_data_views,
+            patch_admin_user_datum,
         )
         from .user_data import signals as _user_data_signals
 

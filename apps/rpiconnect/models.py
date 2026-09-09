@@ -130,7 +130,9 @@ class ConnectUpdateCampaign(models.Model):
     )
     target_set = models.JSONField(default=dict)
     strategy = models.CharField(max_length=20, choices=Strategy.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.DRAFT
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -192,7 +194,9 @@ class ConnectUpdateDeployment(models.Model):
         on_delete=models.CASCADE,
         related_name="update_deployments",
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     error_payload = models.JSONField(default=dict, blank=True)
     queued_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -256,10 +260,17 @@ class ConnectUpdateDeployment(models.Model):
 
         update_fields = kwargs.get("update_fields")
         update_field_names = set(update_fields) if update_fields is not None else None
-        status_will_be_saved = update_field_names is None or "status" in update_field_names
+        status_will_be_saved = (
+            update_field_names is None or "status" in update_field_names
+        )
         original_status = None
         if self.pk and status_will_be_saved:
-            original_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
+            original_status = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
         self.full_clean()
         super().save(*args, **kwargs)
         terminal_statuses = {
@@ -269,7 +280,12 @@ class ConnectUpdateDeployment(models.Model):
         }
         persisted_status = self.status
         if status_will_be_saved:
-            persisted_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
+            persisted_status = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
         if (
             status_will_be_saved
             and original_status != persisted_status

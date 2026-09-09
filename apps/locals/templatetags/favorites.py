@@ -234,12 +234,14 @@ def favorite_entries(app_list, favorites_map):
                 continue
 
             seen_ct_ids.add(ct_id)
-            entries.append({
-                "app": app,
-                "model": model,
-                "favorite": favorite,
-                "ct_id": ct_id,
-            })
+            entries.append(
+                {
+                    "app": app,
+                    "model": model,
+                    "favorite": favorite,
+                    "ct_id": ct_id,
+                }
+            )
 
     entries.sort(
         key=lambda entry: (
@@ -300,7 +302,9 @@ def cached_dashboard_favorites(context, app_list, favorites_map=None):
     return mark_safe(cached)
 
 
-def _render_favorites(app_list, favorites_map, show_changelinks, show_model_badges, request):
+def _render_favorites(
+    app_list, favorites_map, show_changelinks, show_model_badges, request
+):
     entries = favorite_entries(app_list, favorites_map)
     if not entries:
         return ""

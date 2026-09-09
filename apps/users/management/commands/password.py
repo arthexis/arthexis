@@ -139,13 +139,19 @@ class Command(BaseCommand):
                 "--staff and --superuser can only be used with --create or --update."
             )
         if access_point_user and (staff or superuser):
-            raise CommandError("--access-point-user cannot be combined with --staff or --superuser.")
+            raise CommandError(
+                "--access-point-user cannot be combined with --staff or --superuser."
+            )
         if access_point_user and temporary:
-            raise CommandError("--access-point-user cannot be combined with --temporary.")
+            raise CommandError(
+                "--access-point-user cannot be combined with --temporary."
+            )
         if access_point_user and delete_password:
             raise CommandError("--access-point-user cannot be combined with --delete.")
         if access_point_user and raw_password:
-            raise CommandError("--access-point-user cannot be combined with --password.")
+            raise CommandError(
+                "--access-point-user cannot be combined with --password."
+            )
 
         if identifier is None:
             if delete_password:
@@ -153,7 +159,9 @@ class Command(BaseCommand):
             if groups:
                 raise CommandError("identifier is required when using --group.")
             if access_point_user:
-                raise CommandError("identifier is required when using --access-point-user.")
+                raise CommandError(
+                    "identifier is required when using --access-point-user."
+                )
             generated_password = raw_password or temp_passwords.generate_password()
             self.stdout.write(f"Generated password: {generated_password}")
             self.stdout.write(self.style.SUCCESS("Password generated."))
@@ -169,7 +177,9 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"No user found for identifier {identifier!r}. Use --create to add one."
                 )
-            users = [self._create_user(manager, identifier, staff=staff, superuser=superuser)]
+            users = [
+                self._create_user(manager, identifier, staff=staff, superuser=superuser)
+            ]
             created = True
 
         if len(users) > 1:
@@ -183,7 +193,11 @@ class Command(BaseCommand):
         if (
             update_user
             or access_point_user
-            or (create_user and not created and (staff or superuser or access_point_user))
+            or (
+                create_user
+                and not created
+                and (staff or superuser or access_point_user)
+            )
         ):
             self._update_user(
                 user,
@@ -195,7 +209,11 @@ class Command(BaseCommand):
             resolved_groups = self._resolve_groups(groups) if groups else []
             self._configure_access_point_user(user)
             self._harden_access_point_membership(user, resolved_groups)
-            self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Configured {user.username} as a local access point user."
+                )
+            )
             return
 
         self._disable_access_point_user_mode(user)
@@ -206,12 +224,16 @@ class Command(BaseCommand):
 
         if delete_password:
             self._delete_password(user)
-            self.stdout.write(self.style.SUCCESS(f"Password deleted for {user.username}."))
+            self.stdout.write(
+                self.style.SUCCESS(f"Password deleted for {user.username}.")
+            )
             return
 
         password = raw_password or temp_passwords.generate_password()
         default_force_change = not temporary
-        effective_force_change = default_force_change if force_change is None else bool(force_change)
+        effective_force_change = (
+            default_force_change if force_change is None else bool(force_change)
+        )
 
         if temporary:
             expires_in = int(options["expires_in"])
@@ -227,7 +249,9 @@ class Command(BaseCommand):
             )
             self._set_force_password_change(user, effective_force_change)
             self.stdout.write(
-                self._render_temporary_output(user.username, password, entry.expires_at, allow_change)
+                self._render_temporary_output(
+                    user.username, password, entry.expires_at, allow_change
+                )
             )
             self.stdout.write(self.style.SUCCESS("Temporary password created."))
             return
@@ -235,7 +259,11 @@ class Command(BaseCommand):
         user.set_password(password)
         user.save(update_fields=["password"])
         self._set_force_password_change(user, effective_force_change)
-        self.stdout.write(self._render_permanent_output(user.username, password, effective_force_change))
+        self.stdout.write(
+            self._render_permanent_output(
+                user.username, password, effective_force_change
+            )
+        )
         self.stdout.write(self.style.SUCCESS("Permanent password updated."))
 
     def _resolve_users(self, manager, identifier, *, lookup: str):
@@ -266,7 +294,9 @@ class Command(BaseCommand):
             try:
                 return manager.filter(pk=int(identifier))
             except (TypeError, ValueError) as exc:
-                raise CommandError("--lookup id requires an integer identifier.") from exc
+                raise CommandError(
+                    "--lookup id requires an integer identifier."
+                ) from exc
 
         filters = Q(username__iexact=identifier) | Q(email__iexact=identifier)
         try:
@@ -275,7 +305,9 @@ class Command(BaseCommand):
             pass
         return manager.filter(filters)
 
-    def _create_user(self, manager, identifier, *, staff: bool = False, superuser: bool = False):
+    def _create_user(
+        self, manager, identifier, *, staff: bool = False, superuser: bool = False
+    ):
         kwargs = {"username": str(identifier)}
         identifier_text = str(identifier)
         if "@" in identifier_text and not identifier_text.startswith("@"):
@@ -375,7 +407,8 @@ class Command(BaseCommand):
         """Resolve requested group names and raise when any are unknown."""
 
         existing_groups = {
-            group.name: group for group in Group.objects.filter(name__in=groups).order_by("name")
+            group.name: group
+            for group in Group.objects.filter(name__in=groups).order_by("name")
         }
         missing_groups = sorted(set(groups) - set(existing_groups))
         if missing_groups:

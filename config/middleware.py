@@ -1,8 +1,8 @@
 import logging
 from http import HTTPStatus
+
 from django.conf import settings
-from django.core.exceptions import DisallowedHost
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import DisallowedHost, ObjectDoesNotExist
 from django.http import HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
 from django.urls import Resolver404, resolve
@@ -13,7 +13,11 @@ from apps.nodes.models import Node
 from utils.sites import get_site
 
 from .active_app import active_app
-from .request_utils import is_https_request, reset_request_log_context, set_request_log_context
+from .request_utils import (
+    is_https_request,
+    reset_request_log_context,
+    set_request_log_context,
+)
 
 _is_https_request = is_https_request
 
@@ -235,7 +239,11 @@ class UsageAnalyticsMiddleware:
     def _resolve_action(self, method: str) -> str:
         normalized = method.upper()
         if normalized in {"POST", "PUT", "PATCH"}:
-            return UsageEvent.Action.CREATE if normalized == "POST" else UsageEvent.Action.UPDATE
+            return (
+                UsageEvent.Action.CREATE
+                if normalized == "POST"
+                else UsageEvent.Action.UPDATE
+            )
         if normalized == "DELETE":
             return UsageEvent.Action.DELETE
         return UsageEvent.Action.READ
@@ -263,5 +271,9 @@ class PageMissLoggingMiddleware:
             self._log_page_miss(request, response.status_code)
 
     def _log_page_miss(self, request, status_code: int) -> None:
-        path = request.get_full_path() if hasattr(request, "get_full_path") else str(request)
+        path = (
+            request.get_full_path()
+            if hasattr(request, "get_full_path")
+            else str(request)
+        )
         self.logger.info("%s %s -> %s", request.method, path, status_code)

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.db.models import Max
 from django.utils import timezone
 
 from .models import OperationExecution, OperationScreen
-
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,9 @@ def notify_expired_operations() -> int:
     now = timezone.now()
     notified = 0
 
-    operations = OperationScreen.objects.filter(is_active=True, recurrence_days__isnull=False)
+    operations = OperationScreen.objects.filter(
+        is_active=True, recurrence_days__isnull=False
+    )
     for operation in operations:
         threshold = now - timedelta(days=operation.recurrence_days or 0)
         latest_per_user = (
@@ -44,7 +45,10 @@ def notify_expired_operations() -> int:
             )
             if execution is None or execution.performed_at > threshold:
                 continue
-            if execution.expiration_notified_at and execution.expiration_notified_at >= threshold:
+            if (
+                execution.expiration_notified_at
+                and execution.expiration_notified_at >= threshold
+            ):
                 continue
             if not execution.user.email:
                 continue

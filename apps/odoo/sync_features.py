@@ -24,9 +24,11 @@ def is_odoo_sync_integration_enabled(
     )
     if not suite_enabled:
         return False
-    suite_feature = Feature.objects.filter(slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG).only(
-        "metadata"
-    ).first()
+    suite_feature = (
+        Feature.objects.filter(slug=ODOO_CRM_SYNC_SUITE_FEATURE_SLUG)
+        .only("metadata")
+        .first()
+    )
     default_state = "enabled" if default else "disabled"
     integration_state = get_feature_parameter_value(
         suite_feature,

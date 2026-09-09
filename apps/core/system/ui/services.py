@@ -11,11 +11,10 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, NotRequired, TypedDict, cast
 
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
-from typing_extensions import NotRequired
 
 from apps.core.systemctl import _systemctl_command
 from apps.services.lifecycle import build_lifecycle_service_units
@@ -132,13 +131,16 @@ class UptimeReportPayload(TypedDict):
     suite: UptimeReportSuitePayload
     windows: list[UptimeWindowPayload]
 
+
 def _configured_service_units(base_dir: Path) -> list[ServiceUnitConfig]:
     """Return service units configured for this instance."""
 
     return cast(list[ServiceUnitConfig], build_lifecycle_service_units(base_dir))
 
 
-def _systemd_unit_status(unit: str, command: list[str] | None = None) -> ServiceStatusPayload:
+def _systemd_unit_status(
+    unit: str, command: list[str] | None = None
+) -> ServiceStatusPayload:
     """Return the systemd status for a unit, handling missing commands gracefully."""
 
     command = command if command is not None else _systemctl_command()

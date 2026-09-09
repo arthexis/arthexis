@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,7 +18,7 @@ class CoverageSummary:
     num_statements: int
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> "CoverageSummary":
+    def from_payload(cls, payload: Mapping[str, Any]) -> CoverageSummary:
         """Build a summary from the JSON payload emitted by ``coverage json``."""
 
         totals = payload.get("totals")
@@ -39,7 +40,9 @@ class CoverageSummary:
         if statements < 0 or covered < 0:
             raise ValueError("Coverage totals cannot be negative")
 
-        return cls(covered_lines=covered, missing_lines=missing, num_statements=statements)
+        return cls(
+            covered_lines=covered, missing_lines=missing, num_statements=statements
+        )
 
     @property
     def percent(self) -> float:
@@ -69,7 +72,9 @@ def load_summary(path: str | Path) -> CoverageSummary:
     except FileNotFoundError as exc:  # pragma: no cover - handled by caller
         raise exc
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Coverage report {candidate} is not valid JSON: {exc}") from exc
+        raise ValueError(
+            f"Coverage report {candidate} is not valid JSON: {exc}"
+        ) from exc
     return CoverageSummary.from_payload(payload)
 
 
@@ -98,22 +103,22 @@ def render_badge(label: str, value: str, color: str) -> str:
     label_center = label_width / 2
     value_center = label_width + value_width / 2
     return (
-        f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{total_width}\" height=\"20\" "
-        f"role=\"img\" aria-label=\"{label}: {value}\">"
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20" '
+        f'role="img" aria-label="{label}: {value}">'
         f"<title>{label}: {value}</title>"
-        "<linearGradient id=\"s\" x2=\"0\" y2=\"100%\">"
-        "<stop offset=\"0\" stop-color=\"#bbb\" stop-opacity=\".1\"/>"
-        "<stop offset=\"1\" stop-opacity=\".1\"/>"
+        '<linearGradient id="s" x2="0" y2="100%">'
+        '<stop offset="0" stop-color="#bbb" stop-opacity=".1"/>'
+        '<stop offset="1" stop-opacity=".1"/>'
         "</linearGradient>"
-        f"<clipPath id=\"r\"><rect width=\"{total_width}\" height=\"20\" rx=\"3\" fill=\"#fff\"/></clipPath>"
-        "<g clip-path=\"url(#r)\">"
-        f"<rect width=\"{label_width}\" height=\"20\" fill=\"#555\"/>"
-        f"<rect x=\"{label_width}\" width=\"{value_width}\" height=\"20\" fill=\"{color}\"/>"
-        f"<rect width=\"{total_width}\" height=\"20\" fill=\"url(#s)\"/>"
+        f'<clipPath id="r"><rect width="{total_width}" height="20" rx="3" fill="#fff"/></clipPath>'
+        '<g clip-path="url(#r)">'
+        f'<rect width="{label_width}" height="20" fill="#555"/>'
+        f'<rect x="{label_width}" width="{value_width}" height="20" fill="{color}"/>'
+        f'<rect width="{total_width}" height="20" fill="url(#s)"/>'
         "</g>"
-        "<g fill=\"#fff\" text-anchor=\"middle\" font-family=\"Verdana,Geneva,DejaVu Sans,sans-serif\" font-size=\"11\">"
-        f"<text x=\"{label_center:.1f}\" y=\"14\">{label}</text>"
-        f"<text x=\"{value_center:.1f}\" y=\"14\">{value}</text>"
+        '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">'
+        f'<text x="{label_center:.1f}" y="14">{label}</text>'
+        f'<text x="{value_center:.1f}" y="14">{value}</text>'
         "</g>"
         "</svg>"
     )

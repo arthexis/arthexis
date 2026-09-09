@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from django.core.exceptions import DisallowedHost
 from django.http import HttpRequest
 from django.http.request import split_domain_port
-
-from config.request_utils import is_https_request
-
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
     options_to_json,
+)
+from webauthn import (
     verify_authentication_response as _verify_authentication_response,
+)
+from webauthn import (
     verify_registration_response as _verify_registration_response,
 )
-from webauthn.authentication.verify_authentication_response import VerifiedAuthentication
+from webauthn.authentication.verify_authentication_response import (
+    VerifiedAuthentication,
+)
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
@@ -29,6 +32,8 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 from webauthn.registration.verify_registration_response import VerifiedRegistration
+
+from config.request_utils import is_https_request
 
 
 @dataclass(slots=True)

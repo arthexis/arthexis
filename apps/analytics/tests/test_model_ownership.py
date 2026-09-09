@@ -21,9 +21,9 @@ def test_core_usage_event_imports_are_compatibility_aliases():
     from apps.core.models import UsageEvent as LegacyUsageEvent
 
     assert LegacyUsageEvent is UsageEvent
-    assert importlib.import_module("apps.core.models.usage_event") is importlib.import_module(
-        "apps.analytics.models"
-    )
+    assert importlib.import_module(
+        "apps.core.models.usage_event"
+    ) is importlib.import_module("apps.analytics.models")
     assert importlib.import_module("apps.core.analytics") is importlib.import_module(
         "apps.analytics.analytics"
     )

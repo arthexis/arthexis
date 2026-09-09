@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping
 
 from django.utils.text import slugify
 
@@ -51,7 +51,7 @@ class ReleaseFeature:
         return slug or self.title
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, object]) -> "ReleaseFeature":
+    def from_mapping(cls, data: Mapping[str, object]) -> ReleaseFeature:
         """Build a feature from a mapping such as JSON or YAML data."""
 
         title = str(data.get("title", ""))
@@ -114,8 +114,10 @@ class ReleaseFeatures:
 
     @classmethod
     def from_iterable(
-        cls, version: str | None, features: Iterable[Mapping[str, object] | ReleaseFeature]
-    ) -> "ReleaseFeatures":
+        cls,
+        version: str | None,
+        features: Iterable[Mapping[str, object] | ReleaseFeature],
+    ) -> ReleaseFeatures:
         parsed: list[ReleaseFeature] = []
         for item in features:
             if isinstance(item, ReleaseFeature):

@@ -68,16 +68,16 @@ class Command(BaseCommand):
         if reset_all:
             if kind == FeatureKind.NODE:
                 raise CommandError("--reset-all only supports suite features.")
-            deleted_count, fixture_count, baseline_disabled_count = reset_all_suite_features()
+            deleted_count, fixture_count, baseline_disabled_count = (
+                reset_all_suite_features()
+            )
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Dropped {deleted_count} suite features before full reload."
                 )
             )
             self.stdout.write(
-                self.style.SUCCESS(
-                    f"Reloaded {fixture_count} mainstream fixtures."
-                )
+                self.style.SUCCESS(f"Reloaded {fixture_count} mainstream fixtures.")
             )
             if baseline_disabled_count:
                 self.stdout.write(

@@ -37,9 +37,7 @@ def test_release_form_uses_generated_card_name(monkeypatch) -> None:
 
     tag.refresh_from_db()
     expected_label = generated_label_for_rfid(tag.rfid)
-    tables = [
-        item for item in captured["story"] if item.__class__.__name__ == "Table"
-    ]
+    tables = [item for item in captured["story"] if item.__class__.__name__ == "Table"]
     assert response["Content-Disposition"] == (
         "attachment; filename=rfid-release-form.pdf"
     )
@@ -81,16 +79,16 @@ def test_release_form_repairs_stale_generated_card_name(monkeypatch) -> None:
 
     tag.refresh_from_db()
     expected_label = generated_label_for_rfid(tag.rfid)
-    tables = [
-        item for item in captured["story"] if item.__class__.__name__ == "Table"
-    ]
+    tables = [item for item in captured["story"] if item.__class__.__name__ == "Table"]
     assert tag.name_key == rfid_name_key(tag.rfid)
     assert tag.generated_label == expected_label
     assert tables[0]._cellvalues[1][0] == expected_label
 
 
 @pytest.mark.django_db
-def test_release_form_repairs_stale_generated_card_name_with_same_key(monkeypatch) -> None:
+def test_release_form_repairs_stale_generated_card_name_with_same_key(
+    monkeypatch,
+) -> None:
     captured = {}
 
     class CapturingDocument:
@@ -123,8 +121,6 @@ def test_release_form_repairs_stale_generated_card_name_with_same_key(monkeypatc
     )
 
     tag.refresh_from_db()
-    tables = [
-        item for item in captured["story"] if item.__class__.__name__ == "Table"
-    ]
+    tables = [item for item in captured["story"] if item.__class__.__name__ == "Table"]
     assert tag.generated_label == "MappedName777"
     assert tables[0]._cellvalues[1][0] == "MappedName777"

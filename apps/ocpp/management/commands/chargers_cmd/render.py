@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 from pathlib import Path
 
@@ -252,9 +252,7 @@ class ChargersRenderer:
                     except FileNotFoundError:
                         continue
                     seen_paths.add(path)
-                    timestamp = datetime.fromtimestamp(
-                        stat.st_mtime, tz=dt_timezone.utc
-                    )
+                    timestamp = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
                     entries.append(
                         {
                             "charger": charger,

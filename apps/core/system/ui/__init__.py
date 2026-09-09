@@ -7,15 +7,15 @@ modules.
 
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from pathlib import Path
 import os
 import shutil
 import socket
 import subprocess
-from typing import Callable, Iterable
+from collections import deque
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
@@ -24,24 +24,36 @@ from django.utils.translation import gettext_lazy as _
 
 from utils import revision
 
-from ..filesystem import _configured_backend_port, _startup_report_log_path, _startup_report_reference_time
+from ..filesystem import (
+    _configured_backend_port,
+    _startup_report_log_path,
+    _startup_report_reference_time,
+)
 from .formatting import _format_datetime, _format_timestamp, format_datetime
-from .network_probe import _build_nginx_report, _detect_runserver_process, _port_candidates, _probe_ports
-from .services import _build_services_report, _configured_service_units, _systemd_unit_status
+from .network_probe import (
+    _build_nginx_report,
+    _detect_runserver_process,
+    _port_candidates,
+    _probe_ports,
+)
+from .services import (
+    _build_services_report,
+    _configured_service_units,
+    _systemd_unit_status,
+)
 from .uptime import (
     _build_uptime_report,
     _build_uptime_segments,
     _load_shutdown_periods,
-    _system_boot_time,
     _suite_offline_period,
     _suite_uptime_details,
+    _system_boot_time,
     build_uptime_segments,
     load_shutdown_periods,
 )
 
 STARTUP_REPORT_DEFAULT_LIMIT = 50
 STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
-
 
 
 @dataclass(frozen=True)
@@ -71,11 +83,13 @@ def _database_configurations() -> list[dict[str, str]]:
             name = ""
         if isinstance(name, (os.PathLike, Path)):
             name = Path(name).as_posix()
-        databases.append({
-            "alias": alias,
-            "engine": str(engine),
-            "name": str(name),
-        })
+        databases.append(
+            {
+                "alias": alias,
+                "engine": str(engine),
+                "name": str(name),
+            }
+        )
     databases.sort(key=lambda entry: entry["alias"].lower())
     return databases
 
@@ -85,12 +99,26 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
 
     fields: list[SystemField] = []
 
-    def add_field(label: str, key: str, value: object, *, field_type: str = "text", visible: bool = True) -> None:
+    def add_field(
+        label: str,
+        key: str,
+        value: object,
+        *,
+        field_type: str = "text",
+        visible: bool = True,
+    ) -> None:
         if not visible:
             return
-        fields.append(SystemField(label=label, sigil_key=key, value=value, field_type=field_type))
+        fields.append(
+            SystemField(label=label, sigil_key=key, value=value, field_type=field_type)
+        )
 
-    add_field(_("Suite installed"), "INSTALLED", info.get("installed", False), field_type="boolean")
+    add_field(
+        _("Suite installed"),
+        "INSTALLED",
+        info.get("installed", False),
+        field_type="boolean",
+    )
     add_field(_("Revision"), "REVISION", info.get("revision", ""))
 
     service_value = info.get("service") or _("not installed")
@@ -109,7 +137,9 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         visible=bool(info.get("screen_mode")),
     )
 
-    add_field(_("Node Features"), "FEATURES", info.get("features", []), field_type="features")
+    add_field(
+        _("Node Features"), "FEATURES", info.get("features", []), field_type="features"
+    )
     add_field(_("Running"), "RUNNING", info.get("running", False), field_type="boolean")
     add_field(
         _("Service status"),
@@ -201,7 +231,9 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
 
         try:
             expected_features = (
-                NodeFeature.objects.filter(roles__name=info["role"]).only("slug", "display").distinct()
+                NodeFeature.objects.filter(roles__name=info["role"])
+                .only("slug", "display")
+                .distinct()
             )
         except Exception:
             expected_features = []
@@ -312,7 +344,9 @@ def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
         except ValueError:
             parsed_timestamp = None
 
-    timestamp_label = _format_datetime(parsed_timestamp) if parsed_timestamp else timestamp_raw
+    timestamp_label = (
+        _format_datetime(parsed_timestamp) if parsed_timestamp else timestamp_raw
+    )
 
     return {
         "timestamp": parsed_timestamp,
@@ -374,9 +408,7 @@ def _read_startup_report(
         if absolute_delta <= STARTUP_CLOCK_DRIFT_THRESHOLD:
             break
 
-        offset_label = timesince(
-            reference_time - absolute_delta, reference_time
-        )
+        offset_label = timesince(reference_time - absolute_delta, reference_time)
         direction = _("ahead") if delta > timedelta(0) else _("behind")
         clock_warning = _(
             "Startup timestamps appear %(offset)s %(direction)s of the current system time. "
@@ -392,6 +424,7 @@ def _read_startup_report(
         "limit": normalized_limit,
         "clock_warning": clock_warning,
     }
+
 
 # Legacy compatibility re-exports.
 # Prefer importing these from ``apps.core.system_ui``.

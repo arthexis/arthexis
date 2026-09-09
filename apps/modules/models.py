@@ -21,7 +21,9 @@ class ModuleManager(models.Manager):
         role_filter = Q(roles__isnull=True)
         if role is not None:
             role_filter |= Q(roles=role)
-        return self.filter(role_filter | Q(security_mode=Module.SECURITY_INCLUSIVE)).distinct()
+        return self.filter(
+            role_filter | Q(security_mode=Module.SECURITY_INCLUSIVE)
+        ).distinct()
 
 
 class Module(Entity):
@@ -156,7 +158,9 @@ class Module(Entity):
 __all__ = ["Module", "ModuleManager"]
 
 MODULE_FAVICON_BUCKET_SLUG = "modules-favicons"
-MODULE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"])
+MODULE_FAVICON_ALLOWED_PATTERNS = "\n".join(
+    ["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"]
+)
 
 
 def get_module_favicon_bucket():

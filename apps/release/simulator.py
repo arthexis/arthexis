@@ -226,14 +226,22 @@ def run_release_simulation(
                 )
             )
 
-            dist_files = sorted(path for path in resolved_dist.glob("*") if path.is_file())
+            dist_files = sorted(
+                path for path in resolved_dist.glob("*") if path.is_file()
+            )
             if not dist_files:
                 raise ReleaseSimulationError(
                     "validate_metadata",
                     f"No distribution artifacts found in {resolved_dist}.",
                 )
             _run_subprocess(
-                [sys.executable, "-m", "twine", "check", *(str(path) for path in dist_files)],
+                [
+                    sys.executable,
+                    "-m",
+                    "twine",
+                    "check",
+                    *(str(path) for path in dist_files),
+                ],
                 cwd=root,
                 step="validate_metadata",
             )
@@ -272,7 +280,9 @@ def run_release_simulation(
             steps=steps,
         )
     except ReleaseSimulationError as exc:
-        steps.append(SimulationStep(name=exc.step, outcome="failed", detail=exc.message))
+        steps.append(
+            SimulationStep(name=exc.step, outcome="failed", detail=exc.message)
+        )
         summary = _failure_summary(exc.step, run_url=run_url)
         return ReleaseSimulationResult(
             package_name=package_name,
@@ -296,9 +306,13 @@ def parse_blockers_json(raw_value: str) -> list[str]:
     try:
         payload = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ReleaseSimulationError("evaluate_blockers", f"Invalid blockers JSON: {exc}") from exc
+        raise ReleaseSimulationError(
+            "evaluate_blockers", f"Invalid blockers JSON: {exc}"
+        ) from exc
     if not isinstance(payload, list):
-        raise ReleaseSimulationError("evaluate_blockers", "Blockers JSON must be a list.")
+        raise ReleaseSimulationError(
+            "evaluate_blockers", "Blockers JSON must be a list."
+        )
     return [str(item) for item in payload if str(item).strip()]
 
 
@@ -675,7 +689,9 @@ def _safe_read_child_text(root: Path, path: Path) -> str:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Simulate release readiness without publishing.")
+    parser = argparse.ArgumentParser(
+        description="Simulate release readiness without publishing."
+    )
     parser.add_argument("--root", default=".", help="Repository root to simulate from.")
     parser.add_argument("--package-name", default=DEFAULT_PACKAGE_NAME)
     parser.add_argument("--version-file", default="VERSION")

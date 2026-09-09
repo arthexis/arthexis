@@ -3,6 +3,7 @@ import sqlite3
 import time
 from datetime import datetime
 
+
 def to_epoch(value: str | None) -> float | None:
     if not value:
         return None

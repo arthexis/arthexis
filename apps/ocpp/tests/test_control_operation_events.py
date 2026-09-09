@@ -11,7 +11,9 @@ class _ActionServiceHarness(ActionServiceMixin):
 
 class ControlOperationEventTests(TestCase):
     def test_log_control_operation_creates_event(self):
-        user = get_user_model().objects.create_user(username="operator", password="secret")
+        user = get_user_model().objects.create_user(
+            username="operator", password="secret"
+        )
         charger = Charger.objects.create(charger_id="CP-EVENT-1", connector_id=1)
         request = RequestFactory().get("/")
         request.user = user

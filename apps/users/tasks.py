@@ -36,7 +36,9 @@ def analyze_uploaded_error_report(report_id: int) -> None:
         return
     except Exception as exc:
         _mark_report_failed(report, exc)
-        logger.exception("Unexpected error analyzing uploaded error report %s.", report.pk)
+        logger.exception(
+            "Unexpected error analyzing uploaded error report %s.", report.pk
+        )
         raise
     report.analysis = analysis
     report.status = UploadedErrorReport.Status.COMPLETE

@@ -432,7 +432,7 @@ def _user_fixture_paths(user):
 def _read_fixture_entries(path: Path) -> list[dict]:
     try:
         content_bytes = path.read_bytes()
-    except (OSError, IOError):
+    except OSError:
         return []
 
     try:
@@ -482,4 +482,3 @@ def _user_fixture_status(user):
     paths = _user_fixture_paths(user)
     pending = [path for path in paths if _fixture_has_unapplied_entries(path)]
     return {"pending": pending, "total": paths}
-

@@ -3,6 +3,7 @@
 This module provides a stable import target for environments that install the
 repository as the ``arthexis`` Python distribution, including editable installs.
 """
+
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version

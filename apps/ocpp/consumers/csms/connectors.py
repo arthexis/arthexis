@@ -72,9 +72,7 @@ class CSMSConnectorAssignmentMixin:
                 ChargingStation.objects.get_or_create
             )(
                 station_id=self.charger_id,
-                defaults={
-                    "last_path": bounded_last_path(self.scope, ChargingStation)
-                },
+                defaults={"last_path": bounded_last_path(self.scope, ChargingStation)},
             )
         existing = await database_sync_to_async(
             Charger.objects.filter(

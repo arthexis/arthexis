@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import re
 import shutil
 import subprocess
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 from apps.core.optional_hardware import is_expected_i2c_absence
 

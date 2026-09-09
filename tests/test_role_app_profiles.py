@@ -377,7 +377,10 @@ def test_profile_dependency_metadata_is_loaded_from_app_manifests():
         (["manage.py", "migrations", "check"], False),
         (["manage.py", "migrations", "run"], False),
         (["manage.py", "help", "migrations"], False),
-        (["manage.py", "--settings=config.settings.test", "migrations", "check"], False),
+        (
+            ["manage.py", "--settings=config.settings.test", "migrations", "check"],
+            False,
+        ),
         (["manage.py", "check"], False),
         (["manage.py", "--skip-checks", "showmigrations"], False),
     ),
@@ -404,9 +407,7 @@ def test_test_management_command_detection_skips_django_global_options(
         (["manage.py", "test", "run"], False),
     ),
 )
-def test_makemigrations_detection_uses_native_command_only(
-    monkeypatch, argv, expected
-):
+def test_makemigrations_detection_uses_native_command_only(monkeypatch, argv, expected):
     monkeypatch.setattr(sys, "argv", argv)
 
     assert _is_makemigrations_command() is expected

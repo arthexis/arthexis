@@ -7,8 +7,8 @@ from secrets import token_hex
 
 from cryptography.hazmat.primitives import serialization
 
-from apps.nodes.services.transport import send_registration
 from apps.nodes.models.utils import _format_upgrade_body
+from apps.nodes.services.transport import send_registration
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,9 @@ def notify_peers_of_update(node) -> None:
         logger.debug("Private key for %s not found; skipping peer update", node)
         return
     try:
-        private_key = serialization.load_pem_private_key(priv_path.read_bytes(), password=None)
+        private_key = serialization.load_pem_private_key(
+            priv_path.read_bytes(), password=None
+        )
     except Exception as exc:
         logger.warning("Failed to load private key for %s: %s", node, exc)
         return
@@ -54,6 +56,8 @@ def notify_peers_of_update(node) -> None:
         if not send_registration(payload, peer):
             logger.warning("Unable to notify node %s of startup", peer)
             continue
-        version_display = _format_upgrade_body(node.installed_version, node.installed_revision)
+        version_display = _format_upgrade_body(
+            node.installed_version, node.installed_revision
+        )
         version_suffix = f" ({version_display})" if version_display else ""
         logger.info("Announced startup to %s%s", peer, version_suffix)

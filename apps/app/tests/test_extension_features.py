@@ -11,7 +11,6 @@ from utils.extension_features import (
     sync_extension_suite_features,
 )
 
-
 MANIFEST = """\
 [extension]
 name = "printer-zebra"

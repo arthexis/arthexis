@@ -7,7 +7,6 @@ import pytest
 from scripts.startup_orchestration import extract_payload
 from tests.gate_markers import gate
 
-
 pytestmark = [gate.upgrade]
 
 
@@ -25,6 +24,7 @@ def test_extract_payload_reads_last_json_object() -> None:
 
     assert payload["status"] == "ok"
     assert payload["launch"]["celery_embedded"] is True
+
 
 def test_extract_payload_reads_pretty_printed_json_after_noise() -> None:
     output = """channel_layer.redis_url_invalid

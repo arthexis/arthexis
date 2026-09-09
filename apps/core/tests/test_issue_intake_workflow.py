@@ -78,8 +78,13 @@ def test_issue_intake_workflow_reconciles_conflicting_priority_labels():
         "chooseHighestPriorityLabel([...existingPriorityLabels, ...queuedPriorityLabels])"
         in intake_script
     )
-    assert "const priorityLabelsToRemove = existingPriorityLabels.filter" in intake_script
-    assert "github.rest.issues.removeLabel({ owner, repo, issue_number, name })" in intake_script
+    assert (
+        "const priorityLabelsToRemove = existingPriorityLabels.filter" in intake_script
+    )
+    assert (
+        "github.rest.issues.removeLabel({ owner, repo, issue_number, name })"
+        in intake_script
+    )
     assert "Removed conflicting priority label" in intake_script
     assert "addSet.delete(label)" in intake_script
 
@@ -94,11 +99,16 @@ def test_issue_intake_workflow_reconciles_conflicting_issue_type_labels():
     assert "const chooseIssueTypeLabel = (labels) =>" in intake_script
     assert "if (hasBugSignal) {" in intake_script
     assert "} else if (hasFeatureSignal) {" in intake_script
-    assert "const eventIssueTypeLabel = isIssueTypeLabel(eventLabelName)" in intake_script
+    assert (
+        "const eventIssueTypeLabel = isIssueTypeLabel(eventLabelName)" in intake_script
+    )
     assert "const desiredIssueTypeLabel =" in intake_script
     assert "chooseIssueTypeLabel(existingIssueTypeLabels)" in intake_script
     assert "chooseIssueTypeLabel(queuedIssueTypeLabels)" in intake_script
-    assert "const issueTypeLabelsToRemove = existingIssueTypeLabels.filter" in intake_script
+    assert (
+        "const issueTypeLabelsToRemove = existingIssueTypeLabels.filter"
+        in intake_script
+    )
     assert "Removed conflicting issue type label" in intake_script
 
 
@@ -135,9 +145,9 @@ def test_issue_intake_workflow_ignores_ocpp_template_field_label():
 
 
 def test_bug_report_template_explains_ocpp_critical_priority():
-    template_text = (REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(
-        encoding="utf-8"
-    )
+    template_text = (
+        REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml"
+    ).read_text(encoding="utf-8")
 
     assert "OCPP reports with a selected protocol version" in template_text
     assert "automatically prioritized as critical" in template_text
@@ -147,7 +157,10 @@ def test_issue_intake_workflow_constrains_auth_security_signal():
     intake_script = _intake_script()
 
     assert "['security', 'vulnerability', 'xss', 'csrf', 'auth']" not in intake_script
-    assert "hasRegex(issueText, [/\\bauth\\b/i, /\\bauthn\\b/i, /\\bauthz\\b/i])" in intake_script
+    assert (
+        "hasRegex(issueText, [/\\bauth\\b/i, /\\bauthn\\b/i, /\\bauthz\\b/i])"
+        in intake_script
+    )
     assert "'authentication'" in intake_script
     assert "'authorization'" in intake_script
 
@@ -167,7 +180,10 @@ def test_issue_intake_workflow_constrains_question_signal():
     assert "['question', 'how do i', 'how to', 'help']" not in intake_script
     assert "const hasQuestionSignal = hasRegex(issueText" in intake_script
     assert "/\\bquestion\\b/i" in intake_script
-    assert "/\\bhelp\\s+(me|with|using|understand|troubleshoot|debug)\\b/i" in intake_script
+    assert (
+        "/\\bhelp\\s+(me|with|using|understand|troubleshoot|debug)\\b/i"
+        in intake_script
+    )
     assert "operator-facing help" not in intake_script
 
 

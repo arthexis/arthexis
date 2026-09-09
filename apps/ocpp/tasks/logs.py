@@ -31,7 +31,9 @@ def request_charge_point_log(charger_pk: int, log_type: str = "Diagnostics") -> 
     connector_value = charger.connector_id
     ws = store.get_connection(charger.charger_id, connector_value)
     if ws is None:
-        logger.info("Charge point %s is not connected; log request skipped", charger.charger_id)
+        logger.info(
+            "Charge point %s is not connected; log request skipped", charger.charger_id
+        )
         return 0
 
     log_type_value = (log_type or "").strip()
@@ -41,7 +43,9 @@ def request_charge_point_log(charger_pk: int, log_type: str = "Diagnostics") -> 
         status="Pending",
     )
     message_id = uuid.uuid4().hex
-    capture_key = store.start_log_capture(charger.charger_id, connector_value, request.request_id)
+    capture_key = store.start_log_capture(
+        charger.charger_id, connector_value, request.request_id
+    )
     request.message_id = message_id
     request.session_key = capture_key
     request.status = "Requested"

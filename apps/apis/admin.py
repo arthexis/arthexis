@@ -55,7 +55,9 @@ class GeneralServiceTokenCreateForm(forms.Form):
     """Wizard form to create manual JWT tokens for a target user."""
 
     name = forms.CharField(max_length=120)
-    user_id = forms.IntegerField(min_value=1, help_text="User id that owns the token access scope.")
+    user_id = forms.IntegerField(
+        min_value=1, help_text="User id that owns the token access scope."
+    )
     expires_in_days = forms.IntegerField(
         min_value=1,
         max_value=GeneralServiceToken.MAX_EXPIRY_DAYS,
@@ -84,7 +86,9 @@ class GeneralServiceTokenCreateForm(forms.Form):
                 cleaned["user"] = user
         group_ids_raw = cleaned.get("security_group_ids") or ""
         try:
-            group_ids = sorted({int(part.strip()) for part in group_ids_raw.split(",") if part.strip()})
+            group_ids = sorted(
+                {int(part.strip()) for part in group_ids_raw.split(",") if part.strip()}
+            )
         except ValueError:
             self.add_error(
                 "security_group_ids",
@@ -96,10 +100,16 @@ class GeneralServiceTokenCreateForm(forms.Form):
             found_ids = {group.id for group in groups}
             missing = [group_id for group_id in group_ids if group_id not in found_ids]
             if missing:
-                self.add_error("security_group_ids", f"Unknown Security Group ids: {missing}")
+                self.add_error(
+                    "security_group_ids", f"Unknown Security Group ids: {missing}"
+                )
             if "user" in cleaned:
-                user_group_ids = set(cleaned["user"].groups.values_list("id", flat=True))
-                invalid = [group_id for group_id in group_ids if group_id not in user_group_ids]
+                user_group_ids = set(
+                    cleaned["user"].groups.values_list("id", flat=True)
+                )
+                invalid = [
+                    group_id for group_id in group_ids if group_id not in user_group_ids
+                ]
                 if invalid:
                     self.add_error(
                         "security_group_ids",
@@ -118,7 +128,14 @@ class GeneralServiceTokenCreateForm(forms.Form):
 class ServiceTokenAdmin(admin.ModelAdmin):
     """Self-service workflow for scoped token request, reveal, revoke, and rotate."""
 
-    list_display = ("name", "token_prefix", "status", "expires_at", "created_by", "created_at")
+    list_display = (
+        "name",
+        "token_prefix",
+        "status",
+        "expires_at",
+        "created_by",
+        "created_at",
+    )
     list_filter = ("status", "created_at")
     readonly_fields = (
         "created_at",
@@ -149,10 +166,26 @@ class ServiceTokenAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         opts = self.model._meta
         custom = [
-            path("create/", self.admin_site.admin_view(self.create_token), name=f"{opts.app_label}_{opts.model_name}_create"),
-            path("<int:token_id>/reveal/", self.admin_site.admin_view(self.reveal_token), name=f"{opts.app_label}_{opts.model_name}_reveal"),
-            path("<int:token_id>/revoke/", self.admin_site.admin_view(self.revoke_token), name=f"{opts.app_label}_{opts.model_name}_revoke"),
-            path("<int:token_id>/rotate/", self.admin_site.admin_view(self.rotate_token), name=f"{opts.app_label}_{opts.model_name}_rotate"),
+            path(
+                "create/",
+                self.admin_site.admin_view(self.create_token),
+                name=f"{opts.app_label}_{opts.model_name}_create",
+            ),
+            path(
+                "<int:token_id>/reveal/",
+                self.admin_site.admin_view(self.reveal_token),
+                name=f"{opts.app_label}_{opts.model_name}_reveal",
+            ),
+            path(
+                "<int:token_id>/revoke/",
+                self.admin_site.admin_view(self.revoke_token),
+                name=f"{opts.app_label}_{opts.model_name}_revoke",
+            ),
+            path(
+                "<int:token_id>/rotate/",
+                self.admin_site.admin_view(self.rotate_token),
+                name=f"{opts.app_label}_{opts.model_name}_rotate",
+            ),
         ]
         return custom + urls
 
@@ -167,7 +200,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
 
-    def changeform_view(self, request: HttpRequest, object_id=None, form_url="", extra_context=None):
+    def changeform_view(
+        self, request: HttpRequest, object_id=None, form_url="", extra_context=None
+    ):
         if request.method == "POST":
             raise PermissionDenied
         return super().changeform_view(
@@ -181,7 +216,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
         self._require_manage_permission(request)
         form = ServiceTokenCreateForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
-            expires_at = timezone.now() + timedelta(days=form.cleaned_data["expires_in_days"])
+            expires_at = timezone.now() + timedelta(
+                days=form.cleaned_data["expires_in_days"]
+            )
             token, raw_secret = ServiceToken.issue(
                 actor=request.user,
                 name=form.cleaned_data["name"],
@@ -189,7 +226,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
                 expires_at=expires_at,
             )
             request.session[f"service-token-secret:{token.pk}"] = raw_secret
-            return HttpResponseRedirect(reverse("admin:apis_servicetoken_reveal", args=[token.pk]))
+            return HttpResponseRedirect(
+                reverse("admin:apis_servicetoken_reveal", args=[token.pk])
+            )
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -244,7 +283,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
             "impact_note": "Impact: integrations using this token lose access immediately.",
             "form": form,
         }
-        return TemplateResponse(request, "admin/apis/servicetoken/confirm_action.html", context)
+        return TemplateResponse(
+            request, "admin/apis/servicetoken/confirm_action.html", context
+        )
 
     def rotate_token(self, request: HttpRequest, token_id: int) -> HttpResponse:
         self._require_manage_permission(request)
@@ -269,7 +310,14 @@ class ServiceTokenAdmin(admin.ModelAdmin):
                 token.status = ServiceToken.Status.REPLACED
                 token.revoked_at = timezone.now()
                 token.revoked_reason = form.cleaned_data["reason"]
-                token.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
+                token.save(
+                    update_fields=[
+                        "status",
+                        "revoked_at",
+                        "revoked_reason",
+                        "updated_at",
+                    ]
+                )
                 ServiceTokenEvent.record(
                     token=token,
                     event_type=ServiceTokenEvent.EventType.ROTATED,
@@ -281,7 +329,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
                     },
                 )
                 request.session[f"service-token-secret:{replacement.pk}"] = raw_secret
-                return HttpResponseRedirect(reverse("admin:apis_servicetoken_reveal", args=[replacement.pk]))
+                return HttpResponseRedirect(
+                    reverse("admin:apis_servicetoken_reveal", args=[replacement.pk])
+                )
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -291,7 +341,9 @@ class ServiceTokenAdmin(admin.ModelAdmin):
             "impact_note": "Impact: current token becomes inactive and clients must switch to the new secret.",
             "form": form,
         }
-        return TemplateResponse(request, "admin/apis/servicetoken/confirm_action.html", context)
+        return TemplateResponse(
+            request, "admin/apis/servicetoken/confirm_action.html", context
+        )
 
 
 @admin.register(ServiceTokenEvent)
@@ -314,7 +366,15 @@ class ServiceTokenEventAdmin(admin.ModelAdmin):
 class GeneralServiceTokenAdmin(admin.ModelAdmin):
     """Admin wizard for general JWT token issue/reveal/revoke and automatic retirement."""
 
-    list_display = ("name", "user", "token_prefix", "status", "expires_at", "created_by", "created_at")
+    list_display = (
+        "name",
+        "user",
+        "token_prefix",
+        "status",
+        "expires_at",
+        "created_by",
+        "created_at",
+    )
     list_filter = ("status", "created_at")
     readonly_fields = (
         "claims",
@@ -347,9 +407,21 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         opts = self.model._meta
         custom = [
-            path("create/", self.admin_site.admin_view(self.create_token), name=f"{opts.app_label}_{opts.model_name}_create"),
-            path("<int:token_id>/reveal/", self.admin_site.admin_view(self.reveal_token), name=f"{opts.app_label}_{opts.model_name}_reveal"),
-            path("<int:token_id>/revoke/", self.admin_site.admin_view(self.revoke_token), name=f"{opts.app_label}_{opts.model_name}_revoke"),
+            path(
+                "create/",
+                self.admin_site.admin_view(self.create_token),
+                name=f"{opts.app_label}_{opts.model_name}_create",
+            ),
+            path(
+                "<int:token_id>/reveal/",
+                self.admin_site.admin_view(self.reveal_token),
+                name=f"{opts.app_label}_{opts.model_name}_reveal",
+            ),
+            path(
+                "<int:token_id>/revoke/",
+                self.admin_site.admin_view(self.revoke_token),
+                name=f"{opts.app_label}_{opts.model_name}_revoke",
+            ),
         ]
         return custom + urls
 
@@ -365,7 +437,9 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
 
-    def changeform_view(self, request: HttpRequest, object_id=None, form_url="", extra_context=None):
+    def changeform_view(
+        self, request: HttpRequest, object_id=None, form_url="", extra_context=None
+    ):
         if request.method == "POST":
             raise PermissionDenied
         return super().changeform_view(
@@ -380,7 +454,9 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
         self._require_reveal_permission(request)
         form = GeneralServiceTokenCreateForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
-            expires_at = timezone.now() + timedelta(days=form.cleaned_data["expires_in_days"])
+            expires_at = timezone.now() + timedelta(
+                days=form.cleaned_data["expires_in_days"]
+            )
             token, raw_token = GeneralServiceToken.issue(
                 actor=request.user,
                 user=form.cleaned_data["user"],
@@ -390,7 +466,9 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
                 claims=form.cleaned_data.get("custom_claims") or {},
             )
             request.session[f"general-service-token-secret:{token.pk}"] = raw_token
-            return HttpResponseRedirect(reverse("admin:apis_generalservicetoken_reveal", args=[token.pk]))
+            return HttpResponseRedirect(
+                reverse("admin:apis_generalservicetoken_reveal", args=[token.pk])
+            )
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -435,7 +513,9 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
                 impact_note=form.cleaned_data["impact_note"],
             )
             messages.success(request, f"Revoked {token.name}.")
-            return HttpResponseRedirect(reverse("admin:apis_generalservicetoken_changelist"))
+            return HttpResponseRedirect(
+                reverse("admin:apis_generalservicetoken_changelist")
+            )
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -445,7 +525,9 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
             "impact_note": "Impact: integrations using this token lose access immediately.",
             "form": form,
         }
-        return TemplateResponse(request, "admin/apis/servicetoken/confirm_action.html", context)
+        return TemplateResponse(
+            request, "admin/apis/servicetoken/confirm_action.html", context
+        )
 
 
 @admin.register(GeneralServiceTokenEvent)

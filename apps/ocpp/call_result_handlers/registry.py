@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .common import ContextHandler
 from .authorization import clear_cache, get_local_list_version, send_local_list
 from .certificates import (
     certificate_signed,
@@ -10,6 +9,7 @@ from .certificates import (
     get_installed_certificate_ids,
     install_certificate,
 )
+from .common import ContextHandler
 from .configuration import (
     change_availability,
     change_configuration,
@@ -20,7 +20,12 @@ from .configuration import (
     unlock_connector,
 )
 from .diagnostics import get_diagnostics, get_log
-from .firmware import data_transfer, publish_firmware, unpublish_firmware, update_firmware
+from .firmware import (
+    data_transfer,
+    publish_firmware,
+    unpublish_firmware,
+    update_firmware,
+)
 from .profiles import (
     clear_charging_profile,
     clear_display_message,

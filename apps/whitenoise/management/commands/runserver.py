@@ -36,7 +36,6 @@ RunserverCommand = get_next_runserver_command()
 class Command(RunserverCommand):
     """Delegate to WhiteNoise's ``runserver_nostatic`` behavior."""
 
-
     def add_arguments(self, parser):
         super().add_arguments(parser)
         if parser.get_default("use_static_handler") is True:

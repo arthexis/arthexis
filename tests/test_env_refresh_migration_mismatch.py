@@ -18,7 +18,9 @@ pytestmark = [gate.upgrade]
 
 @pytest.fixture
 def env_refresh_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
-    module_path = Path(__file__).resolve().parents[1] / "scripts/maintenance/env_refresh.py"
+    module_path = (
+        Path(__file__).resolve().parents[1] / "scripts/maintenance/env_refresh.py"
+    )
     spec = importlib.util.spec_from_file_location("env_refresh_under_test", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load env-refresh module")
@@ -144,7 +146,9 @@ def test_auto_reconcile_rebuilds_sqlite_after_history_check_failure(
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(env_refresh_module, "_unlink_sqlite_db", unlink_database)
-    monkeypatch.setattr(env_refresh_module, "_run_manage_makemigrations", fake_makemigrations)
+    monkeypatch.setattr(
+        env_refresh_module, "_run_manage_makemigrations", fake_makemigrations
+    )
     monkeypatch.setattr(
         env_refresh_module,
         "_prepare_reconcile_snapshot",
@@ -168,7 +172,9 @@ def test_auto_reconcile_rebuilds_sqlite_after_history_check_failure(
             backend="sqlite",
         ),
     )
-    monkeypatch.setattr(env_refresh_module, "_ensure_content_types", lambda **kwargs: None)
+    monkeypatch.setattr(
+        env_refresh_module, "_ensure_content_types", lambda **kwargs: None
+    )
     monkeypatch.setattr(env_refresh_module, "_fixture_files", lambda: [])
     monkeypatch.setattr(
         env_refresh_module,
@@ -194,7 +200,10 @@ def test_auto_reconcile_rebuilds_sqlite_after_history_check_failure(
     monkeypatch.setattr(
         env_refresh_module.Node,
         "register_current",
-        lambda notify_peers=False: (SimpleNamespace(public_endpoint="test.local"), False),
+        lambda notify_peers=False: (
+            SimpleNamespace(public_endpoint="test.local"),
+            False,
+        ),
     )
     monkeypatch.setattr(
         env_refresh_module,
@@ -310,7 +319,9 @@ def test_sqlite_reconciliation_validates_fresh_migration_state(
             backend="sqlite",
         ),
     )
-    monkeypatch.setattr(env_refresh_module, "_ensure_content_types", lambda **kwargs: None)
+    monkeypatch.setattr(
+        env_refresh_module, "_ensure_content_types", lambda **kwargs: None
+    )
     monkeypatch.setattr(env_refresh_module, "_fixture_files", lambda: [])
     monkeypatch.setattr(
         env_refresh_module,
@@ -325,7 +336,10 @@ def test_sqlite_reconciliation_validates_fresh_migration_state(
     monkeypatch.setattr(
         env_refresh_module.Node,
         "register_current",
-        lambda notify_peers=False: (SimpleNamespace(public_endpoint="test.local"), False),
+        lambda notify_peers=False: (
+            SimpleNamespace(public_endpoint="test.local"),
+            False,
+        ),
     )
     monkeypatch.setattr(
         env_refresh_module,
@@ -441,13 +455,18 @@ def test_successful_auto_reconcile_attempt_removes_unused_snapshot(
         lambda **kwargs: (snapshot_path, tmp_path / "db.sqlite3", None),
     )
     monkeypatch.setattr(env_refresh_module, "_pending_migration_graph", lambda: False)
-    monkeypatch.setattr(env_refresh_module, "_ensure_content_types", lambda **kwargs: None)
+    monkeypatch.setattr(
+        env_refresh_module, "_ensure_content_types", lambda **kwargs: None
+    )
     monkeypatch.setattr(env_refresh_module, "_fixture_files", lambda: [])
     monkeypatch.setattr(env_refresh_module, "load_local_seed_zips", lambda: 0)
     monkeypatch.setattr(
         env_refresh_module.Node,
         "register_current",
-        lambda notify_peers=False: (SimpleNamespace(public_endpoint="test.local"), False),
+        lambda notify_peers=False: (
+            SimpleNamespace(public_endpoint="test.local"),
+            False,
+        ),
     )
 
     env_refresh_module.run_database_tasks(auto_reconcile_on_mismatch=True)

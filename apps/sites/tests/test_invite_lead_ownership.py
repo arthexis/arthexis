@@ -22,12 +22,12 @@ def test_core_lead_imports_are_compatibility_aliases():
 
     assert LegacyInviteLead is InviteLead
     assert LegacyLeadBase is LeadBase
-    assert importlib.import_module("apps.core.models.invite_lead") is importlib.import_module(
-        "apps.sites.models.invite_lead"
-    )
-    assert importlib.import_module("apps.core.models.lead_base") is importlib.import_module(
-        "apps.sites.models.lead_base"
-    )
+    assert importlib.import_module(
+        "apps.core.models.invite_lead"
+    ) is importlib.import_module("apps.sites.models.invite_lead")
+    assert importlib.import_module(
+        "apps.core.models.lead_base"
+    ) is importlib.import_module("apps.sites.models.lead_base")
 
 
 def test_core_registry_no_longer_owns_invite_lead():

@@ -291,10 +291,14 @@ def _preserve_optional_app_selectors(
         return set()
 
     optional_aliases = {
-        alias for selector in optional_entries for alias in _app_selector_aliases(selector)
+        alias
+        for selector in optional_entries
+        for alias in _app_selector_aliases(selector)
     }
     disabled_aliases = {
-        alias for selector in disabled_names for alias in _app_selector_aliases(selector)
+        alias
+        for selector in disabled_names
+        for alias in _app_selector_aliases(selector)
     }
     return {
         entry.strip()

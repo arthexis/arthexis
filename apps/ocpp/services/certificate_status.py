@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 
-from django.conf import settings
 import requests
+from django.conf import settings
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from apps.ocpp.models import InstalledCertificate
 from apps.ocpp.payload_types import CertificateHashData, OCSPResultPayload
-
 
 STATE_ACCEPTED = "accepted"
 STATE_NOT_FOUND = "not_found"
@@ -126,7 +125,9 @@ def check_certificate_status(
 
 
 def _check_ocsp(hash_data: CertificateHashData) -> tuple[OCSPResultPayload, str]:
-    configured_url = str(getattr(settings, "OCPP_CERT_STATUS_OCSP_URL", "") or "").strip()
+    configured_url = str(
+        getattr(settings, "OCPP_CERT_STATUS_OCSP_URL", "") or ""
+    ).strip()
     if not configured_url:
         return _structured_ocsp_result(status=_OCSP_STATUS_GOOD, responder_url=""), ""
 
@@ -147,7 +148,9 @@ def _check_ocsp(hash_data: CertificateHashData) -> tuple[OCSPResultPayload, str]
 
     status = str(response_json.get("status") or _OCSP_STATUS_UNKNOWN).strip().lower()
     responder_url = (
-        str(response_json.get("responderUrl") or response_json.get("responderURL") or "").strip()
+        str(
+            response_json.get("responderUrl") or response_json.get("responderURL") or ""
+        ).strip()
         or configured_url
     )
     errors = response_json.get("errors")
@@ -170,7 +173,9 @@ def _check_ocsp(hash_data: CertificateHashData) -> tuple[OCSPResultPayload, str]
 
 
 def _check_crl(hash_data: CertificateHashData) -> tuple[bool, str]:
-    configured_url = str(getattr(settings, "OCPP_CERT_STATUS_CRL_URL", "") or "").strip()
+    configured_url = str(
+        getattr(settings, "OCPP_CERT_STATUS_CRL_URL", "") or ""
+    ).strip()
     if not configured_url:
         return False, ""
 
@@ -282,12 +287,14 @@ def _iso_datetime_or_now(value: Any) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
-    return datetime.now(tz=timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _validate_chain(certificate_chain: str) -> tuple[bool, str]:
-    trust_store_path = str(getattr(settings, "OCPP_CERT_STATUS_TRUST_STORE", "") or "").strip()
+    trust_store_path = str(
+        getattr(settings, "OCPP_CERT_STATUS_TRUST_STORE", "") or ""
+    ).strip()
     if not trust_store_path:
         return True, ""
     if not certificate_chain.strip():

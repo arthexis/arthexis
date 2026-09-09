@@ -43,7 +43,9 @@ class SiteBadge(Entity):
 
 
 SITE_BADGE_FAVICON_BUCKET_SLUG = "sites-badge-favicons"
-SITE_BADGE_FAVICON_ALLOWED_PATTERNS = "\n".join(["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"])
+SITE_BADGE_FAVICON_ALLOWED_PATTERNS = "\n".join(
+    ["*.png", "*.ico", "*.svg", "*.jpg", "*.jpeg"]
+)
 
 
 def get_site_badge_favicon_bucket():

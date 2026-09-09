@@ -40,7 +40,9 @@ def _readme_base_for_module(root_base: Path, module_path: str) -> Path:
     try:
         readme_base.relative_to(root_base)
     except ValueError:
-        logger.warning("Ignoring README module path outside the suite root: %s", module_path)
+        logger.warning(
+            "Ignoring README module path outside the suite root: %s", module_path
+        )
         return root_base
     return readme_base
 
@@ -73,7 +75,11 @@ def _locate_readme_document(role, lang: str) -> SimpleNamespace:
         candidates.extend(_localized_readme_candidates(locale_base, lang))
 
     readme_file = next(
-        (path for path in candidates if path.is_file() and path.suffix.lower() == ".md"),
+        (
+            path
+            for path in candidates
+            if path.is_file() and path.suffix.lower() == ".md"
+        ),
         None,
     )
     if readme_file is None:

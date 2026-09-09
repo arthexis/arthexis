@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from django.http import HttpRequest
 from django.utils import timezone
@@ -65,7 +65,10 @@ def authenticate_enrollment(
     if enrollment is None:
         return None, (401, "enrollment_token_invalid", "invalid enrollment token")
 
-    if enrollment.revoked_at is not None or enrollment.status == NodeEnrollment.Status.REVOKED:
+    if (
+        enrollment.revoked_at is not None
+        or enrollment.status == NodeEnrollment.Status.REVOKED
+    ):
         enrollment.last_auth_error_code = "enrollment_token_revoked"
         enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
         return None, (401, "enrollment_token_revoked", "enrollment token revoked")
@@ -83,7 +86,10 @@ def authenticate_enrollment(
         enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
         return None, (403, "enrollment_not_active", "enrollment token is not active")
 
-    if enrollment.node.mesh_enrollment_state != enrollment.node.MeshEnrollmentState.ENROLLED:
+    if (
+        enrollment.node.mesh_enrollment_state
+        != enrollment.node.MeshEnrollmentState.ENROLLED
+    ):
         enrollment.last_auth_error_code = "node_not_enrolled"
         enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
         return None, (403, "node_not_enrolled", "node is not enrolled")
@@ -91,11 +97,17 @@ def authenticate_enrollment(
     if enrollment.scope != required_scope:
         enrollment.last_auth_error_code = "enrollment_scope_insufficient"
         enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
-        return None, (403, "enrollment_scope_insufficient", "enrollment token has insufficient scope")
+        return None, (
+            403,
+            "enrollment_scope_insufficient",
+            "enrollment token has insufficient scope",
+        )
 
     enrollment.last_authenticated_at = timezone.now()
     enrollment.last_auth_error_code = ""
-    enrollment.save(update_fields=["last_authenticated_at", "last_auth_error_code", "updated_at"])
+    enrollment.save(
+        update_fields=["last_authenticated_at", "last_auth_error_code", "updated_at"]
+    )
     logger.info(
         "Enrollment authenticated",
         extra={

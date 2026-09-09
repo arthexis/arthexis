@@ -229,8 +229,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             if when is None:
                 continue
             if timezone.is_naive(when):
-                when = timezone.make_aware(when, datetime.timezone.utc)
-            candidates.append(when.astimezone(datetime.timezone.utc))
+                when = timezone.make_aware(when, datetime.UTC)
+            candidates.append(when.astimezone(datetime.UTC))
         if not candidates:
             return None
         return min(candidates)

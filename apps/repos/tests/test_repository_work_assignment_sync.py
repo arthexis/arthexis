@@ -64,8 +64,7 @@ def _pull_request(repository, number=8733, title="Improve PR workflow"):
         state="open",
         labels=["automation"],
         html_url=(
-            f"https://github.example/{repository.owner}/"
-            f"{repository.name}/pull/{number}"
+            f"https://github.example/{repository.owner}/{repository.name}/pull/{number}"
         ),
         created_at=now,
         updated_at=now,

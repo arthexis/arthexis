@@ -3,7 +3,7 @@ from __future__ import annotations
 import errno
 import logging
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as datetime_timezone
 from types import ModuleType, SimpleNamespace
 
@@ -329,7 +329,7 @@ def test_read_rfid_adds_transport_command_card_name(monkeypatch):
 
 def test_read_rfid_imports_transport_writer_metadata(monkeypatch):
     metadata = command_layout.encode_command_metadata(command_block_count=1)
-    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=UTC)
     fake_reader = _FakeReader(
         uid=[0xDE, 0xAD, 0xBE, 0xEF],
         read_blocks={
@@ -394,7 +394,7 @@ def test_read_rfid_clears_blank_transport_metadata(monkeypatch):
         kind=RFID.CLASSIC,
         lcd_label="Old label",
         writer_id="OLD-WRITER",
-        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        writer_written_at=datetime(2026, 5, 13, tzinfo=UTC),
         traits={},
         command_card_name="Old Command",
         command_card_metadata={"valid": True},
@@ -448,7 +448,7 @@ def test_read_rfid_clears_blank_transport_metadata(monkeypatch):
     assert tag.command_provenance_key == ""
     assert tag.command_result_digest == ""
     assert tag.writer_id == "OLD-WRITER"
-    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=UTC)
     assert saved_fields == [
         [
             "command_card_metadata",
@@ -537,7 +537,7 @@ def test_read_rfid_ignores_partial_blank_transport_metadata(monkeypatch):
         kind=RFID.CLASSIC,
         lcd_label="Old label",
         writer_id="OLD-WRITER",
-        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        writer_written_at=datetime(2026, 5, 13, tzinfo=UTC),
         traits={},
     )
     saved_fields = []
@@ -570,7 +570,7 @@ def test_read_rfid_ignores_partial_blank_transport_metadata(monkeypatch):
     assert result["lcd_label"] == "Old label"
     assert tag.lcd_label == "Old label"
     assert tag.writer_id == "OLD-WRITER"
-    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=UTC)
     assert saved_fields == []
 
 
@@ -766,7 +766,7 @@ def test_deep_classic_read_ignores_partial_blank_transport_metadata():
         data=[],
         lcd_label="Old label",
         writer_id="OLD-WRITER",
-        writer_written_at=datetime(2026, 5, 13, tzinfo=datetime_timezone.utc),
+        writer_written_at=datetime(2026, 5, 13, tzinfo=UTC),
         sector_keys={},
         traits={},
     )
@@ -787,7 +787,7 @@ def test_deep_classic_read_ignores_partial_blank_transport_metadata():
     assert result["lcd_label"] == "Old label"
     assert tag.lcd_label == "Old label"
     assert tag.writer_id == "OLD-WRITER"
-    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=datetime_timezone.utc)
+    assert tag.writer_written_at == datetime(2026, 5, 13, tzinfo=UTC)
     assert saved_fields == [["data"]]
 
 
@@ -907,7 +907,7 @@ def test_deep_classic_read_keeps_result_blocks_for_expected_digest():
 
 
 def test_write_writer_metadata_persists_to_card_before_db_update(monkeypatch):
-    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=UTC)
     tag = SimpleNamespace(writer_id="", writer_written_at=None)
     writes = {}
 
@@ -939,8 +939,8 @@ def test_write_writer_metadata_persists_to_card_before_db_update(monkeypatch):
 
 
 def test_write_writer_metadata_failure_does_not_update_db_fields(monkeypatch):
-    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=datetime_timezone.utc)
-    old_written_at = datetime(2026, 5, 1, tzinfo=datetime_timezone.utc)
+    written_at = datetime(2026, 5, 30, 12, 34, 56, tzinfo=UTC)
+    old_written_at = datetime(2026, 5, 1, tzinfo=UTC)
     tag = SimpleNamespace(writer_id="OLD", writer_written_at=old_written_at)
 
     def _write_block(_mfrc, _tag, _uid, block, _data):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -297,7 +297,7 @@ class Command(BaseCommand):
         payload = {
             "schema_version": 1,
             "tool": "django-migrations",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "database": {
                 "alias": database,
                 "vendor": getattr(connection, "vendor", "unknown"),
@@ -438,7 +438,7 @@ class Command(BaseCommand):
             if not output_path.is_absolute():
                 output_path = Path(settings.BASE_DIR) / output_path
             return output_path
-        identifier = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        identifier = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         identifier_path = Path(identifier)
         if (
             identifier_path.is_absolute()

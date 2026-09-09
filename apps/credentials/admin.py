@@ -23,7 +23,12 @@ class SSHAccountAdmin(admin.ModelAdmin):
         "node__network_hostname",
         "node__mac_address",
     )
-    readonly_fields = ("created_at", "updated_at", "private_key_metadata", "public_key_metadata")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "private_key_metadata",
+        "public_key_metadata",
+    )
     fields = (
         "node",
         "username",
@@ -48,7 +53,11 @@ class SSHAccountAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Credential status"))
     def credential_status(self, obj: SSHAccount) -> str:
-        has_auth = bool((obj.password or "").strip() or obj.private_key_media_id or obj.public_key_media_id)
+        has_auth = bool(
+            (obj.password or "").strip()
+            or obj.private_key_media_id
+            or obj.public_key_media_id
+        )
         if not has_auth:
             return _("Missing")
         age = timezone.now() - obj.updated_at

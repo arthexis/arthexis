@@ -26,11 +26,13 @@ def test_detect_runserver_port_prefers_matching_base_dir(monkeypatch, tmp_path: 
     monkeypatch.setattr(
         service_probe,
         "_process_cwd_matches_base_dir",
-        lambda pid, base_dir: {
-            1001: other_base_dir.resolve(),
-            1002: target_base_dir.resolve(),
-        }[pid]
-        == base_dir,
+        lambda pid, base_dir: (
+            {
+                1001: other_base_dir.resolve(),
+                1002: target_base_dir.resolve(),
+            }[pid]
+            == base_dir
+        ),
     )
 
     detected_port = service_probe.detect_runserver_port(target_base_dir)
@@ -83,16 +85,18 @@ def test_detect_runserver_port_returns_none_when_base_dir_is_missing(
 
 
 def test_process_cwd_matches_base_dir_handles_missing_proc_entry():
-    assert (
-        service_probe._process_cwd_matches_base_dir(999999, Path("/tmp")) is False
-    )
+    assert service_probe._process_cwd_matches_base_dir(999999, Path("/tmp")) is False
 
 
-def test_main_detect_runserver_port_accepts_base_dir(monkeypatch, tmp_path: Path, capsys):
+def test_main_detect_runserver_port_accepts_base_dir(
+    monkeypatch, tmp_path: Path, capsys
+):
     target_base_dir = tmp_path / "arthexis"
     target_base_dir.mkdir()
 
-    monkeypatch.setattr(service_probe, "detect_runserver_port", lambda base_dir=None: 8888)
+    monkeypatch.setattr(
+        service_probe, "detect_runserver_port", lambda base_dir=None: 8888
+    )
 
     exit_code = service_probe.main(
         ["detect-runserver-port", "--base-dir", str(target_base_dir)]

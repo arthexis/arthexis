@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ap_client_activity.py"
 
 
@@ -18,7 +17,9 @@ def load_activity_module():
     return module
 
 
-def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
+def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(
+    tmp_path, monkeypatch
+):
     module = load_activity_module()
     log_path = tmp_path / "activity.jsonl"
     rows = [
@@ -26,10 +27,14 @@ def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(tmp_path,
         {"event_type": "middle"},
         {"event_type": "new"},
     ]
-    log_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    log_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+    )
 
     def fail_read_text(*_args, **_kwargs):
-        raise AssertionError("_load_jsonl should not read the whole file for limited loads")
+        raise AssertionError(
+            "_load_jsonl should not read the whole file for limited loads"
+        )
 
     monkeypatch.setattr(module.Path, "read_text", fail_read_text)
 
@@ -58,7 +63,9 @@ def test_build_report_does_not_treat_consent_history_as_authorization(tmp_path):
         "ip_address": "10.42.0.25",
         "mac_address": "aa:bb:cc:dd:ee:ff",
     }
-    (state_dir / "consents.jsonl").write_text(json.dumps(consent) + "\n", encoding="utf-8")
+    (state_dir / "consents.jsonl").write_text(
+        json.dumps(consent) + "\n", encoding="utf-8"
+    )
 
     report = module.build_report(state_dir, limit=500)
 

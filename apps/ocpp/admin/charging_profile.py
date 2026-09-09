@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class ChargingProfileSendForm(forms.Form):
     charger = forms.ModelChoiceField(
         queryset=Charger.objects.all(),
@@ -17,6 +18,7 @@ class ChargingScheduleForm(forms.ModelForm):
     class Meta:
         model = ChargingSchedule
         fields = "__all__"
+
 
 class ChargingScheduleInline(admin.StackedInline):
     model = ChargingSchedule
@@ -42,6 +44,7 @@ class ChargingProfileDispatchInline(admin.TabularInline):
         "updated_at",
     )
     fields = readonly_fields
+
 
 class ChargingProfileAdmin(EntityModelAdmin):
     actions = ("send_bundled_profile",)
@@ -84,7 +87,9 @@ class ChargingProfileAdmin(EntityModelAdmin):
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
         next_id = (
-            ChargingProfile.objects.aggregate(Max("charging_profile_id"))["charging_profile_id__max"]
+            ChargingProfile.objects.aggregate(Max("charging_profile_id"))[
+                "charging_profile_id__max"
+            ]
             or 0
         )
         initial.setdefault("charging_profile_id", next_id + 1)
@@ -114,7 +119,9 @@ class ChargingProfileAdmin(EntityModelAdmin):
                 )
             if profile.schedule.charging_rate_unit != first.schedule.charging_rate_unit:
                 return None, str(
-                    _("Profiles must use the same charging rate unit to bundle together.")
+                    _(
+                        "Profiles must use the same charging rate unit to bundle together."
+                    )
                 )
 
         if not getattr(first, "schedule", None):
@@ -131,13 +138,18 @@ class ChargingProfileAdmin(EntityModelAdmin):
         )
         return payload, None
 
-    def _validate_units(self, request, charger: Charger, schedule_unit: str | None) -> bool:
+    def _validate_units(
+        self, request, charger: Charger, schedule_unit: str | None
+    ) -> bool:
         if schedule_unit is None:
             return True
         if schedule_unit == ChargingProfile.RateUnit.AMP:
             return True
         charger_units = {Charger.EnergyUnit.W, Charger.EnergyUnit.KW}
-        if charger.energy_unit in charger_units and schedule_unit != ChargingProfile.RateUnit.WATT:
+        if (
+            charger.energy_unit in charger_units
+            and schedule_unit != ChargingProfile.RateUnit.WATT
+        ):
             self.message_user(
                 request,
                 _(

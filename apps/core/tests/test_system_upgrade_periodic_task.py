@@ -6,10 +6,10 @@ import builtins
 import logging
 
 import pytest
+from django.db import DatabaseError
 
 from apps.core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
 from apps.core.system.upgrade import _get_auto_upgrade_periodic_task
-from django.db import DatabaseError
 
 
 def test_get_auto_upgrade_periodic_task_handles_missing_django_celery_beat(
@@ -58,7 +58,9 @@ def test_get_auto_upgrade_periodic_task_repairs_missing_task_row(monkeypatch):
             },
         )
 
-    monkeypatch.setattr("apps.core.system.upgrade.ensure_auto_upgrade_periodic_task", _ensure_task)
+    monkeypatch.setattr(
+        "apps.core.system.upgrade.ensure_auto_upgrade_periodic_task", _ensure_task
+    )
 
     task, available, error = _get_auto_upgrade_periodic_task()
 
@@ -82,7 +84,9 @@ def test_get_auto_upgrade_periodic_task_reports_database_failure_during_repair(
     def _fail_repair():
         raise DatabaseError("database unavailable")
 
-    monkeypatch.setattr("apps.core.system.upgrade.ensure_auto_upgrade_periodic_task", _fail_repair)
+    monkeypatch.setattr(
+        "apps.core.system.upgrade.ensure_auto_upgrade_periodic_task", _fail_repair
+    )
 
     with caplog.at_level(logging.ERROR):
         task, available, error = _get_auto_upgrade_periodic_task()

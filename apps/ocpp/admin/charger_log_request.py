@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class ChargerLogRequestAdmin(EntityModelAdmin):
     list_display = (
         "charger",

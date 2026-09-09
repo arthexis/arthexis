@@ -43,7 +43,7 @@ def test_energy_reports_form_defaults_to_last_month(client, monkeypatch):
     def fake_render(request, template_name, context, status=200):
         del request, template_name
         form = context["form"]
-        html = f'value="{form["start"].value()}" ' f'value="{form["end"].value()}"'
+        html = f'value="{form["start"].value()}" value="{form["end"].value()}"'
         return HttpResponse(html, status=status)
 
     monkeypatch.setattr("apps.ocpp.views.reports.render", fake_render)

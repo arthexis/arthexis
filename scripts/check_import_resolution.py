@@ -5,6 +5,7 @@ This script walks the project tree looking for Python modules whose imports
 cannot be resolved. It is intended to be used as a lightweight linting step
 outside the runtime test suite.
 """
+
 from __future__ import annotations
 
 import argparse

@@ -9,16 +9,16 @@ import os
 import queue
 import socket
 import threading
+from collections.abc import Callable, Mapping, MutableMapping
 from pathlib import Path
-from typing import Callable, Mapping, MutableMapping
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management.utils import get_random_secret_key
 from django.http import request as http_request
 from django.http.request import split_domain_port
-from apps.celery.utils import resolve_celery_shutdown_timeout
 
+from apps.celery.utils import resolve_celery_shutdown_timeout
 
 __all__ = [
     "extract_ip_from_host",
@@ -201,7 +201,9 @@ def install_normalize_forwarded_host() -> None:
     def _patched(self):
         if settings.USE_X_FORWARDED_HOST and self.META.get("HTTP_X_FORWARDED_HOST"):
             forwarded_host = self.META["HTTP_X_FORWARDED_HOST"]
-            self.META["HTTP_X_FORWARDED_HOST"] = normalize_forwarded_host_header(forwarded_host)
+            self.META["HTTP_X_FORWARDED_HOST"] = normalize_forwarded_host_header(
+                forwarded_host
+            )
             try:
                 return original_get_raw_host(self)
             finally:
@@ -220,7 +222,6 @@ def install_validate_host_with_subnets() -> None:
         return validate_host_with_subnets(host, allowed_hosts, original_validate)
 
     http_request.validate_host = _patched
-
 
 
 def load_secret_key(

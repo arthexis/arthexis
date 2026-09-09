@@ -124,7 +124,9 @@ def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
     _store_pending_metadata_redis(message_id, copy)
 
 
-def register_monitoring_report_request(request_id: int, metadata: dict[str, object]) -> None:
+def register_monitoring_report_request(
+    request_id: int, metadata: dict[str, object]
+) -> None:
     """Track a monitoring report request by request id."""
 
     if request_id is None:
@@ -162,7 +164,6 @@ def pop_pending_call(message_id: str) -> dict[str, object] | None:
     return metadata
 
 
-
 def has_pending_result(message_id: str) -> bool:
     """Return whether a pending call result exists for ``message_id``."""
 
@@ -170,6 +171,7 @@ def has_pending_result(message_id: str) -> bool:
         if message_id in _pending_call_results:
             return True
     return _load_pending_result_redis(message_id) is not None
+
 
 def record_pending_call_result(
     message_id: str,

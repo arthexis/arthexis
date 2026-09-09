@@ -5,7 +5,6 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import resolve_url
 
-
 ADMIN_LOGIN_URL_NAME = "admin:login"
 
 
@@ -28,7 +27,9 @@ def staff_required(view_func):
     @wraps(view_func)
     def decorated(request, *args, **kwargs):
         if not request.user.is_authenticated:
-            return redirect_to_login(request.get_full_path(), resolve_url(ADMIN_LOGIN_URL_NAME))
+            return redirect_to_login(
+                request.get_full_path(), resolve_url(ADMIN_LOGIN_URL_NAME)
+            )
         if not request.user.is_active or not request.user.is_staff:
             raise PermissionDenied
         return view_func(request, *args, **kwargs)

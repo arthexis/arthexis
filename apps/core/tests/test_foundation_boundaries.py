@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 APPS_DIR = Path(__file__).resolve().parents[2]
 BASE_MODELS = APPS_DIR / "base" / "models.py"
 

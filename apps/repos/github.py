@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING
 
@@ -101,7 +101,7 @@ def parse_github_timestamp(value: str | None) -> datetime:
     if parsed is None:
         parsed = timezone.now()
     if timezone.is_naive(parsed):
-        parsed = timezone.make_aware(parsed, dt_timezone.utc)
+        parsed = timezone.make_aware(parsed, UTC)
     return parsed
 
 
@@ -143,6 +143,7 @@ def ensure_repository(repository: GitHubRepository) -> GitHubRepository:
 
 # Issue helpers
 
+
 def resolve_issue_repository() -> tuple[str, str]:
     """Return the ``(owner, repo)`` tuple for the active package."""
 
@@ -181,7 +182,9 @@ def build_issue_payload(
     """Return an API payload for GitHub issues."""
 
     issue = GitHubIssue.from_active_repository()
-    return issue._build_issue_payload(title, body, labels=labels, fingerprint=fingerprint)
+    return issue._build_issue_payload(
+        title, body, labels=labels, fingerprint=fingerprint
+    )
 
 
 def create_issue(
@@ -211,6 +214,7 @@ def create_pull_request_comment(pull_number: int, body: str):
 
 # Repository helpers
 
+
 def create_repository(
     owner: str | None,
     repo: str,
@@ -223,7 +227,10 @@ def create_repository(
     from apps.repos.models.repositories import GitHubRepository
 
     repository = GitHubRepository(
-        owner=owner or "", name=repo, description=description or "", is_private=visibility == "private"
+        owner=owner or "",
+        name=repo,
+        description=description or "",
+        is_private=visibility == "private",
     )
 
     package = None

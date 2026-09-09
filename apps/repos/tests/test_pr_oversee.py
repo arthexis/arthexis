@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -852,14 +852,8 @@ def test_domain_preflight_detects_gway_imager_node_registration_risk():
         "Image burn/bootstrap",
         "Node registration",
     ]
-    assert (
-        ".venv/bin/python -m pytest apps/imager"
-        in result["validationCommands"]
-    )
-    assert (
-        ".venv/bin/python -m pytest apps/nodes"
-        in result["validationCommands"]
-    )
+    assert ".venv/bin/python -m pytest apps/imager" in result["validationCommands"]
+    assert ".venv/bin/python -m pytest apps/nodes" in result["validationCommands"]
 
 
 def test_compact_monitor_result_summarizes_waiting_checks():
@@ -1261,7 +1255,7 @@ def test_closed_pr_report_filters_recent_closed_prs_and_counts_states():
 
     result = overseer.closed_pr_report(
         since_hours=8,
-        now=datetime(2026, 6, 13, 1, 0, tzinfo=timezone.utc),
+        now=datetime(2026, 6, 13, 1, 0, tzinfo=UTC),
     )
 
     assert result["cutoff"] == "2026-06-12T17:00:00Z"
@@ -1385,7 +1379,9 @@ def test_dependency_graph_orders_prerequisites_and_blocks_unmerged_dependencies(
             CommandResult(0, json.dumps(_review_threads_payload())),
             CommandResult(0, json.dumps(_pr_payload(number=9106, reviewDecision=""))),
             CommandResult(0, json.dumps(_review_threads_payload())),
-            CommandResult(0, json.dumps(_pr_payload(number=1, title="Kiosk", reviewDecision=""))),
+            CommandResult(
+                0, json.dumps(_pr_payload(number=1, title="Kiosk", reviewDecision=""))
+            ),
             CommandResult(0, json.dumps(_review_threads_payload())),
         ]
     )
@@ -1408,14 +1404,14 @@ def test_dependency_graph_orders_prerequisites_and_blocks_unmerged_dependencies(
     assert items["arthexis/arthexis#9105"]["status"] == "merged"
     assert items["arthexis/arthexis#9106"]["status"] == "ready-to-merge"
     assert items["arthexis/gway-ap-kiosk#1"]["status"] == "blocked-by-dependency"
-    assert items["arthexis/gway-ap-kiosk#1"]["blockedBy"] == [
-        "arthexis/arthexis#9104"
-    ]
+    assert items["arthexis/gway-ap-kiosk#1"]["blockedBy"] == ["arthexis/arthexis#9104"]
     assert result["nextActions"] == [
         {"pr": "arthexis/arthexis#9104", "action": "merge"},
         {"pr": "arthexis/arthexis#9106", "action": "merge"},
     ]
-    pr_view_commands = [command for command in runner.commands if command[1:3] == ["pr", "view"]]
+    pr_view_commands = [
+        command for command in runner.commands if command[1:3] == ["pr", "view"]
+    ]
     assert pr_view_commands[3][:6] == [
         "gh",
         "pr",
@@ -1457,9 +1453,7 @@ def test_dependency_graph_distinguishes_cycle_members_from_downstream_prs():
     )
     overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
 
-    result = overseer.dependency_graph(
-        dependencies=["#1=#2", "#2=#1", "#3=#1"]
-    )
+    result = overseer.dependency_graph(dependencies=["#1=#2", "#2=#1", "#3=#1"])
 
     assert result["cycles"] == ["arthexis/arthexis#1", "arthexis/arthexis#2"]
     items = {item["pr"]: item for item in result["items"]}
@@ -1468,7 +1462,9 @@ def test_dependency_graph_distinguishes_cycle_members_from_downstream_prs():
 
 
 def test_dependency_graph_enriches_advisory_checks_from_the_pr_repository():
-    check_url = "https://sonarcloud.io/dashboard?id=arthexis_gway-ap-kiosk&pullRequest=1"
+    check_url = (
+        "https://sonarcloud.io/dashboard?id=arthexis_gway-ap-kiosk&pullRequest=1"
+    )
     runner = FakeRunner(
         [
             CommandResult(0, json.dumps(_pr_payload(number=9104, state="MERGED"))),
@@ -1510,16 +1506,18 @@ def test_dependency_graph_enriches_advisory_checks_from_the_pr_repository():
     )
     overseer = PullRequestOverseer(repo="arthexis/arthexis", runner=runner)
 
-    result = overseer.dependency_graph(
-        dependencies=["arthexis/gway-ap-kiosk#1=#9104"]
-    )
+    result = overseer.dependency_graph(dependencies=["arthexis/gway-ap-kiosk#1=#9104"])
 
     item = next(item for item in result["items"] if item["pr"].endswith("#1"))
     assert item["readyToMerge"] is True
     check_run_command = next(
         command
         for command in runner.commands
-        if command[1:3] == ["api", "repos/arthexis/gway-ap-kiosk/commits/kiosk-head/check-runs?per_page=100&page=1&filter=all"]
+        if command[1:3]
+        == [
+            "api",
+            "repos/arthexis/gway-ap-kiosk/commits/kiosk-head/check-runs?per_page=100&page=1&filter=all",
+        ]
     )
     assert check_run_command[0] == "gh"
 

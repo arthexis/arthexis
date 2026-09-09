@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from .base import *
 
+
 class ChargingProfile(Entity):
     """Charging profiles dispatched through SetChargingProfile."""
 
     class Purpose(models.TextChoices):
-        CHARGE_POINT_MAX_PROFILE = "ChargePointMaxProfile", _(
-            "Charge Point Max Profile"
+        CHARGE_POINT_MAX_PROFILE = (
+            "ChargePointMaxProfile",
+            _("Charge Point Max Profile"),
         )
         TX_DEFAULT_PROFILE = "TxDefaultProfile", _("Transaction Default Profile")
         TX_PROFILE = "TxProfile", _("Transaction Profile")
@@ -103,8 +105,7 @@ class ChargingProfile(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         connector = self.connector_id or 0
         return (
-            f"{self.charger or 'Unassigned'} | {connector} | "
-            f"{self.charging_profile_id}"
+            f"{self.charger or 'Unassigned'} | {connector} | {self.charging_profile_id}"
         )
 
     def clean(self):

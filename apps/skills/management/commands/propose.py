@@ -20,7 +20,9 @@ class Command(BaseCommand):
         )
         parser.add_argument("--prompt", help="Prompt text to guard and pass to Codex.")
         parser.add_argument("--prompt-file", help="Read prompt text from a UTF-8 file.")
-        parser.add_argument("--stdin", action="store_true", help="Read prompt text from stdin.")
+        parser.add_argument(
+            "--stdin", action="store_true", help="Read prompt text from stdin."
+        )
         parser.add_argument(
             "--codex-command",
             default="codex",
@@ -59,7 +61,9 @@ class Command(BaseCommand):
             self._write_text_result(result)
 
         if not result.guard.should_launch and not options["dry_run"]:
-            raise CommandError(result.guard.reason or "Prompt refused by before_prompt hooks.")
+            raise CommandError(
+                result.guard.reason or "Prompt refused by before_prompt hooks."
+            )
         if result.return_code not in {None, 0}:
             raise CommandError(f"Codex exited with status {result.return_code}.")
         return None
@@ -82,7 +86,9 @@ class Command(BaseCommand):
             try:
                 return Path(prompt_file).read_text(encoding="utf-8")
             except (OSError, UnicodeError) as exc:
-                raise CommandError(f"Unable to read prompt file: {prompt_file}: {exc}") from exc
+                raise CommandError(
+                    f"Unable to read prompt file: {prompt_file}: {exc}"
+                ) from exc
         return sys.stdin.read()
 
     def _write_text_result(self, result) -> None:

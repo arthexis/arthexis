@@ -3,7 +3,6 @@ import os
 
 from django.apps import AppConfig
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +37,10 @@ def _setup_celery_beat_integrations():
     from django.core.exceptions import ValidationError
     from django.db.models.signals import pre_save
 
-    from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
+    from apps.celery.utils import (
+        normalize_periodic_task_name,
+        periodic_task_name_variants,
+    )
 
     if not hasattr(CrontabSchedule, "natural_key"):
 
@@ -180,8 +182,10 @@ def _setup_celery_beat_integrations():
 
         if self.pk:
             existing_pk_row = manager.filter(pk=self.pk).first()
-            if existing_pk_row and existing_pk_row.name not in periodic_task_name_variants(
-                original_name
+            if (
+                existing_pk_row
+                and existing_pk_row.name
+                not in periodic_task_name_variants(original_name)
             ):
                 self.pk = None
                 self._state.adding = True
@@ -328,13 +332,17 @@ def _patch_entity_deserialization():
                     explicit_pk = obj.pk
                     if explicit_pk is None:
                         existing_security_group = (
-                            security_group_manager.filter(name=group_name).only("pk").first()
+                            security_group_manager.filter(name=group_name)
+                            .only("pk")
+                            .first()
                         )
                         if existing_security_group is not None:
                             obj.pk = existing_security_group.pk
                             obj._state.adding = False
                         else:
-                            parent_group, _created = group_manager.get_or_create(name=group_name)
+                            parent_group, _created = group_manager.get_or_create(
+                                name=group_name
+                            )
                             obj.pk = parent_group.pk
                     else:
                         parent_group, created = group_manager.get_or_create(
@@ -348,7 +356,10 @@ def _patch_entity_deserialization():
                     setattr(obj, obj._meta.pk.attname, obj.pk)
                     if using:
                         obj._state.db = using
-                except (OperationalError, ProgrammingError):  # pragma: no cover - db not ready
+                except (
+                    OperationalError,
+                    ProgrammingError,
+                ):  # pragma: no cover - db not ready
                     pass
         return original_save(self, save_m2m=save_m2m, using=using, **kwargs)
 
@@ -375,8 +386,7 @@ def _configure_urlfield_assume_scheme():
 
 def _configure_lock_dependent_tasks(config):
     from django.db.backends.signals import connection_created
-    from django.db.models.signals import post_save
-    from django.db.models.signals import post_migrate
+    from django.db.models.signals import post_migrate, post_save
     from django.db.utils import OperationalError, ProgrammingError
 
     from apps.celery.utils import is_celery_enabled
@@ -507,10 +517,11 @@ def _configure_lock_dependent_tasks(config):
         weak=False,
     )
 
+
 def _connect_sqlite_wal():
+    from django.apps import apps
     from django.db import connections
     from django.db.backends.signals import connection_created
-    from django.apps import apps
 
     def _should_skip_sqlite_wal() -> bool:
         """Skip WAL mode in test runs where ephemeral filesystems can be unstable."""
@@ -574,7 +585,9 @@ def _connect_sqlite_wal():
         try:
             parsed_value = int(raw_value.strip())
         except ValueError:
-            logger.warning("Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name)
+            logger.warning(
+                "Invalid %s value %r; ignoring %s.", env_name, raw_value, pragma_name
+            )
             return None
 
         if minimum is not None and parsed_value < minimum:

@@ -20,7 +20,9 @@ from apps.repos.release_management import (
 class Command(BaseCommand):
     """Expose Release Management operations for CLI users."""
 
-    help = "Operate on GitHub issues, pull requests, and releases via Release Management."
+    help = (
+        "Operate on GitHub issues, pull requests, and releases via Release Management."
+    )
 
     def add_arguments(self, parser):
         """Register CLI arguments for repository operations.
@@ -75,11 +77,15 @@ class Command(BaseCommand):
         self._add_repository_argument(prs_list)
 
         releases_parser = subparsers.add_parser("releases", help="Release operations")
-        releases_subparsers = releases_parser.add_subparsers(dest="action", required=True)
+        releases_subparsers = releases_parser.add_subparsers(
+            dest="action", required=True
+        )
         releases_list = releases_subparsers.add_parser("list", help="List releases")
         releases_list.add_argument("--limit", type=int, default=20)
         self._add_repository_argument(releases_list)
-        releases_create = releases_subparsers.add_parser("create", help="Create release")
+        releases_create = releases_subparsers.add_parser(
+            "create", help="Create release"
+        )
         releases_create.add_argument("--tag", required=True)
         releases_create.add_argument("--title", required=True)
         releases_create.add_argument("--notes", default="")
@@ -107,10 +113,18 @@ class Command(BaseCommand):
 
         try:
             if resource == "issues" and action == "list":
-                rows = client.list_issues(repository, state=str(options.get("state") or "open"))
+                rows = client.list_issues(
+                    repository, state=str(options.get("state") or "open")
+                )
                 for item in rows:
-                    self.stdout.write(f"#{item.get('number')} [{item.get('state')}] {item.get('title')}")
-                self.stdout.write(self.style.SUCCESS(f"Listed {len(rows)} issues from {repository.slug}"))
+                    self.stdout.write(
+                        f"#{item.get('number')} [{item.get('state')}] {item.get('title')}"
+                    )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Listed {len(rows)} issues from {repository.slug}"
+                    )
+                )
                 return
 
             if resource == "issues" and action == "create":
@@ -123,22 +137,32 @@ class Command(BaseCommand):
                 return
 
             if resource == "prs" and action == "list":
-                rows = client.list_pull_requests(repository, state=str(options.get("state") or "open"))
+                rows = client.list_pull_requests(
+                    repository, state=str(options.get("state") or "open")
+                )
                 for item in rows:
-                    self.stdout.write(f"#{item.get('number')} [{item.get('state')}] {item.get('title')}")
+                    self.stdout.write(
+                        f"#{item.get('number')} [{item.get('state')}] {item.get('title')}"
+                    )
                 self.stdout.write(
-                    self.style.SUCCESS(f"Listed {len(rows)} pull requests from {repository.slug}")
+                    self.style.SUCCESS(
+                        f"Listed {len(rows)} pull requests from {repository.slug}"
+                    )
                 )
                 return
 
             if resource == "releases" and action == "list":
-                rows = client.list_releases(repository, limit=int(options.get("limit") or 20))
+                rows = client.list_releases(
+                    repository, limit=int(options.get("limit") or 20)
+                )
                 for item in rows:
                     self.stdout.write(
                         f"{item.get('tagName')} - {item.get('name') or ''} ({item.get('url') or ''})"
                     )
                 self.stdout.write(
-                    self.style.SUCCESS(f"Listed {len(rows)} releases from {repository.slug}")
+                    self.style.SUCCESS(
+                        f"Listed {len(rows)} releases from {repository.slug}"
+                    )
                 )
                 return
 

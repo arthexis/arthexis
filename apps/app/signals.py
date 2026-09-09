@@ -1,7 +1,11 @@
 from django.db.models.signals import post_delete, post_migrate, post_save
 from django.dispatch import receiver
 
-from apps.app.models import Application, refresh_application_models, refresh_enabled_apps_lock
+from apps.app.models import (
+    Application,
+    refresh_application_models,
+    refresh_enabled_apps_lock,
+)
 
 
 @receiver(post_migrate)

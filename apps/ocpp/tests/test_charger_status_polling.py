@@ -51,6 +51,7 @@ def test_status_view_includes_non_transaction_events(client):
     assert all(item["severity"] in {"info", "warning", "error"} for item in events)
     assert not any("TransactionEvent" in str(item["event"]) for item in events)
 
+
 @pytest.mark.django_db
 def test_status_view_aggregate_includes_events_from_all_connectors(client):
     """Regression: aggregate status view includes notable events from all connectors."""
@@ -151,6 +152,7 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
     assert "Connected connector-a-unique" in event_names
     assert "Connected connector-b-unique" in event_names
 
+
 def test_dedupe_event_rows_keeps_newest_row_for_same_status_identity():
     """Status dedupe should keep the newest row for one identity collision."""
 
@@ -176,6 +178,7 @@ def test_dedupe_event_rows_keeps_newest_row_for_same_status_identity():
     rows = dedupe_event_rows([(older, 1), (newer, 1)])
 
     assert rows == [newer]
+
 
 @pytest.mark.django_db
 def test_status_view_ignores_invalid_status_payload_rows(client):
@@ -205,6 +208,7 @@ def test_status_view_ignores_invalid_status_payload_rows(client):
     assert any(item["event"] == "Connected websocket" for item in events)
     assert not any(item["event"] == "Status" for item in events)
 
+
 def test_classify_event_severity_handles_status_and_retry_edge_cases():
     """Severity classifier should consistently map status and retry edge cases."""
 
@@ -233,6 +237,7 @@ def test_classify_event_severity_handles_status_and_retry_edge_cases():
         "#ffc107",
         "Warning",
     )
+
 
 @pytest.mark.django_db
 def test_status_view_disables_event_admin_links_when_admin_urls_missing(
@@ -277,6 +282,7 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     assert "1234" in html
     assert "admin/ocpp/transaction/1234/change/" not in html
 
+
 @pytest.mark.django_db
 def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged_users(
     client,
@@ -311,6 +317,7 @@ def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged
     html = response.content.decode()
     assert "diag.example" not in html
 
+
 @pytest.mark.django_db
 def test_status_view_shows_non_transaction_events_for_staff(client):
     """Staff users should keep access to non-transaction events in status view."""
@@ -343,6 +350,7 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
         item["event"] == "DiagnosticsStatusNotification"
         for item in response.context["non_transaction_events"]
     )
+
 
 def test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions():
     """Regression: out-of-order status retries should keep the newest connector row."""
@@ -381,4 +389,6 @@ def test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions
     status_rows = [row for row in rows if row.event == "Status"]
     assert len(status_rows) == 1
     assert status_rows[0].timestamp == row_newest.timestamp
-    assert any(row.event == "Heartbeat" and row.details == "retry in 10s" for row in rows)
+    assert any(
+        row.event == "Heartbeat" and row.details == "retry in 10s" for row in rows
+    )

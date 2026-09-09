@@ -16,7 +16,6 @@ from utils.extensions import (
     normalize_github_repository,
 )
 
-
 MANIFEST = """\
 [extension]
 name = "diagnostics"

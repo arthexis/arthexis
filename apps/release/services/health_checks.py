@@ -16,7 +16,9 @@ def resolve_release(identifier):
         try:
             return queryset.get(pk=int(identifier))
         except (ValueError, PackageRelease.DoesNotExist):
-            active_match = queryset.filter(package__is_active=True, version=identifier).first()
+            active_match = queryset.filter(
+                package__is_active=True, version=identifier
+            ).first()
             if active_match:
                 return active_match
             try:
@@ -32,7 +34,9 @@ def resolve_release(identifier):
     raise CommandError("No releases available to check")
 
 
-def run_check_pypi(*, stdout, stderr, style, release_identifier=None, **_kwargs) -> None:
+def run_check_pypi(
+    *, stdout, stderr, style, release_identifier=None, **_kwargs
+) -> None:
     """Check PyPI connectivity and credentials for a package release."""
 
     release_obj = resolve_release(release_identifier)

@@ -80,9 +80,7 @@ def odoo_quote_report(request):
         context["error"] = _(
             "Configure and verify your Odoo employee before generating the report."
         )
-        return TemplateResponse(
-            request, "admin/core/odoo_quote_report.html", context
-        )
+        return TemplateResponse(request, "admin/core/odoo_quote_report.html", context)
 
     try:
         params = OdooQuoteReportParams.from_request(request)

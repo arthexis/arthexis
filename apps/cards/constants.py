@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-
 # Mapping between the RC522 header labels and the Raspberry Pi connections.
 # The wiring strings mirror the labeling used in the installation manual to
 # make it easier to cross-reference hardware documentation with the code.
-MODULE_WIRING: "OrderedDict[str, str]" = OrderedDict(
+MODULE_WIRING: OrderedDict[str, str] = OrderedDict(
     [
         ("SDA", "CE0"),
         ("SCK", "SCLK"),

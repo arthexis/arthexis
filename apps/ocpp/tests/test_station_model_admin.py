@@ -35,5 +35,7 @@ def test_station_model_admin_changelist_filters_by_connector_type(client):
     )
 
     assert response.status_code == 200
-    rows = list(response.context["cl"].queryset.values_list("connector_type", flat=True))
+    rows = list(
+        response.context["cl"].queryset.values_list("connector_type", flat=True)
+    )
     assert rows == ["CCS2"]

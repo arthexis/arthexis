@@ -33,7 +33,9 @@ def sigil_resolution_deadline(seconds: float):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("iterations, max_seconds", [(500, 0.75), (1000, 1.5)])
-def test_resolve_sigils_many_env_tokens_scales_linearly(monkeypatch, iterations, max_seconds):
+def test_resolve_sigils_many_env_tokens_scales_linearly(
+    monkeypatch, iterations, max_seconds
+):
     SigilRoot.objects.update_or_create(
         prefix="ENV", defaults={"context_type": SigilRoot.Context.CONFIG}
     )

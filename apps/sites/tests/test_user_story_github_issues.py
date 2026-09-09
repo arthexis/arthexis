@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 from django.contrib import admin
@@ -400,7 +400,7 @@ def test_feedback_issue_body_includes_node_role_and_minute_submitted_at(
         rating=4,
         path="/feedback/",
         comments="Body should include role and a less granular timestamp.",
-        submitted_at=datetime(2026, 5, 31, 14, 25, 36, 987654, tzinfo=timezone.utc),
+        submitted_at=datetime(2026, 5, 31, 14, 25, 36, 987654, tzinfo=UTC),
     )
 
     body = story.build_github_issue_body()

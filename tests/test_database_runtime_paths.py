@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 SETTINGS_SCRIPT = r"""
 import json
 from pathlib import Path

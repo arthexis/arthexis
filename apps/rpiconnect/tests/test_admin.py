@@ -13,6 +13,7 @@ from apps.rpiconnect.models import (
     ConnectUpdateDeployment,
 )
 
+
 @pytest.mark.django_db
 def test_connect_device_admin_shows_inventory_eligibility_indicators():
     """Device admin should render inventory signal columns used for eligibility checks."""
@@ -35,6 +36,7 @@ def test_connect_device_admin_shows_inventory_eligibility_indicators():
     assert model_admin.connectivity_indicator(device) == "ethernet"
     assert model_admin.free_space_indicator(device) == "12 GB"
     assert "Eligible" in model_admin.eligibility_indicator(device)
+
 
 @pytest.mark.django_db
 def test_campaign_admin_rollback_creates_previous_release_campaign(admin_client):
@@ -91,7 +93,9 @@ def test_campaign_admin_rollback_creates_previous_release_campaign(admin_client)
         status=ConnectUpdateDeployment.Status.SUCCEEDED,
     )
 
-    response = admin_client.post(reverse("admin:rpiconnect_campaign_rollback", args=[current_campaign.pk]))
+    response = admin_client.post(
+        reverse("admin:rpiconnect_campaign_rollback", args=[current_campaign.pk])
+    )
 
     assert response.status_code == 302
     rollback_campaign = ConnectUpdateCampaign.objects.exclude(
@@ -99,6 +103,7 @@ def test_campaign_admin_rollback_creates_previous_release_campaign(admin_client)
     ).get()
     assert rollback_campaign.release == previous_release
     assert rollback_campaign.status == ConnectUpdateCampaign.Status.RUNNING
+
 
 @pytest.mark.django_db
 def test_campaign_progress_requires_model_view_permission(client, django_user_model):
@@ -124,12 +129,17 @@ def test_campaign_progress_requires_model_view_permission(client, django_user_mo
         status=ConnectUpdateCampaign.Status.DRAFT,
     )
 
-    response = client.get(reverse("admin:rpiconnect_campaign_progress", args=[campaign.pk]))
+    response = client.get(
+        reverse("admin:rpiconnect_campaign_progress", args=[campaign.pk])
+    )
 
     assert response.status_code == 403
 
+
 @pytest.mark.django_db
-def test_campaign_rollback_requires_change_and_add_permission(client, django_user_model):
+def test_campaign_rollback_requires_change_and_add_permission(
+    client, django_user_model
+):
     """Rollback endpoint should deny staff users that lack add/change campaign permissions."""
 
     user = django_user_model.objects.create_user(
@@ -170,6 +180,8 @@ def test_campaign_rollback_requires_change_and_add_permission(client, django_use
         status=ConnectUpdateDeployment.Status.SUCCEEDED,
     )
 
-    response = client.post(reverse("admin:rpiconnect_campaign_rollback", args=[campaign.pk]))
+    response = client.post(
+        reverse("admin:rpiconnect_campaign_rollback", args=[campaign.pk])
+    )
 
     assert response.status_code == 403

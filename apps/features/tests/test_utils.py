@@ -24,7 +24,9 @@ def test_feature_cache_key_is_namespaced_for_test_database(monkeypatch) -> None:
 
 
 def test_feature_cache_key_handles_pathlike_test_database_name(monkeypatch) -> None:
-    monkeypatch.setitem(connection.settings_dict, "NAME", "/tmp/arthexis/test_db.sqlite3")
+    monkeypatch.setitem(
+        connection.settings_dict, "NAME", "/tmp/arthexis/test_db.sqlite3"
+    )
     monkeypatch.setitem(
         connection.settings_dict,
         "TEST",

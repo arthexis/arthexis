@@ -33,7 +33,9 @@ def _apply_operation_error(
         "details": details or {},
     }
     operation.responded_at = responded_at
-    operation.save(update_fields=["status", "status_info", "response_payload", "responded_at"])
+    operation.save(
+        update_fields=["status", "status_info", "response_payload", "responded_at"]
+    )
 
 
 async def handle_install_certificate_error(
@@ -51,7 +53,9 @@ async def handle_install_certificate_error(
     responded_at = timezone.now()
 
     def _apply() -> None:
-        _apply_operation_error(operation_pk, responded_at, error_code, description, details)
+        _apply_operation_error(
+            operation_pk, responded_at, error_code, description, details
+        )
         installed = InstalledCertificate.objects.filter(pk=installed_pk).first()
         if installed:
             installed.status = InstalledCertificate.STATUS_ERROR
@@ -85,7 +89,9 @@ async def handle_delete_certificate_error(
     responded_at = timezone.now()
 
     def _apply() -> None:
-        _apply_operation_error(operation_pk, responded_at, error_code, description, details)
+        _apply_operation_error(
+            operation_pk, responded_at, error_code, description, details
+        )
         installed = InstalledCertificate.objects.filter(pk=installed_pk).first()
         if installed:
             installed.status = InstalledCertificate.STATUS_ERROR

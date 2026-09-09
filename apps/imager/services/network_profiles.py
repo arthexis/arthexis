@@ -158,7 +158,9 @@ def select_host_network_profiles(
     candidates: list[tuple[Path, str, set[str]]] = []
     if requested_names or copy_all:
         source_dir = (
-            (profile_dir or Path(DEFAULT_HOST_NETWORK_PROFILE_DIR)).expanduser().resolve()
+            (profile_dir or Path(DEFAULT_HOST_NETWORK_PROFILE_DIR))
+            .expanduser()
+            .resolve()
         )
         if not source_dir.is_dir():
             raise ImagerBuildError(

@@ -1,5 +1,6 @@
-from ..common_imports import *
 from apps.cards.models import RFIDAttempt
+
+from ..common_imports import *
 from .utils import (
     TransactionExportForm,
     TransactionImportForm,
@@ -154,4 +155,3 @@ class MeterValueAdmin(EntityModelAdmin):
     )
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterValueDateFilter)
-

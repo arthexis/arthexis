@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
 import json
 import numbers
 import re
 import shutil
 import subprocess
+from collections import deque
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from datetime import timezone as dt_timezone
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from django.conf import settings
 from django.utils import timezone
@@ -89,7 +90,9 @@ def resolve_period(period_key: str | None) -> ReportPeriod:
     return REPORT_PERIODS.get(period_key, REPORT_PERIODS[REPORT_PERIOD_ORDER[0]])
 
 
-def collect_scheduled_tasks(now: datetime, window_end: datetime) -> list[ScheduledTaskSummary]:
+def collect_scheduled_tasks(
+    now: datetime, window_end: datetime
+) -> list[ScheduledTaskSummary]:
     """Return Celery tasks scheduled to run before ``window_end``.
 
     Tasks with unknown scheduling information are included to avoid omitting
@@ -105,7 +108,7 @@ def collect_scheduled_tasks(now: datetime, window_end: datetime) -> list[Schedul
         if summary.next_run is None or summary.next_run <= window_end:
             filtered.append(summary)
 
-    far_future = datetime.max.replace(tzinfo=dt_timezone.utc)
+    far_future = datetime.max.replace(tzinfo=UTC)
     filtered.sort(
         key=lambda item: (
             item.next_run or far_future,
@@ -431,9 +434,7 @@ def _collect_journal_entries(
     for unit in _candidate_journal_units():
         source_label = f"systemd journal ({unit})"
         sources.append(source_label)
-        for entry in _read_journal_entries(
-            unit, start, end, max_lines=max_lines
-        ):
+        for entry in _read_journal_entries(unit, start, end, max_lines=max_lines):
             if entry.timestamp < start or entry.timestamp > end:
                 continue
             entries.append(
@@ -554,10 +555,7 @@ def _parse_journal_record(data: dict, unit: str) -> CeleryLogEntry | None:
         return None
 
     logger_name = str(
-        data.get("SYSLOG_IDENTIFIER")
-        or data.get("_COMM")
-        or data.get("UNIT")
-        or unit
+        data.get("SYSLOG_IDENTIFIER") or data.get("_COMM") or data.get("UNIT") or unit
     ).strip()
     level = _priority_to_level(data.get("PRIORITY"))
 
@@ -593,7 +591,7 @@ def _parse_journal_timestamp(data: dict) -> datetime | None:
         seconds, microseconds = divmod(micros, 1_000_000)
         return datetime.fromtimestamp(
             seconds + microseconds / 1_000_000,
-            tz=dt_timezone.utc,
+            tz=UTC,
         )
 
     raw_timestamp = data.get("__REALTIME_TIMESTAMP_STR") or data.get("TIMESTAMP")
@@ -602,4 +600,3 @@ def _parse_journal_timestamp(data: dict) -> datetime | None:
         if parsed is not None:
             return parsed
     return None
-

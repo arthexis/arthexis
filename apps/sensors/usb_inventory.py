@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -135,7 +135,9 @@ def _flatten_lsblk(
         current_usb = parent_usb or _is_usb_device(item)
         item["_parent_usb"] = parent_usb
         item["_parent_identity_paths"] = parent_identity_paths
-        item["_child_pi_image"] = any(_lsblk_tree_has_pi_image(child) for child in children)
+        item["_child_pi_image"] = any(
+            _lsblk_tree_has_pi_image(child) for child in children
+        )
         identity_paths = tuple(_device_identity_paths(item, include_parents=False))
         flattened.append(item)
         flattened.extend(
@@ -157,7 +159,10 @@ def _lsblk_tree_has_pi_image(device: dict[str, Any]) -> bool:
     children = device.get("children", []) or []
     if not isinstance(children, list):
         return False
-    return any(isinstance(child, dict) and _lsblk_tree_has_pi_image(child) for child in children)
+    return any(
+        isinstance(child, dict) and _lsblk_tree_has_pi_image(child)
+        for child in children
+    )
 
 
 def _mount_index(findmnt_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -415,7 +420,9 @@ def match_claim(device: dict[str, Any], claim: dict[str, Any]) -> bool:
         if key in fields and not _match_text(fields[key], device.get(key)):
             return False
 
-    requires_kindle_shape = fields.get("kindle") is True or fields.get("kindle_shape") is True
+    requires_kindle_shape = (
+        fields.get("kindle") is True or fields.get("kindle_shape") is True
+    )
     if requires_kindle_shape and not device.get("kindle_shape"):
         return False
 
@@ -523,7 +530,7 @@ def refresh_inventory() -> dict[str, Any]:
         device["claims"] = sorted(set(device_claims))
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "claims_path": str(claims_path()),
         "devices": devices,
     }

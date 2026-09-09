@@ -7,7 +7,6 @@ import re
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-
 SUBDOMAIN_PREFIX_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 NGINX_PROXY_PASS_RE = re.compile(r"proxy_pass\s+https?://[^:]+:(\d+)")
 NGINX_SSL_LISTEN_RE = re.compile(r"listen\s+[^;]*\b443\b[^;]*ssl", re.IGNORECASE)

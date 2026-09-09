@@ -122,13 +122,18 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
         return super().get_deleted_objects(objs, request)
 
     def response_action(self, request, queryset):
-        if request.POST.get("action") == "delete_selected" and not request.user.is_superuser:
+        if (
+            request.POST.get("action") == "delete_selected"
+            and not request.user.is_superuser
+        ):
             selected_group_ids = {
                 int(pk)
                 for pk in request.POST.getlist(ACTION_CHECKBOX_NAME)
                 if str(pk).isdigit()
             }
-            site_operator_group_ids = self._site_operator_group_ids_for_user(request.user)
+            site_operator_group_ids = self._site_operator_group_ids_for_user(
+                request.user
+            )
             if selected_group_ids & site_operator_group_ids:
                 raise PermissionDenied
         return super().response_action(request, queryset)

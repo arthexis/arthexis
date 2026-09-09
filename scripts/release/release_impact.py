@@ -243,9 +243,14 @@ def _is_minor_contract_change(change: Any) -> bool:
     path = change.path
     if _is_patch_only_path(path):
         return False
-    if re.fullmatch(r"apps/[^/]+/(views|forms|models|consumers|apis|api|serializers)\.py", path):
+    if re.fullmatch(
+        r"apps/[^/]+/(views|forms|models|consumers|apis|api|serializers)\.py", path
+    ):
         return True
-    if re.match(r"apps/[^/]+/(views|forms|models|templates|static|consumers|apis|api|serializers)/", path):
+    if re.match(
+        r"apps/[^/]+/(views|forms|models|templates|static|consumers|apis|api|serializers)/",
+        path,
+    ):
         return True
     if re.fullmatch(r"apps/[^/]+/(urls|routes|routing)\.py", path):
         return True

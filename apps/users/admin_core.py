@@ -7,23 +7,23 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 
-from apps.locals.user_data import (
-    UserDatumAdminMixin,
-    delete_user_fixture,
-    dump_user_fixture,
-    resolve_fixture_user,
-)
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.impersonation import (
     get_impersonator_user_id,
     store_impersonator_user_id,
 )
 from apps.core.models import get_owned_objects_for_user
+from apps.locals.user_data import (
+    UserDatumAdminMixin,
+    delete_user_fixture,
+    dump_user_fixture,
+    resolve_fixture_user,
+)
 from apps.users import temp_passwords
 from apps.users.models import User
 
@@ -119,7 +119,9 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
 
     def _change_url(self, user_id) -> str:
         opts = self.model._meta
-        return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[user_id])
+        return reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_change", args=[user_id]
+        )
 
     def _safe_next_url(self, request, fallback_url: str = "/") -> str:
         next_url = request.POST.get("next") or request.GET.get("next")
@@ -306,9 +308,7 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                 _("You cannot impersonate the selected user."),
                 level=messages.ERROR,
             )
-            return HttpResponseRedirect(
-                self._change_url(target.pk)
-            )
+            return HttpResponseRedirect(self._change_url(target.pk))
         impersonator_id = get_impersonator_user_id(request.session)
         if impersonator_id is None:
             impersonator_id = request.user.pk
@@ -430,13 +430,17 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             if not write_enabled:
                 form.add_error(
                     None,
-                    _("Configure the login RFID, block, offset, and value before writing."),
+                    _(
+                        "Configure the login RFID, block, offset, and value before writing."
+                    ),
                 )
             else:
                 from apps.cards.reader import write_rfid_cell_value
 
                 key_choice = user.login_rfid_key
-                key_value = tag.key_a if key_choice == user.LOGIN_RFID_KEY_A else tag.key_b
+                key_value = (
+                    tag.key_a if key_choice == user.LOGIN_RFID_KEY_A else tag.key_b
+                )
                 write_result = write_rfid_cell_value(
                     block=user.login_rfid_block,
                     offset=user.login_rfid_offset,
@@ -448,7 +452,12 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                     form.add_error(None, write_result["error"])
                 else:
                     scanned = write_result.get("rfid")
-                    if scanned and tag and tag.rfid and scanned.upper() != tag.rfid.upper():
+                    if (
+                        scanned
+                        and tag
+                        and tag.rfid
+                        and scanned.upper() != tag.rfid.upper()
+                    ):
                         form.add_error(
                             None,
                             _(
@@ -463,9 +472,7 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                             _("RFID login data written successfully."),
                             level=messages.SUCCESS,
                         )
-                        return HttpResponseRedirect(
-                            self._change_url(user.pk)
-                        )
+                        return HttpResponseRedirect(self._change_url(user.pk))
 
         context = dict(self.admin_site.each_context(request))
         context.update(
@@ -544,7 +551,9 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             delete_user_fixture(obj, target_user)
             self.message_user(
                 request,
-                _("User data for user accounts is managed through the profile sections."),
+                _(
+                    "User data for user accounts is managed through the profile sections."
+                ),
             )
         elif obj.is_user_data:
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)

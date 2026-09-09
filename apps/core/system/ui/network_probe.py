@@ -59,7 +59,9 @@ def _build_nginx_report(
     """Return comparison data for the managed nginx configuration file."""
 
     resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
-    resolved_site_path = Path(site_path) if site_path is not None else _nginx_site_path()
+    resolved_site_path = (
+        Path(site_path) if site_path is not None else _nginx_site_path()
+    )
 
     mode = _resolve_nginx_mode(resolved_base)
     port = _configured_backend_port(resolved_base)

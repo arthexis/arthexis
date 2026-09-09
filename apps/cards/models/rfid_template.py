@@ -166,7 +166,7 @@ class RFIDCommandTemplate(Entity):
         counter = 2
         while cls.all_objects.filter(slug=candidate).exists():
             suffix = f"-{counter}"
-            candidate = f"{base[:64 - len(suffix)]}{suffix}"
+            candidate = f"{base[: 64 - len(suffix)]}{suffix}"
             counter += 1
         return candidate
 

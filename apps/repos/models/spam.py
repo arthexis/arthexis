@@ -47,7 +47,9 @@ class RepositoryIssueSpamAssessment(Entity):
             )
         ]
         indexes = [
-            models.Index(fields=["is_spam", "processed_at"], name="repo_issue_spam_idx"),
+            models.Index(
+                fields=["is_spam", "processed_at"], name="repo_issue_spam_idx"
+            ),
             models.Index(fields=["issue_author"], name="repo_issue_spam_author_idx"),
         ]
 

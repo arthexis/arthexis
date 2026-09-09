@@ -4,5 +4,4 @@ DJANGO_APPS = [
     "apps.cards",
 ]
 
-REQUIRES_APPS = [
-]
+REQUIRES_APPS = []

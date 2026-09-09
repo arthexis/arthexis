@@ -13,7 +13,9 @@ async def reserve_now(ctx: HandlerContext) -> bool:
     Persistence updates: updates ``CPReservation`` EVCS confirmation fields.
     """
 
-    return await legacy.handle_reserve_now_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_reserve_now_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def cancel_reservation(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def cancel_reservation(ctx: HandlerContext) -> bool:
     Persistence updates: updates ``CPReservation`` status and clears confirmation fields.
     """
 
-    return await legacy.handle_cancel_reservation_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_cancel_reservation_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def remote_start_transaction(ctx: HandlerContext) -> bool:
@@ -33,7 +37,9 @@ async def remote_start_transaction(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_remote_start_transaction_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_remote_start_transaction_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def remote_stop_transaction(ctx: HandlerContext) -> bool:
@@ -43,7 +49,9 @@ async def remote_stop_transaction(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_remote_stop_transaction_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_remote_stop_transaction_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def request_start_transaction(ctx: HandlerContext) -> bool:
@@ -53,7 +61,9 @@ async def request_start_transaction(ctx: HandlerContext) -> bool:
     Persistence updates: updates in-memory transaction request status.
     """
 
-    return await legacy.handle_request_start_transaction_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_request_start_transaction_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def request_stop_transaction(ctx: HandlerContext) -> bool:
@@ -63,7 +73,9 @@ async def request_stop_transaction(ctx: HandlerContext) -> bool:
     Persistence updates: updates in-memory transaction request status.
     """
 
-    return await legacy.handle_request_stop_transaction_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_request_stop_transaction_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_transaction_status(ctx: HandlerContext) -> bool:
@@ -73,7 +85,9 @@ async def get_transaction_status(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_get_transaction_status_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_transaction_status_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_reserve_now_result = legacy_adapter(reserve_now)

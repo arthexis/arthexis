@@ -30,7 +30,9 @@ def test_release_management_uses_suite_api_by_default(monkeypatch):
         lambda self: "token-1",
     )
 
-    def fail_gh(self, args: list[str]) -> Any:  # pragma: no cover - explicit failure branch
+    def fail_gh(
+        self, args: list[str]
+    ) -> Any:  # pragma: no cover - explicit failure branch
         raise AssertionError(f"gh fallback should not run, got {args}")
 
     monkeypatch.setattr(ReleaseManagementClient, "_run_gh_json", fail_gh)
@@ -379,7 +381,13 @@ def test_release_management_normalizes_suite_pull_request_payload(monkeypatch):
         github_service,
         "fetch_repository_pull_requests",
         lambda **kwargs: [
-            {"number": 14, "state": "open", "title": "PR", "draft": True, "url": "https://example.com/pr/14"}
+            {
+                "number": 14,
+                "state": "open",
+                "title": "PR",
+                "draft": True,
+                "url": "https://example.com/pr/14",
+            }
         ],
     )
 

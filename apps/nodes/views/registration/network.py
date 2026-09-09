@@ -30,7 +30,9 @@ def get_client_ip(request) -> str:
     trusted_proxies = getattr(settings, "TRUSTED_PROXIES", ())
     if isinstance(trusted_proxies, str):
         trusted_proxies = (trusted_proxies,)
-    trusted_proxy_set = {value.strip() for value in trusted_proxies if value and value.strip()}
+    trusted_proxy_set = {
+        value.strip() for value in trusted_proxies if value and value.strip()
+    }
 
     if remote_addr in trusted_proxy_set:
         forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")

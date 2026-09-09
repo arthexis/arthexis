@@ -2,7 +2,9 @@ from apps.app.services.profile_apps import app_selector_installed, profile_skip_
 from apps.core.services.profile_apps import (
     app_selector_installed as legacy_app_selector_installed,
 )
-from apps.core.services.profile_apps import profile_skip_reason as legacy_profile_skip_reason
+from apps.core.services.profile_apps import (
+    profile_skip_reason as legacy_profile_skip_reason,
+)
 
 
 def test_profile_app_matching_does_not_confuse_django_sites_with_local_sites():

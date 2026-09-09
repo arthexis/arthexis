@@ -23,7 +23,9 @@ class ChatProfile(Profile):
         default=False,
         db_default=False,
         verbose_name=_("I would like to be contacted via chat"),
-        help_text=_("Allow support staff to contact this owner using the chat channel."),
+        help_text=_(
+            "Allow support staff to contact this owner using the chat channel."
+        ),
     )
 
     class Meta(Profile.Meta):

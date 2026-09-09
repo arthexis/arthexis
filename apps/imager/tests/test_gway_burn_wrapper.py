@@ -18,7 +18,9 @@ def test_resolve_parent_public_key_prefers_environment(monkeypatch, tmp_path: Pa
     assert gway_burn.resolve_parent_public_key(home=tmp_path) == configured.resolve()
 
 
-def test_resolve_parent_public_key_uses_standard_ed25519_key(monkeypatch, tmp_path: Path):
+def test_resolve_parent_public_key_uses_standard_ed25519_key(
+    monkeypatch, tmp_path: Path
+):
     monkeypatch.delenv(gway_burn.KEY_FILE_ENV, raising=False)
     ssh_dir = tmp_path / ".ssh"
     ssh_dir.mkdir()
@@ -71,7 +73,9 @@ def test_main_preserves_explicit_recovery_choice(monkeypatch):
     monkeypatch.setattr(
         gway_burn.subprocess,
         "run",
-        lambda command, **kwargs: calls.append(command) or SimpleNamespace(returncode=0),
+        lambda command, **kwargs: (
+            calls.append(command) or SimpleNamespace(returncode=0)
+        ),
     )
 
     assert gway_burn.main(["--skip-recovery-ssh", "--reserve-number", "4"]) == 0

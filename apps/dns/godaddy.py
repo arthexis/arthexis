@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping, MutableMapping, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import requests
 from django.utils import timezone
@@ -16,9 +17,9 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
 
 @dataclass
 class DeploymentResult:
-    deployed: list["GoDaddyDNSRecord"]
-    failures: MutableMapping["GoDaddyDNSRecord", str]
-    skipped: MutableMapping["GoDaddyDNSRecord", str]
+    deployed: list[GoDaddyDNSRecord]
+    failures: MutableMapping[GoDaddyDNSRecord, str]
+    skipped: MutableMapping[GoDaddyDNSRecord, str]
 
 
 def _error_from_response(response: Response) -> str:
@@ -43,10 +44,10 @@ def _error_from_response(response: Response) -> str:
 
 
 def deploy_records(
-    credentials: "DNSProviderCredential", records: Iterable["GoDaddyDNSRecord"]
+    credentials: DNSProviderCredential, records: Iterable[GoDaddyDNSRecord]
 ) -> DeploymentResult:
-    filtered: list["GoDaddyDNSRecord"] = []
-    skipped: MutableMapping["GoDaddyDNSRecord", str] = {}
+    filtered: list[GoDaddyDNSRecord] = []
+    skipped: MutableMapping[GoDaddyDNSRecord, str] = {}
     for record in records:
         domain = record.get_domain(credentials)
         if not domain:
@@ -69,7 +70,9 @@ def deploy_records(
     if customer_id:
         session.headers["X-Shopper-Id"] = customer_id
 
-    grouped: MutableMapping[tuple[str, str, str], list["GoDaddyDNSRecord"]] = defaultdict(list)
+    grouped: MutableMapping[tuple[str, str, str], list[GoDaddyDNSRecord]] = defaultdict(
+        list
+    )
     for record in filtered:
         key = (
             record.get_domain(credentials),
@@ -78,8 +81,8 @@ def deploy_records(
         )
         grouped[key].append(record)
 
-    deployed: list["GoDaddyDNSRecord"] = []
-    failures: MutableMapping["GoDaddyDNSRecord", str] = {}
+    deployed: list[GoDaddyDNSRecord] = []
+    failures: MutableMapping[GoDaddyDNSRecord, str] = {}
     now = timezone.now()
 
     base_url = credentials.get_base_url()
@@ -130,7 +133,7 @@ def _extract_txt(rdata) -> str:
     return str(rdata).strip('"')
 
 
-def _matches_record(record: "GoDaddyDNSRecord", rdata) -> bool:
+def _matches_record(record: GoDaddyDNSRecord, rdata) -> bool:
     expected = (record.resolve_sigils("data") or "").strip()
     rtype = record.record_type
 
@@ -152,7 +155,9 @@ def _matches_record(record: "GoDaddyDNSRecord", rdata) -> bool:
         host = getattr(rdata, "exchange", None)
         if host is None:
             return False
-        host_match = _normalize_hostname(host.to_text()) == _normalize_hostname(expected)
+        host_match = _normalize_hostname(host.to_text()) == _normalize_hostname(
+            expected
+        )
         priority = getattr(rdata, "preference", None)
         priority_match = record.priority is None or priority == record.priority
         return host_match and priority_match
@@ -160,9 +165,16 @@ def _matches_record(record: "GoDaddyDNSRecord", rdata) -> bool:
         target = getattr(rdata, "target", None)
         if target is None:
             return False
-        target_match = _normalize_hostname(target.to_text()) == _normalize_hostname(expected)
-        priority_match = record.priority is None or getattr(rdata, "priority", None) == record.priority
-        weight_match = record.weight is None or getattr(rdata, "weight", None) == record.weight
+        target_match = _normalize_hostname(target.to_text()) == _normalize_hostname(
+            expected
+        )
+        priority_match = (
+            record.priority is None
+            or getattr(rdata, "priority", None) == record.priority
+        )
+        weight_match = (
+            record.weight is None or getattr(rdata, "weight", None) == record.weight
+        )
         port_match = record.port is None or getattr(rdata, "port", None) == record.port
         return target_match and priority_match and weight_match and port_match
     if rtype == record.Type.TXT:
@@ -173,7 +185,7 @@ def _matches_record(record: "GoDaddyDNSRecord", rdata) -> bool:
 
 
 def validate_record(
-    record: "GoDaddyDNSRecord", resolver: dns_resolver.Resolver | None = None
+    record: GoDaddyDNSRecord, resolver: dns_resolver.Resolver | None = None
 ) -> tuple[bool, str]:
     resolver = resolver or create_resolver()
     fqdn = record.fqdn()

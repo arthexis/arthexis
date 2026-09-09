@@ -149,7 +149,9 @@ def _restore_system_units(
     sudo_prefix = _sudo_prefix(runner=runner)
     if sudo_prefix is None:
         active_units = [
-            unit for unit, state in session.system_units if state in ACTIVE_SYSTEMD_STATES
+            unit
+            for unit, state in session.system_units
+            if state in ACTIVE_SYSTEMD_STATES
         ]
         if active_units:
             _record_warning(
@@ -213,8 +215,12 @@ def _install_bastion_refresh_hold(
         )
         return
 
-    test_result = _run(runner, [*sudo_prefix, "test", "-e", str(BASTION_USB_REFRESH_HOLD)])
-    session.bastion_hold_prior_state = "present" if test_result.returncode == 0 else "absent"
+    test_result = _run(
+        runner, [*sudo_prefix, "test", "-e", str(BASTION_USB_REFRESH_HOLD)]
+    )
+    session.bastion_hold_prior_state = (
+        "present" if test_result.returncode == 0 else "absent"
+    )
     if session.bastion_hold_prior_state == "absent":
         install_result = _run(
             runner,
@@ -243,7 +249,9 @@ def _install_bastion_refresh_hold(
         ],
     )
     if token_dir_result.returncode != 0:
-        _record_warning(session, log, "could not create bastion USB hold token directory")
+        _record_warning(
+            session, log, "could not create bastion USB hold token directory"
+        )
         return
 
     if session.bastion_hold_prior_state == "present":

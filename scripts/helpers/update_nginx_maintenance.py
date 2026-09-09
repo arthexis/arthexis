@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Ensure nginx configs serve the maintenance fallback page."""
+
 from __future__ import annotations
 
 import sys

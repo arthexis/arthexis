@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .charger import Charger
 
+
 class CPReservation(Entity):
     """Track connector reservations dispatched to an EVCS."""
 
@@ -110,12 +111,20 @@ class CPReservation(Entity):
         """Select an available connector for this reservation."""
 
         if not self.location_id:
-            raise ValidationError({"location": _("Select a location for the reservation.")})
+            raise ValidationError(
+                {"location": _("Select a location for the reservation.")}
+            )
         if not self.start_time:
-            raise ValidationError({"start_time": _("Provide a start time for the reservation.")})
+            raise ValidationError(
+                {"start_time": _("Provide a start time for the reservation.")}
+            )
         if self.duration_minutes <= 0:
             raise ValidationError(
-                {"duration_minutes": _("Reservation window must be at least one minute.")}
+                {
+                    "duration_minutes": _(
+                        "Reservation window must be at least one minute."
+                    )
+                }
             )
 
         candidates = list(
@@ -125,7 +134,11 @@ class CPReservation(Entity):
         )
         if not candidates:
             raise ValidationError(
-                {"location": _("No connectors are configured for the selected location.")}
+                {
+                    "location": _(
+                        "No connectors are configured for the selected location."
+                    )
+                }
             )
 
         def _priority(charger: Charger) -> tuple[int, int]:
@@ -156,7 +169,9 @@ class CPReservation(Entity):
                 return charger
 
         raise ValidationError(
-            _("All connectors at this location are reserved for the selected time window.")
+            _(
+                "All connectors at this location are reserved for the selected time window."
+            )
         )
 
     def clean(self):
@@ -167,7 +182,11 @@ class CPReservation(Entity):
             )
         if self.duration_minutes <= 0:
             raise ValidationError(
-                {"duration_minutes": _("Reservation window must be at least one minute.")}
+                {
+                    "duration_minutes": _(
+                        "Reservation window must be at least one minute."
+                    )
+                }
             )
         try:
             self.allocate_connector(force=bool(self.pk))
@@ -182,7 +201,9 @@ class CPReservation(Entity):
         update_fields = kwargs.get("update_fields")
         relevant_fields = {"location", "start_time", "duration_minutes", "connector"}
         should_allocate = True
-        if update_fields is not None and not relevant_fields.intersection(update_fields):
+        if update_fields is not None and not relevant_fields.intersection(
+            update_fields
+        ):
             should_allocate = False
         if should_allocate:
             self.allocate_connector(force=bool(self.pk))
@@ -192,7 +213,9 @@ class CPReservation(Entity):
         """Dispatch a ReserveNow request to the associated connector."""
 
         if not self.pk:
-            raise ValidationError(_("Save the reservation before sending it to the EVCS."))
+            raise ValidationError(
+                _("Save the reservation before sending it to the EVCS.")
+            )
         connector = self.connector
         if connector is None or connector.connector_id is None:
             raise ValidationError(_("Unable to determine which connector to reserve."))
@@ -257,7 +280,9 @@ class CPReservation(Entity):
         """Dispatch a CancelReservation request for this reservation."""
 
         if not self.pk:
-            raise ValidationError(_("Save the reservation before sending it to the EVCS."))
+            raise ValidationError(
+                _("Save the reservation before sending it to the EVCS.")
+            )
         connector = self.connector
         if connector is None or connector.connector_id is None:
             raise ValidationError(_("Unable to determine which connector to cancel."))

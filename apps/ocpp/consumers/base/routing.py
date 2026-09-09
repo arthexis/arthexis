@@ -6,8 +6,7 @@ occur only inside delegated handlers on the consumer.
 """
 
 from apps.ocpp.consumers.csms.protocol import OCPPAction
-from apps.ocpp.consumers.csms.router import build_action_registry
-from apps.ocpp.consumers.csms.router import CSMSRouterContext
+from apps.ocpp.consumers.csms.router import CSMSRouterContext, build_action_registry
 from apps.ocpp.payload_types import Handler
 
 

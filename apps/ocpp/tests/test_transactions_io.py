@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from datetime import timezone as dt_timezone
 from decimal import Decimal
 
@@ -61,15 +61,11 @@ def test_export_transactions_filters_and_serializes_decimals(base_time):
     exported_tx = exported["transactions"][0]
 
     assert exported_tx["charger"] == "CP-1"
-    assert (
-        exported_tx["start_time"] == base_time.astimezone(dt_timezone.utc).isoformat()
-    )
+    assert exported_tx["start_time"] == base_time.astimezone(UTC).isoformat()
     assert exported_tx["meter_values"] == [
         {
             "connector_id": 1,
-            "timestamp": (base_time + timedelta(minutes=5))
-            .astimezone(dt_timezone.utc)
-            .isoformat(),
+            "timestamp": (base_time + timedelta(minutes=5)).astimezone(UTC).isoformat(),
             "context": "Sample.Periodic",
             "energy": "100.500",
             "voltage": "230.500",

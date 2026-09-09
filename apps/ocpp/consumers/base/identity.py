@@ -9,7 +9,9 @@ from ... import store
 from ...models import Charger
 from ..constants import SERIAL_QUERY_PARAM_NAMES
 
-FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
+FORWARDED_PAIR_RE = re.compile(
+    r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE
+)
 
 
 def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
@@ -158,7 +160,9 @@ class IdentityMixin:
 
         self.serial_source = None
         query_bytes = self.scope.get("query_string") or b""
-        self._raw_query_string = query_bytes.decode("utf-8", "ignore") if query_bytes else ""
+        self._raw_query_string = (
+            query_bytes.decode("utf-8", "ignore") if query_bytes else ""
+        )
         if query_bytes:
             try:
                 parsed = parse_qs(

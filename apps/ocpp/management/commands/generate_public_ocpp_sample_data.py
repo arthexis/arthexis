@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.ocpp.models import Charger, Transaction
 
@@ -64,7 +64,9 @@ class Command(BaseCommand):
             ),
         )
 
-    def _validate_options(self, options: dict[str, object]) -> tuple[int, int, int, str]:
+    def _validate_options(
+        self, options: dict[str, object]
+    ) -> tuple[int, int, int, str]:
         """Validate and normalize command options."""
 
         charger_count = int(options["chargers"])
@@ -156,7 +158,8 @@ class Command(BaseCommand):
                     charger=connector,
                     connector_id=connector_index,
                     start_time=session_start,
-                    stop_time=session_start + timedelta(minutes=session_duration_minutes),
+                    stop_time=session_start
+                    + timedelta(minutes=session_duration_minutes),
                     meter_start=meter_start,
                     meter_stop=meter_stop,
                     rfid=f"RFID-{station_index:03d}-{connector_index:02d}",
@@ -184,15 +187,17 @@ class Command(BaseCommand):
         connector.last_status = "Charging"
         connector.last_status_timestamp = now
         connector.last_heartbeat = now
-        connector.save(update_fields=["last_status", "last_status_timestamp", "last_heartbeat"])
+        connector.save(
+            update_fields=["last_status", "last_status_timestamp", "last_heartbeat"]
+        )
         return (1 if connector_created else 0), len(transactions_to_create)
 
     @transaction.atomic
     def handle(self, *args, **options):
         """Create parent/connector chargers plus historical and active sessions."""
 
-        charger_count, connector_count, tx_per_connector, prefix = self._validate_options(
-            options
+        charger_count, connector_count, tx_per_connector, prefix = (
+            self._validate_options(options)
         )
 
         rng = random.Random(options["seed"])

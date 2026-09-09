@@ -9,9 +9,7 @@ LANGUAGES = [
 PARLER_DEFAULT_LANGUAGE_CODE = "en"
 
 PARLER_LANGUAGES = {
-    None: (
-        {"code": "en"},
-    ),
+    None: ({"code": "en"},),
     "default": {
         "fallbacks": ["en"],
         "hide_untranslated": False,

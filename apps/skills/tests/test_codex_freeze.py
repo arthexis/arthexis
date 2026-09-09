@@ -212,8 +212,8 @@ def test_freeze_status_includes_cache_remote_source_and_bypass(tmp_path, setting
     settings.BASE_DIR = tmp_path
     status = freeze_status()
 
-    assert status["cache_path"].replace("\\", "/").endswith(
-        "work/codex/freeze-state.json"
+    assert (
+        status["cache_path"].replace("\\", "/").endswith("work/codex/freeze-state.json")
     )
     assert status["remote_url"] == ""
     assert status["decision"] == "allow"
@@ -237,7 +237,9 @@ def test_codex_freeze_start_rejects_past_until():
     past = (timezone.now() - timedelta(minutes=1)).isoformat()
 
     with pytest.raises(CommandError, match="--until must be in the future"):
-        call_command("codex_freeze", "start", "--reason", "past window", "--until", past)
+        call_command(
+            "codex_freeze", "start", "--reason", "past window", "--until", past
+        )
 
 
 def test_codex_freeze_end_deactivates_future_freeze(tmp_path, settings):

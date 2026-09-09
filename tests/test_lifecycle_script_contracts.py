@@ -113,9 +113,9 @@ def test_install_usage_keeps_core_lifecycle_flags() -> None:
     )
 
     for flag in expected_flags:
-        assert re.search(
-            rf"(?<![\w-]){re.escape(flag)}(?![\w-])", install_usage
-        ), f"install.sh usage is missing lifecycle flag: {flag}"
+        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", install_usage), (
+            f"install.sh usage is missing lifecycle flag: {flag}"
+        )
 
 
 def test_install_debian_default_requires_redis_for_terminal_celery() -> None:
@@ -163,7 +163,9 @@ def test_install_reexec_preserves_explicit_migration_policy() -> None:
     install_script = _read_shell_contract("install.sh")
 
     assert 'ARTHEXIS_RUN_AS_USER="$TARGET_USER"' in install_script
-    assert 'ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY:-}"' in install_script
+    assert (
+        'ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY:-}"' in install_script
+    )
 
 
 def test_install_no_start_and_embedded_skip_systemd_restart() -> None:
@@ -417,9 +419,9 @@ def test_install_writes_role_enabled_apps_lock_before_env_refresh() -> None:
         "No enabled-apps lock present; preserving full app fallback" in install_script
     )
 
-    assert (
-        "refresh_charger_facing_route_lock_metadata()" in install_script
-    ), "install.sh is missing route metadata refresh function"
+    assert "refresh_charger_facing_route_lock_metadata()" in install_script, (
+        "install.sh is missing route metadata refresh function"
+    )
     metadata_body = install_script.split(
         "refresh_charger_facing_route_lock_metadata()", 1
     )[1].split("role_app_profiles_explicitly_enabled()", 1)[0]
@@ -918,7 +920,7 @@ def test_systemd_locks_skips_control_usb_polling_cleanup_when_dropin_absent(
 
     sudo = bin_dir / "sudo"
     sudo.write_text(
-        "#!/bin/sh\n" 'printf "sudo %s\\n" "$*" >> "$COMMAND_LOG"\n' "exit 1\n",
+        '#!/bin/sh\nprintf "sudo %s\\n" "$*" >> "$COMMAND_LOG"\nexit 1\n',
         encoding="utf-8",
     )
     sudo.chmod(0o755)
@@ -935,8 +937,7 @@ def test_systemd_locks_skips_control_usb_polling_cleanup_when_dropin_absent(
         [
             bash,
             "-c",
-            'set -e; source "$1"; '
-            "arthexis_remove_control_usb_polling_timer_overrides",
+            'set -e; source "$1"; arthexis_remove_control_usb_polling_timer_overrides',
             "bash",
             str(ROOT / "scripts/helpers/systemd_locks.sh"),
         ],
@@ -1016,7 +1017,7 @@ def test_systemd_locks_retriggers_configured_attached_burner(
     udevadm.chmod(0o755)
     readlink = bin_dir / "readlink"
     readlink.write_text(
-        "#!/bin/sh\n" 'if [ "$1" = -f ]; then\n' "  printf '/dev/sdb\\n'\n" "fi\n",
+        "#!/bin/sh\nif [ \"$1\" = -f ]; then\n  printf '/dev/sdb\\n'\nfi\n",
         encoding="utf-8",
     )
     readlink.chmod(0o755)
@@ -1246,14 +1247,14 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
     for script_name, tokens in scripts_and_tokens.items():
         script_text = _read_shell_contract(script_name)
         for token in tokens:
-            assert (
-                token in script_text
-            ), f"{script_name} is missing expected token: {token}"
+            assert token in script_text, (
+                f"{script_name} is missing expected token: {token}"
+            )
 
     upgrade_script = _read_shell_contract("upgrade.sh")
-    assert re.search(
-        r"^\s*--branch\)\s*$", upgrade_script, re.MULTILINE
-    ), "upgrade.sh is missing expected parser label: --branch)"
+    assert re.search(r"^\s*--branch\)\s*$", upgrade_script, re.MULTILINE), (
+        "upgrade.sh is missing expected parser label: --branch)"
+    )
 
     command_script = _read_shell_contract("command.sh")
     assert 'python -m utils.command_api "$@"' in command_script
@@ -1796,7 +1797,7 @@ def test_post_upgrade_hooks_are_one_shot_and_receive_context(tmp_path: Path) -> 
         f"""
         #!/usr/bin/env bash
         set -euo pipefail
-        source "{(ROOT / 'scripts/helpers/post-upgrade-hooks.sh').as_posix()}"
+        source "{(ROOT / "scripts/helpers/post-upgrade-hooks.sh").as_posix()}"
         LOCAL_REVISION=old-sha
         CURRENT_REVISION=new-sha
         REMOTE_REVISION=target-sha
@@ -1860,7 +1861,7 @@ def test_post_upgrade_hook_failure_is_left_for_retry(tmp_path: Path) -> None:
         f"""
         #!/usr/bin/env bash
         set -euo pipefail
-        source "{(ROOT / 'scripts/helpers/post-upgrade-hooks.sh').as_posix()}"
+        source "{(ROOT / "scripts/helpers/post-upgrade-hooks.sh").as_posix()}"
         arthexis_run_post_upgrade_hooks "{suite_arg}" "{lock_arg}"
         """,
     )
@@ -1899,7 +1900,7 @@ def test_pending_post_upgrade_hook_detector_requires_executable_file(
         f"""
         #!/usr/bin/env bash
         set -euo pipefail
-        source "{(ROOT / 'scripts/helpers/post-upgrade-hooks.sh').as_posix()}"
+        source "{(ROOT / "scripts/helpers/post-upgrade-hooks.sh").as_posix()}"
         if arthexis_has_post_upgrade_hooks "{suite_arg}" "{lock_arg}"; then
           printf 'pending\\n'
           exit 0
@@ -2123,7 +2124,7 @@ def test_upgrade_pre_check_exits_before_mutating_upgrade_steps() -> None:
         is None
     )
     assert (
-        "if [[ $PRE_CHECK -eq 1 ]]; then\n" "  pre_check_report_and_exit\n" "fi"
+        "if [[ $PRE_CHECK -eq 1 ]]; then\n  pre_check_report_and_exit\nfi"
     ) not in upgrade_text
     assert "github_raw_version_url_for_revision()" in upgrade_text
     assert "read_remote_version_without_ref_update()" in upgrade_text

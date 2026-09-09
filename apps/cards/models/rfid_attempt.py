@@ -99,7 +99,7 @@ class RFIDAttempt(Entity):
         charger_id: int | None = None,
         account_id: int | None = None,
         transaction_id: int | None = None,
-    ) -> "RFIDAttempt | None":
+    ) -> RFIDAttempt | None:
         rfid_value = str(payload.get("rfid", "") or "").strip().upper()
         if not rfid_value:
             return None
@@ -111,11 +111,7 @@ class RFIDAttempt(Entity):
                 authenticated = False
         raw_label_id = payload.get("label_id")
         try:
-            label_id = (
-                int(raw_label_id)
-                if raw_label_id not in (None, "")
-                else None
-            )
+            label_id = int(raw_label_id) if raw_label_id not in (None, "") else None
         except (TypeError, ValueError):
             label_id = None
         if label_id is not None:

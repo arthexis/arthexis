@@ -189,10 +189,14 @@ def _usage_post_delete(sender, instance, **kwargs):
     if kwargs.get("raw"):
         return
 
-    record_model_event(model_label=instance._meta.label_lower, action=UsageEvent.Action.DELETE)
+    record_model_event(
+        model_label=instance._meta.label_lower, action=UsageEvent.Action.DELETE
+    )
 
 
-def build_usage_summary(days: int = 30, queryset: QuerySet[UsageEvent] | None = None) -> dict:
+def build_usage_summary(
+    days: int = 30, queryset: QuerySet[UsageEvent] | None = None
+) -> dict:
     """Build a usage analytics summary for the requested time window.
 
     Historical analytics remain viewable even when collection is disabled, so the

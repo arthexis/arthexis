@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone as datetime_timezone
-from pathlib import Path
 import json
 import logging
 import os
+from datetime import UTC, datetime
+from datetime import timezone as datetime_timezone
+from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
 
 from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE, SUITE_UPTIME_LOCK_NAME
-
 
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
@@ -123,8 +123,8 @@ def _suite_uptime_lock_is_fresh(lock_path: Path, now: datetime) -> bool:
     except OSError:
         return False
 
-    heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=datetime_timezone.utc)
-    now_utc = now.astimezone(datetime_timezone.utc)
+    heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=UTC)
+    now_utc = now.astimezone(UTC)
     if heartbeat > now_utc:
         return False
     return (now_utc - heartbeat) <= SUITE_UPTIME_LOCK_MAX_AGE

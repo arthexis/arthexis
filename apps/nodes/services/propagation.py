@@ -46,11 +46,25 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
         control_payload = None
     attachments = message_model.normalize_attachments(data.get("attachments"))
     reach_name = data.get("reach")
-    reach_role = NodeRole.objects.filter(name=reach_name).first() if reach_name else None
+    reach_role = (
+        NodeRole.objects.filter(name=reach_name).first() if reach_name else None
+    )
 
-    filter_node = Node.objects.filter(uuid=data.get("filter_node")).first() if data.get("filter_node") else None
-    filter_feature = NodeFeature.objects.filter(slug=data.get("filter_node_feature")).first() if data.get("filter_node_feature") else None
-    filter_role = NodeRole.objects.filter(name=data.get("filter_node_role")).first() if data.get("filter_node_role") else None
+    filter_node = (
+        Node.objects.filter(uuid=data.get("filter_node")).first()
+        if data.get("filter_node")
+        else None
+    )
+    filter_feature = (
+        NodeFeature.objects.filter(slug=data.get("filter_node_feature")).first()
+        if data.get("filter_node_feature")
+        else None
+    )
+    filter_role = (
+        NodeRole.objects.filter(name=data.get("filter_node_role")).first()
+        if data.get("filter_node_role")
+        else None
+    )
 
     filter_relation = ""
     if data.get("filter_current_relation"):
@@ -64,7 +78,11 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
         seen_values = list(seen_values)
     normalized_seen = [str(v) for v in seen_values if v is not None]
 
-    origin_node = Node.objects.filter(uuid=data.get("origin")).first() if data.get("origin") else None
+    origin_node = (
+        Node.objects.filter(uuid=data.get("origin")).first()
+        if data.get("origin")
+        else None
+    )
     if not origin_node:
         origin_node = sender
     is_remote_upgrade_control = kind in REMOTE_UPGRADE_CONTROL_KINDS
@@ -179,13 +197,20 @@ def propagate(
         return
 
     if _upgrade_in_progress():
-        logger.info("Skipping NetMessage propagation during upgrade in progress", extra={"id": message.pk})
+        logger.info(
+            "Skipping NetMessage propagation during upgrade in progress",
+            extra={"id": message.pk},
+        )
         return
     if local and not message.node_origin_id:
         message.node_origin = local
         message.save(update_fields=["node_origin"])
 
-    origin_uuid = str(message.node_origin.uuid) if message.node_origin_id else (str(local.uuid) if local else None)
+    origin_uuid = (
+        str(message.node_origin.uuid)
+        if message.node_origin_id
+        else (str(local.uuid) if local else None)
+    )
     private_key = None
     seen = list(seen or [])
     local_id = None
@@ -207,21 +232,33 @@ def propagate(
     if message.filter_node_id:
         filtered_nodes = filtered_nodes.filter(pk=message.filter_node_id)
     if message.filter_node_feature_id:
-        filtered_nodes = filtered_nodes.filter(features__pk=message.filter_node_feature_id)
+        filtered_nodes = filtered_nodes.filter(
+            features__pk=message.filter_node_feature_id
+        )
     if message.filter_node_role_id:
         filtered_nodes = filtered_nodes.filter(role_id=message.filter_node_role_id)
     if message.filter_current_relation:
-        filtered_nodes = filtered_nodes.filter(current_relation=message.filter_current_relation)
+        filtered_nodes = filtered_nodes.filter(
+            current_relation=message.filter_current_relation
+        )
     if message.filter_installed_version:
-        filtered_nodes = filtered_nodes.filter(installed_version=message.filter_installed_version)
+        filtered_nodes = filtered_nodes.filter(
+            installed_version=message.filter_installed_version
+        )
     if message.filter_installed_revision:
-        filtered_nodes = filtered_nodes.filter(installed_revision=message.filter_installed_revision)
+        filtered_nodes = filtered_nodes.filter(
+            installed_revision=message.filter_installed_revision
+        )
     filtered_nodes = filtered_nodes.distinct()
 
     if local:
         filtered_nodes = filtered_nodes.exclude(pk=local.pk)
     total_known = filtered_nodes.count()
-    remaining = list(filtered_nodes.exclude(pk__in=message.propagated_to.values_list("pk", flat=True)))
+    remaining = list(
+        filtered_nodes.exclude(
+            pk__in=message.propagated_to.values_list("pk", flat=True)
+        )
+    )
     if not remaining:
         message.complete = True
         message.save(update_fields=["complete"])
@@ -247,9 +284,17 @@ def propagate(
             message.save(update_fields=["complete"])
             return
     else:
-        role_order = [reach_name] if message.filter_node_role_id else role_map.get(reach_name, [None])
+        role_order = (
+            [reach_name]
+            if message.filter_node_role_id
+            else role_map.get(reach_name, [None])
+        )
         for role_name in role_order:
-            role_nodes = remaining[:] if role_name is None else [n for n in remaining if n.role and n.role.name == role_name]
+            role_nodes = (
+                remaining[:]
+                if role_name is None
+                else [n for n in remaining if n.role and n.role.name == role_name]
+            )
             random.shuffle(role_nodes)
             for n in role_nodes:
                 selected.append(n)
@@ -266,7 +311,12 @@ def propagate(
 
     payload_seen = seen.copy() + [str(n.uuid) for n in selected]
     for node in selected:
-        payload = message._build_payload(sender_id=local_id, origin_uuid=origin_uuid, reach_name=reach_name, seen=payload_seen)
+        payload = message._build_payload(
+            sender_id=local_id,
+            origin_uuid=origin_uuid,
+            reach_name=reach_name,
+            seen=payload_seen,
+        )
         payload_json = message._serialize_payload(payload)
         headers = {"Content-Type": "application/json"}
         signature = message._sign_payload(payload_json, private_key)

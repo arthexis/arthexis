@@ -51,9 +51,7 @@ def get_cached_user_favorites(
         show_changelinks=show_changelinks,
         show_model_badges=show_model_badges,
     )
-    return get_cached_value_for_key(
-        cache_key, builder, force_refresh=force_refresh
-    )
+    return get_cached_value_for_key(cache_key, builder, force_refresh=force_refresh)
 
 
 def clear_user_favorites_cache(

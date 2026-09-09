@@ -13,9 +13,8 @@ from apps.counters.models import DashboardRule
 
 
 def _system_dashboard_rules_report_view(request: HttpRequest):
-    rules = (
-        DashboardRule.objects.select_related("content_type")
-        .order_by("content_type__app_label", "content_type__model")
+    rules = DashboardRule.objects.select_related("content_type").order_by(
+        "content_type__app_label", "content_type__model"
     )
 
     entries: list[dict[str, Any]] = []
@@ -27,7 +26,11 @@ def _system_dashboard_rules_report_view(request: HttpRequest):
         model_name = model._meta.verbose_name if model else content_type.name
 
         status = DashboardRule.get_cached_value(content_type, rule.evaluate)
-        if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+        if (
+            isinstance(status, dict)
+            and status.get("success")
+            and "is_default_message" not in status
+        ):
             status["is_default_message"] = status.get("message") == str(
                 DEFAULT_SUCCESS_MESSAGE
             )
@@ -40,7 +43,9 @@ def _system_dashboard_rules_report_view(request: HttpRequest):
                 "rule_admin_url": reverse(
                     "admin:counters_dashboardrule_change", args=[rule.pk]
                 ),
-                "description": rule.failure_message or rule.success_message or rule.name,
+                "description": rule.failure_message
+                or rule.success_message
+                or rule.name,
             }
         )
 

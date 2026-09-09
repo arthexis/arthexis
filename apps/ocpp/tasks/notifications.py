@@ -109,7 +109,9 @@ def send_daily_session_report() -> int:
 
     for index, transaction in enumerate(transactions, start=1):
         start_local = timezone.localtime(transaction.start_time)
-        stop_local = timezone.localtime(transaction.stop_time) if transaction.stop_time else None
+        stop_local = (
+            timezone.localtime(transaction.stop_time) if transaction.stop_time else None
+        )
         duration = _format_duration(stop_local - start_local if stop_local else None)
         account = transaction.account.name if transaction.account else "N/A"
         connector_letter = Charger.connector_letter_from_value(transaction.connector_id)
@@ -124,9 +126,9 @@ def send_daily_session_report() -> int:
             lines.append(f"   {label}: {identifier}")
         if connector:
             lines.append(f"   {connector}")
-        lines.append("   Start: " f"{start_local.strftime('%H:%M:%S %Z')}")
+        lines.append(f"   Start: {start_local.strftime('%H:%M:%S %Z')}")
         if stop_local:
-            lines.append("   Stop: " f"{stop_local.strftime('%H:%M:%S %Z')} ({duration})")
+            lines.append(f"   Stop: {stop_local.strftime('%H:%M:%S %Z')} ({duration})")
         else:
             lines.append("   Stop: in progress")
         lines.append(f"   Energy: {transaction.kw:.2f} kWh")
@@ -139,13 +141,21 @@ def send_daily_session_report() -> int:
     if node is not None:
         node.send_mail(subject, body, recipients)
     else:
-        mailer.send(subject, body, recipients, getattr(settings, "DEFAULT_FROM_EMAIL", None))
+        mailer.send(
+            subject, body, recipients, getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        )
 
-    logger.info("Sent OCPP session report for %s to %s", today.isoformat(), ", ".join(recipients))
+    logger.info(
+        "Sent OCPP session report for %s to %s",
+        today.isoformat(),
+        ", ".join(recipients),
+    )
     return len(transactions)
 
 
-@shared_task(name="apps.ocpp.tasks.send_offline_charge_point_notifications", rate_limit="12/h")
+@shared_task(
+    name="apps.ocpp.tasks.send_offline_charge_point_notifications", rate_limit="12/h"
+)
 def send_offline_charge_point_notifications() -> int:
     """Send offline notifications for charge points that stay offline."""
 
@@ -175,7 +185,9 @@ def send_offline_charge_point_notifications() -> int:
     if charger_ids:
         station_map = {
             station.charger_id: station
-            for station in Charger.objects.filter(charger_id__in=charger_ids, connector_id__isnull=True)
+            for station in Charger.objects.filter(
+                charger_id__in=charger_ids, connector_id__isnull=True
+            )
         }
 
     def _station_for(charger: Charger) -> Charger:
@@ -213,7 +225,10 @@ def send_offline_charge_point_notifications() -> int:
             continue
         recipient = resolve_offline_notification_recipient(source)
         if not recipient:
-            logger.info("Skipping offline notification for %s: no recipient resolved", source.charger_id)
+            logger.info(
+                "Skipping offline notification for %s: no recipient resolved",
+                source.charger_id,
+            )
             continue
 
         subject = f"Charge point offline: {source.charger_id}"
@@ -232,9 +247,13 @@ def send_offline_charge_point_notifications() -> int:
         if last_seen:
             message.append(f"Last seen: {timezone.localtime(last_seen).isoformat()}")
         try:
-            mailer.send(subject=subject, message="\n".join(message), recipient_list=[recipient])
+            mailer.send(
+                subject=subject, message="\n".join(message), recipient_list=[recipient]
+            )
         except Exception as exc:
-            logger.exception("Failed to send offline notification for %s: %s", source.charger_id, exc)
+            logger.exception(
+                "Failed to send offline notification for %s: %s", source.charger_id, exc
+            )
             continue
         source.offline_notification_sent_at = now
         source.save(update_fields=["offline_notification_sent_at"])

@@ -13,6 +13,7 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC
 from datetime import timezone as dt_timezone
 from pathlib import Path
 from typing import Any
@@ -749,7 +750,7 @@ def _label_filter_matches(task: GitHubMonitorTask, item: Mapping[str, object]) -
 def _parse_github_datetime(value: object):
     parsed = parse_datetime(str(value or "").strip())
     if parsed is not None and timezone.is_naive(parsed):
-        parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
+        parsed = timezone.make_aware(parsed, timezone=UTC)
     return parsed
 
 

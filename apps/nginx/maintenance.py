@@ -22,7 +22,7 @@ def _build_exact_match_block(filename: str) -> str:
     return (
         f"location = /maintenance/{filename} {{\n"
         f"    alias {MAINTENANCE_ROOT}/{filename};\n"
-        "    add_header Cache-Control \"no-store\";\n"
+        '    add_header Cache-Control "no-store";\n'
         "}"
     )
 
@@ -105,14 +105,18 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
         if identifier not in inner:
             indented_block = textwrap.indent(snippet, "    ")
             if location_marker in inner:
-                inner = inner.replace(location_marker, f"{indented_block}\n\n{location_marker}", 1)
+                inner = inner.replace(
+                    location_marker, f"{indented_block}\n\n{location_marker}", 1
+                )
             else:
                 inner = inner.rstrip() + "\n" + indented_block + "\n"
             changed = True
 
     if "location /maintenance/ {" not in inner:
         if location_marker in inner:
-            inner = inner.replace(location_marker, f"{indented_dir}\n\n{location_marker}", 1)
+            inner = inner.replace(
+                location_marker, f"{indented_dir}\n\n{location_marker}", 1
+            )
         else:
             inner = inner.rstrip() + "\n" + indented_dir + "\n"
         changed = True
@@ -132,7 +136,9 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
         proxy_added = True
         return head + body[:end_line] + insertion + body[end_line:] + tail
 
-    inner, _ = re.subn(r"(    location / \{)(.*?)(\n\s*\})", add_proxy, inner, flags=re.DOTALL)
+    inner, _ = re.subn(
+        r"(    location / \{)(.*?)(\n\s*\})", add_proxy, inner, flags=re.DOTALL
+    )
     if proxy_added:
         changed = True
 

@@ -95,4 +95,7 @@ def test_external_router_ignores_non_external_model(settings):
 
     assert router.db_for_read(CoreModel) is None
     assert router.db_for_write(CoreModel) is None
-    assert router.allow_migrate("external_arthexis_plugin_sample", "core", model=CoreModel) is False
+    assert (
+        router.allow_migrate("external_arthexis_plugin_sample", "core", model=CoreModel)
+        is False
+    )

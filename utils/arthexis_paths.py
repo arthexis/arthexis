@@ -68,7 +68,9 @@ def _coerce_mode(value: ArthexisMode | str | None) -> ArthexisMode:
         return ArthexisMode(normalized)
     except ValueError as exc:
         choices = ", ".join(mode.value for mode in ArthexisMode)
-        raise ValueError(f"Unknown Arthexis mode {value!r}; expected one of: {choices}") from exc
+        raise ValueError(
+            f"Unknown Arthexis mode {value!r}; expected one of: {choices}"
+        ) from exc
 
 
 def _default_paths(mode: ArthexisMode, project_root: Path) -> dict[str, Path]:

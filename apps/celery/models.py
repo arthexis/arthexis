@@ -1,4 +1,5 @@
 """Proxy models for Celery admin integration."""
+
 from django_celery_beat.models import (
     ClockedSchedule,
     CrontabSchedule,

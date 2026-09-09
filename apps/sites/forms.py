@@ -70,7 +70,9 @@ class AuthenticatorLoginForm(AuthenticationForm):
         self.verified_device = None
 
     def get_password_required_error(self) -> ValidationError:
-        return ValidationError(self.error_messages["password_required"], code="password_required")
+        return ValidationError(
+            self.error_messages["password_required"], code="password_required"
+        )
 
     @sensitive_variables()
     def clean(self):
@@ -185,7 +187,11 @@ class UserStoryForm(forms.ModelForm):
             return ANONYMOUS_ATTACHMENT_LIMIT
         if self.user.is_staff:
             return None
-        return int(getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", AUTHENTICATED_ATTACHMENT_LIMIT))
+        return int(
+            getattr(
+                settings, "USER_STORY_ATTACHMENT_LIMIT", AUTHENTICATED_ATTACHMENT_LIMIT
+            )
+        )
 
     def get_allowed_attachment_extensions(self) -> tuple[str, ...]:
         """Return normalized set of extensions accepted by attachment uploads."""
@@ -201,7 +207,11 @@ class UserStoryForm(forms.ModelForm):
         """Return the maximum attachment size in bytes."""
 
         return int(
-            getattr(settings, "USER_STORY_ATTACHMENT_MAX_BYTES", DEFAULT_MAX_ATTACHMENT_FILE_SIZE)
+            getattr(
+                settings,
+                "USER_STORY_ATTACHMENT_MAX_BYTES",
+                DEFAULT_MAX_ATTACHMENT_FILE_SIZE,
+            )
         )
 
     def clean_comments(self):
@@ -211,7 +221,8 @@ class UserStoryForm(forms.ModelForm):
         limit = self.get_comment_limit()
         if limit is not None and len(comments) > limit:
             raise forms.ValidationError(
-                _("Please keep your comment under %(limit)s characters.") % {"limit": limit},
+                _("Please keep your comment under %(limit)s characters.")
+                % {"limit": limit},
                 code="too_long",
             )
         return comments
@@ -222,7 +233,9 @@ class UserStoryForm(forms.ModelForm):
         limit = self.get_attachment_limit()
         attachment_count = len(self.upload_files)
         if limit == 0 and attachment_count:
-            raise forms.ValidationError(_("File uploads are not available for your account."), code="forbidden")
+            raise forms.ValidationError(
+                _("File uploads are not available for your account."), code="forbidden"
+            )
         if limit is not None and limit > 0 and attachment_count > limit:
             raise forms.ValidationError(
                 ngettext(
@@ -239,7 +252,8 @@ class UserStoryForm(forms.ModelForm):
             extension = Path(uploaded_file.name).suffix.lstrip(".").lower()
             if allowed_extensions and extension not in allowed_extensions:
                 raise forms.ValidationError(
-                    _("Unsupported file type: %(extension)s.") % {"extension": extension or _("unknown")},
+                    _("Unsupported file type: %(extension)s.")
+                    % {"extension": extension or _("unknown")},
                     code="invalid_file_type",
                 )
             if uploaded_file.size > max_file_size:
@@ -321,4 +335,6 @@ class UserStoryForm(forms.ModelForm):
         if not self.instance.pk:
             return
         for uploaded_file in self.upload_files:
-            UserStoryAttachment.objects.create(user_story=self.instance, file=uploaded_file)
+            UserStoryAttachment.objects.create(
+                user_story=self.instance, file=uploaded_file
+            )

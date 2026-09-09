@@ -12,7 +12,7 @@ import re
 from collections import deque
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 from pathlib import Path
 from threading import RLock
@@ -177,7 +177,7 @@ def start_session_log(cid: str, tx_id: int) -> None:
             # If finalizing the previous session fails we still want to reset
             # the session metadata so the new session can proceed.
 
-    start = datetime.now(dt_timezone.utc)
+    start = datetime.now(UTC)
     folder = _session_folder(cid)
     date = start.strftime("%Y%m%d")
     filename = f"{date}_{tx_id}.json"
@@ -204,9 +204,7 @@ def add_session_message(cid: str, message: str) -> None:
         buffer: list[str] = sess.setdefault("buffer", [])
         payload = json.dumps(
             {
-                "timestamp": datetime.now(dt_timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z"),
+                "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "message": message,
             },
             ensure_ascii=False,
@@ -247,7 +245,9 @@ def _flush_session_buffer(sess: dict[str, object]) -> None:
 def _finalize_session(sess: dict[str, object]) -> None:
     try:
         _flush_session_buffer(sess)
-        path: Path | None = sess.get("path") if isinstance(sess.get("path"), Path) else None
+        path: Path | None = (
+            sess.get("path") if isinstance(sess.get("path"), Path) else None
+        )
         if path:
             with path.open("a", encoding="utf-8") as handle:
                 if sess.get("first", True):
@@ -288,7 +288,11 @@ def stop_session_lock() -> None:
 
 
 def start_log_capture(
-    serial: str, connector: int | str | None, request_id: int, *, name: str | None = None
+    serial: str,
+    connector: int | str | None,
+    request_id: int,
+    *,
+    name: str | None = None,
 ) -> str:
     """Begin recording a GetLog capture using the session log pipeline."""
 
@@ -587,7 +591,9 @@ def iter_log_entries(
         )
 
 
-def get_logs(cid: str, log_type: str = "charger", *, limit: int | None = None) -> list[str]:
+def get_logs(
+    cid: str, log_type: str = "charger", *, limit: int | None = None
+) -> list[str]:
     """Return all log entries for the given id and type."""
 
     entries_list: list[str] = []

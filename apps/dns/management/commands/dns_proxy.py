@@ -48,7 +48,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         config_id = options.get("config_id")
         if config_id:
-            config = DNSProxyConfig.objects.filter(pk=config_id, is_enabled=True).first()
+            config = DNSProxyConfig.objects.filter(
+                pk=config_id, is_enabled=True
+            ).first()
             if not config:
                 raise CommandError("DNS proxy configuration not found or disabled.")
             runtime = config.to_runtime_config()

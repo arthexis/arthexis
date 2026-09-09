@@ -81,8 +81,7 @@ RESERVATION_CLAIM_TOKEN_HASH_KEY = "reservation_claim_token_hash"
 RESERVED_NODE_CLAIM_MISMATCH_DETAIL = "Reserved node claim token did not match."
 GWAY_PREFIX_MAX_LENGTH = max(
     min(
-        (Node._meta.get_field("hostname").max_length or 100)
-        - (GWAY_NUMBER_WIDTH + 1),
+        (Node._meta.get_field("hostname").max_length or 100) - (GWAY_NUMBER_WIDTH + 1),
         (Node._meta.get_field("public_endpoint").max_length or 50)
         - len(GWAY_LOCK_ENDPOINT_PREFIX),
     ),
@@ -137,8 +136,10 @@ def _gway_reservation_request_token(request) -> str:
 def _require_gway_reservation_auth(request):
     expected_token = _configured_gway_reservation_token()
     request_token = _gway_reservation_request_token(request)
-    if expected_token and request_token and hmac.compare_digest(
-        request_token, expected_token
+    if (
+        expected_token
+        and request_token
+        and hmac.compare_digest(request_token, expected_token)
     ):
         return None
     return JsonResponse({"detail": "authentication required"}, status=401)
@@ -148,7 +149,9 @@ def _hash_reservation_claim_token(token: str) -> str:
     return make_password(token)
 
 
-def _reservation_claim_token_matches(node: Node, payload: NodeRegistrationPayload) -> bool:
+def _reservation_claim_token_matches(
+    node: Node, payload: NodeRegistrationPayload
+) -> bool:
     request_token = (payload.reservation_claim_token or "").strip()
     stored_hash = str(
         (node.mesh_key_fingerprint_metadata or {}).get(
@@ -260,9 +263,7 @@ def next_gway_number(request):
 
     prefix = _clean_gway_number_prefix(request.POST.get("prefix", "gway"))
     minimum_number = _clean_gway_minimum_number(request.POST.get("minimum_number"))
-    node, claim_token = _reserve_next_gway_number(
-        prefix, minimum_number=minimum_number
-    )
+    node, claim_token = _reserve_next_gway_number(prefix, minimum_number=minimum_number)
     number = int(node.hostname.rsplit("-", 1)[1])
     return JsonResponse(
         {
@@ -535,7 +536,9 @@ def _normalize_addresses(payload: NodeRegistrationPayload):
     return mac_address, address_value, ipv6_value, ipv4_value
 
 
-def _public_endpoint_identity_matches(node: Node, payload: NodeRegistrationPayload) -> bool:
+def _public_endpoint_identity_matches(
+    node: Node, payload: NodeRegistrationPayload
+) -> bool:
     """Return whether payload trust material already matches an endpoint node."""
 
     return bool(
@@ -729,9 +732,8 @@ def _update_existing_node(
     ):
         node.mesh_key_fingerprint_metadata = payload.mesh_key_fingerprint_metadata
         update_fields.append("mesh_key_fingerprint_metadata")
-    elif (
-        reserved_claimed
-        and RESERVATION_CLAIM_TOKEN_HASH_KEY in (node.mesh_key_fingerprint_metadata or {})
+    elif reserved_claimed and RESERVATION_CLAIM_TOKEN_HASH_KEY in (
+        node.mesh_key_fingerprint_metadata or {}
     ):
         node.mesh_key_fingerprint_metadata = {
             key: value
@@ -1404,17 +1406,20 @@ def register_visitor_proxy(request):
         _apply_token_signature(visitor_payload, host_info, token)
 
         try:
-            visitor_register_body, visitor_register_url, last_error, register_attempt = (
-                _try_proxy_json_request(
-                    session=session,
-                    url=visitor_register_url,
-                    timeout_seconds=timeout_seconds,
-                    method="post",
-                    payload=visitor_payload,
-                    log_prefix="Visitor registration proxy",
-                    request_error_message="visitor notification request failed",
-                    response_error_message="visitor response json parse failed",
-                )
+            (
+                visitor_register_body,
+                visitor_register_url,
+                last_error,
+                register_attempt,
+            ) = _try_proxy_json_request(
+                session=session,
+                url=visitor_register_url,
+                timeout_seconds=timeout_seconds,
+                method="post",
+                payload=visitor_payload,
+                log_prefix="Visitor registration proxy",
+                request_error_message="visitor notification request failed",
+                response_error_message="visitor response json parse failed",
             )
         except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
             registration_logger.warning(

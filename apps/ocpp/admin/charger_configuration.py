@@ -2,6 +2,7 @@ from django.utils.translation import gettext_lazy as _
 
 from .common_imports import *
 
+
 class ConfigurationKeyInlineForm(forms.ModelForm):
     value_input = forms.CharField(
         label=_("Value"),
@@ -73,9 +74,7 @@ class ConfigurationKeyInlineForm(forms.ModelForm):
     def _format_extra_data(self) -> str:
         if not self.instance.extra_data:
             return ""
-        formatted = json.dumps(
-            self.instance.extra_data, indent=2, ensure_ascii=False
-        )
+        formatted = json.dumps(self.instance.extra_data, indent=2, ensure_ascii=False)
         return format_html("<pre>{}</pre>", formatted)
 
 
@@ -103,10 +102,9 @@ class UploadFirmwareForm(forms.Form):
                 default_date, timezone.get_current_timezone()
             )
         self.fields["retrieve_date"].initial = timezone.localtime(default_date)
-        self.fields["chargers"].queryset = (
-            Charger.objects.filter(connector_id__isnull=True)
-            .order_by("display_name", "charger_id")
-        )
+        self.fields["chargers"].queryset = Charger.objects.filter(
+            connector_id__isnull=True
+        ).order_by("display_name", "charger_id")
 
     chargers = forms.ModelMultipleChoiceField(
         label=_("Charge points"),
@@ -238,7 +236,9 @@ class LogViewAdminMixin:
         log_limit = request.GET.get("limit") or "20"
         if log_limit not in allowed_limits:
             log_limit = "20"
-        log_entries = store.get_logs(identifier, log_type=self.log_type, limit=log_limit)
+        log_entries = store.get_logs(
+            identifier, log_type=self.log_type, limit=log_limit
+        )
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -284,6 +284,7 @@ class ConfigurationKeyInline(admin.TabularInline):
             return "-"
         formatted = json.dumps(obj.extra_data, indent=2, ensure_ascii=False)
         return format_html("<pre>{}</pre>", formatted)
+
 
 class ChargerConfigurationAdmin(admin.ModelAdmin):
     change_form_template = "admin/ocpp/chargerconfiguration/change_form.html"
@@ -467,9 +468,9 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
                     description = str(details)
             if not description:
                 description = _("Unknown error")
-            message = _(
-                "ChangeConfiguration failed: %(details)s"
-            ) % {"details": description}
+            message = _("ChangeConfiguration failed: %(details)s") % {
+                "details": description
+            }
             return False, None, message
 
         payload_result = result.get("payload")
@@ -500,7 +501,9 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             return False, message, False
 
         entries = list(configuration.configuration_entries.order_by("position", "id"))
-        editable = [entry for entry in entries if entry.has_value and not entry.readonly]
+        editable = [
+            entry for entry in entries if entry.has_value and not entry.readonly
+        ]
         if not editable:
             message = _(
                 "This configuration does not include editable keys with values."
@@ -536,9 +539,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
 
     def _restart_charger(self, charger: Charger) -> tuple[bool, str]:
         if not charger.is_local:
-            message = _(
-                "Only local charge points can be restarted from this server."
-            )
+            message = _("Only local charge points can be restarted from this server.")
             return False, message
 
         connector_value = charger.connector_id
@@ -577,9 +578,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
 
         result = store.wait_for_pending_call(message_id, timeout=10.0)
         if result is None:
-            return False, _(
-                "Reset did not receive a response from the charger."
-            )
+            return False, _("Reset did not receive a response from the charger.")
         if not result.get("success", True):
             description = str(result.get("error_description") or "").strip()
             if not description:
@@ -782,9 +781,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
                 if configuration.connector_id is None:
                     fallback = fallback.filter(connector_id__isnull=True)
                 else:
-                    fallback = fallback.filter(
-                        connector_id=configuration.connector_id
-                    )
+                    fallback = fallback.filter(connector_id=configuration.connector_id)
                 linked_ids = list(fallback.values_list("pk", flat=True))
             if not linked_ids:
                 missing.append(configuration)
@@ -799,9 +796,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             for configuration in missing:
                 self.message_user(
                     request,
-                    _(
-                        "%(identifier)s has no associated charger to refresh."
-                    )
+                    _("%(identifier)s has no associated charger to refresh.")
                     % {"identifier": configuration.charger_identifier},
                     level=messages.WARNING,
                 )

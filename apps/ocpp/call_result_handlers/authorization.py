@@ -13,7 +13,9 @@ async def send_local_list(ctx: HandlerContext) -> bool:
     Persistence updates: updates local authorization version state.
     """
 
-    return await legacy.handle_send_local_list_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_send_local_list_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_local_list_version(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def get_local_list_version(ctx: HandlerContext) -> bool:
     Persistence updates: applies authorization entries and updates local authorization version.
     """
 
-    return await legacy.handle_get_local_list_version_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_local_list_version_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def clear_cache(ctx: HandlerContext) -> bool:
@@ -33,7 +37,9 @@ async def clear_cache(ctx: HandlerContext) -> bool:
     Persistence updates: resets local authorization version when accepted.
     """
 
-    return await legacy.handle_clear_cache_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_clear_cache_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_send_local_list_result = legacy_adapter(send_local_list)

@@ -15,7 +15,6 @@ from apps.nginx.management.commands.nginx import write_apply_status
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
 
-
 _RUNTIME_INHERITED_FIELDS = (
     "mode",
     "role",

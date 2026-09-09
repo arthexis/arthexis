@@ -17,10 +17,7 @@ def first_group_email(group) -> str:
     if not group or not getattr(group, "pk", None):
         return ""
     user = (
-        group.user_set.filter(is_active=True)
-        .exclude(email="")
-        .order_by("id")
-        .first()
+        group.user_set.filter(is_active=True).exclude(email="").order_by("id").first()
     )
     return (user.email or "").strip() if user else ""
 

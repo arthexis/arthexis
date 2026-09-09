@@ -91,7 +91,9 @@ class NodeUpgradePolicyAssignment(Entity):
     """Attach upgrade policy configuration and timing to a node."""
 
     node = models.ForeignKey(
-        "nodes.Node", on_delete=models.CASCADE, related_name="upgrade_policy_assignments"
+        "nodes.Node",
+        on_delete=models.CASCADE,
+        related_name="upgrade_policy_assignments",
     )
     policy = models.ForeignKey(
         UpgradePolicy,

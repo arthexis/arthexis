@@ -4,9 +4,8 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic.base import RedirectView
 
-from config.admin_urls import admin_route
-
 from apps.sites import views as pages_views
+from config.admin_urls import admin_route
 
 ROOT_URLPATTERNS = [
     path(

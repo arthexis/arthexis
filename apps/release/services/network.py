@@ -65,7 +65,7 @@ def fetch_pypi_releases(
     raise AssertionError("Unreachable")  # pragma: no cover
 
 
-def close_response(resp: Optional[object]) -> None:
+def close_response(resp: object | None) -> None:
     if resp is None:
         return
     close = getattr(resp, "close", None)

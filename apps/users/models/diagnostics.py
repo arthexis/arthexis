@@ -19,7 +19,9 @@ from .profile import Profile
 def uploaded_error_report_storage() -> FileSystemStorage:
     """Store raw uploaded error reports outside publicly served media paths."""
 
-    return FileSystemStorage(location=Path(settings.BASE_DIR) / "var" / "private" / "error-reports")
+    return FileSystemStorage(
+        location=Path(settings.BASE_DIR) / "var" / "private" / "error-reports"
+    )
 
 
 class UserDiagnosticsProfile(Profile):
@@ -96,7 +98,9 @@ class UserDiagnosticEvent(Entity):
         blank=True,
         related_name="events",
     )
-    source = models.CharField(max_length=20, choices=Source.choices, default=Source.ERROR)
+    source = models.CharField(
+        max_length=20, choices=Source.choices, default=Source.ERROR
+    )
     summary = models.CharField(max_length=255)
     details = models.TextField(blank=True)
     request_method = models.CharField(max_length=16, blank=True)
@@ -162,7 +166,9 @@ class UserDiagnosticBundle(Entity):
         blank=True,
         help_text=_("Human-readable report bundle text to copy into a patch request."),
     )
-    events = models.ManyToManyField(UserDiagnosticEvent, related_name="bundles", blank=True)
+    events = models.ManyToManyField(
+        UserDiagnosticEvent, related_name="bundles", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -195,7 +201,9 @@ class UploadedErrorReport(Entity):
         storage=uploaded_error_report_storage,
         upload_to="error-reports/%Y/%m/%d",
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     analysis = models.JSONField(default=dict, blank=True)
     error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)

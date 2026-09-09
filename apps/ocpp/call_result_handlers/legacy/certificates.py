@@ -228,7 +228,9 @@ async def handle_get_installed_certificate_ids_result(
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            hash_data = entry.get("hashData") or entry.get("certificateHashData") or entry
+            hash_data = (
+                entry.get("hashData") or entry.get("certificateHashData") or entry
+            )
             if not isinstance(hash_data, dict):
                 continue
             cert_type = str(entry.get("certificateType") or "").strip()

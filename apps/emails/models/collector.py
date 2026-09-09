@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
-from apps.core.models import EmailArtifact
+from apps.emails.models.email import EmailArtifact
 from apps.emails.models.inbox import EmailInbox
 
 logger = logging.getLogger(__name__)
@@ -337,7 +337,9 @@ class EmailCollector(Entity):
 
                 NetMessage.broadcast(rendered_subject, rendered_message)
             except Exception:
-                logger.exception("Failed net message notification for collector %s", self.pk)
+                logger.exception(
+                    "Failed net message notification for collector %s", self.pk
+                )
 
         if mode == self.NOTIFY_EMAIL:
             recipients = self._parse_recipients(self.notification_recipients)
@@ -400,7 +402,9 @@ class EmailCollector(Entity):
             try:
                 self._notify_for_message(msg, sigils)
             except Exception:
-                logger.exception("Failed to send notification for collector %s", self.pk)
+                logger.exception(
+                    "Failed to send notification for collector %s", self.pk
+                )
 
         if odoo_snapshot_sigils is not None:
             try:

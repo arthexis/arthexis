@@ -3,9 +3,9 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from django.core.mail.backends.base import BaseEmailBackend
-from django.core.mail import get_connection
 from django.conf import settings
+from django.core.mail import get_connection
+from django.core.mail.backends.base import BaseEmailBackend
 from django.db.models import Q
 
 from apps.emails.models import EmailOutbox
@@ -30,9 +30,7 @@ class OutboxEmailBackend(BaseEmailBackend):
             return None
         return getattr(value, "pk", value)
 
-    def _select_outbox(
-        self, message
-    ) -> tuple[EmailOutbox | None, list[EmailOutbox]]:
+    def _select_outbox(self, message) -> tuple[EmailOutbox | None, list[EmailOutbox]]:
         from_email = getattr(message, "from_email", None)
         node_id = self._resolve_identifier(message, "node")
         user_id = self._resolve_identifier(message, "user")
@@ -101,9 +99,11 @@ class OutboxEmailBackend(BaseEmailBackend):
         return selected, fallbacks
 
     def _fallback_outbox(self, queryset):
-        ownerless = queryset.filter(
-            node__isnull=True, user__isnull=True, group__isnull=True
-        ).order_by("pk").first()
+        ownerless = (
+            queryset.filter(node__isnull=True, user__isnull=True, group__isnull=True)
+            .order_by("pk")
+            .first()
+        )
         if ownerless:
             return ownerless
         return queryset.order_by("pk").first()
@@ -137,7 +137,9 @@ class OutboxEmailBackend(BaseEmailBackend):
                     finally:
                         try:
                             connection.close()
-                        except Exception:  # pragma: no cover - close errors shouldn't fail send
+                        except (
+                            Exception
+                        ):  # pragma: no cover - close errors shouldn't fail send
                             pass
                 if last_error is not None:
                     message.from_email = original_from_email
@@ -153,7 +155,9 @@ class OutboxEmailBackend(BaseEmailBackend):
                 finally:
                     try:
                         connection.close()
-                    except Exception:  # pragma: no cover - close errors shouldn't fail send
+                    except (
+                        Exception
+                    ):  # pragma: no cover - close errors shouldn't fail send
                         pass
 
             message.from_email = original_from_email

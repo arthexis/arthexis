@@ -124,7 +124,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 "send/",
                 self.admin_site.admin_view(self.send_tool_view),
                 name=f"{opts.app_label}_{opts.model_name}_send",
-            )
+            ),
         ]
         return custom_urls + urls
 
@@ -228,9 +228,8 @@ class NetMessageAdmin(EntityModelAdmin):
         reply_to = request.GET.get("reply_to")
         if reply_to:
             try:
-                message = (
-                    NetMessage.objects.select_related("node_origin__role")
-                    .get(pk=reply_to)
+                message = NetMessage.objects.select_related("node_origin__role").get(
+                    pk=reply_to
                 )
             except (NetMessage.DoesNotExist, ValueError, TypeError):
                 message = None

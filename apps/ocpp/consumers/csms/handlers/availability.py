@@ -5,15 +5,16 @@ from __future__ import annotations
 from channels.db import database_sync_to_async
 
 from apps.ocpp import store
-from apps.ocpp.models import Charger
-
 from apps.ocpp.consumers.csms import persistence
+from apps.ocpp.models import Charger
 
 
 class AvailabilityHandlersMixin:
     """Handle charger availability transitions derived from inbound status flow."""
 
-    async def _handle_available_status_transition(self, connector_value: int | None) -> None:
+    async def _handle_available_status_transition(
+        self, connector_value: int | None
+    ) -> None:
         """Close cached active session state when a connector becomes available."""
 
         if connector_value is None:
@@ -54,7 +55,9 @@ class AvailabilityHandlersMixin:
     ) -> None:
         """Persist availability state for current charger and cached references."""
 
-        targets = await database_sync_to_async(persistence.update_availability_state_records)(
+        targets = await database_sync_to_async(
+            persistence.update_availability_state_records
+        )(
             charger_id=self.charger_id,
             connector_value=connector_value,
             state=state,

@@ -24,7 +24,11 @@ def _oversized_image_file():
 
 
 def _media_file(upload, *, save=True):
-    bucket = get_cardface_bucket() if save else MediaBucket(slug="cardface-test-bucket", name="Card Faces")
+    bucket = (
+        get_cardface_bucket()
+        if save
+        else MediaBucket(slug="cardface-test-bucket", name="Card Faces")
+    )
     media_file = MediaFile(
         bucket=bucket,
         file=upload,

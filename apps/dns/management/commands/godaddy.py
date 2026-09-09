@@ -102,7 +102,9 @@ class Command(BaseCommand):
         if not api_secret:
             missing.append("--api-secret")
         if missing:
-            raise CommandError(f"Missing required arguments for add: {', '.join(missing)}")
+            raise CommandError(
+                f"Missing required arguments for add: {', '.join(missing)}"
+            )
 
         credential = DNSProviderCredential.objects.create(
             user=user,
@@ -133,8 +135,13 @@ class Command(BaseCommand):
         """Resolve GoDaddy API credentials using safe precedence rules."""
 
         sandbox_mode = bool(options.get("sandbox"))
-        allow_cli_secret_flags = sandbox_mode or bool(getattr(settings, "DEBUG", False)) or (
-            os.getenv("GODADDY_ALLOW_CLI_SECRETS", "").strip().lower() in {"1", "true", "yes", "on"}
+        allow_cli_secret_flags = (
+            sandbox_mode
+            or bool(getattr(settings, "DEBUG", False))
+            or (
+                os.getenv("GODADDY_ALLOW_CLI_SECRETS", "").strip().lower()
+                in {"1", "true", "yes", "on"}
+            )
         )
 
         api_key_flag = str(options.get("api_key") or "").strip()
@@ -160,7 +167,9 @@ class Command(BaseCommand):
                 with open(api_secret_file, encoding="utf-8") as secret_file:
                     api_secret = secret_file.read().strip()
             except OSError as exc:
-                raise CommandError(f"Unable to read --api-secret-file '{api_secret_file}': {exc}") from exc
+                raise CommandError(
+                    f"Unable to read --api-secret-file '{api_secret_file}': {exc}"
+                ) from exc
         if not api_secret and api_secret_flag and allow_cli_secret_flags:
             api_secret = api_secret_flag
         if not api_secret and sys.stdin.isatty():
@@ -174,7 +183,9 @@ class Command(BaseCommand):
                 "API secret (set GODADDY_API_SECRET, use --api-secret-file, or use --api-secret in sandbox)"
             )
         if missing:
-            raise CommandError(f"Missing required arguments for add: {', '.join(missing)}")
+            raise CommandError(
+                f"Missing required arguments for add: {', '.join(missing)}"
+            )
 
         return api_key, api_secret
 
@@ -183,7 +194,9 @@ class Command(BaseCommand):
 
         credential_id = options.get("credential_id")
         if credential_id is None:
-            raise CommandError("remove requires credential_id. Usage: godaddy remove <credential_id>")
+            raise CommandError(
+                "remove requires credential_id. Usage: godaddy remove <credential_id>"
+            )
 
         deleted, _ = DNSProviderCredential.objects.filter(
             pk=credential_id,
@@ -192,7 +205,9 @@ class Command(BaseCommand):
         if not deleted:
             raise CommandError(f"GoDaddy credential #{credential_id} was not found.")
 
-        self.stdout.write(self.style.SUCCESS(f"Removed GoDaddy credential #{credential_id}."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Removed GoDaddy credential #{credential_id}.")
+        )
 
     def _handle_setup(self, options: dict[str, object]) -> None:
         """Document manual DNS setup steps instead of auto-configuring credentials."""
@@ -281,9 +296,11 @@ class Command(BaseCommand):
     def _handle_list(self) -> None:
         """Print GoDaddy DNS credentials."""
 
-        credentials = list(DNSProviderCredential.objects.filter(
-            provider=DNSProviderCredential.Provider.GODADDY,
-        ).order_by("pk"))
+        credentials = list(
+            DNSProviderCredential.objects.filter(
+                provider=DNSProviderCredential.Provider.GODADDY,
+            ).order_by("pk")
+        )
         if not credentials:
             self.stdout.write("No GoDaddy credentials configured.")
             return

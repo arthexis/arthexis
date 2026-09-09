@@ -83,7 +83,9 @@ class User(Entity, AbstractUser):
     temporary_expires_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text=_("Automatically deactivate this account after the selected date and time."),
+        help_text=_(
+            "Automatically deactivate this account after the selected date and time."
+        ),
     )
     login_rfid = models.ForeignKey(
         "cards.RFID",
@@ -103,7 +105,9 @@ class User(Entity, AbstractUser):
         max_length=1,
         choices=LOGIN_RFID_KEY_CHOICES,
         default=LOGIN_RFID_KEY_A,
-        help_text=_("Select which RFID key should be used to read the login data cell."),
+        help_text=_(
+            "Select which RFID key should be used to read the login data cell."
+        ),
     )
     login_rfid_block = models.PositiveSmallIntegerField(
         null=True,
@@ -194,7 +198,10 @@ class User(Entity, AbstractUser):
         return True
 
     def deactivate_temporary_credentials(self):
-        if self.temporary_expires_at is None or self.temporary_expires_at > timezone.now():
+        if (
+            self.temporary_expires_at is None
+            or self.temporary_expires_at > timezone.now()
+        ):
             self.temporary_expires_at = timezone.now()
         self.is_active = False
         temp_passwords.discard_temp_password(self.username)

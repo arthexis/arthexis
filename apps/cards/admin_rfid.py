@@ -375,7 +375,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             "download_filename": f"rfid-public-usage-{tag.pk}.png",
             "change_url": reverse("admin:cards_rfid_change", args=[tag.pk]),
         }
-        return TemplateResponse(request, "admin/cards/rfid/public_usage_qr.html", context)
+        return TemplateResponse(
+            request, "admin/cards/rfid/public_usage_qr.html", context
+        )
 
     @admin.display(description=_("End"), ordering="endianness")
     def endianness_short(self, obj):
@@ -619,10 +621,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     new_tag.energy_accounts.set(source.energy_accounts.all())
                     self.message_user(
                         request,
-                        _(
-                            "Copied RFID %(source_label)s to %(new_label)s "
-                            "(%(rfid)s)."
-                        )
+                        _("Copied RFID %(source_label)s to %(new_label)s (%(rfid)s).")
                         % {
                             "source_label": source.label_id,
                             "new_label": new_tag.label_id,

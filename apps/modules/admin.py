@@ -70,7 +70,9 @@ class ModuleAdminForm(forms.ModelForm):
         upload = self.cleaned_data.get("favicon_upload")
         if upload:
             bucket = get_module_favicon_bucket()
-            instance.favicon_media = create_media_file(bucket=bucket, uploaded_file=upload)
+            instance.favicon_media = create_media_file(
+                bucket=bucket, uploaded_file=upload
+            )
         if commit:
             instance.save()
             self.save_m2m()
@@ -102,7 +104,13 @@ class ModuleAdmin(EntityModelAdmin):
         "security_group",
         "security_mode",
     )
-    list_filter = ("roles", "features", "application", "security_group", "security_mode")
+    list_filter = (
+        "roles",
+        "features",
+        "application",
+        "security_group",
+        "security_mode",
+    )
     fields = (
         "roles",
         "features",
@@ -124,7 +132,9 @@ class ModuleAdmin(EntityModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.annotate(landing_count=Count("landings", distinct=True)).prefetch_related(
+        return queryset.annotate(
+            landing_count=Count("landings", distinct=True)
+        ).prefetch_related(
             "roles",
             "features",
         )

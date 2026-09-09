@@ -33,7 +33,9 @@ def test_root_does_not_track_example_templates() -> None:
 
 def test_root_does_not_track_backup_artifacts() -> None:
     tracked_backups = [
-        path for path in _tracked_paths() if path == "backups" or path.startswith("backups/")
+        path
+        for path in _tracked_paths()
+        if path == "backups" or path.startswith("backups/")
     ]
 
     assert tracked_backups == []

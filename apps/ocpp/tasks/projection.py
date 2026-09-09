@@ -29,7 +29,9 @@ def request_power_projection(
     try:
         charger = Charger.objects.get(pk=charger_pk)
     except Charger.DoesNotExist:
-        logger.warning("Unable to request composite schedule for missing charger %s", charger_pk)
+        logger.warning(
+            "Unable to request composite schedule for missing charger %s", charger_pk
+        )
         return 0
 
     connector_value = charger.connector_id if charger.connector_id is not None else 0
@@ -63,11 +65,15 @@ def request_power_projection(
     try:
         async_to_sync(ws.send)(msg)
     except Exception as exc:  # pragma: no cover - network error
-        logger.warning("Failed to send GetCompositeSchedule to %s (%s)", charger.charger_id, exc)
+        logger.warning(
+            "Failed to send GetCompositeSchedule to %s (%s)", charger.charger_id, exc
+        )
         projection.status = "Error"
         projection.raw_response = {"error": "send_failed", "message": str(exc)}
         projection.received_at = timezone.now()
-        projection.save(update_fields=["status", "raw_response", "received_at", "updated_at"])
+        projection.save(
+            update_fields=["status", "raw_response", "received_at", "updated_at"]
+        )
         return 0
 
     store.add_log(log_key, f"< {msg}", log_type="charger")

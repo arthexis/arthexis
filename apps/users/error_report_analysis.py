@@ -47,7 +47,9 @@ MAX_TOTAL_LOG_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_ENTRIES = 2000
 
 
-def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = "strict") -> str:
+def _read_zip_text_limited(
+    zf: ZipFile, name: str, *, limit: int, errors: str = "strict"
+) -> str:
     info = zf.getinfo(name)
     if info.file_size > limit:
         raise ValueError(f"{name} exceeds maximum allowed size")
@@ -59,9 +61,32 @@ def _read_zip_text_limited(zf: ZipFile, name: str, *, limit: int, errors: str = 
 
 
 RULES = (
-    ("high", "migration", re.compile(r"(migration|django\.db\.utils|OperationalError|ProgrammingError)", re.IGNORECASE), "Migration or database startup failure signals detected."),
-    ("high", "startup", re.compile(r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)", re.IGNORECASE), "Python startup traceback detected."),
-    ("medium", "service", re.compile(r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE), "Service-level instability markers detected."),
+    (
+        "high",
+        "migration",
+        re.compile(
+            r"(migration|django\.db\.utils|OperationalError|ProgrammingError)",
+            re.IGNORECASE,
+        ),
+        "Migration or database startup failure signals detected.",
+    ),
+    (
+        "high",
+        "startup",
+        re.compile(
+            r"(Traceback \(most recent call last\)|ModuleNotFoundError|ImportError)",
+            re.IGNORECASE,
+        ),
+        "Python startup traceback detected.",
+    ),
+    (
+        "medium",
+        "service",
+        re.compile(
+            r"(systemd|failed to start|connection refused|timeout)", re.IGNORECASE
+        ),
+        "Service-level instability markers detected.",
+    ),
 )
 
 
@@ -77,7 +102,9 @@ def _manifest_list(manifest: dict, field: str, *, string_items: bool = False) ->
 
 
 def _load_manifest(zf: ZipFile) -> dict:
-    manifest = json.loads(_read_zip_text_limited(zf, "manifest.json", limit=MAX_MANIFEST_BYTES))
+    manifest = json.loads(
+        _read_zip_text_limited(zf, "manifest.json", limit=MAX_MANIFEST_BYTES)
+    )
     if not isinstance(manifest, dict):
         raise ValueError("manifest.json must decode to an object")
     return manifest
@@ -85,7 +112,9 @@ def _load_manifest(zf: ZipFile) -> dict:
 
 def _load_summary(zf: ZipFile) -> str:
     try:
-        return _read_zip_text_limited(zf, "summary.txt", limit=MAX_SUMMARY_BYTES, errors="replace")
+        return _read_zip_text_limited(
+            zf, "summary.txt", limit=MAX_SUMMARY_BYTES, errors="replace"
+        )
     except KeyError:
         return ""
 
@@ -132,7 +161,9 @@ def _is_log_entry(name: str) -> bool:
     return any(LOG_PATH_PART_PATTERN.search(part) for part in lower_name.split("/"))
 
 
-def _scan_text_for_rules(source: str, text: str, findings: list[dict], *, summary_suffix: str = "") -> None:
+def _scan_text_for_rules(
+    source: str, text: str, findings: list[dict], *, summary_suffix: str = ""
+) -> None:
     if SECRET_EXPOSURE_PATTERN.search(text):
         findings.append(
             {
@@ -176,10 +207,7 @@ def redact_analysis_payload(payload):
     """Return an analysis payload safe for stdout or clear-text JSON files."""
 
     if isinstance(payload, dict):
-        return {
-            key: redact_analysis_payload(value)
-            for key, value in payload.items()
-        }
+        return {key: redact_analysis_payload(value) for key, value in payload.items()}
     if isinstance(payload, list):
         return [redact_analysis_payload(value) for value in payload]
     if isinstance(payload, tuple):
@@ -204,10 +232,18 @@ def analyze_error_report_package(package_path: Path) -> dict:
             for log_name, log_text in _iter_log_text(zf):
                 _scan_text_for_rules(log_name, log_text, findings)
             if summary:
-                _scan_text_for_rules("summary.txt", summary, findings, summary_suffix=" (summary.txt)")
+                _scan_text_for_rules(
+                    "summary.txt", summary, findings, summary_suffix=" (summary.txt)"
+                )
     except BadZipFile as exc:
         raise ValueError(f"Invalid zip package: {package_path}") from exc
-    except (json.JSONDecodeError, KeyError, OSError, UnicodeDecodeError, ValueError) as exc:
+    except (
+        json.JSONDecodeError,
+        KeyError,
+        OSError,
+        UnicodeDecodeError,
+        ValueError,
+    ) as exc:
         raise ValueError(f"Malformed error-report package: {package_path}") from exc
 
     unique_findings = []
@@ -220,7 +256,9 @@ def analyze_error_report_package(package_path: Path) -> dict:
         unique_findings.append(finding)
 
     max_rank = max([SEVERITY_ORDER[f["severity"]] for f in unique_findings], default=0)
-    max_severity = next(level for level, rank in SEVERITY_ORDER.items() if rank == max_rank)
+    max_severity = next(
+        level for level, rank in SEVERITY_ORDER.items() if rank == max_rank
+    )
 
     return {
         "package": str(package_path),

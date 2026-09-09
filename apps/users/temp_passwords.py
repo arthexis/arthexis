@@ -13,12 +13,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from cryptography.fernet import Fernet, InvalidToken
-
 
 DEFAULT_PASSWORD_LENGTH = 16
 DEFAULT_EXPIRATION = timedelta(hours=1)
@@ -44,7 +43,7 @@ def _encrypt_payload(plaintext: str) -> str:
     return token.decode("utf-8")
 
 
-def _decrypt_payload(ciphertext: str) -> Optional[str]:
+def _decrypt_payload(ciphertext: str) -> str | None:
     """Return the decrypted plaintext, or ``None`` if decryption fails."""
     key = _encryption_key()
     f = Fernet(key)
@@ -93,7 +92,7 @@ def _lockfile_path(username: str) -> Path:
     return _base_lock_dir() / _lockfile_name(username)
 
 
-def _parse_timestamp(value: str | None) -> Optional[datetime]:
+def _parse_timestamp(value: str | None) -> datetime | None:
     """Return a timezone aware datetime parsed from ``value``."""
 
     if not value:
@@ -139,7 +138,7 @@ def generate_password(length: int = DEFAULT_PASSWORD_LENGTH) -> str:
 def store_temp_password(
     username: str,
     raw_password: str,
-    expires_at: Optional[datetime] = None,
+    expires_at: datetime | None = None,
     *,
     allow_change: bool = False,
 ) -> TempPasswordEntry:
@@ -171,7 +170,7 @@ def store_temp_password(
     )
 
 
-def load_temp_password(username: str) -> Optional[TempPasswordEntry]:
+def load_temp_password(username: str) -> TempPasswordEntry | None:
     """Return the stored temporary password for ``username``, if any."""
 
     path = _lockfile_path(username)

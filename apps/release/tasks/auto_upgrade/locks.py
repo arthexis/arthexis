@@ -8,7 +8,6 @@ from django.utils import timezone
 
 from apps.core.auto_upgrade import append_auto_upgrade_log
 
-
 logger = logging.getLogger(__name__)
 
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
@@ -46,9 +45,7 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
     try:
         recorded_time = datetime.fromisoformat(raw_value)
     except ValueError:
-        logger.warning(
-            "Invalid auto-upgrade recency lockfile contents: %s", raw_value
-        )
+        logger.warning("Invalid auto-upgrade recency lockfile contents: %s", raw_value)
         return False
 
     if timezone.is_naive(recorded_time):
@@ -72,9 +69,7 @@ def _load_skipped_revisions(base_dir: Path) -> set[str]:
     skip_file = _skip_lock_path(base_dir)
     try:
         return {
-            line.strip()
-            for line in skip_file.read_text().splitlines()
-            if line.strip()
+            line.strip() for line in skip_file.read_text().splitlines() if line.strip()
         }
     except FileNotFoundError:
         return set()
@@ -164,9 +159,7 @@ def _read_auto_upgrade_failure_count(base_dir: Path) -> int:
     try:
         return int(raw_value)
     except ValueError:
-        logger.warning(
-            "Invalid auto-upgrade failure lockfile contents: %s", raw_value
-        )
+        logger.warning("Invalid auto-upgrade failure lockfile contents: %s", raw_value)
         return 0
 
 

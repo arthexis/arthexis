@@ -22,7 +22,10 @@ class OcppStartupMaintenanceTests(SimpleTestCase):
 
     def test_reset_cached_statuses_command_reports_result(self):
         out = StringIO()
-        with patch("apps.ocpp.management.commands.reset_cached_statuses.reset_cached_statuses", return_value=3):
+        with patch(
+            "apps.ocpp.management.commands.reset_cached_statuses.reset_cached_statuses",
+            return_value=3,
+        ):
             call_command("reset_cached_statuses", stdout=out)
 
         assert "Cleared cached charger statuses for 3 charge points." in out.getvalue()

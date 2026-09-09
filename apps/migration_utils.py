@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any, Dict, Optional, Tuple
 
-ModelKey = Tuple[str, str]
+ModelKey = tuple[str, str]
 
 
-def _resolve_alias(target: Any, aliases: Optional[Dict[Any, Any]]) -> Any:
+def _resolve_alias(target: Any, aliases: dict[Any, Any] | None) -> Any:
     if aliases and target in aliases:
         return aliases[target]
     return target
@@ -18,8 +19,8 @@ def _resolve_alias(target: Any, aliases: Optional[Dict[Any, Any]]) -> Any:
 def import_callable(
     dotted_path: str,
     *,
-    default: Optional[Callable[..., Any]] = None,
-    aliases: Optional[Dict[str, str]] = None,
+    default: Callable[..., Any] | None = None,
+    aliases: dict[str, str] | None = None,
 ) -> Callable[..., Any]:
     """Import a callable for migrations without crashing on missing modules.
 
@@ -51,9 +52,7 @@ def import_callable(
     if default is not None:
         return default
 
-    raise ImportError(
-        f"Callable {attribute} not found in {module_path} for migrations"
-    )
+    raise ImportError(f"Callable {attribute} not found in {module_path} for migrations")
 
 
 def get_model(
@@ -62,7 +61,7 @@ def get_model(
     model_name: str,
     *,
     allow_missing: bool = False,
-    aliases: Optional[Dict[ModelKey, ModelKey]] = None,
+    aliases: dict[ModelKey, ModelKey] | None = None,
 ) -> Any:
     """Fetch a model from the historical apps registry safely.
 

@@ -6,9 +6,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import TypedDict, cast
-
-from typing_extensions import NotRequired
+from typing import NotRequired, TypedDict, cast
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.repos.services import github as github_service
@@ -151,9 +149,13 @@ class ReleaseManagementClient:
     @staticmethod
     def _ensure_gh_available() -> None:
         try:
-            subprocess.run(["gh", "--version"], check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["gh", "--version"], check=True, capture_output=True, text=True
+            )
         except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-            raise ReleaseManagementError("GitHub CLI is unavailable; install/authenticate gh first") from exc
+            raise ReleaseManagementError(
+                "GitHub CLI is unavailable; install/authenticate gh first"
+            ) from exc
 
     def _run_gh_json(self, args: list[str]) -> JSONValue:
         self._ensure_gh_available()
@@ -164,7 +166,11 @@ class ReleaseManagementClient:
             text=True,
         )
         if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip() or "gh command failed"
+            message = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "gh command failed"
+            )
             raise ReleaseManagementError(message)
         output = completed.stdout.strip()
         if not output:
@@ -173,9 +179,15 @@ class ReleaseManagementClient:
 
     def _run_gh(self, args: list[str]) -> str:
         self._ensure_gh_available()
-        completed = subprocess.run(["gh", *args], check=False, capture_output=True, text=True)
+        completed = subprocess.run(
+            ["gh", *args], check=False, capture_output=True, text=True
+        )
         if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip() or "gh command failed"
+            message = (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "gh command failed"
+            )
             raise ReleaseManagementError(message)
         return completed.stdout.strip()
 
@@ -186,7 +198,9 @@ class ReleaseManagementClient:
     def _can_use_suite_api(self) -> bool:
         return bool(self._resolve_token()) and self._feature_enabled()
 
-    def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[GitHubIssuePayload]:
+    def list_issues(
+        self, repository: RepositoryRef, *, state: str = "open"
+    ) -> list[GitHubIssuePayload]:
         """List issues using suite API first unless binary mode is selected."""
 
         token = self._resolve_token()
@@ -287,9 +301,13 @@ class ReleaseManagementClient:
         rows = self._run_gh_json(
             ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
         )
-        return cast(list[GitHubPullRequestPayload], rows) if isinstance(rows, list) else []
+        return (
+            cast(list[GitHubPullRequestPayload], rows) if isinstance(rows, list) else []
+        )
 
-    def create_release(self, repository: RepositoryRef, *, tag: str, title: str, notes: str) -> str:
+    def create_release(
+        self, repository: RepositoryRef, *, tag: str, title: str, notes: str
+    ) -> str:
         """Create a GitHub release via gh CLI."""
 
         return self._run_gh(
@@ -307,7 +325,9 @@ class ReleaseManagementClient:
             ]
         )
 
-    def list_releases(self, repository: RepositoryRef, *, limit: int = 20) -> list[GitHubReleasePayload]:
+    def list_releases(
+        self, repository: RepositoryRef, *, limit: int = 20
+    ) -> list[GitHubReleasePayload]:
         """List releases via gh CLI JSON output."""
 
         rows = self._run_gh_json(
@@ -336,7 +356,9 @@ class ReleaseManagementClient:
         return payload
 
     @staticmethod
-    def _coerce_pull_request_payload(item: dict[str, JSONValue]) -> GitHubPullRequestPayload:
+    def _coerce_pull_request_payload(
+        item: dict[str, JSONValue],
+    ) -> GitHubPullRequestPayload:
         payload: GitHubPullRequestPayload = cast(GitHubPullRequestPayload, item)
         draft = item.get("draft")
         if isinstance(draft, bool) and "isDraft" not in payload:

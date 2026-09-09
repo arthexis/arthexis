@@ -6,7 +6,6 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
-
 OLD_TARGETS = [
     ("analytics", None),
     ("core", "0003_release_email_models"),

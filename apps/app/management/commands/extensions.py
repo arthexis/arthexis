@@ -115,7 +115,9 @@ class Command(BaseCommand):
         declarations = load_declared_extension_repositories(self.base_dir)
         manifests = load_extension_manifests(self.base_dir)
         installed_by_repository = {
-            manifest.repository: manifest for manifest in manifests if manifest.repository
+            manifest.repository: manifest
+            for manifest in manifests
+            if manifest.repository
         }
         installed_by_name = {manifest.name: manifest for manifest in manifests}
 
@@ -124,7 +126,9 @@ class Command(BaseCommand):
             return
 
         for key, repository in sorted(declarations.items()):
-            manifest = installed_by_repository.get(repository) or installed_by_name.get(key)
+            manifest = installed_by_repository.get(repository) or installed_by_name.get(
+                key
+            )
             state = "installed" if manifest else "missing"
             apps = ",".join(manifest.django_apps) if manifest else "-"
             self.stdout.write(f"{key}\t{state}\t{repository}\t{apps}")

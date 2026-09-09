@@ -155,14 +155,15 @@ def encode_command_metadata(
         raise CardLayoutError("command payload does not fit on this card")
     if result_block_count < 0:
         raise CardLayoutError("result block count must be non-negative")
-    if result_block_count and command_block_count + result_block_count > available_blocks:
+    if (
+        result_block_count
+        and command_block_count + result_block_count > available_blocks
+    ):
         raise CardLayoutError("result payload does not fit on this card")
 
     normalized_provenance = _normalize_provenance_key(provenance_key)
     provenance_bytes = (
-        bytes.fromhex(normalized_provenance)
-        if normalized_provenance
-        else b"\x00" * 8
+        bytes.fromhex(normalized_provenance) if normalized_provenance else b"\x00" * 8
     )
     payload = bytearray(COMMAND_METADATA_BYTES)
     payload[0:4] = COMMAND_LAYOUT_MAGIC
@@ -461,8 +462,6 @@ def command_result_blocks_complete(dump: object) -> bool:
     if metadata.result_block_count <= 0:
         return True
     required_blocks = set(
-        result_data_blocks(metadata.command_block_count)[
-            : metadata.result_block_count
-        ]
+        result_data_blocks(metadata.command_block_count)[: metadata.result_block_count]
     )
     return required_blocks.issubset(blocks)

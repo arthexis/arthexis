@@ -10,7 +10,9 @@ from pathlib import Path
 
 
 def default_repo() -> Path:
-    return Path(os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")).expanduser()
+    return Path(
+        os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")
+    ).expanduser()
 
 
 def list_files(root: Path) -> list[str]:
@@ -36,10 +38,21 @@ def main() -> int:
         "codexScriptsHooks": list_files(codex_home / "scripts" / "hooks"),
         "repoCodexHooks": list_files(repo / ".codex" / "hooks"),
         "repoHooks": list_files(repo / "hooks"),
-        "repoHookContext": [str(path) for path in [repo / "apps" / "skills" / "hook_context.py"] if path.exists()],
-        "repoHookCommands": list_files(repo / "apps" / "skills" / "management" / "commands"),
+        "repoHookContext": [
+            str(path)
+            for path in [repo / "apps" / "skills" / "hook_context.py"]
+            if path.exists()
+        ],
+        "repoHookCommands": list_files(
+            repo / "apps" / "skills" / "management" / "commands"
+        ),
     }
-    print(json.dumps({"codexHome": str(codex_home), "repo": str(repo), "surfaces": surfaces}, indent=2))
+    print(
+        json.dumps(
+            {"codexHome": str(codex_home), "repo": str(repo), "surfaces": surfaces},
+            indent=2,
+        )
+    )
     return 0
 
 

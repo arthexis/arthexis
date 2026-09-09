@@ -193,15 +193,18 @@ def dashboard(request):
 
     latest_tx_ids = [
         tx_id
-        for tx_id in {getattr(charger, "latest_tx_id", None) for charger in visible_chargers}
+        for tx_id in {
+            getattr(charger, "latest_tx_id", None) for charger in visible_chargers
+        }
         if tx_id
     ]
     latest_tx_map: dict[int, Transaction] = {}
     if latest_tx_ids:
         latest_tx_map = {
             tx.pk: tx
-            for tx in Transaction.objects.filter(pk__in=latest_tx_ids)
-            .select_related("charger")
+            for tx in Transaction.objects.filter(pk__in=latest_tx_ids).select_related(
+                "charger"
+            )
         }
 
     def _status_group(state_value: str, color_value: str) -> str:
@@ -270,7 +273,9 @@ def dashboard(request):
             if child["charger"].connector_id is not None
         ]
         charging_state = force_str(STATUS_BADGE_MAP["charging"][0]).casefold()
-        if connector_states and all(state == charging_state for state in connector_states):
+        if connector_states and all(
+            state == charging_state for state in connector_states
+        ):
             label, badge_color = STATUS_BADGE_MAP["charging"]
             parent_entry["state"] = label
             parent_entry["color"] = badge_color
@@ -288,7 +293,11 @@ def dashboard(request):
     }
     wants_table_partial = request.GET.get("partial") == "table"
     accepts_json = "application/json" in request.headers.get("Accept", "").lower()
-    if is_htmx or wants_table_partial or request.headers.get("x-requested-with") == "XMLHttpRequest":
+    if (
+        is_htmx
+        or wants_table_partial
+        or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
         html = render_to_string(
             "ocpp/includes/dashboard_table_rows.html", context, request=request
         )

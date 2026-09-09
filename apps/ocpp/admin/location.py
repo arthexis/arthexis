@@ -108,7 +108,8 @@ class LocationAdmin(EntityModelAdmin):
                 )
 
                 change_url = reverse(
-                    f"admin:{opts.app_label}_{opts.model_name}_change", args=[location.pk]
+                    f"admin:{opts.app_label}_{opts.model_name}_change",
+                    args=[location.pk],
                 )
                 return HttpResponseRedirect(change_url)
 

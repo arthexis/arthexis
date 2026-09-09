@@ -34,7 +34,9 @@ def _grant_model_perms(user, model):
 
 
 @pytest.mark.django_db
-def test_setup_templates_step_one_imports_selected_records(admin_client, admin_user, monkeypatch):
+def test_setup_templates_step_one_imports_selected_records(
+    admin_client, admin_user, monkeypatch
+):
     profile = OdooEmployee.objects.create(
         user=admin_user,
         host="https://odoo.example.com",
@@ -120,7 +122,9 @@ def test_setup_templates_step_one_scopes_template_upsert_by_odoo_instance(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = admin_client.post(
@@ -178,9 +182,7 @@ def test_setup_templates_step_two_creates_linked_objects(admin_client):
 
 
 @pytest.mark.django_db
-def test_setup_templates_step_two_assigns_one_salesperson(
-    admin_client, admin_user
-):
+def test_setup_templates_step_two_assigns_one_salesperson(admin_client, admin_user):
     source_template = OdooSaleOrderTemplate.objects.create(
         name="Base",
         odoo_template={"id": 90, "name": "Base"},
@@ -275,12 +277,16 @@ def test_setup_templates_step_one_truncates_imported_product_name(
         fields = kwargs.get("fields") or []
         if fields == ["id", "name"]:
             return [{"id": 701, "name": long_name}]
-        return [{"id": 701, "name": long_name, "description_sale": "Remote description"}]
+        return [
+            {"id": 701, "name": long_name, "description_sale": "Remote description"}
+        ]
 
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = admin_client.post(
@@ -334,7 +340,9 @@ def test_setup_templates_step_one_preserves_product_renewal_period_on_reimport(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = admin_client.post(
@@ -380,7 +388,9 @@ def test_setup_templates_step_one_truncates_imported_template_name(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = admin_client.post(
@@ -554,7 +564,9 @@ def test_setup_templates_step_one_employee_import_truncates_long_username(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = admin_client.post(
@@ -644,7 +656,9 @@ def test_setup_templates_step_one_employee_import_requires_auth_user_permissions
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
 
     response = client.post(
@@ -652,13 +666,17 @@ def test_setup_templates_step_one_employee_import_requires_auth_user_permissions
         {"source_type": "employees", "selected_ids": ["88"]},
     )
 
-    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    response_messages = [
+        str(message) for message in get_messages(response.wsgi_request)
+    ]
     assert any(
         "do not have permission to synchronize authentication users" in message
         for message in response_messages
     )
     assert (
-        OdooEmployee.objects.filter(host=profile.host, database=profile.database, odoo_uid=88).count()
+        OdooEmployee.objects.filter(
+            host=profile.host, database=profile.database, odoo_uid=88
+        ).count()
         == 0
     )
 
@@ -689,9 +707,13 @@ def test_setup_templates_step_one_reports_database_write_failures(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
+        ),
     )
-    monkeypatch.setattr(OdooSaleOrderTemplateAdmin, "_import_source_selection", fail_import)
+    monkeypatch.setattr(
+        OdooSaleOrderTemplateAdmin, "_import_source_selection", fail_import
+    )
 
     response = admin_client.post(
         reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
@@ -704,8 +726,13 @@ def test_setup_templates_step_one_reports_database_write_failures(
     assert response.status_code == 302
     assert response.url.endswith("?source_type=products")
     response = admin_client.get(response.url)
-    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
-    assert any("Import failed while saving local records" in message for message in response_messages)
+    response_messages = [
+        str(message) for message in get_messages(response.wsgi_request)
+    ]
+    assert any(
+        "Import failed while saving local records" in message
+        for message in response_messages
+    )
 
 
 @pytest.mark.django_db
@@ -790,7 +817,9 @@ def test_setup_templates_step_two_rechecks_product_payload_before_rule_creation(
     )
 
     assert response.status_code == 302
-    assert response.url == reverse("admin:odoo_odoosaleordertemplate_setup_templates_create")
+    assert response.url == reverse(
+        "admin:odoo_odoosaleordertemplate_setup_templates_create"
+    )
     assert OdooSaleOrderTemplate.objects.filter(name="Setup: Base").count() == 0
     assert OdooSaleFactor.objects.count() == 0
     assert OdooSaleFactorProductRule.objects.count() == 0

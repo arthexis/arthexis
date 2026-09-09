@@ -56,7 +56,9 @@ class UploadedErrorReportUploadForm(forms.Form):
     """Validate uploaded error-report packages before creating records."""
 
     source_label = forms.CharField(max_length=200, required=False)
-    package = forms.FileField(widget=forms.ClearableFileInput(attrs={"accept": ".zip,application/zip"}))
+    package = forms.FileField(
+        widget=forms.ClearableFileInput(attrs={"accept": ".zip,application/zip"})
+    )
 
     def clean_source_label(self) -> str:
         return (self.cleaned_data.get("source_label") or "").strip()
@@ -105,7 +107,13 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
 
     list_display = ("name", "user", "last_used_at", "created_at")
     search_fields = ("name", "user__username", "user__email", "credential_id")
-    readonly_fields = ("credential_id", "created_at", "last_used_at", "sign_count", "updated_at")
+    readonly_fields = (
+        "credential_id",
+        "created_at",
+        "last_used_at",
+        "sign_count",
+        "updated_at",
+    )
 
     change_list_template = "admin/users/passkeycredential_changelist.html"
 
@@ -121,7 +129,9 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
 
     def registration_wizard_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_add_permission(request):
-            messages.error(request, _("You do not have permission to register passkeys."))
+            messages.error(
+                request, _("You do not have permission to register passkeys.")
+            )
             return redirect(reverse("admin:index"))
 
         form = PasskeyRegistrationForm(request.POST or None)
@@ -157,7 +167,9 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
             name = pending.get("name")
             user_handle = pending.get("user_handle")
             if not all((challenge, user_id, name, user_handle)):
-                messages.error(request, _("Passkey registration session expired. Please restart."))
+                messages.error(
+                    request, _("Passkey registration session expired. Please restart.")
+                )
                 return redirect(reverse("admin:users_passkeycredential_register"))
 
             user = User.objects.filter(pk=user_id).first()
@@ -173,8 +185,15 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
                     credential,
                     expected_challenge=challenge,
                 )
-            except (TypeError, ValueError, InvalidJSONStructure, InvalidRegistrationResponse):
-                messages.error(request, _("Passkey verification failed. Please try again."))
+            except (
+                TypeError,
+                ValueError,
+                InvalidJSONStructure,
+                InvalidRegistrationResponse,
+            ):
+                messages.error(
+                    request, _("Passkey verification failed. Please try again.")
+                )
             else:
                 transports = credential.get("response", {}).get("transports") or []
                 try:
@@ -190,12 +209,18 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
                 except IntegrityError:
                     messages.error(
                         request,
-                        _("A passkey with this name or credential already exists for the user."),
+                        _(
+                            "A passkey with this name or credential already exists for the user."
+                        ),
                     )
                 else:
                     request.session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
                     messages.success(request, _("Passkey registered successfully."))
-                    return redirect(reverse("admin:users_passkeycredential_change", args=[passkey.pk]))
+                    return redirect(
+                        reverse(
+                            "admin:users_passkeycredential_change", args=[passkey.pk]
+                        )
+                    )
 
         context = {
             **self.admin_site.each_context(request),
@@ -205,7 +230,9 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
             "registration_url": reverse("admin:users_passkeycredential_register"),
             "public_key_options_data": options_data,
         }
-        return TemplateResponse(request, "admin/users/passkeycredential_wizard.html", context)
+        return TemplateResponse(
+            request, "admin/users/passkeycredential_wizard.html", context
+        )
 
 
 @admin.register(UserFlag)
@@ -234,7 +261,13 @@ class UserDiagnosticsProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
 class UserDiagnosticEventAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "source", "summary", "request_method", "occurred_at")
     list_filter = ("source", "occurred_at")
-    search_fields = ("user__username", "summary", "details", "request_path", "fingerprint")
+    search_fields = (
+        "user__username",
+        "summary",
+        "details",
+        "request_path",
+        "fingerprint",
+    )
     readonly_fields = ("fingerprint", "occurred_at", "metadata")
     actions = ("create_bundle_for_selected_users",)
 
@@ -257,7 +290,9 @@ class UserDiagnosticEventAdmin(admin.ModelAdmin):
                 level=messages.SUCCESS,
             )
             return
-        self.message_user(request, _("No bundles were created."), level=messages.WARNING)
+        self.message_user(
+            request, _("No bundles were created."), level=messages.WARNING
+        )
 
     def save_model(self, request, obj, form, change):
         if not change and obj.source == UserDiagnosticEvent.Source.FEEDBACK:
@@ -299,8 +334,14 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
     list_filter = ("status", "created_at")
     search_fields = ("source_label", "package")
     exclude = ("package",)
-    readonly_fields = ("package_name", "analysis", "error", "status", "created_at", "updated_at")
-
+    readonly_fields = (
+        "package_name",
+        "analysis",
+        "error",
+        "status",
+        "created_at",
+        "updated_at",
+    )
 
     @admin.display(description=_("Package"))
     def package_name(self, obj: UploadedErrorReport) -> str:
@@ -316,21 +357,32 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
         return super().has_add_permission(request)
 
     def changelist_view(self, request: HttpRequest, extra_context=None):
-        context = {**(extra_context or {}), "has_upload_permission": self.has_upload_permission(request)}
+        context = {
+            **(extra_context or {}),
+            "has_upload_permission": self.has_upload_permission(request),
+        }
         return super().changelist_view(request, extra_context=context)
 
     def get_urls(self):
         custom = [
-            path("upload/", self.admin_site.admin_view(self.upload_view), name="users_uploadederrorreport_upload"),
+            path(
+                "upload/",
+                self.admin_site.admin_view(self.upload_view),
+                name="users_uploadederrorreport_upload",
+            ),
         ]
         return custom + super().get_urls()
 
     def upload_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_upload_permission(request):
-            messages.error(request, _("You do not have permission to upload error reports."))
+            messages.error(
+                request, _("You do not have permission to upload error reports.")
+            )
             return redirect(reverse("admin:index"))
 
-        form = UploadedErrorReportUploadForm(request.POST or None, request.FILES or None)
+        form = UploadedErrorReportUploadForm(
+            request.POST or None, request.FILES or None
+        )
         if request.method == "POST":
             if form.is_valid():
                 report = UploadedErrorReport.objects.create(
@@ -338,16 +390,24 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
                     uploaded_by=request.user if request.user.is_authenticated else None,
                     package=form.cleaned_data["package"],
                 )
-                if not enqueue_task(analyze_uploaded_error_report, report.pk, require_enabled=False):
+                if not enqueue_task(
+                    analyze_uploaded_error_report, report.pk, require_enabled=False
+                ):
                     try:
                         analyze_uploaded_error_report(report.pk)
                     except Exception as exc:
-                        logger.exception("Failed to analyze uploaded error report synchronously.")
+                        logger.exception(
+                            "Failed to analyze uploaded error report synchronously."
+                        )
                         report.status = UploadedErrorReport.Status.FAILED
                         report.error = str(exc)
                         report.save(update_fields=["status", "error", "updated_at"])
-                        messages.error(request, _("Error report analysis failed to start."))
-                return redirect(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
+                        messages.error(
+                            request, _("Error report analysis failed to start.")
+                        )
+                return redirect(
+                    reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+                )
 
         context = {
             **self.admin_site.each_context(request),
@@ -356,7 +416,9 @@ class UploadedErrorReportAdmin(EntityModelAdmin):
             "title": _("Upload error report"),
             "refresh_ms": 3000,
         }
-        return TemplateResponse(request, "admin/users/uploaded_error_report_upload.html", context)
+        return TemplateResponse(
+            request, "admin/users/uploaded_error_report_upload.html", context
+        )
 
 
 __all__ = ["admin"]

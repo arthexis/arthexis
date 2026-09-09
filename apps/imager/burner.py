@@ -40,7 +40,9 @@ def has_imager_burner_tools() -> bool:
 def imager_burner_available(*, node=None) -> bool:
     """Return whether the current node may own durable image burn jobs."""
 
-    return bool(node is not None and node_is_control(node) and has_imager_burner_tools())
+    return bool(
+        node is not None and node_is_control(node) and has_imager_burner_tools()
+    )
 
 
 def device_identity(
@@ -460,16 +462,16 @@ def run_burn_job(job: RaspberryPiImageBurnJob) -> RaspberryPiImageBurnJob:
         job.status = RaspberryPiImageBurnJob.Status.FAILED
         job.error = str(exc)
         job.finished_at = timezone.now()
-        job.save(
-            update_fields=["status", "error", "finished_at", "updated_at"]
-        )
+        job.save(update_fields=["status", "error", "finished_at", "updated_at"])
         append_job_log(job, f"failed: {exc}")
         return job
 
     job.status = RaspberryPiImageBurnJob.Status.SUCCEEDED
     job.result = _write_result_payload(result)
     job.error = ""
-    job.progress_total_bytes = result.size_bytes or job.progress_total_bytes or job.image_size_bytes
+    job.progress_total_bytes = (
+        result.size_bytes or job.progress_total_bytes or job.image_size_bytes
+    )
     job.progress_bytes = job.progress_total_bytes
     job.finished_at = timezone.now()
     job.save(

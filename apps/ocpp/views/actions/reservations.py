@@ -1,11 +1,10 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -18,7 +17,9 @@ from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
-def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_reserve_now(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
     if reservation_pk in (None, ""):
         return JsonResponse({"detail": "reservation required"}, status=400)
@@ -104,7 +105,9 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
-def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_cancel_reservation(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
     if reservation_pk in (None, ""):
         return JsonResponse({"detail": "reservation required"}, status=400)

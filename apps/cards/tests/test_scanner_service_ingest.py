@@ -33,7 +33,9 @@ def test_ingest_service_scans_reads_ndjson_log(monkeypatch, settings, tmp_path):
 
 
 @pytest.mark.django_db
-def test_ingest_service_scans_recovers_when_log_rotates(monkeypatch, settings, tmp_path):
+def test_ingest_service_scans_recovers_when_log_rotates(
+    monkeypatch, settings, tmp_path
+):
     settings.BASE_DIR = str(tmp_path)
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -88,9 +90,7 @@ def test_ingest_service_scans_honors_legacy_integer_offset(
 
 
 @pytest.mark.django_db
-def test_ingest_service_scans_ignores_stale_label_id(
-    monkeypatch, settings, tmp_path
-):
+def test_ingest_service_scans_ignores_stale_label_id(monkeypatch, settings, tmp_path):
     settings.BASE_DIR = str(tmp_path)
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)

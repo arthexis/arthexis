@@ -38,7 +38,9 @@ def clear_script_cache():
 
 @pytest.mark.django_db
 def test_parse_script_normalizes_keywords_and_identifiers():
-    instructions = parse_script("let cp_host = [CP:hostname=SIM-CP-1.public_endpoint]\nemit OCPP:$CP_HOST")
+    instructions = parse_script(
+        "let cp_host = [CP:hostname=SIM-CP-1.public_endpoint]\nemit OCPP:$CP_HOST"
+    )
 
     assert [item.action for item in instructions] == ["LET", "EMIT"]
     assert instructions[0].identifier == "CP_HOST"
@@ -140,11 +142,11 @@ def test_resolve_enables_cache_by_default(monkeypatch):
 
 
 @pytest.mark.django_db
-
-
 @pytest.mark.django_db
 def test_execute_script_interpolates_longest_variable_name_first(monkeypatch):
-    monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", lambda *args, **kwargs: args[0])
+    monkeypatch.setattr(
+        "apps.sigils.script_runtime.resolve_sigils", lambda *args, **kwargs: args[0]
+    )
 
     outputs = execute_script(
         parse_script(

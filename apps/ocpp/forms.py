@@ -68,4 +68,3 @@ class ChargerVendorSubmissionForm(forms.ModelForm):
         """Normalize OCPP version input for consistent admin review."""
 
         return " ".join((self.cleaned_data.get("ocpp_versions") or "").split())
-

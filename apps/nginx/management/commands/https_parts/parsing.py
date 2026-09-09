@@ -36,7 +36,9 @@ def _parse_site_domain(candidate: str | None) -> str | None:
         raise CommandError("--site must include a valid hostname or URL.")
 
     if normalized == "localhost":
-        raise CommandError("--site requires a public host. Use --local for local development.")
+        raise CommandError(
+            "--site requires a public host. Use --local for local development."
+        )
 
     if normalized.startswith("-"):
         raise CommandError("--site must include a valid hostname or URL.")
@@ -54,7 +56,9 @@ def _parse_site_domain(candidate: str | None) -> str | None:
         raise CommandError("--site must include a valid hostname or URL.")
 
     if parsed_ip is not None and parsed_ip.is_loopback:
-        raise CommandError("--site requires a public host. Use --local for local development.")
+        raise CommandError(
+            "--site requires a public host. Use --local for local development."
+        )
 
     return normalized
 

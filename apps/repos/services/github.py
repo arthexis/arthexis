@@ -7,7 +7,7 @@ import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 from urllib.parse import quote
@@ -82,7 +82,9 @@ RequestParamValue: TypeAlias = RequestParamScalar | Iterable[RequestParamScalar]
 RequestParams: TypeAlias = Mapping[str, RequestParamValue]
 
 
-def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[str, str]:
+def build_headers(
+    token: str, *, user_agent: str = "arthexis-admin"
+) -> Mapping[str, str]:
     return {
         "Accept": "application/vnd.github+json",
         "Authorization": f"token {token}",
@@ -234,8 +236,12 @@ def create_repository(
     headers = build_headers(token)
     payload = _build_repository_payload(
         getattr(repository, "name", ""),
-        private=getattr(repository, "is_private", False) if private is None else private,
-        description=description if description is not None else getattr(repository, "description", ""),
+        private=getattr(repository, "is_private", False)
+        if private is None
+        else private,
+        description=description
+        if description is not None
+        else getattr(repository, "description", ""),
     )
 
     endpoints: list[str] = []
@@ -257,7 +263,8 @@ def create_repository(
             )
         except requests.RequestException as exc:  # pragma: no cover - network failure
             logger.exception(
-                "GitHub repository creation request failed for %s", getattr(repository, "slug", None)
+                "GitHub repository creation request failed for %s",
+                getattr(repository, "slug", None),
             )
             raise GitHubRepositoryError(str(exc)) from exc
 
@@ -271,7 +278,9 @@ def create_repository(
 
                 owner_data = payload_data.get("owner")
                 resolved_owner = (
-                    owner_data.get("login") if isinstance(owner_data, Mapping) else owner
+                    owner_data.get("login")
+                    if isinstance(owner_data, Mapping)
+                    else owner
                 )
                 resolved_owner = (resolved_owner or owner).strip("/")
                 return f"https://github.com/{resolved_owner}/{getattr(repository, 'name', '')}"
@@ -538,8 +547,8 @@ def _issue_has_recent_marker(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
 
-    marker_age = datetime.now(timezone.utc) - datetime.fromtimestamp(
-        lock_path.stat().st_mtime, timezone.utc
+    marker_age = datetime.now(UTC) - datetime.fromtimestamp(
+        lock_path.stat().st_mtime, UTC
     )
     return marker_age < ISSUE_LOCK_TTL
 
@@ -699,7 +708,7 @@ def build_issue_payload(
             logger.info("Skipping GitHub issue for active fingerprint %s", fingerprint)
             return None
 
-        lock_path.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+        lock_path.write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
         digest = _issue_fingerprint_digest(fingerprint)
         payload["body"] = f"{body_text}\n\n<!-- fingerprint:{digest} -->"
 
@@ -766,7 +775,9 @@ def create_issue(
                 retry_payload["labels"] = fallback_labels
             else:
                 retry_payload.pop("labels", None)
-            response = requests.post(url, json=retry_payload, headers=headers, timeout=timeout)
+            response = requests.post(
+                url, json=retry_payload, headers=headers, timeout=timeout
+            )
     except Exception:
         if response is not None:
             with contextlib.suppress(Exception):
@@ -968,7 +979,9 @@ def merge_pull_request(
         timeout=timeout,
     )
     if str(pull.get("state") or "").lower() != "open":
-        raise GitHubRepositoryError(f"Cannot merge PR #{pull_number} because it is not open")
+        raise GitHubRepositoryError(
+            f"Cannot merge PR #{pull_number} because it is not open"
+        )
 
     mergeable = pull.get("mergeable")
     if mergeable is None:

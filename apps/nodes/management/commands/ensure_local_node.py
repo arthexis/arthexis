@@ -19,7 +19,9 @@ class Command(BaseCommand):
         Node._local_cache.clear()
         local_node = Node.get_local()
         if local_node is None or local_node.pk != node.pk:
-            raise CommandError("Local node registration could not be resolved after registration.")
+            raise CommandError(
+                "Local node registration could not be resolved after registration."
+            )
 
         action = "created" if created else "refreshed"
         self.stdout.write(

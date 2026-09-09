@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .charging_profile import ChargingProfile
 
+
 class PowerProjection(Entity):
     """Aggregated power schedules returned by GetCompositeSchedule."""
 

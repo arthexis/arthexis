@@ -6,7 +6,7 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp import store
-from apps.ocpp.models import CPFirmwareDeployment, ChargerLogRequest, PowerProjection
+from apps.ocpp.models import ChargerLogRequest, CPFirmwareDeployment, PowerProjection
 
 from .common import _json_details
 from .types import CallErrorContext
@@ -102,7 +102,9 @@ async def handle_get_log_error(
         }
         if capture_key:
             request.session_key = str(capture_key)
-        request.save(update_fields=["status", "responded_at", "raw_response", "session_key"])
+        request.save(
+            update_fields=["status", "responded_at", "raw_response", "session_key"]
+        )
 
     await database_sync_to_async(_apply_error)()
     parts: list[str] = []

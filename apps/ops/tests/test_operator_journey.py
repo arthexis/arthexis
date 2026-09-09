@@ -381,9 +381,7 @@ class OperatorJourneyViewTests(TestCase):
         limited_user.groups.add(self.group)
         self.client.force_login(limited_user)
 
-        for url_name in (
-            "ops:operator-cards",
-        ):
+        for url_name in ("ops:operator-cards",):
             with self.subTest(url_name=url_name):
                 response = self.client.get(reverse(url_name))
 

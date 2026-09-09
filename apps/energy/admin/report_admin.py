@@ -224,7 +224,9 @@ class ClientReportAdmin(EntityModelAdmin):
         else:
             report_summary_rows = None
             if form.is_bound:
-                selected_chargers = form.cleaned_data.get("chargers") or Charger.objects.none()
+                selected_chargers = (
+                    form.cleaned_data.get("chargers") or Charger.objects.none()
+                )
 
         download_param = request.GET.get("download")
         if download_param:

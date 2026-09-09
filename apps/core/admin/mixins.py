@@ -15,7 +15,9 @@ from django_object_actions import DjangoObjectActions
 TEST_CREDENTIALS_LABEL = _("Test credentials")
 
 
-def _build_credentials_actions(action_name, handler_name, description=TEST_CREDENTIALS_LABEL):
+def _build_credentials_actions(
+    action_name, handler_name, description=TEST_CREDENTIALS_LABEL
+):
     def bulk_action(self, request, queryset):
         handler = getattr(self, handler_name)
         for obj in queryset:
@@ -42,7 +44,9 @@ class OwnableAdminForm(forms.ModelForm):
     owner_required: bool = True
 
     owner_conflict_message = _("Select either a user or a security group, not both.")
-    owner_required_message = _("Ownable objects must be assigned to a user or a security group.")
+    owner_required_message = _(
+        "Ownable objects must be assigned to a user or a security group."
+    )
     owner_exactly_one_message = _("Select exactly one owner.")
 
     def _configured_owner_field_names(self) -> tuple[str, ...]:
@@ -106,7 +110,6 @@ class OwnableAdminMixin:
     def _form_includes_ownable_validation(self, form_class):
         return form_class and issubclass(form_class, OwnableAdminForm)
 
-
     def get_form(self, request, obj=None, **kwargs):
         """Return a form class that enforces ownership validation and tolerates dynamic fields."""
 
@@ -140,7 +143,9 @@ class OwnableAdminMixin:
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
         owner_fields = set(self.ownable_fieldset[1].get("fields", ()))
-        has_owner = any(owner_fields.issubset(set(fs[1].get("fields", ()))) for fs in fieldsets)
+        has_owner = any(
+            owner_fields.issubset(set(fs[1].get("fields", ()))) for fs in fieldsets
+        )
         if not has_owner:
             fieldsets.insert(0, self.ownable_fieldset)
         return fieldsets
@@ -176,7 +181,9 @@ class PublicViewLinksAdminMixin:
         del request
         return []
 
-    def _normalize_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
+    def _normalize_public_view_links(
+        self, obj=None, request=None
+    ) -> list[dict[str, str]]:
         """Return de-duplicated public view links with stable labels."""
 
         normalized: list[dict[str, str]] = []
@@ -282,9 +289,7 @@ class ProfileAdminMixin:
 
     def _resolve_my_profile_target(self, request):
         opts = self.model._meta
-        changelist_url = reverse(
-            f"admin:{opts.app_label}_{opts.model_name}_changelist"
-        )
+        changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         user = getattr(request, "user", None)
         if not getattr(user, "is_authenticated", False):
             return (

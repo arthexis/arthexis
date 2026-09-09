@@ -129,10 +129,9 @@ def _is_same_favicon_target(request, target_url: str) -> bool:
         return False
     target_port = target_port or _default_favicon_port(target_scheme)
     request_port = request_port or _default_favicon_port(request_scheme)
-    return (
-        (parsed.hostname or "").lower() == (request_host.hostname or "").lower()
-        and target_port == request_port
-    )
+    return (parsed.hostname or "").lower() == (
+        request_host.hostname or ""
+    ).lower() and target_port == request_port
 
 
 def _default_favicon_port(scheme: str) -> int | None:

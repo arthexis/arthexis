@@ -3,7 +3,7 @@ import re
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from datetime import timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
@@ -726,7 +726,7 @@ def _collect_status_events(
                 parsed = parse_datetime(payload_timestamp)
                 if parsed is not None:
                     if timezone.is_naive(parsed):
-                        parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
+                        parsed = timezone.make_aware(parsed, timezone=UTC)
                     event_time = parsed
         elif message.startswith("Connected"):
             status_bucket = "available"

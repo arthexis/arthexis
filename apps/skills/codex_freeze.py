@@ -168,7 +168,9 @@ def decision_from_state(
     if not state:
         return FreezeDecision("allow", source=source)
     if not state_signature_is_valid(state):
-        return FreezeDecision("allow", source=f"{source}-invalid-signature", state=state)
+        return FreezeDecision(
+            "allow", source=f"{source}-invalid-signature", state=state
+        )
     now = now or timezone.now()
     generated_at = _parse_timestamp(state.get("generated_at"))
     max_age_seconds = state.get("max_age_seconds")

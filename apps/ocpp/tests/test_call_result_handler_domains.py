@@ -46,7 +46,11 @@ async def test_configuration_domain_tracks_status_and_resilience():
     ok = await handle_change_availability_result(
         consumer,
         "cfg-msg",
-        {"requested_at": timezone.now(), "connector_id": 1, "availability_type": "Inoperative"},
+        {
+            "requested_at": timezone.now(),
+            "connector_id": 1,
+            "availability_type": "Inoperative",
+        },
         {"status": "Accepted"},
         consumer.store_key,
     )
@@ -65,7 +69,9 @@ async def test_configuration_domain_tracks_status_and_resilience():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_firmware_domain_updates_deployment():
-    firmware_obj = await database_sync_to_async(CPFirmware.objects.create)(name="FW", payload_json={})
+    firmware_obj = await database_sync_to_async(CPFirmware.objects.create)(
+        name="FW", payload_json={}
+    )
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="FW-1")
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.create)(
         firmware=firmware_obj,
@@ -86,7 +92,9 @@ async def test_firmware_domain_updates_deployment():
     )
 
     assert result is True
-    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(pk=deployment.pk)
+    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
+        pk=deployment.pk
+    )
     assert deployment.status == "Rejected"
 
 
@@ -94,7 +102,9 @@ async def test_firmware_domain_updates_deployment():
 @pytest.mark.django_db(transaction=True)
 async def test_transactions_domain_updates_reservation_and_status_mapping():
     location = await database_sync_to_async(Location.objects.create)(name="Depot")
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="TRX-1", connector_id=1, location=location)
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="TRX-1", connector_id=1, location=location
+    )
     reservation = await database_sync_to_async(CPReservation.objects.create)(
         location=location,
         connector=charger,
@@ -114,7 +124,9 @@ async def test_transactions_domain_updates_reservation_and_status_mapping():
     )
 
     assert result is True
-    reservation = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+    reservation = await database_sync_to_async(CPReservation.objects.get)(
+        pk=reservation.pk
+    )
     assert reservation.evcs_confirmed is True
 
 
@@ -157,7 +169,10 @@ async def test_profiles_domain_updates_profile_and_ignores_malformed_variable_pa
     ok = await handle_clear_charging_profile_result(
         consumer,
         "prof-msg",
-        {"charging_profile_id": profile_obj.charging_profile_id, "charger_id": charger.charger_id},
+        {
+            "charging_profile_id": profile_obj.charging_profile_id,
+            "charger_id": charger.charger_id,
+        },
         {"status": "Accepted", "statusInfo": {"detail": "ok"}},
         consumer.store_key,
     )
@@ -234,7 +249,9 @@ async def test_certificates_domain_updates_operation_status():
     )
 
     assert result is True
-    operation = await database_sync_to_async(CertificateOperation.objects.get)(pk=operation.pk)
+    operation = await database_sync_to_async(CertificateOperation.objects.get)(
+        pk=operation.pk
+    )
     assert operation.status == CertificateOperation.STATUS_REJECTED
 
 
@@ -267,7 +284,9 @@ async def test_diagnostics_domain_updates_log_request_and_diagnostics_metadata()
 
     assert log_result is True
     assert diag_result is True
-    refreshed = await database_sync_to_async(ChargerLogRequest.objects.get)(pk=request.pk)
+    refreshed = await database_sync_to_async(ChargerLogRequest.objects.get)(
+        pk=request.pk
+    )
     assert refreshed.status == "Uploaded"
 
 

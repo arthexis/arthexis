@@ -50,7 +50,9 @@ def _normalize_display_message_entry(entry: dict, parse_timestamp) -> dict[str, 
     }
 
 
-def _create_display_message(notification, target, entry: dict, parse_timestamp) -> dict[str, object]:
+def _create_display_message(
+    notification, target, entry: dict, parse_timestamp
+) -> dict[str, object]:
     normalized_entry = _normalize_display_message_entry(entry, parse_timestamp)
     DisplayMessage.objects.create(
         notification=notification,

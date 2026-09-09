@@ -16,6 +16,7 @@ else:
     def client_report_download(*_args, **_kwargs):
         raise Http404
 
+
 from .landing import (
     changelog_report,
     changelog_report_data,

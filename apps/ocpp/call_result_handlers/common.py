@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Awaitable, Callable, Protocol
+from typing import Protocol
 
 from apps.ocpp.payload_types import JSONObject
 
@@ -38,7 +39,9 @@ class CallResultContext(Protocol):
         connector_hint: int | str | None,
     ) -> object: ...
 
-    def _persist_configuration_result(self, payload: dict, connector_id) -> object | None: ...
+    def _persist_configuration_result(
+        self, payload: dict, connector_id
+    ) -> object | None: ...
 
 
 @dataclass(slots=True)
@@ -90,7 +93,9 @@ def legacy_adapter(handler: ContextHandler) -> LegacyHandler:
 
     @wraps(handler)
     async def _wrapped(consumer, message_id, metadata, payload_data, log_key):
-        return await handler(build_context(consumer, message_id, metadata, payload_data, log_key))
+        return await handler(
+            build_context(consumer, message_id, metadata, payload_data, log_key)
+        )
 
     _wrapped.__name__ = f"legacy_{getattr(handler, '__name__', 'handler')}"
     return _wrapped

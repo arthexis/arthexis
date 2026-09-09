@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, OperationalError, connections
 
 from .models import SigilRoot
-
 
 logger = logging.getLogger(__name__)
 

@@ -30,6 +30,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 CONNECT_TIMEOUT = 5
 
+
 async def _finalize_communicator(communicator: WebsocketCommunicator) -> None:
     """Wait for communicator shutdown so teardown does not stall on pending tasks."""
 
@@ -38,6 +39,7 @@ async def _finalize_communicator(communicator: WebsocketCommunicator) -> None:
         return
     await communicator.disconnect()
     await communicator.wait()
+
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
@@ -55,11 +57,13 @@ def clear_store_state():
     store.log_names["charger"].clear()
     cache.clear()
 
+
 @pytest.fixture(autouse=True)
 def isolate_log_dir(tmp_path, monkeypatch):
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
+
 
 @pytest.fixture
 def local_node(monkeypatch):
@@ -75,6 +79,7 @@ def local_node(monkeypatch):
     )
     Node._local_cache.clear()
     return node
+
 
 @pytest.fixture
 def charge_point_features(local_node):
@@ -94,6 +99,8 @@ def charge_point_features(local_node):
         suite_feature.save(update_fields=["is_enabled"])
         feature_map[slug] = suite_feature
     return local_node, feature_map
+
+
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason():
     async def run_scenario():
@@ -112,6 +119,8 @@ def test_rejects_invalid_serial_from_path_logs_reason():
         in entry
         for entry in entries
     )
+
+
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_query_serial_and_logs_details():
     async def run_scenario():
@@ -128,9 +137,12 @@ def test_rejects_invalid_query_serial_and_logs_details():
     assert any("Serial Number cannot be blank." in entry for entry in entries)
     assert any("query_string='cid='" in entry for entry in entries)
 
+
 def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
     token = base64.b64encode(f"{username}:{password}".encode())
     return [(b"authorization", b"Basic " + token)]
+
+
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_charge_station_manager_user():
     authorized = get_user_model().objects.create_user(
@@ -160,6 +172,8 @@ def test_basic_auth_accepts_charge_station_manager_user():
     async_to_sync(run_scenario)()
 
     assert connection_result["connected"] is True
+
+
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_unknown_extension_action_replies_with_empty_call_result():
     async def run_scenario():

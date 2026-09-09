@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone as datetime_timezone
+from datetime import UTC, datetime
+from datetime import timezone as datetime_timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -43,9 +44,7 @@ def _lcd_lines(
 
 def _lock_heartbeat(lock_path: Path) -> datetime | None:
     try:
-        return datetime.fromtimestamp(
-            lock_path.stat().st_mtime, tz=datetime_timezone.utc
-        )
+        return datetime.fromtimestamp(lock_path.stat().st_mtime, tz=UTC)
     except OSError:
         return None
 
@@ -77,7 +76,7 @@ def _lock_issues(
             )
 
     heartbeat = _lock_heartbeat(lock_path) if isinstance(lock_path, Path) else None
-    if heartbeat and heartbeat > now.astimezone(datetime_timezone.utc):
+    if heartbeat and heartbeat > now.astimezone(UTC):
         issues.append("Suite uptime lock heartbeat is newer than the current time")
 
     if lock_info.get("exists") and not lock_info.get("fresh"):

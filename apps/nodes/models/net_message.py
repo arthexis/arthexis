@@ -264,7 +264,9 @@ class NetMessage(Entity):
                 )
             )
         except DeserializationError:
-            logger.exception("Failed to deserialize attachments for NetMessage %s", self.pk)
+            logger.exception(
+                "Failed to deserialize attachments for NetMessage %s", self.pk
+            )
             return
         for obj in objects:
             try:
@@ -402,7 +404,9 @@ class NetMessage(Entity):
         qs = PendingNetMessage.objects.filter(node=node).order_by("-queued_at")
         keep_ids = list(qs.values_list("pk", flat=True)[:limit])
         if keep_ids:
-            PendingNetMessage.objects.filter(node=node).exclude(pk__in=keep_ids).delete()
+            PendingNetMessage.objects.filter(node=node).exclude(
+                pk__in=keep_ids
+            ).delete()
         else:
             qs.delete()
 

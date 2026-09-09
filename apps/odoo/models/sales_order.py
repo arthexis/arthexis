@@ -40,7 +40,9 @@ class OdooSaleOrderTemplate(Entity):
         null=True,
         blank=True,
         related_name="sale_order_templates",
-        help_text=_("Optional preset salesperson (Odoo employee) for generated orders."),
+        help_text=_(
+            "Optional preset salesperson (Odoo employee) for generated orders."
+        ),
     )
 
     def template_id(self) -> int | None:
@@ -140,7 +142,9 @@ class OdooSaleFactorProductRule(Entity):
     def clean(self):
         super().clean()
         if self.product_id() is None:
-            raise ValidationError({"odoo_product": _("Choose a product with a valid Odoo ID.")})
+            raise ValidationError(
+                {"odoo_product": _("Choose a product with a valid Odoo ID.")}
+            )
 
     def __str__(self) -> str:  # pragma: no cover - representation
         return self.name

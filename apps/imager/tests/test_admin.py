@@ -43,6 +43,7 @@ class _ProbeResponse:
     def getcode():
         return 200
 
+
 @pytest.mark.django_db
 @override_settings(
     IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/base-roots",),
@@ -109,8 +110,11 @@ def test_imager_admin_rejects_a_symlink_that_escapes_an_allowed_root(tmp_path) -
         assert not form.is_valid()
         assert "base_image_uri" in form.errors
 
+
 @patch("apps.imager.admin.build_rpi4b_image")
-def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
+def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(
+    mock_build, admin_client, tmp_path
+):
     """Regression: successful builds should return to the wizard with artifact URL actions."""
 
     output_dir = tmp_path / "output"
@@ -147,10 +151,12 @@ def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock
                 "skip_recovery_ssh": "on",
             },
             follow=True,
-    )
+        )
 
     assert response.status_code == 200
-    assert any(f"?artifact={artifact.pk}" in url for url, _status in response.redirect_chain)
+    assert any(
+        f"?artifact={artifact.pk}" in url for url, _status in response.redirect_chain
+    )
     body = response.content.decode("utf-8")
     assert "Latest build artifact" in body
     assert "Test URL" in body
@@ -180,10 +186,13 @@ def test_imager_admin_create_rpi_image_view_requires_recovery_or_explicit_skip(
                 "download_base_uri": "",
                 "git_url": "https://github.com/arthexis/arthexis.git",
             },
-    )
+        )
 
     assert response.status_code == 200
-    assert "Recovery SSH is required for customized image builds" in response.content.decode("utf-8")
+    assert (
+        "Recovery SSH is required for customized image builds"
+        in response.content.decode("utf-8")
+    )
     mock_build.assert_not_called()
 
 
@@ -234,9 +243,15 @@ def test_probe_download_url_blocks_unsafe_targets(download_url, expected_message
     assert reachable is False
     assert result == expected_message
 
-@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+
+@patch(
+    "apps.imager.admin.getaddrinfo",
+    return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+)
 @patch("apps.imager.admin.build_opener")
-def test_probe_download_url_revalidates_redirect_targets(build_opener_mock, _getaddrinfo_mock):
+def test_probe_download_url_revalidates_redirect_targets(
+    build_opener_mock, _getaddrinfo_mock
+):
     """Regression: redirect responses must not allow probes to private hosts."""
 
     build_opener_mock.return_value.open.side_effect = [
@@ -249,22 +264,44 @@ def test_probe_download_url_revalidates_redirect_targets(build_opener_mock, _get
         )
     ]
 
-    reachable, result = _probe_download_url("https://cdn.example.com/images/stable-rpi-4b.img")
+    reachable, result = _probe_download_url(
+        "https://cdn.example.com/images/stable-rpi-4b.img"
+    )
 
     assert reachable is False
     assert result == "Refusing to probe local or private addresses."
 
-@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+
+@patch(
+    "apps.imager.admin.getaddrinfo",
+    return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+)
 @patch("apps.imager.admin.build_opener")
-def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getaddrinfo_mock):
+def test_probe_download_url_allows_five_redirect_hops(
+    build_opener_mock, _getaddrinfo_mock
+):
     """Regression: redirect limit should allow five redirects before failing."""
 
     build_opener_mock.return_value.open.side_effect = [
-        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {"Location": "/hop-1"}, None),
-        HTTPError("https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None),
-        HTTPError("https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None),
-        HTTPError("https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None),
-        HTTPError("https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None),
+        HTTPError(
+            "https://cdn.example.com/images/stable.img",
+            302,
+            "Found",
+            {"Location": "/hop-1"},
+            None,
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None
+        ),
         _ProbeResponse(),
     ]
 
@@ -273,18 +310,40 @@ def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getadd
     assert reachable is True
     assert result == "HTTP 200"
 
-@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+
+@patch(
+    "apps.imager.admin.getaddrinfo",
+    return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+)
 @patch("apps.imager.admin.build_opener")
-def test_probe_download_url_fails_after_sixth_redirect(build_opener_mock, _getaddrinfo_mock):
+def test_probe_download_url_fails_after_sixth_redirect(
+    build_opener_mock, _getaddrinfo_mock
+):
     """Regression: sixth redirect hop should fail with an explicit limit error."""
 
     build_opener_mock.return_value.open.side_effect = [
-        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {"Location": "/hop-1"}, None),
-        HTTPError("https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None),
-        HTTPError("https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None),
-        HTTPError("https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None),
-        HTTPError("https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None),
-        HTTPError("https://cdn.example.com/hop-5", 302, "Found", {"Location": "/hop-6"}, None),
+        HTTPError(
+            "https://cdn.example.com/images/stable.img",
+            302,
+            "Found",
+            {"Location": "/hop-1"},
+            None,
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None
+        ),
+        HTTPError(
+            "https://cdn.example.com/hop-5", 302, "Found", {"Location": "/hop-6"}, None
+        ),
     ]
 
     reachable, result = _probe_download_url("https://cdn.example.com/images/stable.img")
@@ -292,9 +351,15 @@ def test_probe_download_url_fails_after_sixth_redirect(build_opener_mock, _getad
     assert reachable is False
     assert result == "Too many redirects."
 
-@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+
+@patch(
+    "apps.imager.admin.getaddrinfo",
+    return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+)
 @patch("apps.imager.admin.build_opener")
-def test_probe_download_url_fails_redirect_without_location(build_opener_mock, _getaddrinfo_mock):
+def test_probe_download_url_fails_redirect_without_location(
+    build_opener_mock, _getaddrinfo_mock
+):
     """Regression: redirects without Location should fail probing."""
 
     build_opener_mock.return_value.open.side_effect = [

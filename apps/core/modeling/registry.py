@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,9 @@ class ModelRegistry:
                 continue
             yield spec
 
-    def find_path(self, source_dimension_id: str, target_dimension_id: str) -> list[TransformationSpec]:
+    def find_path(
+        self, source_dimension_id: str, target_dimension_id: str
+    ) -> list[TransformationSpec]:
         if source_dimension_id == target_dimension_id:
             return []
         adjacency: dict[str, list[TransformationSpec]] = {}

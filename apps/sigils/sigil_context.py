@@ -2,16 +2,17 @@ from __future__ import annotations
 
 from threading import local
 from typing import Dict, Optional, Type
+
 from django.db import models
 
 _thread = local()
 
 
-def set_context(context: Dict[Type[models.Model], str]) -> None:
+def set_context(context: dict[type[models.Model], str]) -> None:
     _thread.context = context
 
 
-def get_context() -> Dict[Type[models.Model], str]:
+def get_context() -> dict[type[models.Model], str]:
     return getattr(_thread, "context", {})
 
 
@@ -19,7 +20,7 @@ def set_request(request) -> None:
     _thread.request = request
 
 
-def get_request() -> Optional[object]:
+def get_request() -> object | None:
     return getattr(_thread, "request", None)
 
 

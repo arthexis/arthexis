@@ -29,7 +29,9 @@ def test_setup_hardware_gpio_missing_disables_reader(caplog, monkeypatch):
     assert "WARNING" not in caplog.text
 
 
-def test_record_setup_failure_logs_info_for_expected_missing_hardware(caplog, monkeypatch):
+def test_record_setup_failure_logs_info_for_expected_missing_hardware(
+    caplog, monkeypatch
+):
     monkeypatch.setattr(
         background_reader,
         "_hardware_disabled_reason",
@@ -103,16 +105,21 @@ def test_setup_hardware_logs_info_for_expected_missing_device(caplog, monkeypatc
             patch_ctx.setitem(sys.modules, "mfrc522", SimpleNamespace())
 
             def _mfrc_ctor(**_kwargs):
-                raise FileNotFoundError("[Errno 2] No such file or directory: '/dev/spidev0.0'")
+                raise FileNotFoundError(
+                    "[Errno 2] No such file or directory: '/dev/spidev0.0'"
+                )
 
             sys.modules["mfrc522"].MFRC522 = _mfrc_ctor
             assert background_reader._setup_hardware() is False
 
     assert "RFID hardware disabled for this process after setup failure" in caplog.text
-    reader_logs = [record for record in caplog.records if record.name == background_reader.__name__]
+    reader_logs = [
+        record for record in caplog.records if record.name == background_reader.__name__
+    ]
     assert any(
         record.levelno == logging.INFO
-        and "RFID hardware disabled for this process after setup failure" in record.getMessage()
+        and "RFID hardware disabled for this process after setup failure"
+        in record.getMessage()
         for record in reader_logs
     )
     assert not any(record.levelno >= logging.WARNING for record in reader_logs)
@@ -123,7 +130,9 @@ def test_start_skips_when_hardware_is_disabled(monkeypatch):
     monkeypatch.setattr(background_reader, "_thread", None)
 
     def _unexpected_thread(*_args, **_kwargs):
-        raise AssertionError("background thread should not start when hardware disabled")
+        raise AssertionError(
+            "background thread should not start when hardware disabled"
+        )
 
     monkeypatch.setattr(background_reader.threading, "Thread", _unexpected_thread)
 
@@ -192,14 +201,20 @@ def test_lock_file_active_keeps_existing_service_lock(tmp_path, settings):
     assert lock.read_text(encoding="utf-8") == "other-process-marker"
 
 
-def test_worker_setup_failure_does_not_delete_service_lock(tmp_path, settings, monkeypatch):
+def test_worker_setup_failure_does_not_delete_service_lock(
+    tmp_path, settings, monkeypatch
+):
     settings.BASE_DIR = str(tmp_path)
     lock = tmp_path / ".locks" / "rfid-service.lck"
     lock.parent.mkdir(parents=True)
     lock.write_text("configured", encoding="utf-8")
     monkeypatch.setattr(background_reader, "_setup_hardware", lambda: False)
-    monkeypatch.setattr(background_reader, "_record_setup_failure", lambda *args, **kwargs: None)
-    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        background_reader, "_record_setup_failure", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(background_reader, "_thread", object())
 
     background_reader._worker()
@@ -221,7 +236,9 @@ def test_get_next_tag_polling_fallback_uses_original_timeout(monkeypatch):
 
     monkeypatch.setattr(background_reader, "is_configured", lambda: True)
     monkeypatch.setattr(background_reader, "_tag_queue", EmptyQueue())
-    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(reader, "read_rfid", fake_read_rfid)
     monkeypatch.setattr(
         background_reader,

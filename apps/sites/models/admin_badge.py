@@ -35,12 +35,14 @@ class AdminBadge(Ownable):
         blank=True,
         default="",
         max_length=255,
-        help_text=_(
-            "Deprecated: provider source is configured via Provider key."
-        ),
+        help_text=_("Deprecated: provider source is configured via Provider key."),
     )
-    first_part = models.CharField(max_length=10, choices=PART_CHOICES, default=PART_LABEL)
-    second_part = models.CharField(max_length=10, choices=PART_CHOICES, default=PART_VALUE)
+    first_part = models.CharField(
+        max_length=10, choices=PART_CHOICES, default=PART_LABEL
+    )
+    second_part = models.CharField(
+        max_length=10, choices=PART_CHOICES, default=PART_VALUE
+    )
     filled_color = models.CharField(max_length=7, default="#28a745")
     missing_color = models.CharField(max_length=7, default="#6c757d")
     is_enabled = models.BooleanField(default=True)

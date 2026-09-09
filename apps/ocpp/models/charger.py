@@ -173,7 +173,7 @@ class Charger(Ownable):
         blank=True,
         default="",
         help_text=(
-            "Current availability reported by the charger " "(Operative/Inoperative)."
+            "Current availability reported by the charger (Operative/Inoperative)."
         ),
     )
     availability_state_updated_at = models.DateTimeField(
@@ -313,8 +313,7 @@ class Charger(Ownable):
     allow_remote = models.BooleanField(
         default=False,
         help_text=_(
-            "Permit this charge point to receive remote commands from its manager "
-            "node."
+            "Permit this charge point to receive remote commands from its manager node."
         ),
     )
     export_transactions = models.BooleanField(

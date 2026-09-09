@@ -6,8 +6,8 @@ from django.db import models
 
 from apps.emails import mailer
 from apps.nodes.models import Node
-from apps.users.models import Profile as CoreProfile
 from apps.sigils.fields import SigilShortAutoField
+from apps.users.models import Profile as CoreProfile
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +36,11 @@ class EmailOutbox(CoreProfile):
     )
     host = SigilShortAutoField(
         max_length=100,
-        help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
+        help_text=("Gmail: smtp.gmail.com. GoDaddy: smtpout.secureserver.net"),
     )
     port = models.PositiveIntegerField(
         default=587,
-        help_text=("Gmail: 587 (TLS). " "GoDaddy: 587 (TLS) or 465 (SSL)"),
+        help_text=("Gmail: 587 (TLS). GoDaddy: 587 (TLS) or 465 (SSL)"),
     )
     username = SigilShortAutoField(
         max_length=100,

@@ -13,7 +13,9 @@ async def get_composite_schedule(ctx: HandlerContext) -> bool:
     Persistence updates: updates ``PowerProjection`` schedule fields and raw response.
     """
 
-    return await legacy.handle_get_composite_schedule_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_composite_schedule_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_charging_profile(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def set_charging_profile(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_set_charging_profile_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_charging_profile_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def clear_charging_profile(ctx: HandlerContext) -> bool:
@@ -33,7 +37,9 @@ async def clear_charging_profile(ctx: HandlerContext) -> bool:
     Persistence updates: updates matching ``ChargingProfile`` response status fields.
     """
 
-    return await legacy.handle_clear_charging_profile_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_clear_charging_profile_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_variables(ctx: HandlerContext) -> bool:
@@ -43,7 +49,9 @@ async def get_variables(ctx: HandlerContext) -> bool:
     Persistence updates: upserts ``Variable`` rows for returned attributes.
     """
 
-    return await legacy.handle_get_variables_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_variables_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_variables(ctx: HandlerContext) -> bool:
@@ -53,7 +61,9 @@ async def set_variables(ctx: HandlerContext) -> bool:
     Persistence updates: upserts ``Variable`` rows using request metadata as value source.
     """
 
-    return await legacy.handle_set_variables_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_variables_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_variable_monitoring(ctx: HandlerContext) -> bool:
@@ -63,7 +73,9 @@ async def set_variable_monitoring(ctx: HandlerContext) -> bool:
     Persistence updates: upserts ``MonitoringRule`` rows and links variables.
     """
 
-    return await legacy.handle_set_variable_monitoring_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_variable_monitoring_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def clear_variable_monitoring(ctx: HandlerContext) -> bool:
@@ -73,7 +85,9 @@ async def clear_variable_monitoring(ctx: HandlerContext) -> bool:
     Persistence updates: disables matching ``MonitoringRule`` rows when accepted.
     """
 
-    return await legacy.handle_clear_variable_monitoring_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_clear_variable_monitoring_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_monitoring_report(ctx: HandlerContext) -> bool:
@@ -83,7 +97,9 @@ async def get_monitoring_report(ctx: HandlerContext) -> bool:
     Persistence updates: clears pending report requests on rejection status.
     """
 
-    return await legacy.handle_get_monitoring_report_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_monitoring_report_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_monitoring_base(ctx: HandlerContext) -> bool:
@@ -93,7 +109,9 @@ async def set_monitoring_base(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_set_monitoring_base_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_monitoring_base_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_monitoring_level(ctx: HandlerContext) -> bool:
@@ -103,7 +121,9 @@ async def set_monitoring_level(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_set_monitoring_level_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_monitoring_level_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def clear_display_message(ctx: HandlerContext) -> bool:
@@ -113,7 +133,9 @@ async def clear_display_message(ctx: HandlerContext) -> bool:
     Persistence updates: updates display message compliance tracking in store.
     """
 
-    return await legacy.handle_clear_display_message_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_clear_display_message_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def customer_information(ctx: HandlerContext) -> bool:
@@ -123,7 +145,9 @@ async def customer_information(ctx: HandlerContext) -> bool:
     Persistence updates: logs response and records pending call result.
     """
 
-    return await legacy.handle_customer_information_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_customer_information_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_base_report(ctx: HandlerContext) -> bool:
@@ -133,7 +157,9 @@ async def get_base_report(ctx: HandlerContext) -> bool:
     Persistence updates: report request queue status updates in store.
     """
 
-    return await legacy.handle_get_base_report_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_base_report_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_charging_profiles(ctx: HandlerContext) -> bool:
@@ -143,7 +169,9 @@ async def get_charging_profiles(ctx: HandlerContext) -> bool:
     Persistence updates: updates charging profile report queue state.
     """
 
-    return await legacy.handle_get_charging_profiles_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_charging_profiles_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_display_messages(ctx: HandlerContext) -> bool:
@@ -153,7 +181,9 @@ async def get_display_messages(ctx: HandlerContext) -> bool:
     Persistence updates: display message request queue updates in store.
     """
 
-    return await legacy.handle_get_display_messages_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_display_messages_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_report(ctx: HandlerContext) -> bool:
@@ -163,7 +193,9 @@ async def get_report(ctx: HandlerContext) -> bool:
     Persistence updates: monitoring/device report queue updates in store.
     """
 
-    return await legacy.handle_get_report_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_report_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_display_message(ctx: HandlerContext) -> bool:
@@ -173,7 +205,9 @@ async def set_display_message(ctx: HandlerContext) -> bool:
     Persistence updates: display message compliance updates in store.
     """
 
-    return await legacy.handle_set_display_message_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_display_message_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_get_composite_schedule_result = legacy_adapter(get_composite_schedule)

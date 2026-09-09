@@ -265,13 +265,19 @@ def _render_pdf_bytes(
         return b""
 
     if HTML is None:
-        logger.warning("Report PDF rendering unavailable: missing WeasyPrint dependency")
+        logger.warning(
+            "Report PDF rendering unavailable: missing WeasyPrint dependency"
+        )
         return b""
 
     try:
-        return HTML(string=rendered_html, url_fetcher=_safe_report_url_fetcher).write_pdf()
+        return HTML(
+            string=rendered_html, url_fetcher=_safe_report_url_fetcher
+        ).write_pdf()
     except (OSError, RuntimeError, ValueError) as exc:
-        logger.warning("Report PDF rendering failed; returning empty PDF payload", exc_info=exc)
+        logger.warning(
+            "Report PDF rendering failed; returning empty PDF payload", exc_info=exc
+        )
         return b""
 
 

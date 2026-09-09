@@ -106,7 +106,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                     status,
                 )
             )
-        return format_html("<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items)))
+        return format_html(
+            "<ul>{}</ul>", format_html_join("", "{}", ((item,) for item in items))
+        )
 
     def _manual_enablement_data(self, feature, node):
         """Return manual toggle metadata for a feature on the given node."""
@@ -154,7 +156,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         ]
         return custom + urls
 
-    def _require_feature_eligible(self, request, feature, *, node=None, action_label="Action"):
+    def _require_feature_eligible(
+        self, request, feature, *, node=None, action_label="Action"
+    ):
         """Return ``True`` when the feature eligibility check succeeds."""
 
         from ..feature_checks import feature_checks
@@ -251,7 +255,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
 
             result = feature_checks.run(feature, node=node)
         except Exception:  # pragma: no cover - defensive
-            logging.exception("Error while running feature check for %s", feature.display)
+            logging.exception(
+                "Error while running feature check for %s", feature.display
+            )
             status = "error"
             message = (
                 f"An error occurred while checking eligibility for {feature.display}."
@@ -399,7 +405,9 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 action_label="Manual enablement",
             ):
                 return JsonResponse(
-                    {"detail": f"{feature.display} is not eligible for manual enablement."},
+                    {
+                        "detail": f"{feature.display} is not eligible for manual enablement."
+                    },
                     status=400,
                 )
             _, created = NodeFeatureAssignment.objects.update_or_create(

@@ -325,9 +325,9 @@ def _parse_instance_id(token: str, index: int) -> tuple[str | None, int]:
     return _parse_quoted_segment(
         token,
         index,
-        lambda value, offset, depth, in_quotes: depth == 0
-        and not in_quotes
-        and value[offset] == ".",
+        lambda value, offset, depth, in_quotes: (
+            depth == 0 and not in_quotes and value[offset] == "."
+        ),
     )
 
 
@@ -395,16 +395,14 @@ def _parse_key_segment(token: str, index: int) -> tuple[str | None, int]:
     key, index = _parse_quoted_segment(
         token,
         index,
-        lambda value, offset, depth, in_quotes: depth == 0
-        and not in_quotes
-        and value[offset] == "=",
+        lambda value, offset, depth, in_quotes: (
+            depth == 0 and not in_quotes and value[offset] == "="
+        ),
     )
     return key, index
 
 
-def _parse_key_and_param(
-    token: str, index: int
-) -> tuple[str | None, str | None, int]:
+def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, int]:
     """Parse optional ``.key`` and ``=param`` segments from a sigil token.
 
     Args:
@@ -466,7 +464,9 @@ def _is_valid_pipeline_head(name: str) -> bool:
 
 def _is_pipeline_action_name(name: str) -> bool:
     upper_name = name.upper()
-    return upper_name in PIPELINE_WINDOW_ACTIONS or upper_name in PIPELINE_INSTANCE_ACTIONS
+    return (
+        upper_name in PIPELINE_WINDOW_ACTIONS or upper_name in PIPELINE_INSTANCE_ACTIONS
+    )
 
 
 def _is_whitespace_operator_operand(value: str) -> bool:
@@ -487,9 +487,9 @@ def _parse_whitespace_operator_candidate(
     if len(parts) != 2:
         return None
     left, right = parts
-    if not _is_whitespace_operator_operand(
-        left
-    ) or not _is_whitespace_operator_operand(right):
+    if not _is_whitespace_operator_operand(left) or not _is_whitespace_operator_operand(
+        right
+    ):
         return None
     return WhitespaceOperatorCandidate(left=left, right=right)
 
@@ -1181,7 +1181,9 @@ def _split_token_fallback_segments(token: str) -> list[str]:
             elif char == "=" and depth == 0 and saw_top_level_dot:
                 has_param_payload = True
             elif char == ";" and depth == 0:
-                if has_param_payload and not _looks_like_fallback_branch_start(token[index + 1 :]):
+                if has_param_payload and not _looks_like_fallback_branch_start(
+                    token[index + 1 :]
+                ):
                     index += 1
                     continue
                 segments.append(token[start:index].strip())
@@ -1227,13 +1229,10 @@ def _resolve_whitespace_operator_candidate(
         )
         if joined_resolved and joined_resolved != _failed_resolution(joined_token):
             return joined_resolved
-        if (
-            joined_resolved == ""
-            and _empty_joined_resolution_is_specific(
-                joined_token,
-                current=current,
-                allowed_roots=allowed_roots,
-            )
+        if joined_resolved == "" and _empty_joined_resolution_is_specific(
+            joined_token,
+            current=current,
+            allowed_roots=allowed_roots,
         ):
             return joined_resolved
 

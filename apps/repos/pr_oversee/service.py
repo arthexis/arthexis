@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -139,18 +139,14 @@ def _parse_github_timestamp(value: str) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _format_github_timestamp(value: datetime) -> str:
     """Return a compact UTC timestamp using GitHub's trailing-Z style."""
 
-    return (
-        value.astimezone(timezone.utc)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
+    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _compact_text(value: str, *, width: int = 180) -> str:
@@ -177,7 +173,11 @@ def parse_pr_dependency_edges(
     edges: dict[str, tuple[str, ...]] = {}
     for raw_value in values:
         dependent_value, separator, prerequisites_value = str(raw_value).partition("=")
-        if not separator or not dependent_value.strip() or not prerequisites_value.strip():
+        if (
+            not separator
+            or not dependent_value.strip()
+            or not prerequisites_value.strip()
+        ):
             raise PullRequestOverseeError(
                 "PR dependency edges must use dependent=prerequisite[,prerequisite]"
             )
@@ -207,7 +207,9 @@ def parse_pr_dependency_edges(
     return edges
 
 
-def _dependency_order(edges: Mapping[str, Iterable[str]]) -> tuple[list[str], list[str]]:
+def _dependency_order(
+    edges: Mapping[str, Iterable[str]],
+) -> tuple[list[str], list[str]]:
     """Return prerequisites-first order and any nodes participating in a cycle."""
 
     prerequisites = {node: set(values) for node, values in edges.items()}
@@ -510,10 +512,10 @@ class PullRequestOverseer:
         if limit <= 0:
             raise PullRequestOverseeError("limit must be greater than zero")
 
-        reference_time = now or datetime.now(timezone.utc)
+        reference_time = now or datetime.now(UTC)
         if reference_time.tzinfo is None:
-            reference_time = reference_time.replace(tzinfo=timezone.utc)
-        cutoff = reference_time.astimezone(timezone.utc) - timedelta(hours=since_hours)
+            reference_time = reference_time.replace(tzinfo=UTC)
+        cutoff = reference_time.astimezone(UTC) - timedelta(hours=since_hours)
         payload = self.gh_json(
             [
                 "pr",

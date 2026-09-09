@@ -10,7 +10,9 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_inventory_flags_non_english_docs_and_source_adjacent_prose(tmp_path: Path) -> None:
+def test_inventory_flags_non_english_docs_and_source_adjacent_prose(
+    tmp_path: Path,
+) -> None:
     _write(
         tmp_path / "README.md",
         "The operator documentation should explain the release workflow.\n",
@@ -65,7 +67,9 @@ def test_inventory_flags_non_english_docs_and_source_adjacent_prose(tmp_path: Pa
 
 
 def test_markdown_report_summarizes_policy_gaps(tmp_path: Path) -> None:
-    _write(tmp_path / "README.md", "La politica debe explicar el flujo para operadores.\n")
+    _write(
+        tmp_path / "README.md", "La politica debe explicar el flujo para operadores.\n"
+    )
 
     report = inventory.build_inventory(tmp_path)
     markdown = inventory.format_markdown(report, limit=10)
@@ -77,7 +81,9 @@ def test_markdown_report_summarizes_policy_gaps(tmp_path: Path) -> None:
 
 def test_inventory_skips_symlinks_outside_repo(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-policy.md"
-    outside.write_text("The external document should not be scanned.\n", encoding="utf-8")
+    outside.write_text(
+        "The external document should not be scanned.\n", encoding="utf-8"
+    )
     link_path = tmp_path / "docs" / "external.md"
     link_path.parent.mkdir(parents=True, exist_ok=True)
     link_path.symlink_to(outside)

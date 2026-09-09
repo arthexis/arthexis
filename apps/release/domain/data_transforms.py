@@ -559,6 +559,7 @@ TRANSFORMS: dict[str, TransformRunner] = {
     "reports.archive_sql_report_products": _run_sql_report_product_archival,
 }
 
+
 def list_transform_names() -> list[str]:
     """Return registered transform names in deterministic execution order."""
 

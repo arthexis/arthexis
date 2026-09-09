@@ -1,4 +1,5 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
+from datetime import timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone
@@ -26,4 +27,4 @@ def test_parse_ocpp_timestamp_parses_utc_string():
     parsed = _parse_ocpp_timestamp(timestamp_str)
     assert parsed is not None
     assert timezone.is_aware(parsed)
-    assert parsed == datetime(2024, 5, 6, 7, 8, 9, tzinfo=dt_timezone.utc)
+    assert parsed == datetime(2024, 5, 6, 7, 8, 9, tzinfo=UTC)

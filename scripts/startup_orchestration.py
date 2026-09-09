@@ -37,4 +37,6 @@ def extract_payload(raw_output: str) -> dict[str, object]:
             continue
         if isinstance(payload, dict):
             return payload
-    raise json.JSONDecodeError("No JSON object found in orchestration output", raw_output, 0)
+    raise json.JSONDecodeError(
+        "No JSON object found in orchestration output", raw_output, 0
+    )

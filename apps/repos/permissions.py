@@ -15,9 +15,7 @@ REPOSITORY_WORK_LABEL_PERMISSIONS = (
     "repos.change_repositoryissue",
     "repos.change_repositorypullrequest",
 )
-REPOSITORY_WORK_ASSIGNMENT_ADD_PERMISSIONS = (
-    "repos.add_repositoryworkassignment",
-)
+REPOSITORY_WORK_ASSIGNMENT_ADD_PERMISSIONS = ("repos.add_repositoryworkassignment",)
 REPOSITORY_WORK_ASSIGNMENT_CHANGE_PERMISSIONS = (
     "repos.change_repositoryworkassignment",
 )

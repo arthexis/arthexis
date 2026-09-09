@@ -88,9 +88,7 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
 
         def visit_Assign(self, node: ast.Assign) -> None:
             if self._in_call_handler:
-                self.actions.update(
-                    _collect_actions_from_dict(node, "action_handlers")
-                )
+                self.actions.update(_collect_actions_from_dict(node, "action_handlers"))
             self.generic_visit(node)
 
         def visit_Dict(self, node: ast.Dict) -> None:
@@ -104,7 +102,11 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
             self._collect_actions_from_protocol_decorators(node)
-            if node.name in {"_handle_call_message", "_build_registry", "build_action_registry"}:
+            if node.name in {
+                "_handle_call_message",
+                "_build_registry",
+                "build_action_registry",
+            }:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
@@ -114,7 +116,11 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
             self._collect_actions_from_protocol_decorators(node)
-            if node.name in {"_handle_call_message", "_build_registry", "build_action_registry"}:
+            if node.name in {
+                "_handle_call_message",
+                "_build_registry",
+                "build_action_registry",
+            }:
                 previous_state = self._in_call_handler
                 self._in_call_handler = True
                 self.generic_visit(node)
@@ -130,12 +136,8 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
                     continue
                 func = decorator.func
                 is_protocol_call = (
-                    isinstance(func, ast.Name)
-                    and func.id == "protocol_call"
-                ) or (
-                    isinstance(func, ast.Attribute)
-                    and func.attr == "protocol_call"
-                )
+                    isinstance(func, ast.Name) and func.id == "protocol_call"
+                ) or (isinstance(func, ast.Attribute) and func.attr == "protocol_call")
                 if not is_protocol_call:
                     continue
                 if len(decorator.args) < 3:
@@ -193,9 +195,7 @@ class _CsmsToCpVisitor(ast.NodeVisitor):
         if not node.targets:
             return
 
-        if isinstance(node.value, ast.Constant) and isinstance(
-            node.value.value, str
-        ):
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     self._current_constants().setdefault(target.id, set()).add(
@@ -225,9 +225,7 @@ class _CsmsToCpVisitor(ast.NodeVisitor):
             return
         action_expr = payload.elts[2]
         action_values: set[str] = set()
-        if isinstance(action_expr, ast.Constant) and isinstance(
-            action_expr.value, str
-        ):
+        if isinstance(action_expr, ast.Constant) and isinstance(action_expr.value, str):
             action_values.add(action_expr.value)
         elif isinstance(action_expr, ast.Name):
             action_values.update(self._current_constants().get(action_expr.id, set()))
@@ -270,7 +268,9 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
     return actions
 
 
-def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
+def run_coverage_ocpp16(
+    *, badge_path=None, json_path=None, stdout=None, stderr=None
+) -> None:
     """Generate OCPP 1.6 coverage output and badge."""
     app_dir = Path(__file__).resolve().parents[1]
     project_root = app_dir.parent.parent
@@ -286,16 +286,22 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
     csms_to_cp_coverage = sorted(spec_csms_to_cp & implemented_csms_to_cp)
 
     cp_to_csms_percentage = (
-        len(cp_to_csms_coverage) / len(spec_cp_to_csms) * 100 if spec_cp_to_csms else 0.0
+        len(cp_to_csms_coverage) / len(spec_cp_to_csms) * 100
+        if spec_cp_to_csms
+        else 0.0
     )
     csms_to_cp_percentage = (
-        len(csms_to_cp_coverage) / len(spec_csms_to_cp) * 100 if spec_csms_to_cp else 0.0
+        len(csms_to_cp_coverage) / len(spec_csms_to_cp) * 100
+        if spec_csms_to_cp
+        else 0.0
     )
 
     overall_spec = spec_cp_to_csms | spec_csms_to_cp
     overall_implemented = implemented_cp_to_csms | implemented_csms_to_cp
     overall_coverage = sorted(overall_spec & overall_implemented)
-    overall_percentage = len(overall_coverage) / len(overall_spec) * 100 if overall_spec else 0.0
+    overall_percentage = (
+        len(overall_coverage) / len(overall_spec) * 100 if overall_spec else 0.0
+    )
 
     summary = {
         "spec": spec,
@@ -346,7 +352,9 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
     badge_output.parent.mkdir(parents=True, exist_ok=True)
 
     badge_value = f"{round(overall_percentage, 1)}%"
-    badge_svg = render_badge("ocpp 1.6j", badge_value, coverage_color(overall_percentage))
+    badge_svg = render_badge(
+        "ocpp 1.6j", badge_value, coverage_color(overall_percentage)
+    )
     badge_output.write_text(badge_svg + "\n", encoding="utf-8")
 
     if overall_percentage < 100 and stderr:

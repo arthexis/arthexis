@@ -16,7 +16,6 @@ import dns.exception
 import dns.resolver
 import requests
 
-
 DNS_POLL_INTERVAL_SECONDS = 5
 HOOK_LOG_PATH = "/logs/certbot-godaddy-hook.log"
 PUBLIC_DNS_RESOLVERS = ("1.1.1.1", "8.8.8.8", "9.9.9.9")
@@ -75,7 +74,9 @@ def _zone_and_name(fqdn: str, zone_override: str = "") -> tuple[str, str]:
         raise RuntimeError(f"Invalid DNS name for ACME challenge: {fqdn}")
     domain = ".".join(labels[-2:])
     host = ".".join(labels[:-2])
-    _emit_log(f"GODADDY_ZONE not set; derived zone '{domain}' for challenge domain '{value}'.")
+    _emit_log(
+        f"GODADDY_ZONE not set; derived zone '{domain}' for challenge domain '{value}'."
+    )
     return domain, host
 
 
@@ -118,7 +119,9 @@ def _fetch_existing_txt_values(zone: str, host: str) -> list[str]:
     payload = response.json()
     if not isinstance(payload, list):
         return []
-    return [str(item.get("data", "")).strip() for item in payload if isinstance(item, dict)]
+    return [
+        str(item.get("data", "")).strip() for item in payload if isinstance(item, dict)
+    ]
 
 
 def _public_recursive_resolver() -> dns.resolver.Resolver:
@@ -156,7 +159,9 @@ def _query_authoritative_txt_values(
             errors.append(f"{nameserver} (A): {exc}")
 
         try:
-            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
+            ns_ips.extend(
+                str(answer) for answer in resolver.resolve(nameserver, "AAAA")
+            )
         except dns.resolver.NoAnswer:
             pass
         except dns.exception.DNSException as exc:
@@ -280,7 +285,9 @@ def _wait_for_public_recursive_txt_propagation(
 
     deadline = time.time() + max(0, timeout_seconds)
     while True:
-        observed_values, failed_resolvers = _query_public_recursive_txt_values(challenge_domain)
+        observed_values, failed_resolvers = _query_public_recursive_txt_values(
+            challenge_domain
+        )
         successful_resolvers = [
             resolver_ip
             for resolver_ip in observed_values
@@ -353,7 +360,9 @@ def _upsert_txt_record() -> None:
         )
 
     merged_values = sorted({*existing_values, validation})
-    payload = [{"data": value, "ttl": TXT_RECORD_TTL_SECONDS} for value in merged_values]
+    payload = [
+        {"data": value, "ttl": TXT_RECORD_TTL_SECONDS} for value in merged_values
+    ]
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
     )

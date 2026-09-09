@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Iterable
 
 from django.apps import apps
 from django.db import connections
-from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Q
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 
 from apps.core.channel_metrics import stale_state_evicted
 
 from . import store
 from .status_display import ERROR_OK_VALUES
-
 
 logger = logging.getLogger(__name__)
 
@@ -129,4 +128,3 @@ def clear_stale_cached_statuses(max_age: timedelta = timedelta(minutes=5)) -> in
 
     stale_state_evicted(source="ocpp.cached_status", count=updated)
     return updated
-

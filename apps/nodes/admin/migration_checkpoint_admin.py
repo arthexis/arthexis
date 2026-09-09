@@ -44,7 +44,6 @@ class NodeMigrationCheckpointAdmin(admin.ModelAdmin):
         actions.pop("delete_selected", None)
         return actions
 
-
     @admin.display(description="Progress (%)")
     def completion_percent(self, obj: NodeMigrationCheckpoint) -> float:
         """Render percentage completion in the admin changelist."""

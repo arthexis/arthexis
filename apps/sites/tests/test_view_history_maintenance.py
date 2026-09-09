@@ -36,7 +36,10 @@ class ViewHistoryMaintenanceTests(SimpleTestCase):
 
     def test_purge_view_history_command_enforces_minimum_days(self):
         out = StringIO()
-        with patch("apps.sites.management.commands.purge_view_history.purge_view_history", return_value=2) as purge:
+        with patch(
+            "apps.sites.management.commands.purge_view_history.purge_view_history",
+            return_value=2,
+        ) as purge:
             call_command("purge_view_history", "--days", "0", stdout=out)
 
         purge.assert_called_once_with(days=1)

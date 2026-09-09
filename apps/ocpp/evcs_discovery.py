@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from ipaddress import IPv4Address
-from typing import Iterable, Sequence
 
 DEFAULT_TOP_PORTS = 200
 DEFAULT_CONSOLE_PORT = 8900

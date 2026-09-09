@@ -9,12 +9,12 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.utils.dateparse import parse_date, parse_datetime
 
-from apps.energy.models import CustomerAccount
 from apps.cards.models import RFID
+from apps.energy.models import CustomerAccount
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from apps.nodes.models import Node
@@ -181,7 +181,7 @@ def _resolve_accounts(
     accounts: list[CustomerAccount] = []
     missing: list[str] = []
     seen_ids: set[int] = set()
-    matched_names: "OrderedDict[str, None]" = OrderedDict()
+    matched_names: OrderedDict[str, None] = OrderedDict()
 
     # Resolve by numeric identifiers first to preserve ordering.
     id_values = _coerce_values(
@@ -217,7 +217,7 @@ def _resolve_accounts(
     name_values = _coerce_values(
         entry.get("customer_account_names") or entry.get("energy_account_names")
     )
-    processed_names: "OrderedDict[str, None]" = OrderedDict()
+    processed_names: OrderedDict[str, None] = OrderedDict()
     for raw in name_values:
         normalized = raw.strip().upper()
         if not normalized or normalized in processed_names:

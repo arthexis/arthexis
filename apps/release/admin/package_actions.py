@@ -74,9 +74,7 @@ def _fetch_latest_pypi_version(package_name: str) -> tuple[Version | None, str |
             }
         return max(candidates), None
     except Exception as exc:
-        return None, _("Unable to load releases from PyPI: %(error)s") % {
-            "error": exc
-        }
+        return None, _("Unable to load releases from PyPI: %(error)s") % {"error": exc}
     finally:
         if resp is not None:
             close = getattr(resp, "close", None)
@@ -102,12 +100,9 @@ def prepare_package_release(admin_view, request, package):
         latest_release_info = _latest_release(existing_releases)
         if latest_release_info is not None:
             latest_version, latest_release = latest_release_info
-            if (
-                not latest_release.is_published
-                and (
-                    pypi_latest_version is not None
-                    and latest_version >= pypi_latest_version
-                )
+            if not latest_release.is_published and (
+                pypi_latest_version is not None
+                and latest_version >= pypi_latest_version
             ):
                 if latest_release.is_deleted:
                     latest_release.is_deleted = False

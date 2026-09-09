@@ -12,7 +12,9 @@ from apps.nodes.views import network
 
 
 @pytest.mark.django_db
-def test_net_message_logs_validation_reason_without_exposing_it_to_peer(monkeypatch, caplog):
+def test_net_message_logs_validation_reason_without_exposing_it_to_peer(
+    monkeypatch, caplog
+):
     sender = Node.objects.create(
         hostname="sender",
         current_relation=Node.Relation.SIBLING,
@@ -27,7 +29,9 @@ def test_net_message_logs_validation_reason_without_exposing_it_to_peer(monkeypa
     def reject_payload(*_args, **_kwargs) -> None:
         raise ValueError("uuid is required")
 
-    monkeypatch.setattr(network.serialization, "load_pem_public_key", lambda _value: PublicKey())
+    monkeypatch.setattr(
+        network.serialization, "load_pem_public_key", lambda _value: PublicKey()
+    )
     monkeypatch.setattr(NetMessage, "receive_payload", reject_payload)
     request = RequestFactory().post(
         "/nodes/net-message/",

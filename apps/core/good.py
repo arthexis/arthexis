@@ -99,7 +99,9 @@ class GoodReport:
         if not self.issues:
             return self.tagline
         if self.has_non_minor_issues:
-            raise ValueError("Cannot render a success line when non-minor issues exist.")
+            raise ValueError(
+                "Cannot render a success line when non-minor issues exist."
+            )
         return f"{self.tagline}*"
 
 
@@ -153,10 +155,15 @@ def _check_instance_availability() -> Iterable[GoodIssue]:
         return
 
     candidates = list(_iter_instance_connection_targets(node))
-    if any(_can_connect(host, candidate_port) for _, host, candidate_port in candidates):
+    if any(
+        _can_connect(host, candidate_port) for _, host, candidate_port in candidates
+    ):
         return
 
-    target = ", ".join(f"{scheme}://{host}:{candidate_port}" for scheme, host, candidate_port in candidates)
+    target = ", ".join(
+        f"{scheme}://{host}:{candidate_port}"
+        for scheme, host, candidate_port in candidates
+    )
     yield GoodIssue(
         key="instance-unreachable",
         title="Local instance did not accept a TCP connection",
@@ -198,7 +205,9 @@ def _iter_instance_connection_targets(node: Node) -> Iterable[tuple[str, str, in
 def _check_internet_connectivity() -> Iterable[GoodIssue]:
     """Verify basic outbound internet connectivity for integrations and updates."""
 
-    endpoints = tuple(getattr(settings, "GOOD_CONNECTIVITY_ENDPOINTS", DEFAULT_CONNECTIVITY_ENDPOINTS))
+    endpoints = tuple(
+        getattr(settings, "GOOD_CONNECTIVITY_ENDPOINTS", DEFAULT_CONNECTIVITY_ENDPOINTS)
+    )
     if any(_can_connect(host, port, timeout=2.0) for host, port in endpoints):
         return
 
@@ -274,7 +283,14 @@ def _check_recent_journal_errors() -> Iterable[GoodIssue]:
         )
         return
 
-    command = [journalctl, "--since", f"{LOG_LOOKBACK_DAYS} days ago", "-p", "err..alert", "--no-pager"]
+    command = [
+        journalctl,
+        "--since",
+        f"{LOG_LOOKBACK_DAYS} days ago",
+        "-p",
+        "err..alert",
+        "--no-pager",
+    ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode not in {0, 1}:
         yield GoodIssue(
@@ -302,7 +318,9 @@ def _check_suite_feature_eligibility() -> Iterable[GoodIssue]:
 
     try:
         node = Node.get_local()
-        features = list(Feature.objects.select_related("node_feature").order_by("display"))
+        features = list(
+            Feature.objects.select_related("node_feature").order_by("display")
+        )
     except (OperationalError, ProgrammingError):
         return
 
@@ -320,7 +338,9 @@ def _check_suite_feature_eligibility() -> Iterable[GoodIssue]:
             continue
         if feature.node_feature_id:
             node_feature = getattr(feature, "node_feature", None)
-            node_feature_slug = getattr(node_feature, "slug", str(feature.node_feature_id))
+            node_feature_slug = getattr(
+                node_feature, "slug", str(feature.node_feature_id)
+            )
             yield GoodIssue(
                 key=f"suite-feature-blocked:{feature.slug}",
                 title=f"Suite feature waiting on node capability: {feature.display}",
@@ -342,7 +362,9 @@ def _check_node_feature_eligibility() -> Iterable[GoodIssue]:
     for feature in features:
         try:
             result = feature_checks.run(feature, node=node)
-        except Exception as exc:  # pragma: no cover - defensive against optional integrations
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - defensive against optional integrations
             yield GoodIssue(
                 key=f"node-feature-check-failed:{feature.slug}",
                 title=f"Node feature check failed: {feature.display}",
@@ -430,7 +452,9 @@ def _check_dashboard_rules() -> Iterable[GoodIssue]:
     """Evaluate dashboard rules and surface any failing operator checks."""
 
     try:
-        rules = list(DashboardRule.objects.select_related("content_type").order_by("name"))
+        rules = list(
+            DashboardRule.objects.select_related("content_type").order_by("name")
+        )
     except (OperationalError, ProgrammingError):
         return
 
@@ -467,7 +491,9 @@ def marketing_tagline(*, docs_url: str | None = None) -> str:
 def docs_url() -> str:
     """Return the external source URL for the ``good`` command reference."""
 
-    return "https://github.com/arthexis/arthexis/blob/main/docs/operations/good-command.md"
+    return (
+        "https://github.com/arthexis/arthexis/blob/main/docs/operations/good-command.md"
+    )
 
 
 def _can_connect(host: str, port: int, *, timeout: float = 1.5) -> bool:

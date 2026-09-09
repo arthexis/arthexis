@@ -63,6 +63,7 @@ def kiosk_live_connection(request):
         }
     )
 
+
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
@@ -112,7 +113,9 @@ def charger_list(request):
                 "meterStart": session_tx.meter_start,
                 "startTime": session_tx.start_time.isoformat(),
             }
-            identifier = str(getattr(session_tx, "vehicle_identifier", "") or "").strip()
+            identifier = str(
+                getattr(session_tx, "vehicle_identifier", "") or ""
+            ).strip()
             if identifier:
                 active_payload["vid"] = identifier
             legacy_vin = str(getattr(session_tx, "vin", "") or "").strip()
@@ -125,7 +128,9 @@ def charger_list(request):
             active_transactions.append(active_payload)
         state, color = _charger_state(
             charger,
-            tx_obj if charger.connector_id is not None else (sessions if sessions else None),
+            tx_obj
+            if charger.connector_id is not None
+            else (sessions if sessions else None),
         )
         entry = {
             "charger_id": cid,
@@ -138,9 +143,7 @@ def charger_list(request):
             "transaction": tx_data,
             "activeTransactions": active_transactions,
             "lastHeartbeat": (
-                charger.last_heartbeat.isoformat()
-                if charger.last_heartbeat
-                else None
+                charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
             ),
             "lastMeterValues": charger.last_meter_values,
             "firmwareStatus": charger.firmware_status,
@@ -170,9 +173,7 @@ def charger_list(request):
 @api_login_required
 def charger_detail(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    access_response = _ensure_charger_access(
-        request.user, charger, request=request
-    )
+    access_response = _ensure_charger_access(request.user, charger, request=request)
     if access_response is not None:
         return access_response
 
@@ -235,7 +236,9 @@ def charger_detail(request, cid, connector=None):
     log = store.get_logs(log_key, log_type="charger")
     state, color = _charger_state(
         charger,
-        tx_obj if charger.connector_id is not None else (sessions if sessions else None),
+        tx_obj
+        if charger.connector_id is not None
+        else (sessions if sessions else None),
     )
     payload = {
         "charger_id": cid,

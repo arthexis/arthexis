@@ -111,10 +111,22 @@ class OperationLinkAdmin(admin.ModelAdmin):
 class SecurityAlertEventAdmin(admin.ModelAdmin):
     """Admin for aggregated security alert event records."""
 
-    list_display = ("key", "severity", "message", "occurrence_count", "last_occurred_at", "is_active")
+    list_display = (
+        "key",
+        "severity",
+        "message",
+        "occurrence_count",
+        "last_occurred_at",
+        "is_active",
+    )
     list_filter = ("severity", "is_active", "last_occurred_at")
     search_fields = ("key", "message", "detail")
-    readonly_fields = ("occurrence_count", "last_occurred_at", "created_at", "updated_at")
+    readonly_fields = (
+        "occurrence_count",
+        "last_occurred_at",
+        "created_at",
+        "updated_at",
+    )
 
 
 class OperatorJourneyStepInline(admin.TabularInline):

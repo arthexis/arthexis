@@ -41,6 +41,7 @@ def test_odoo_quote_report_rejects_invalid_query_params(admin_client, admin_user
     assert response.status_code == 400
     assert "Enter a whole number." in response.rendered_content
 
+
 @pytest.mark.django_db
 @pytest.mark.django_db
 def test_odoo_quote_report_params_raise_validation_error_for_out_of_range_values():
@@ -55,4 +56,3 @@ def test_odoo_quote_report_params_raise_validation_error_for_out_of_range_values
         OdooQuoteReportParams.from_request(request)
 
     assert "Ensure this value is between 1 and 365." in exc_info.value.messages
-

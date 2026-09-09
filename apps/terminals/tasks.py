@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-import stat
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,11 +21,19 @@ def _terminal_state_dir() -> Path:
     if override:
         return Path(override)
     if _is_windows():
-        local_app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+        local_app_data = (
+            os.environ.get("LOCALAPPDATA")
+            or os.environ.get("APPDATA")
+            or str(Path.home())
+        )
         base = Path(local_app_data) / "Arthexis"
     else:
         configured_state_home = os.environ.get("XDG_STATE_HOME")
-        base = Path(configured_state_home) if configured_state_home else Path.home() / ".local" / "state"
+        base = (
+            Path(configured_state_home)
+            if configured_state_home
+            else Path.home() / ".local" / "state"
+        )
         if not _can_create_state_dir(base):
             return Path(os.environ.get("TMPDIR") or "/tmp") / "arthexis-agent-terminals"
     return base / "agent-terminals"
@@ -60,7 +68,9 @@ def _ensure_private_state_dir(path: Path) -> None:
         raise PermissionError(f"Terminal state dir must not be a symlink: {path}")
     getuid = getattr(os, "getuid", None)
     if getuid is not None and stats.st_uid != getuid():
-        raise PermissionError(f"Terminal state dir must be owned by current user: {path}")
+        raise PermissionError(
+            f"Terminal state dir must be owned by current user: {path}"
+        )
     current_mode = stat.S_IMODE(stats.st_mode)
     if current_mode != 0o700:
         path.chmod(0o700)
@@ -187,7 +197,9 @@ def _build_startup_script(terminal: AgentTerminal) -> str:
 
 
 def _command_metadata(command: Sequence[str]) -> str:
-    return " ".join(" ".join(str(part).split()) for part in command if str(part).strip())
+    return " ".join(
+        " ".join(str(part).split()) for part in command if str(part).strip()
+    )
 
 
 def _powershell_quote(value: str) -> str:
@@ -195,7 +207,7 @@ def _powershell_quote(value: str) -> str:
 
 
 def _split_windows_command(value: str) -> list[str]:
-    return [part.strip("\"") for part in shlex.split(value, posix=False)]
+    return [part.strip('"') for part in shlex.split(value, posix=False)]
 
 
 def _command_script(
@@ -209,7 +221,9 @@ def _command_script(
     if shell == "powershell":
         lines = []
         if working_directory:
-            lines.append(f"Set-Location -LiteralPath {_powershell_quote(str(working_directory))}")
+            lines.append(
+                f"Set-Location -LiteralPath {_powershell_quote(str(working_directory))}"
+            )
         executable, *args = [str(part) for part in command]
         joined_args = " ".join(_powershell_quote(arg) for arg in args)
         suffix = f" {joined_args}" if joined_args else ""
@@ -225,7 +239,10 @@ def _command_script(
 def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
     script_dir = _terminal_state_dir() / "scripts"
     _ensure_private_state_dir(script_dir)
-    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
+    script_path = (
+        script_dir
+        / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.ps1"
+    )
     _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
     return script_path
 
@@ -233,7 +250,10 @@ def _write_windows_startup_script(state_key: str, startup_script: str) -> Path:
 def _write_posix_startup_script(state_key: str, startup_script: str) -> Path:
     script_dir = _terminal_state_dir() / "scripts"
     _ensure_private_state_dir(script_dir)
-    script_path = script_dir / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.sh"
+    script_path = (
+        script_dir
+        / f"{re.sub(r'[^A-Za-z0-9_.-]+', '-', state_key).strip('.-') or 'terminal'}.sh"
+    )
     _write_private_file(script_path, startup_script, 0o700, "Terminal startup script")
     return script_path
 

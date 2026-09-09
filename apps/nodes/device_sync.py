@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, TypeVar
 
 from django.db import models
 
@@ -14,7 +15,7 @@ DetectedType = TypeVar("DetectedType")
 def sync_detected_devices(
     *,
     model_cls: type[ModelType],
-    node: "Node",
+    node: Node,
     detected: Iterable[DetectedType],
     identifier_getter: Callable[[DetectedType], str],
     defaults_getter: Callable[[DetectedType], dict[str, object]],

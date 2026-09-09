@@ -68,7 +68,9 @@ def test_trait_sigils_export_safe_environment_names():
 def test_transport_metadata_decodes_command_card_name_and_metadata_block():
     metadata_block = command_layout.encode_command_metadata(command_block_count=2)
     blocks = {
-        classic_layout.sector_block(0, 1): classic_layout.encode_card_name("Suite Upgrade"),
+        classic_layout.sector_block(0, 1): classic_layout.encode_card_name(
+            "Suite Upgrade"
+        ),
         classic_layout.sector_block(0, 2): metadata_block,
     }
 
@@ -99,7 +101,9 @@ def test_transport_metadata_decodes_writer_blocks():
     blocks = {
         classic_layout.sector_block(0, 1): classic_layout.encode_card_name("Door"),
         classic_layout.sector_block(1, 1): classic_layout.encode_writer_id("NODE-1"),
-        classic_layout.sector_block(1, 2): classic_layout.encode_writer_date(written_at),
+        classic_layout.sector_block(1, 2): classic_layout.encode_writer_date(
+            written_at
+        ),
     }
 
     metadata = classic_layout.decode_transport_metadata(_dump_from_blocks(blocks))
@@ -128,7 +132,9 @@ def test_command_layout_round_trips_command_and_result_blocks():
         started_result,
         command_block_count=metadata.command_block_count,
     )
-    for index, block in enumerate(command_layout.result_data_blocks(metadata.command_block_count)):
+    for index, block in enumerate(
+        command_layout.result_data_blocks(metadata.command_block_count)
+    ):
         blocks[block] = encoded_result[index * 16 : index * 16 + 16]
 
     card = command_layout.decode_command_card_from_dump(_dump_from_blocks(blocks))
@@ -165,12 +171,8 @@ def test_command_payload_blocks_complete_for_single_block_command():
     metadata = command_layout.decode_command_metadata(metadata_block)
 
     assert metadata.command_block_count == 1
-    assert command_layout.command_payload_blocks_complete(
-        _dump_from_blocks(blocks)
-    )
-    assert not command_layout.command_result_blocks_complete(
-        _dump_from_blocks(blocks)
-    )
+    assert command_layout.command_payload_blocks_complete(_dump_from_blocks(blocks))
+    assert not command_layout.command_result_blocks_complete(_dump_from_blocks(blocks))
 
 
 def test_command_payload_blocks_complete_for_multi_block_command_with_extra_blocks():
@@ -320,7 +322,9 @@ def test_command_payload_requires_json_object_params():
 
 def test_command_payload_starts_in_managed_sectors_and_reserves_result_space():
     blocks = command_layout.command_data_blocks()
-    assert blocks[0] == classic_layout.sector_block(classic_layout.FIRST_MANAGED_SECTOR, 0)
+    assert blocks[0] == classic_layout.sector_block(
+        classic_layout.FIRST_MANAGED_SECTOR, 0
+    )
 
     capacity = (
         len(blocks) - command_layout.MIN_RESULT_BLOCKS

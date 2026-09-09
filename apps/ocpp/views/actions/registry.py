@@ -10,7 +10,6 @@ from . import (
     reservations,
 )
 
-
 ACTION_HANDLERS = {
     "get_configuration": configuration._handle_get_configuration,
     "reserve_now": reservations._handle_reserve_now,

@@ -5,11 +5,10 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
-from django.conf import settings
 import requests
+from django.conf import settings
 
 from config.admin_urls import normalize_admin_url_path
-
 
 CSRF_TOKEN_PATTERN = re.compile(
     r"<input\b"
@@ -64,7 +63,9 @@ class Node:
         self.base_url = base_url.rstrip("/")
         self.session = session or requests.Session()
         self.timeout = timeout
-        self.admin_path = normalize_admin_url_path(admin_path or _default_admin_url_path())
+        self.admin_path = normalize_admin_url_path(
+            admin_path or _default_admin_url_path()
+        )
         self.session_cookie_name = session_cookie_name or _default_session_cookie_name()
 
     def login(self, username: str, password: str) -> None:
@@ -86,7 +87,9 @@ class Node:
         except requests.RequestException as exc:
             raise ArthexisNotebookError("Login request failed.") from exc
         if not self._admin_session_is_authenticated():
-            raise ArthexisNotebookError("Login failed: invalid credentials or CSRF flow.")
+            raise ArthexisNotebookError(
+                "Login failed: invalid credentials or CSRF flow."
+            )
 
     @property
     def is_authenticated(self) -> bool:
@@ -108,7 +111,9 @@ class Node:
             raise ArthexisNotebookError("Could not fetch admin login page.") from exc
         token = self._extract_csrf_token(response.text)
         if not token:
-            raise ArthexisNotebookError("Could not find csrfmiddlewaretoken on admin login page.")
+            raise ArthexisNotebookError(
+                "Could not find csrfmiddlewaretoken on admin login page."
+            )
         return token
 
     @staticmethod
@@ -126,7 +131,9 @@ class Node:
         except ValueError as exc:
             raise ArthexisNotebookError(f"Invalid JSON response for {path!r}.") from exc
         if not isinstance(data, dict):
-            raise ArthexisNotebookError("Unexpected API response; expected JSON object.")
+            raise ArthexisNotebookError(
+                "Unexpected API response; expected JSON object."
+            )
         return data
 
     def _admin_session_is_authenticated(self) -> bool:
@@ -153,7 +160,9 @@ def _default_admin_url_path() -> str:
 
 def _default_session_cookie_name() -> str:
     if settings.configured:
-        return str(getattr(settings, "SESSION_COOKIE_NAME", DEFAULT_SESSION_COOKIE_NAME))
+        return str(
+            getattr(settings, "SESSION_COOKIE_NAME", DEFAULT_SESSION_COOKIE_NAME)
+        )
     return DEFAULT_SESSION_COOKIE_NAME
 
 

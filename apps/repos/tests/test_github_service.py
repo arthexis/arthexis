@@ -12,7 +12,13 @@ from apps.repos.services import github
 
 
 class DummyResponse:
-    def __init__(self, data: Any, status_code: int = 200, links: dict | None = None, text: str = ""):
+    def __init__(
+        self,
+        data: Any,
+        status_code: int = 200,
+        links: dict | None = None,
+        text: str = "",
+    ):
         self._data = data
         self.status_code = status_code
         self.links = links or {}
@@ -135,13 +141,17 @@ def test_fetch_repository_issues_handles_pagination(monkeypatch):
     responses = [
         DummyResponse(
             [{"number": 1}, {"number": 2}],
-            links={"next": {"url": "https://api.github.com/repos/octo/demo/issues?page=2"}},
+            links={
+                "next": {"url": "https://api.github.com/repos/octo/demo/issues?page=2"}
+            },
         ),
         DummyResponse([{"number": 3}]),
     ]
 
     def fake_get(url, headers=None, params=None, timeout=None):
-        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        calls.append(
+            {"url": url, "params": params, "headers": headers, "timeout": timeout}
+        )
         return responses.pop(0)
 
     monkeypatch.setattr(github.requests, "get", fake_get)
@@ -158,18 +168,24 @@ def test_fetch_repository_labels_handles_pagination(monkeypatch):
     responses = [
         DummyResponse(
             [{"name": "bug"}],
-            links={"next": {"url": "https://api.github.com/repos/octo/demo/labels?page=2"}},
+            links={
+                "next": {"url": "https://api.github.com/repos/octo/demo/labels?page=2"}
+            },
         ),
         DummyResponse([{"name": "triage"}]),
     ]
 
     def fake_get(url, headers=None, params=None, timeout=None):
-        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        calls.append(
+            {"url": url, "params": params, "headers": headers, "timeout": timeout}
+        )
         return responses.pop(0)
 
     monkeypatch.setattr(github.requests, "get", fake_get)
 
-    labels = list(github.fetch_repository_labels(token="tok", owner="octo", name="demo"))
+    labels = list(
+        github.fetch_repository_labels(token="tok", owner="octo", name="demo")
+    )
 
     assert [label["name"] for label in labels] == ["bug", "triage"]
     assert calls[0]["url"].endswith("/repos/octo/demo/labels")
@@ -180,12 +196,18 @@ def test_fetch_repository_labels_handles_pagination(monkeypatch):
 
 def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
     def fake_get(url, headers=None, params=None, timeout=None):
-        return DummyResponse({"message": "Nope"}, status_code=500, links={}, text="boom")
+        return DummyResponse(
+            {"message": "Nope"}, status_code=500, links={}, text="boom"
+        )
 
     monkeypatch.setattr(github.requests, "get", fake_get)
 
     with pytest.raises(github.GitHubRepositoryError):
-        list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
+        list(
+            github.fetch_repository_pull_requests(
+                token="tok", owner="octo", name="demo"
+            )
+        )
 
 
 def test_resolve_repository_token_prefers_user_token_then_env(monkeypatch):
@@ -485,7 +507,12 @@ def test_submit_pull_request_review_decision_posts_review_event(monkeypatch):
     calls: dict[str, Any] = {}
 
     def fake_post(url, json=None, headers=None, timeout=None):
-        calls["request"] = {"url": url, "json": json, "headers": headers, "timeout": timeout}
+        calls["request"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
         return DummyResponse({"id": 99}, status_code=200)
 
     monkeypatch.setattr(github.requests, "post", fake_post)
@@ -529,7 +556,11 @@ def test_merge_pull_request_rejects_unknown_mergeability(monkeypatch):
     monkeypatch.setattr(
         github,
         "fetch_pull_request",
-        lambda **kwargs: {"state": "open", "mergeable": None, "mergeable_state": "unknown"},
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": None,
+            "mergeable_state": "unknown",
+        },
     )
 
     with pytest.raises(github.GitHubRepositoryError, match="being calculated"):
@@ -556,8 +587,16 @@ def test_merge_pull_request_calls_merge_endpoint(monkeypatch):
     )
 
     def fake_put(url, json=None, headers=None, timeout=None):
-        calls["request"] = {"url": url, "json": json, "headers": headers, "timeout": timeout}
-        return DummyResponse({"merged": True, "message": "Pull Request successfully merged"}, status_code=200)
+        calls["request"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse(
+            {"merged": True, "message": "Pull Request successfully merged"},
+            status_code=200,
+        )
 
     monkeypatch.setattr(github.requests, "put", fake_put)
 

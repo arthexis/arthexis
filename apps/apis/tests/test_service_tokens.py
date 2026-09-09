@@ -59,10 +59,13 @@ def test_token_secret_reveal_is_one_time_and_audited(client, staff_user):
     assert first_reveal.status_code == 200
     assert "atk_" in first_reveal.content.decode("utf-8")
     assert "no longer available" in second_reveal.content.decode("utf-8")
-    assert ServiceTokenEvent.objects.filter(
-        token=token,
-        event_type=ServiceTokenEvent.EventType.REVEALED,
-    ).count() == 1
+    assert (
+        ServiceTokenEvent.objects.filter(
+            token=token,
+            event_type=ServiceTokenEvent.EventType.REVEALED,
+        ).count()
+        == 1
+    )
 
 
 @pytest.mark.django_db
@@ -149,7 +152,10 @@ def test_revoke_token_marks_inactive_and_writes_audit_event(client, staff_user):
 
     response = client.post(
         reverse("admin:apis_servicetoken_revoke", args=[token.pk]),
-        {"reason": "Compromise suspected", "impact_note": "Clients need a replacement."},
+        {
+            "reason": "Compromise suspected",
+            "impact_note": "Clients need a replacement.",
+        },
     )
 
     assert response.status_code == 302

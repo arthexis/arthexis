@@ -10,7 +10,6 @@ from django.utils.translation import gettext_lazy as _
 from ... import store
 from ...models import Charger
 
-
 CALL_ACTION_LABELS = {
     "RemoteStartTransaction": _("Remote start transaction"),
     "RemoteStopTransaction": _("Remote stop transaction"),
@@ -298,7 +297,9 @@ def _build_component_variable_base(entry: dict) -> tuple[dict[str, object], str 
     return {"component": component, "variable": variable}, None
 
 
-def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], str | None]:
+def _build_component_variable_payload(
+    entry: dict,
+) -> tuple[dict[str, object], str | None]:
     payload, error = _build_component_variable_base(entry)
     if error:
         return payload, error
@@ -308,5 +309,7 @@ def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], s
     return payload, None
 
 
-def _build_component_variable_entry(entry: dict) -> tuple[dict[str, object], str | None]:
+def _build_component_variable_entry(
+    entry: dict,
+) -> tuple[dict[str, object], str | None]:
     return _build_component_variable_base(entry)
