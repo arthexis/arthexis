@@ -14,6 +14,19 @@ root = "/opt/arthexis"
 checkout = "app"
 environment = ".venv"
 
+# Terminal is the lightweight default. The other canonical roles require the
+# Celery runtime stack and therefore install the project's `celery` extra.
+[install.extras]
+argument = "--role"
+default = "Terminal"
+state = ".locks/role.lck"
+
+[install.extras.values]
+Control = ["celery"]
+Satellite = ["celery"]
+Terminal = []
+Watchtower = ["celery"]
+
 [lifecycle]
 install = "apps.core.system.lifecycle:install"
 upgrade = "apps.core.system.lifecycle:upgrade"
