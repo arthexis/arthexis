@@ -43,6 +43,14 @@ profiles = ["Terminal", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
 
+[services.web-local.environment]
+PYTHONUNBUFFERED = "1"
+ARTHEXIS_MODE = "installed"
+ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
+ARTHEXIS_LOG_DIR = "/opt/arthexis/var/log"
+ARTHEXIS_CACHE_DIR = "/opt/arthexis/var/cache"
+ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
+
 [services.web-edge]
 description = "Arthexis charger-facing web service"
 command = ["{python}", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
@@ -50,6 +58,14 @@ working_directory = "{project}"
 profiles = ["Control", "Satellite"]
 restart = "on-failure"
 restart_sec = 5
+
+[services.web-edge.environment]
+PYTHONUNBUFFERED = "1"
+ARTHEXIS_MODE = "installed"
+ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
+ARTHEXIS_LOG_DIR = "/opt/arthexis/var/log"
+ARTHEXIS_CACHE_DIR = "/opt/arthexis/var/cache"
+ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 
 [services.worker]
 description = "Arthexis Celery worker"
@@ -59,6 +75,14 @@ profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
 
+[services.worker.environment]
+PYTHONUNBUFFERED = "1"
+ARTHEXIS_MODE = "installed"
+ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
+ARTHEXIS_LOG_DIR = "/opt/arthexis/var/log"
+ARTHEXIS_CACHE_DIR = "/opt/arthexis/var/cache"
+ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
+
 [services.beat]
 description = "Arthexis Celery beat scheduler"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "beat", "--loglevel=INFO"]
@@ -66,3 +90,11 @@ working_directory = "{project}"
 profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
+
+[services.beat.environment]
+PYTHONUNBUFFERED = "1"
+ARTHEXIS_MODE = "installed"
+ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
+ARTHEXIS_LOG_DIR = "/opt/arthexis/var/log"
+ARTHEXIS_CACHE_DIR = "/opt/arthexis/var/cache"
+ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"

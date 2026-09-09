@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import socket
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 from urllib.parse import urlparse
 
 from config.roles import SUPPORTED_ROLES, normalize_role
@@ -39,6 +40,58 @@ def layout(root: str | Path | None = None) -> InstallationLayout:
 
 def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
     return selected or layout()
+
+
+def _managed_runtime_dirs(current: InstallationLayout) -> dict[str, Path]:
+    state_root = current.root / "var"
+    return {
+        "ARTHEXIS_DATA_DIR": state_root / "lib",
+        "ARTHEXIS_LOG_DIR": state_root / "log",
+        "ARTHEXIS_CACHE_DIR": state_root / "cache",
+        "ARTHEXIS_RUN_DIR": state_root / "run",
+    }
+
+
+def _managed_environment(current: InstallationLayout) -> dict[str, str]:
+    env = os.environ.copy()
+    env["ARTHEXIS_MODE"] = "installed"
+    for name, path in _managed_runtime_dirs(current).items():
+        env[name] = str(path)
+    return env
+
+
+def _prepare_runtime_state(current: InstallationLayout) -> Path:
+    runtime_dirs = _managed_runtime_dirs(current)
+    for path in runtime_dirs.values():
+        path.mkdir(parents=True, exist_ok=True)
+
+    data_dir = runtime_dirs["ARTHEXIS_DATA_DIR"]
+    legacy_database = current.checkout / "db.sqlite3"
+    managed_database = data_dir / "db.sqlite3"
+    if legacy_database.is_file() and not managed_database.exists():
+        shutil.copy2(legacy_database, managed_database)
+    return current.root / "var"
+
+
+def _restore_runtime_ownership(state_root: Path) -> None:
+    """Return managed mutable state to the user that invoked sudo."""
+
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is None or geteuid() != 0:
+        return
+
+    uid_text = os.environ.get("SUDO_UID", "")
+    gid_text = os.environ.get("SUDO_GID", "")
+    if not uid_text.isdigit() or not gid_text.isdigit():
+        return
+
+    uid = int(uid_text)
+    gid = int(gid_text)
+    for directory, _, filenames in os.walk(state_root):
+        os.chown(directory, uid, gid)
+        directory_path = Path(directory)
+        for filename in filenames:
+            os.chown(directory_path / filename, uid, gid)
 
 
 def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> str | None:
@@ -173,6 +226,7 @@ def run_python(
         cwd=Path(cwd) if cwd is not None else current.checkout,
         check=check,
         text=True,
+        env=_managed_environment(current),
     )
 
 
@@ -217,12 +271,19 @@ def prepare(
     """
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():
-        raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
-    if run_migrations:
-        migrate(layout=current)
-    ensure_local_node(layout=current)
-    if run_collectstatic:
-        collectstatic(layout=current)
+        raise FileNotFoundError(
+            f"installation checkout does not exist: {current.checkout}"
+        )
+
+    state_root = _prepare_runtime_state(current)
+    try:
+        if run_migrations:
+            migrate(layout=current)
+        ensure_local_node(layout=current)
+        if run_collectstatic:
+            collectstatic(layout=current)
+    finally:
+        _restore_runtime_ownership(state_root)
     return current
 
 
@@ -240,12 +301,16 @@ def _prepare_for_role(
     return prepare(layout=current)
 
 
-def install(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
+def install(
+    *arguments: str, layout: InstallationLayout | None = None
+) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
     return _prepare_for_role(arguments, layout=layout)
 
 
-def upgrade(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
+def upgrade(
+    *arguments: str, layout: InstallationLayout | None = None
+) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
     return _prepare_for_role(arguments, layout=layout)
 
