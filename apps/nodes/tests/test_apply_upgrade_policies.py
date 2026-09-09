@@ -12,7 +12,10 @@ pytestmark = [pytest.mark.django_db]
 def test_apply_upgrade_policies_skips_when_auto_upgrade_feature_disabled(monkeypatch):
     """Feature toggle should skip scheduled policy checks."""
 
-    monkeypatch.setattr("apps.nodes.tasks.auto_upgrade_suite_feature_enabled", lambda default=True: False)
+    monkeypatch.setattr(
+        "apps.nodes.tasks.auto_upgrade_suite_feature_enabled",
+        lambda default=True: False,
+    )
 
     result = apply_upgrade_policies()
 

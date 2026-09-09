@@ -140,7 +140,7 @@ def test_doctor_all_runs_all_targets_once(
 def test_doctor_skips_control_peripherals_on_non_control_role(
     monkeypatch: pytest.MonkeyPatch,
     settings,
-    ) -> None:
+) -> None:
     settings.NODE_ROLE = "Watchtower"
     settings.INSTALLED_APPS = ["apps.core", "apps.cards"]
     invoked: list[tuple[str, ...]] = []

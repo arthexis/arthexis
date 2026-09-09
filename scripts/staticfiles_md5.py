@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Compute a hash representing the current static files state."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,9 +9,8 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
@@ -162,9 +162,8 @@ def _cache_is_valid(cache: dict | None, commit: str) -> tuple[bool, str | None]:
     if latest_mtime is None:
         return False, None
 
-    if (
-        latest_mtime == cache.get("latest_mtime_ns")
-        and file_count == cache.get("file_count")
+    if latest_mtime == cache.get("latest_mtime_ns") and file_count == cache.get(
+        "file_count"
     ):
         return True, cache.get("hash")
 

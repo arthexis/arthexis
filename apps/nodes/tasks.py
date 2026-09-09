@@ -5,7 +5,7 @@ import os
 import shutil
 import socket
 import subprocess
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from datetime import timezone as datetime_timezone
 from pathlib import Path
 
@@ -28,6 +28,7 @@ from utils import revision
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
 
 logger = logging.getLogger(__name__)
+
 
 @shared_task
 def apply_upgrade_policies() -> str:
@@ -125,7 +126,7 @@ def _startup_duration_seconds(
     lock_fresh = False
     try:
         stats = lock_path.stat()
-        heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=datetime_timezone.utc)
+        heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=UTC)
         if heartbeat <= now_value:
             lock_fresh = (
                 now_value - heartbeat
@@ -156,7 +157,7 @@ def _startup_duration_seconds(
     if not boot_time:
         return None
 
-    boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
+    boot_dt = datetime.fromtimestamp(boot_time, tz=UTC)
     seconds = int((now_value - boot_dt).total_seconds())
     return seconds if seconds >= 0 else None
 

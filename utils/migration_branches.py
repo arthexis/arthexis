@@ -3,13 +3,13 @@
 Provides branch sentry operations to detect databases that crossed
 retroactively edited migrations without running the refreshed code.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
 from django.db.migrations.operations.base import Operation
-
 
 _MARKER_TABLE = "migration_branch_markers"
 
@@ -75,10 +75,14 @@ class _BranchOperation(Operation):
         self.branch_id = branch_id
         self.migration_label = migration_label
 
-    def state_forwards(self, app_label: str, state: Any) -> None:  # pragma: no cover - no state change
+    def state_forwards(
+        self, app_label: str, state: Any
+    ) -> None:  # pragma: no cover - no state change
         return None
 
-    def database_backwards(self, app_label, schema_editor, from_state, to_state):  # pragma: no cover - irreversible
+    def database_backwards(
+        self, app_label, schema_editor, from_state, to_state
+    ):  # pragma: no cover - irreversible
         raise NotImplementedError("Branch operations cannot be reversed")
 
     @staticmethod
@@ -110,7 +114,9 @@ class _BranchOperation(Operation):
             row = cursor.fetchone()
         if not row:
             return None
-        return _BranchMarker(branch_id=row[0], splinter_migration=row[1], merge_migration=row[2])
+        return _BranchMarker(
+            branch_id=row[0], splinter_migration=row[1], merge_migration=row[2]
+        )
 
     @classmethod
     def _upsert_marker(
@@ -235,9 +241,7 @@ class BranchTagOperation(_BranchOperation):
 
     def _existing_migrations(self, schema_editor) -> list[str]:
         placeholders = ", ".join(["%s"] * len(self.project_apps))
-        query = (
-            f"SELECT app, name FROM django_migrations WHERE app IN ({placeholders})"
-        )
+        query = f"SELECT app, name FROM django_migrations WHERE app IN ({placeholders})"
         with schema_editor.connection.cursor() as cursor:
             cursor.execute(query, list(self.project_apps))
             rows = cursor.fetchall()
@@ -295,13 +299,19 @@ class SafelyDeprecatedMigration(Operation):
     def __init__(self, *, reason: str = ""):
         self.reason = reason.strip()
 
-    def state_forwards(self, app_label: str, state: Any) -> None:  # pragma: no cover - no state change
+    def state_forwards(
+        self, app_label: str, state: Any
+    ) -> None:  # pragma: no cover - no state change
         return None
 
-    def database_forwards(self, app_label, schema_editor, from_state, to_state) -> None:  # pragma: no cover - no db change
+    def database_forwards(
+        self, app_label, schema_editor, from_state, to_state
+    ) -> None:  # pragma: no cover - no db change
         return None
 
-    def database_backwards(self, app_label, schema_editor, from_state, to_state) -> None:  # pragma: no cover - no db change
+    def database_backwards(
+        self, app_label, schema_editor, from_state, to_state
+    ) -> None:  # pragma: no cover - no db change
         return None
 
     def describe(self) -> str:

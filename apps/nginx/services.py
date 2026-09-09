@@ -48,7 +48,9 @@ def ensure_nginx_in_path() -> bool:
         if candidate.exists() and candidate.is_file():
             current_path = os.environ.get("PATH", "")
             if str(directory) not in current_path.split(":"):
-                os.environ["PATH"] = f"{current_path}:{directory}" if current_path else str(directory)
+                os.environ["PATH"] = (
+                    f"{current_path}:{directory}" if current_path else str(directory)
+                )
             return True
 
     return False
@@ -95,7 +97,9 @@ def record_lock_state(mode: str, port: int, role: str) -> None:
     _write_lock(lock_dir / "role.lck", role)
 
 
-def remove_nginx_configuration(*, sudo: str = "sudo", reload: bool = True) -> ApplyResult:
+def remove_nginx_configuration(
+    *, sudo: str = "sudo", reload: bool = True
+) -> ApplyResult:
     if not can_manage_nginx():
         raise NginxUnavailableError(
             "nginx configuration requires sudo privileges and nginx assets. "
@@ -118,7 +122,12 @@ def remove_nginx_configuration(*, sudo: str = "sudo", reload: bool = True) -> Ap
         if validated:
             reloaded = reload_or_start_nginx(sudo)
 
-    return ApplyResult(changed=True, validated=validated, reloaded=reloaded, message="Removed nginx configuration.")
+    return ApplyResult(
+        changed=True,
+        validated=validated,
+        reloaded=reloaded,
+        message="Removed nginx configuration.",
+    )
 
 
 def _write_config_with_sudo(dest: Path, content: str, *, sudo: str = "sudo") -> None:
@@ -250,4 +259,6 @@ def restart_nginx(*, sudo: str = "sudo") -> ApplyResult:
     if validated:
         reloaded = reload_or_start_nginx(sudo)
 
-    return ApplyResult(changed=True, validated=validated, reloaded=reloaded, message="Restarted nginx.")
+    return ApplyResult(
+        changed=True, validated=validated, reloaded=reloaded, message="Restarted nginx."
+    )

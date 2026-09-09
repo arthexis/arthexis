@@ -8,7 +8,6 @@ from apps.release import release_workflow
 
 from .utils import _get_package_release_model
 
-
 logger = logging.getLogger(__name__)
 
 

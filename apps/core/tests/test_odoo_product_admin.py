@@ -56,8 +56,12 @@ def test_load_employees_action_respects_sync_feature_toggle(
     response = admin_client.post(reverse("admin:odoo_odooemployee_load_employees"))
     assert response.status_code == 302
     assert OdooEmployee.objects.count() == 1
+
+
 @pytest.mark.django_db
-def test_load_employees_action_requires_verified_profile(admin_client, admin_user, monkeypatch):
+def test_load_employees_action_requires_verified_profile(
+    admin_client, admin_user, monkeypatch
+):
     """The tool action redirects without syncing when Odoo credentials are not verified."""
 
     OdooEmployee.objects.create(

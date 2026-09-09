@@ -52,7 +52,9 @@ def python_command(repo: Path, args: list[str]) -> list[str]:
     return [executable, *args]
 
 
-def build_plan(repo: Path, action: str, latest: bool, role: str | None) -> list[dict[str, Any]]:
+def build_plan(
+    repo: Path, action: str, latest: bool, role: str | None
+) -> list[dict[str, Any]]:
     repo = repo.resolve()
     latest_args = ["--latest"] if latest else []
     env = {}
@@ -71,20 +73,40 @@ def build_plan(repo: Path, action: str, latest: bool, role: str | None) -> list[
             commands.append({"name": "upgrade", "cmd": upgrade, "env": env})
 
     if action in {"plan", "health", "all"}:
-        commands.append({"name": "django-check", "cmd": python_command(repo, [MANAGE_PY, "check"]), "env": env})
+        commands.append(
+            {
+                "name": "django-check",
+                "cmd": python_command(repo, [MANAGE_PY, "check"]),
+                "env": env,
+            }
+        )
 
     if action in {"plan", "validate", "all"}:
-        commands.append({"name": "django-check", "cmd": python_command(repo, [MANAGE_PY, "check"]), "env": env})
+        commands.append(
+            {
+                "name": "django-check",
+                "cmd": python_command(repo, [MANAGE_PY, "check"]),
+                "env": env,
+            }
+        )
         commands.append(
             {
                 "name": "makemigrations-check",
-                "cmd": python_command(repo, [MANAGE_PY, "makemigrations", "--check", "--dry-run"]),
+                "cmd": python_command(
+                    repo, [MANAGE_PY, "makemigrations", "--check", "--dry-run"]
+                ),
                 "env": env,
             }
         )
         import_resolution = repo / "scripts" / "check_import_resolution.py"
         if import_resolution.exists():
-            commands.append({"name": "import-resolution", "cmd": python_command(repo, [str(import_resolution)]), "env": env})
+            commands.append(
+                {
+                    "name": "import-resolution",
+                    "cmd": python_command(repo, [str(import_resolution)]),
+                    "env": env,
+                }
+            )
 
     seen: set[tuple[str, tuple[str, ...]]] = set()
     unique: list[dict[str, Any]] = []
@@ -96,12 +118,21 @@ def build_plan(repo: Path, action: str, latest: bool, role: str | None) -> list[
     return unique
 
 
-def run_plan(repo: Path, commands: list[dict[str, Any]], timeout: int) -> list[dict[str, Any]]:
+def run_plan(
+    repo: Path, commands: list[dict[str, Any]], timeout: int
+) -> list[dict[str, Any]]:
     results = []
     for item in commands:
         env = os.environ.copy()
         env.update(item.get("env") or {})
-        proc = subprocess.run(item["cmd"], cwd=repo, env=env, text=True, capture_output=True, timeout=timeout)
+        proc = subprocess.run(
+            item["cmd"],
+            cwd=repo,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
         results.append(
             {
                 "name": item["name"],
@@ -118,17 +149,29 @@ def run_plan(repo: Path, commands: list[dict[str, Any]], timeout: int) -> list[d
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["plan", "install", "upgrade", "health", "validate", "all"], nargs="?", default="plan")
+    parser.add_argument(
+        "action",
+        choices=["plan", "install", "upgrade", "health", "validate", "all"],
+        nargs="?",
+        default="plan",
+    )
     parser.add_argument("--repo", type=Path, default=default_repo())
     parser.add_argument("--latest", action="store_true")
     parser.add_argument("--role")
-    parser.add_argument("--write", action="store_true", help="Execute the planned commands")
+    parser.add_argument(
+        "--write", action="store_true", help="Execute the planned commands"
+    )
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
 
     repo = args.repo.resolve()
     commands = build_plan(repo, args.action, args.latest, args.role)
-    output: dict[str, Any] = {"repo": str(repo), "action": args.action, "write": args.write, "commands": commands}
+    output: dict[str, Any] = {
+        "repo": str(repo),
+        "action": args.action,
+        "write": args.write,
+        "commands": commands,
+    }
     if args.write:
         output["results"] = run_plan(repo, commands, args.timeout)
     print(json.dumps(output, indent=2))

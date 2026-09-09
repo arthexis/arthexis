@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
-from django.db import connection
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
@@ -191,12 +190,17 @@ class CampaignService:
                     metadata = device.metadata or {}
                     device_labels = set(metadata.get("labels") or [])
                     device_cohort = metadata.get("cohort")
-                    if label_set.intersection(device_labels) or device_cohort in cohort_set:
+                    if (
+                        label_set.intersection(device_labels)
+                        or device_cohort in cohort_set
+                    ):
                         selected_devices[device.pk] = device
 
         return sorted(selected_devices.values(), key=lambda item: item.device_id)
 
-    def start_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
+    def start_campaign(
+        self, campaign: ConnectUpdateCampaign, *, created_by=None
+    ) -> ConnectUpdateCampaign:
         """Move campaign into running state."""
 
         with transaction.atomic():
@@ -212,7 +216,9 @@ class CampaignService:
             self._queue_next_rollout_stage(campaign=campaign)
         return campaign
 
-    def pause_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
+    def pause_campaign(
+        self, campaign: ConnectUpdateCampaign, *, created_by=None
+    ) -> ConnectUpdateCampaign:
         """Pause active rollout execution."""
 
         self._transition_campaign(
@@ -223,7 +229,9 @@ class CampaignService:
         )
         return campaign
 
-    def resume_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
+    def resume_campaign(
+        self, campaign: ConnectUpdateCampaign, *, created_by=None
+    ) -> ConnectUpdateCampaign:
         """Resume a paused campaign."""
 
         with transaction.atomic():
@@ -237,7 +245,9 @@ class CampaignService:
             self._queue_next_rollout_stage(campaign=campaign)
         return campaign
 
-    def stop_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
+    def stop_campaign(
+        self, campaign: ConnectUpdateCampaign, *, created_by=None
+    ) -> ConnectUpdateCampaign:
         """Stop execution and mark remaining deployments rolled back."""
 
         with transaction.atomic():
@@ -247,10 +257,14 @@ class CampaignService:
                 event_type="campaign.stopped",
                 created_by=created_by,
             )
-            self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
+            self._mark_open_deployments_as_rolled_back(
+                campaign=campaign, created_by=created_by
+            )
         return campaign
 
-    def cancel_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
+    def cancel_campaign(
+        self, campaign: ConnectUpdateCampaign, *, created_by=None
+    ) -> ConnectUpdateCampaign:
         """Cancel campaign and mark in-flight work as rolled back."""
 
         with transaction.atomic():
@@ -260,7 +274,9 @@ class CampaignService:
                 event_type="campaign.cancelled",
                 created_by=created_by,
             )
-            self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
+            self._mark_open_deployments_as_rolled_back(
+                campaign=campaign, created_by=created_by
+            )
         return campaign
 
     def campaign_summary(self, campaign: ConnectUpdateCampaign) -> dict:
@@ -268,7 +284,9 @@ class CampaignService:
 
         status_counts = {
             entry["status"]: entry["count"]
-            for entry in campaign.deployments.order_by().values("status").annotate(count=Count("id"))
+            for entry in campaign.deployments.order_by()
+            .values("status")
+            .annotate(count=Count("id"))
         }
         per_device = [
             {
@@ -278,7 +296,9 @@ class CampaignService:
                 "started_at": deployment.started_at,
                 "completed_at": deployment.completed_at,
             }
-            for deployment in campaign.deployments.select_related("device").order_by("device__device_id")
+            for deployment in campaign.deployments.select_related("device").order_by(
+                "device__device_id"
+            )
         ]
 
         return {
@@ -297,9 +317,13 @@ class CampaignService:
 
     def _validate_release(self, release: ConnectImageRelease) -> None:
         if not release.artifact_url:
-            raise CampaignServiceError("Release artifact URI is required before scheduling.")
+            raise CampaignServiceError(
+                "Release artifact URI is required before scheduling."
+            )
         if not release.checksum:
-            raise CampaignServiceError("Release checksum is required before scheduling.")
+            raise CampaignServiceError(
+                "Release checksum is required before scheduling."
+            )
 
     def _validate_device_compatibility(
         self,
@@ -347,7 +371,9 @@ class CampaignService:
         ).prefetch_related("events")
         for active_campaign in active_campaigns:
             target_device_ids = self._campaign_target_device_ids(active_campaign)
-            for target_device_id in target_device_ids.intersection(requested_device_ids):
+            for target_device_id in target_device_ids.intersection(
+                requested_device_ids
+            ):
                 conflicts.add(requested_devices[target_device_id])
 
         if conflicts:
@@ -377,7 +403,9 @@ class CampaignService:
 
         if strategy == ConnectUpdateCampaign.Strategy.BATCHED:
             if batch_size < 1:
-                raise CampaignServiceError("batch_size must be greater than zero for batched rollouts.")
+                raise CampaignServiceError(
+                    "batch_size must be greater than zero for batched rollouts."
+                )
             stages = []
             for index in range(0, len(device_pks), batch_size):
                 stages.append(
@@ -404,7 +432,11 @@ class CampaignService:
         """Return immutable target device IDs captured for an existing campaign."""
 
         created_event = next(
-            (event for event in campaign.events.all() if event.event_type == self.EVENT_CAMPAIGN_CREATED),
+            (
+                event
+                for event in campaign.events.all()
+                if event.event_type == self.EVENT_CAMPAIGN_CREATED
+            ),
             None,
         )
         if created_event:
@@ -422,7 +454,11 @@ class CampaignService:
         """Queue the next rollout stage when a running campaign has no open deployments."""
 
         with transaction.atomic():
-            campaign = ConnectUpdateCampaign.objects.select_for_update().filter(pk=campaign_id).first()
+            campaign = (
+                ConnectUpdateCampaign.objects.select_for_update()
+                .filter(pk=campaign_id)
+                .first()
+            )
             if not campaign or campaign.status != ConnectUpdateCampaign.Status.RUNNING:
                 return
             self._queue_next_rollout_stage(campaign=campaign)
@@ -437,7 +473,9 @@ class CampaignService:
         required_from_status: str | None = None,
     ) -> None:
         with transaction.atomic():
-            locked_campaign = type(campaign).objects.select_for_update().get(pk=campaign.pk)
+            locked_campaign = (
+                type(campaign).objects.select_for_update().get(pk=campaign.pk)
+            )
             from_status = locked_campaign.status
             if required_from_status and from_status != required_from_status:
                 raise CampaignServiceError(
@@ -451,7 +489,10 @@ class CampaignService:
 
             locked_campaign.status = to_status
             update_fields = ["status", "updated_at"]
-            if to_status in self.TERMINAL_CAMPAIGN_STATUSES and locked_campaign.completed_at is None:
+            if (
+                to_status in self.TERMINAL_CAMPAIGN_STATUSES
+                and locked_campaign.completed_at is None
+            ):
                 locked_campaign.completed_at = timezone.now()
                 update_fields.append("completed_at")
             locked_campaign.save(update_fields=update_fields)
@@ -493,7 +534,9 @@ class CampaignService:
             )
             return
 
-        deployment_device_ids = set(deployment_queryset.values_list("device_id", flat=True))
+        deployment_device_ids = set(
+            deployment_queryset.values_list("device_id", flat=True)
+        )
         for stage in stages:
             stage_device_ids = set(stage.device_ids)
             if stage_device_ids.issubset(deployment_device_ids):
@@ -503,7 +546,9 @@ class CampaignService:
             if not next_ids:
                 continue
             existing_device_ids = set(
-                ConnectDevice.objects.filter(pk__in=next_ids).values_list("pk", flat=True)
+                ConnectDevice.objects.filter(pk__in=next_ids).values_list(
+                    "pk", flat=True
+                )
             )
             missing_device_ids = sorted(set(next_ids) - existing_device_ids)
             if missing_device_ids:
@@ -540,11 +585,15 @@ class CampaignService:
             created_by=None,
         )
 
-    def _load_rollout_stages(self, campaign: ConnectUpdateCampaign) -> list[RolloutStage]:
+    def _load_rollout_stages(
+        self, campaign: ConnectUpdateCampaign
+    ) -> list[RolloutStage]:
         """Load rollout stages from the creation event payload."""
 
         created_event = (
-            campaign.events.filter(event_type=self.EVENT_CAMPAIGN_CREATED).only("payload").first()
+            campaign.events.filter(event_type=self.EVENT_CAMPAIGN_CREATED)
+            .only("payload")
+            .first()
         )
         if not created_event:
             return []
@@ -554,16 +603,22 @@ class CampaignService:
             device_ids = stage.get("device_ids", [])
             if not isinstance(device_ids, list):
                 continue
-            stages.append(RolloutStage(label=stage.get("label", ""), device_ids=device_ids))
+            stages.append(
+                RolloutStage(label=stage.get("label", ""), device_ids=device_ids)
+            )
         return stages
 
-    def _mark_open_deployments_as_rolled_back(self, *, campaign: ConnectUpdateCampaign, created_by) -> None:
+    def _mark_open_deployments_as_rolled_back(
+        self, *, campaign: ConnectUpdateCampaign, created_by
+    ) -> None:
         open_statuses = {
             ConnectUpdateDeployment.Status.PENDING,
             ConnectUpdateDeployment.Status.IN_PROGRESS,
         }
         open_deployments = list(
-            campaign.deployments.select_for_update().filter(status__in=open_statuses).only("id", "status")
+            campaign.deployments.select_for_update()
+            .filter(status__in=open_statuses)
+            .only("id", "status")
         )
         if not open_deployments:
             return

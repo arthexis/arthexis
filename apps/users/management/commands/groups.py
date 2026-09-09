@@ -36,14 +36,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         group_name = options.get("group")
-        add_usernames = self._normalize_usernames(coerce_option_list(options.get("add_usernames")))
+        add_usernames = self._normalize_usernames(
+            coerce_option_list(options.get("add_usernames"))
+        )
         remove_usernames = self._normalize_usernames(
             coerce_option_list(options.get("remove_usernames"))
         )
 
         if add_usernames or remove_usernames:
             if not group_name:
-                raise CommandError("A group name is required when using --add/--remove.")
+                raise CommandError(
+                    "A group name is required when using --add/--remove."
+                )
             self._manage_members(group_name, add_usernames, remove_usernames)
             return
 
@@ -62,7 +66,9 @@ class Command(BaseCommand):
             normalized.append(candidate)
         return normalized
 
-    def _manage_members(self, group_name: str, add_usernames: list[str], remove_usernames: list[str]) -> None:
+    def _manage_members(
+        self, group_name: str, add_usernames: list[str], remove_usernames: list[str]
+    ) -> None:
         """Add and remove users for a single group in one command execution."""
 
         overlapping_usernames = sorted(set(add_usernames) & set(remove_usernames))
@@ -78,7 +84,9 @@ class Command(BaseCommand):
         requested_usernames = sorted(set(add_usernames + remove_usernames))
         users_by_username = {
             user.username: user
-            for user in user_model.objects.filter(username__in=requested_usernames).order_by("username")
+            for user in user_model.objects.filter(
+                username__in=requested_usernames
+            ).order_by("username")
         }
         missing_usernames = sorted(set(requested_usernames) - set(users_by_username))
         if missing_usernames:
@@ -86,11 +94,17 @@ class Command(BaseCommand):
             raise CommandError(f"Unknown users: {missing}")
 
         if add_usernames:
-            group.user_set.add(*[users_by_username[username] for username in add_usernames])
+            group.user_set.add(
+                *[users_by_username[username] for username in add_usernames]
+            )
         if remove_usernames:
-            group.user_set.remove(*[users_by_username[username] for username in remove_usernames])
+            group.user_set.remove(
+                *[users_by_username[username] for username in remove_usernames]
+            )
 
-        self.stdout.write(self.style.SUCCESS(f"Updated membership for group '{group.name}'."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Updated membership for group '{group.name}'.")
+        )
 
     def _list_groups(self) -> None:
         """Render all groups with current member counts and staff-group markers."""
@@ -101,7 +115,9 @@ class Command(BaseCommand):
             return
 
         for group in groups:
-            members = list(group.user_set.order_by("username").values_list("username", flat=True))
+            members = list(
+                group.user_set.order_by("username").values_list("username", flat=True)
+            )
             members_text = ", ".join(members) if members else "(no members)"
             marker = " [staff SG]" if group.name in STAFF_SECURITY_GROUP_NAMES else ""
             self.stdout.write(f"{group.name}{marker} ({len(members)}): {members_text}")

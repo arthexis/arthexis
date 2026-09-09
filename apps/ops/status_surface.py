@@ -81,12 +81,27 @@ def redact_log_line(raw_line: str) -> str:
 def _redact_payload_mapping(payload: dict[str, object]) -> None:
     for key, value in list(payload.items()):
         lowered = str(key).lower()
-        if any(token in lowered for token in ("password", "token", "secret", "authorization", "api_key", "apikey")):
+        if any(
+            token in lowered
+            for token in (
+                "password",
+                "token",
+                "secret",
+                "authorization",
+                "api_key",
+                "apikey",
+            )
+        ):
             payload[key] = REDACTION_SENTINEL
         elif isinstance(value, dict):
             _redact_payload_mapping(value)
         elif isinstance(value, list):
-            payload[key] = [REDACTION_SENTINEL if isinstance(item, str) and "bearer " in item.lower() else item for item in value]
+            payload[key] = [
+                REDACTION_SENTINEL
+                if isinstance(item, str) and "bearer " in item.lower()
+                else item
+                for item in value
+            ]
 
 
 def _visible_chargers(user) -> Iterable[Charger]:
@@ -107,17 +122,24 @@ def _log_visible_chargers(user) -> Iterable[Charger]:
 
 
 def _is_staff_scope(user) -> bool:
-    return bool(getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
+    return bool(
+        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
+    )
 
 
 def _scope_queue_counts(*, user, visible: list[Charger]) -> tuple[int, int]:
     if _is_staff_scope(user):
         return len(store.pending_calls), len(store.monitoring_report_requests)
 
-    visible_keys = {store.identity_key(charger.charger_id, charger.connector_id) for charger in visible}
+    visible_keys = {
+        store.identity_key(charger.charger_id, charger.connector_id)
+        for charger in visible
+    }
     visible_pairs = {(charger.charger_id, charger.connector_id) for charger in visible}
     pending_calls = sum(
-        1 for metadata in store.pending_calls.values() if metadata.get("log_key") in visible_keys
+        1
+        for metadata in store.pending_calls.values()
+        if metadata.get("log_key") in visible_keys
     )
     monitoring_requests = sum(
         1
@@ -215,7 +237,9 @@ def _guidance_for_failures(failure_count: int) -> StatusCondition:
 
 
 def _critical_events_for_scope(*, user, limit: int = 10) -> list[dict[str, object]]:
-    failed_ops = _failed_operations_for_scope(user=user).select_related("charger")[:limit]
+    failed_ops = _failed_operations_for_scope(user=user).select_related("charger")[
+        :limit
+    ]
     since = timezone.now() - timedelta(hours=24)
     alerts = SecurityAlertEvent.objects.none()
     if _is_staff_scope(user):
@@ -263,10 +287,14 @@ def scoped_log_excerpts(*, user, limit_per_charger: int = 5) -> list[dict[str, o
 
     include_sensitive_event_names = _is_staff_scope(user)
     excerpts: list[dict[str, object]] = []
-    for charger in _log_visible_chargers(user).order_by("charger_id", "connector_id")[:20]:
+    for charger in _log_visible_chargers(user).order_by("charger_id", "connector_id")[
+        :20
+    ]:
         key = store.identity_key(charger.charger_id, charger.connector_id)
         lines = []
-        for entry in store.iter_log_entries(key, log_type="charger", limit=limit_per_charger * 3):
+        for entry in store.iter_log_entries(
+            key, log_type="charger", limit=limit_per_charger * 3
+        ):
             text = entry.text
             if (not include_sensitive_event_names) and any(
                 marker in text
@@ -305,7 +333,9 @@ def build_status_surface(*, user) -> dict[str, object]:
         for charger in visible
         if store.is_connected(charger.charger_id, charger.connector_id)
     )
-    pending_count, monitoring_request_count = _scope_queue_counts(user=user, visible=visible)
+    pending_count, monitoring_request_count = _scope_queue_counts(
+        user=user, visible=visible
+    )
     failure_count = _failed_operations_for_scope(user=user).count()
     critical_events = _critical_events_for_scope(user=user)
     conditions = [

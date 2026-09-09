@@ -50,7 +50,9 @@ def ensure_feature_enabled(
         try:
             base_dir = Path(settings.BASE_DIR)
             base_path = target.get_base_path()
-            if target._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
+            if target._detect_auto_feature(
+                slug, base_dir=base_dir, base_path=base_path
+            ):
                 NodeFeatureAssignment.objects.update_or_create(
                     node=target, feature=feature
                 )

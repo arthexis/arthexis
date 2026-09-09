@@ -62,8 +62,6 @@ def test_run_fetch_from_github_action_emits_success_message_and_redirects():
 
 
 @pytest.mark.django_db
-
-
 @pytest.mark.django_db
 def test_run_fetch_from_github_action_emits_error_message_and_redirects():
     model_admin = RepositoryIssueAdmin(RepositoryIssue, admin.site)
@@ -124,12 +122,18 @@ def test_fetch_open_actions_delegate_to_shared_helper(monkeypatch):
     assert issue_call["request"] is request
     assert issue_sync_function.__self__ is RepositoryIssue
     assert issue_sync_function.__func__ is RepositoryIssue.fetch_open_issues.__func__
-    assert str(issue_call["error_message_template"]) == "Failed to fetch issues from GitHub: %(error)s"
+    assert (
+        str(issue_call["error_message_template"])
+        == "Failed to fetch issues from GitHub: %(error)s"
+    )
     assert (
         str(issue_call["success_message_template"])
         == "Fetched %(created)s new and %(updated)s updated issues."
     )
-    assert str(issue_call["empty_state_message_template"]) == "No open issues found to sync."
+    assert (
+        str(issue_call["empty_state_message_template"])
+        == "No open issues found to sync."
+    )
 
     assert pull_request_result is sentinel
     assert pull_request_call["request"] is request

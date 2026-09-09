@@ -36,7 +36,9 @@ def generate_model_sigils(**kwargs) -> None:
             root.context_type = policy["context_type"]
             root.is_user_safe = policy["is_user_safe"]
             root.is_deleted = False
-            root.save(update_fields=["prefix", "context_type", "is_user_safe", "is_deleted"])
+            root.save(
+                update_fields=["prefix", "context_type", "is_user_safe", "is_deleted"]
+            )
         else:
             SigilRoot.objects.create(
                 prefix=prefix,
@@ -46,9 +48,7 @@ def generate_model_sigils(**kwargs) -> None:
 
 
 def _sigil_builder_view(request):
-    if not SigilRoot.objects.filter(
-        context_type=SigilRoot.Context.ENTITY
-    ).exists():
+    if not SigilRoot.objects.filter(context_type=SigilRoot.Context.ENTITY).exists():
         load_fixture_sigil_roots()
 
     grouped: dict[str, dict[str, object]] = {}
@@ -135,9 +135,7 @@ def _sigil_builder_view(request):
         else:
             single = request.POST.get("sigil", "")
             if single:
-                source_text = (
-                    f"[{single}]" if not single.startswith("[") else single
-                )
+                source_text = f"[{single}]" if not single.startswith("[") else single
                 sigils_text = source_text
         if source_text and not errors:
             resolved_text = resolve_sigils_in_text(source_text)

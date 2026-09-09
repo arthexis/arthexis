@@ -46,7 +46,9 @@ from apps.users.models import User
     ],
 )
 def test_legacy_domain_ui_modules_are_owner_aliases(legacy_module, owner_module):
-    assert importlib.import_module(legacy_module) is importlib.import_module(owner_module)
+    assert importlib.import_module(legacy_module) is importlib.import_module(
+        owner_module
+    )
 
 
 def test_odoo_legacy_modules_are_owner_aliases_when_installed():
@@ -59,7 +61,9 @@ def test_odoo_legacy_modules_are_owner_aliases_when_installed():
         ("apps.core.admin.odoo", "apps.odoo.admin_core"),
     ]
     for legacy_module, owner_module in aliases:
-        assert importlib.import_module(legacy_module) is importlib.import_module(owner_module)
+        assert importlib.import_module(legacy_module) is importlib.import_module(
+            owner_module
+        )
 
 
 def test_domain_admin_classes_are_registered_from_owner_apps():

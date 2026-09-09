@@ -69,11 +69,15 @@ class Command(BaseCommand):
 
         subparsers = parser.add_subparsers(dest="action")
 
-        list_parser = subparsers.add_parser("list", aliases=["ls"], help="List inbox, outbox, and bridge configuration.")
+        list_parser = subparsers.add_parser(
+            "list", aliases=["ls"], help="List inbox, outbox, and bridge configuration."
+        )
         list_parser.set_defaults(action="list")
         self._add_base_command_arguments(parser, list_parser)
 
-        inbox_parser = subparsers.add_parser("inbox", aliases=["ib"], help="Show or configure an inbox.")
+        inbox_parser = subparsers.add_parser(
+            "inbox", aliases=["ib"], help="Show or configure an inbox."
+        )
         inbox_parser.set_defaults(action="inbox")
         self._add_base_command_arguments(parser, inbox_parser)
         inbox_parser.add_argument(
@@ -81,40 +85,84 @@ class Command(BaseCommand):
             nargs="?",
             help="Inbox id or username/email to show or update.",
         )
-        inbox_parser.add_argument("--owner-user", type=int, help="Owner user id for created or updated inboxes.")
+        inbox_parser.add_argument(
+            "--owner-user",
+            type=int,
+            help="Owner user id for created or updated inboxes.",
+        )
         self._add_inbox_arguments(inbox_parser)
 
-        outbox_parser = subparsers.add_parser("outbox", aliases=["ob"], help="Show or configure an outbox.")
+        outbox_parser = subparsers.add_parser(
+            "outbox", aliases=["ob"], help="Show or configure an outbox."
+        )
         outbox_parser.set_defaults(action="outbox")
         self._add_base_command_arguments(parser, outbox_parser)
-        outbox_parser.add_argument("outbox_id", nargs="?", type=int, help="Outbox id to show or update.")
-        outbox_parser.add_argument("--owner-user", type=int, help="Owner user id for created or updated outboxes.")
+        outbox_parser.add_argument(
+            "outbox_id", nargs="?", type=int, help="Outbox id to show or update."
+        )
+        outbox_parser.add_argument(
+            "--owner-user",
+            type=int,
+            help="Owner user id for created or updated outboxes.",
+        )
         self._add_outbox_arguments(outbox_parser)
 
-        bridge_parser = subparsers.add_parser("bridge", aliases=["br"], help="Show or configure an inbox/outbox bridge.")
+        bridge_parser = subparsers.add_parser(
+            "bridge", aliases=["br"], help="Show or configure an inbox/outbox bridge."
+        )
         bridge_parser.set_defaults(action="bridge")
         self._add_base_command_arguments(parser, bridge_parser)
-        bridge_parser.add_argument("bridge_id", nargs="?", type=int, help="Bridge id to show or update.")
+        bridge_parser.add_argument(
+            "bridge_id", nargs="?", type=int, help="Bridge id to show or update."
+        )
         self._add_bridge_arguments(bridge_parser)
 
-        send_parser = subparsers.add_parser("send", aliases=["tx"], help="Send an outbound email.")
+        send_parser = subparsers.add_parser(
+            "send", aliases=["tx"], help="Send an outbound email."
+        )
         send_parser.set_defaults(action="send")
         self._add_base_command_arguments(parser, send_parser)
-        send_parser.add_argument("outbox_id", nargs="?", type=int, help="Optional outbox id to use.")
+        send_parser.add_argument(
+            "outbox_id", nargs="?", type=int, help="Optional outbox id to use."
+        )
         send_parser.add_argument("-t", "--to", help="Comma-separated recipients.")
         send_parser.add_argument("-s", "--subject", default="", help="Email subject.")
-        send_parser.add_argument("-m", "--message", default="", help="Email body message.")
+        send_parser.add_argument(
+            "-m", "--message", default="", help="Email body message."
+        )
         send_parser.add_argument("-f", "--from-email", help="Override from address.")
 
-        search_parser = subparsers.add_parser("search", aliases=["find"], help="Search inbound messages.")
+        search_parser = subparsers.add_parser(
+            "search", aliases=["find"], help="Search inbound messages."
+        )
         search_parser.set_defaults(action="search")
         self._add_base_command_arguments(parser, search_parser)
-        search_parser.add_argument("inbox_id", nargs="?", type=int, help="Optional inbox id to search.")
-        search_parser.add_argument("-s", "--subject", default="", help="Subject filter.")
-        search_parser.add_argument("-f", "--from", dest="search_from", default="", help="From-address filter.")
-        search_parser.add_argument("-b", "--body", dest="search_body", default="", help="Body filter.")
-        search_parser.add_argument("-n", "--limit", dest="search_limit", type=int, default=10, help="Maximum results.")
-        search_parser.add_argument("-r", "--regex", action="store_true", help="Use regular expressions for filters.")
+        search_parser.add_argument(
+            "inbox_id", nargs="?", type=int, help="Optional inbox id to search."
+        )
+        search_parser.add_argument(
+            "-s", "--subject", default="", help="Subject filter."
+        )
+        search_parser.add_argument(
+            "-f", "--from", dest="search_from", default="", help="From-address filter."
+        )
+        search_parser.add_argument(
+            "-b", "--body", dest="search_body", default="", help="Body filter."
+        )
+        search_parser.add_argument(
+            "-n",
+            "--limit",
+            dest="search_limit",
+            type=int,
+            default=10,
+            help="Maximum results.",
+        )
+        search_parser.add_argument(
+            "-r",
+            "--regex",
+            action="store_true",
+            help="Use regular expressions for filters.",
+        )
 
     def _add_legacy_arguments(self, parser) -> None:
         """Register hidden flat flags for backward compatibility."""
@@ -122,9 +170,15 @@ class Command(BaseCommand):
         parser.add_argument("--inbox", help=SUPPRESS)
         parser.add_argument("--outbox", type=int, help=SUPPRESS)
         parser.add_argument("--bridge", type=int, help=SUPPRESS)
-        self._add_inbox_arguments(parser, help_text=SUPPRESS, include_short_aliases=False)
-        self._add_outbox_arguments(parser, help_text=SUPPRESS, include_short_aliases=False)
-        self._add_bridge_arguments(parser, help_text=SUPPRESS, include_short_aliases=False)
+        self._add_inbox_arguments(
+            parser, help_text=SUPPRESS, include_short_aliases=False
+        )
+        self._add_outbox_arguments(
+            parser, help_text=SUPPRESS, include_short_aliases=False
+        )
+        self._add_bridge_arguments(
+            parser, help_text=SUPPRESS, include_short_aliases=False
+        )
         parser.add_argument("--send", action="store_true", help=SUPPRESS)
         parser.add_argument("--to", help=SUPPRESS)
         parser.add_argument("--subject", default="", help=SUPPRESS)
@@ -210,16 +264,29 @@ class Command(BaseCommand):
             no_ssl_flags.insert(0, "--no-ssl")
             enabled_flags.insert(0, "--enabled")
             disabled_flags.insert(0, "--disabled")
-        parser.add_argument(*username_flags, dest="inbox_username", help=help_text or "Inbox login username.")
-        parser.add_argument(*host_flags, dest="inbox_host", help=help_text or "Inbox host name.")
-        parser.add_argument(*port_flags, dest="inbox_port", type=int, help=help_text or "Inbox server port.")
+        parser.add_argument(
+            *username_flags,
+            dest="inbox_username",
+            help=help_text or "Inbox login username.",
+        )
+        parser.add_argument(
+            *host_flags, dest="inbox_host", help=help_text or "Inbox host name."
+        )
+        parser.add_argument(
+            *port_flags,
+            dest="inbox_port",
+            type=int,
+            help=help_text or "Inbox server port.",
+        )
         parser.add_argument(
             *protocol_flags,
             dest="inbox_protocol",
             choices=[EmailInbox.IMAP, EmailInbox.POP3],
             help=help_text or "Inbox protocol.",
         )
-        parser.add_argument(*password_flags, dest="inbox_password", help=help_text or "Inbox password.")
+        parser.add_argument(
+            *password_flags, dest="inbox_password", help=help_text or "Inbox password."
+        )
         parser.add_argument(
             *password_env_flags,
             dest="inbox_password_env",
@@ -236,11 +303,36 @@ class Command(BaseCommand):
             action="store_true",
             help=help_text or "Prompt interactively for the inbox password.",
         )
-        parser.add_argument(*priority_flags, dest="inbox_priority", type=int, help=help_text or "Inbox priority.")
-        parser.add_argument(*ssl_flags, dest="inbox_use_ssl", action="store_true", help=help_text or "Enable SSL for inbox connection.")
-        parser.add_argument(*no_ssl_flags, dest="inbox_no_ssl", action="store_true", help=help_text or "Disable SSL for inbox connection.")
-        parser.add_argument(*enabled_flags, dest="inbox_enabled", action="store_true", help=help_text or "Mark inbox as enabled.")
-        parser.add_argument(*disabled_flags, dest="inbox_disabled", action="store_true", help=help_text or "Mark inbox as disabled.")
+        parser.add_argument(
+            *priority_flags,
+            dest="inbox_priority",
+            type=int,
+            help=help_text or "Inbox priority.",
+        )
+        parser.add_argument(
+            *ssl_flags,
+            dest="inbox_use_ssl",
+            action="store_true",
+            help=help_text or "Enable SSL for inbox connection.",
+        )
+        parser.add_argument(
+            *no_ssl_flags,
+            dest="inbox_no_ssl",
+            action="store_true",
+            help=help_text or "Disable SSL for inbox connection.",
+        )
+        parser.add_argument(
+            *enabled_flags,
+            dest="inbox_enabled",
+            action="store_true",
+            help=help_text or "Mark inbox as enabled.",
+        )
+        parser.add_argument(
+            *disabled_flags,
+            dest="inbox_disabled",
+            action="store_true",
+            help=help_text or "Mark inbox as disabled.",
+        )
 
     def _add_outbox_arguments(
         self, parser, help_text: str | None = None, include_short_aliases: bool = True
@@ -274,18 +366,72 @@ class Command(BaseCommand):
             no_ssl_flags.insert(0, "--no-ssl")
             enabled_flags.insert(0, "--enabled")
             disabled_flags.insert(0, "--disabled")
-        parser.add_argument(*host_flags, dest="outbox_host", help=help_text or "Outbox SMTP host name.")
-        parser.add_argument(*port_flags, dest="outbox_port", type=int, help=help_text or "Outbox SMTP port.")
-        parser.add_argument(*username_flags, dest="outbox_username", help=help_text or "Outbox SMTP username.")
-        parser.add_argument(*password_flags, dest="outbox_password", help=help_text or "Outbox SMTP password.")
-        parser.add_argument(*from_flags, dest="outbox_from_email", help=help_text or "Default from address for the outbox.")
-        parser.add_argument(*priority_flags, dest="outbox_priority", type=int, help=help_text or "Outbox priority.")
-        parser.add_argument(*tls_flags, dest="outbox_use_tls", action="store_true", help=help_text or "Enable SMTP TLS.")
-        parser.add_argument(*no_tls_flags, dest="outbox_no_tls", action="store_true", help=help_text or "Disable SMTP TLS.")
-        parser.add_argument(*ssl_flags, dest="outbox_use_ssl", action="store_true", help=help_text or "Enable SMTP SSL.")
-        parser.add_argument(*no_ssl_flags, dest="outbox_no_ssl", action="store_true", help=help_text or "Disable SMTP SSL.")
-        parser.add_argument(*enabled_flags, dest="outbox_enabled", action="store_true", help=help_text or "Mark outbox as enabled.")
-        parser.add_argument(*disabled_flags, dest="outbox_disabled", action="store_true", help=help_text or "Mark outbox as disabled.")
+        parser.add_argument(
+            *host_flags, dest="outbox_host", help=help_text or "Outbox SMTP host name."
+        )
+        parser.add_argument(
+            *port_flags,
+            dest="outbox_port",
+            type=int,
+            help=help_text or "Outbox SMTP port.",
+        )
+        parser.add_argument(
+            *username_flags,
+            dest="outbox_username",
+            help=help_text or "Outbox SMTP username.",
+        )
+        parser.add_argument(
+            *password_flags,
+            dest="outbox_password",
+            help=help_text or "Outbox SMTP password.",
+        )
+        parser.add_argument(
+            *from_flags,
+            dest="outbox_from_email",
+            help=help_text or "Default from address for the outbox.",
+        )
+        parser.add_argument(
+            *priority_flags,
+            dest="outbox_priority",
+            type=int,
+            help=help_text or "Outbox priority.",
+        )
+        parser.add_argument(
+            *tls_flags,
+            dest="outbox_use_tls",
+            action="store_true",
+            help=help_text or "Enable SMTP TLS.",
+        )
+        parser.add_argument(
+            *no_tls_flags,
+            dest="outbox_no_tls",
+            action="store_true",
+            help=help_text or "Disable SMTP TLS.",
+        )
+        parser.add_argument(
+            *ssl_flags,
+            dest="outbox_use_ssl",
+            action="store_true",
+            help=help_text or "Enable SMTP SSL.",
+        )
+        parser.add_argument(
+            *no_ssl_flags,
+            dest="outbox_no_ssl",
+            action="store_true",
+            help=help_text or "Disable SMTP SSL.",
+        )
+        parser.add_argument(
+            *enabled_flags,
+            dest="outbox_enabled",
+            action="store_true",
+            help=help_text or "Mark outbox as enabled.",
+        )
+        parser.add_argument(
+            *disabled_flags,
+            dest="outbox_disabled",
+            action="store_true",
+            help=help_text or "Mark outbox as disabled.",
+        )
 
     def _add_bridge_arguments(
         self, parser, help_text: str | None = None, include_short_aliases: bool = True
@@ -299,9 +445,21 @@ class Command(BaseCommand):
             name_flags.insert(0, "--name")
             inbox_flags.insert(0, "--inbox")
             outbox_flags.insert(0, "--outbox")
-        parser.add_argument(*name_flags, dest="bridge_name", help=help_text or "Bridge name.")
-        parser.add_argument(*inbox_flags, dest="bridge_inbox", type=int, help=help_text or "Inbox id for the bridge relation.")
-        parser.add_argument(*outbox_flags, dest="bridge_outbox", type=int, help=help_text or "Outbox id for the bridge relation.")
+        parser.add_argument(
+            *name_flags, dest="bridge_name", help=help_text or "Bridge name."
+        )
+        parser.add_argument(
+            *inbox_flags,
+            dest="bridge_inbox",
+            type=int,
+            help=help_text or "Inbox id for the bridge relation.",
+        )
+        parser.add_argument(
+            *outbox_flags,
+            dest="bridge_outbox",
+            type=int,
+            help=help_text or "Outbox id for the bridge relation.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         """Execute the requested verb-based command or the legacy flat flow."""
@@ -497,11 +655,15 @@ class Command(BaseCommand):
         except user_model.DoesNotExist as exc:
             raise CommandError(f"User not found: {user_id}") from exc
 
-    def _boolean_option(self, options: dict[str, Any], true_key: str, false_key: str) -> bool | None:
+    def _boolean_option(
+        self, options: dict[str, Any], true_key: str, false_key: str
+    ) -> bool | None:
         """Resolve a tri-state boolean from positive/negative CLI flags."""
 
         if options[true_key] and options[false_key]:
-            raise CommandError(f"Cannot use --{true_key.replace('_', '-')} with --{false_key.replace('_', '-')}.")
+            raise CommandError(
+                f"Cannot use --{true_key.replace('_', '-')} with --{false_key.replace('_', '-')}."
+            )
         if options[true_key]:
             return True
         if options[false_key]:
@@ -512,7 +674,8 @@ class Command(BaseCommand):
         """Return whether inbox configuration flags were supplied."""
 
         return any(
-            (value := options.get(key)) is not None and not (isinstance(value, bool) and value is False)
+            (value := options.get(key)) is not None
+            and not (isinstance(value, bool) and value is False)
             for key in self.INBOX_EDITABLE_KEYS
         )
 
@@ -520,7 +683,8 @@ class Command(BaseCommand):
         """Return whether outbox configuration flags were supplied."""
 
         return any(
-            (value := options.get(key)) is not None and not (isinstance(value, bool) and value is False)
+            (value := options.get(key)) is not None
+            and not (isinstance(value, bool) and value is False)
             for key in self.OUTBOX_EDITABLE_KEYS
         )
 
@@ -632,7 +796,9 @@ class Command(BaseCommand):
         if ssl_value is not None:
             outbox.use_ssl = ssl_value
 
-        enabled_value = self._boolean_option(options, "outbox_enabled", "outbox_disabled")
+        enabled_value = self._boolean_option(
+            options, "outbox_enabled", "outbox_disabled"
+        )
         if enabled_value is not None:
             outbox.is_enabled = enabled_value
 
@@ -683,7 +849,9 @@ class Command(BaseCommand):
         """Send an email using either a selected outbox or outbox auto-selection."""
 
         raw_recipients = options.get("to") or ""
-        recipients = [item.strip() for item in raw_recipients.split(",") if item.strip()]
+        recipients = [
+            item.strip() for item in raw_recipients.split(",") if item.strip()
+        ]
         if not recipients:
             raise CommandError("send requires --to with at least one recipient.")
 
@@ -722,7 +890,11 @@ class Command(BaseCommand):
 
         inbox_id = options.get("inbox")
         if inbox_id is None:
-            inbox = EmailInbox.objects.filter(is_enabled=True).order_by("-priority", "id").first()
+            inbox = (
+                EmailInbox.objects.filter(is_enabled=True)
+                .order_by("-priority", "id")
+                .first()
+            )
             if inbox is None:
                 raise CommandError("No enabled inbox is available for search.")
         else:
@@ -842,7 +1014,9 @@ class Command(BaseCommand):
                     "is_enabled": outbox.is_enabled,
                     "priority": outbox.priority,
                 }
-                for outbox in EmailOutbox.objects.select_related("user", "group", "node")
+                for outbox in EmailOutbox.objects.select_related(
+                    "user", "group", "node"
+                )
             ],
             "bridges": [
                 {

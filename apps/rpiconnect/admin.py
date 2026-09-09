@@ -37,8 +37,12 @@ class ConnectCampaignWizardForm(forms.Form):
     """Collect campaign targeting and rollout controls for admin operators."""
 
     release = forms.ModelChoiceField(
-        queryset=ConnectImageRelease.objects.order_by("-released_at", "name", "version"),
-        help_text=_("Release to deploy. Checksums and compatibility tags are shown in the registry list."),
+        queryset=ConnectImageRelease.objects.order_by(
+            "-released_at", "name", "version"
+        ),
+        help_text=_(
+            "Release to deploy. Checksums and compatibility tags are shown in the registry list."
+        ),
         label=_("Release to deploy"),
     )
     device_ids = forms.CharField(
@@ -48,22 +52,30 @@ class ConnectCampaignWizardForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
     labels = forms.CharField(
-        help_text=_("Comma-separated metadata labels; devices with any listed label are included."),
+        help_text=_(
+            "Comma-separated metadata labels; devices with any listed label are included."
+        ),
         label=_("Target by metadata labels"),
         required=False,
     )
     cohorts = forms.CharField(
-        help_text=_("Comma-separated cohort values from device metadata (for staged populations)."),
+        help_text=_(
+            "Comma-separated cohort values from device metadata (for staged populations)."
+        ),
         label=_("Target by metadata cohorts"),
         required=False,
     )
     strategy = forms.ChoiceField(
         choices=ConnectUpdateCampaign.Strategy.choices,
-        help_text=_("Rollout strategy controls whether all targets, canary sets, or batches queue first."),
+        help_text=_(
+            "Rollout strategy controls whether all targets, canary sets, or batches queue first."
+        ),
         label=_("Rollout strategy"),
     )
     canary_percent = forms.IntegerField(
-        help_text=_("Canary percentage of matched devices to queue first when strategy is Canary."),
+        help_text=_(
+            "Canary percentage of matched devices to queue first when strategy is Canary."
+        ),
         initial=10,
         label=_("Canary percentage"),
         max_value=100,
@@ -82,12 +94,16 @@ class ConnectCampaignWizardForm(forms.Form):
             ("start_now", _("Start now")),
             ("draft", _("Save as draft")),
         ),
-        help_text=_("Choose whether to launch immediately or leave the campaign in draft for manual timing."),
+        help_text=_(
+            "Choose whether to launch immediately or leave the campaign in draft for manual timing."
+        ),
         initial="start_now",
         label=_("Campaign launch timing"),
     )
     timing_notes = forms.CharField(
-        help_text=_("Optional operator timing context, such as maintenance window expectations."),
+        help_text=_(
+            "Optional operator timing context, such as maintenance window expectations."
+        ),
         label=_("Timing and scheduling notes"),
         required=False,
         widget=forms.Textarea(attrs={"rows": 2}),
@@ -99,14 +115,20 @@ class ConnectCampaignWizardForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
     override_conflicts = forms.BooleanField(
-        help_text=_("Allow launch even when devices are part of another active campaign."),
+        help_text=_(
+            "Allow launch even when devices are part of another active campaign."
+        ),
         label=_("Override campaign conflict protection"),
         required=False,
     )
 
     @staticmethod
     def _split_tokens(raw_value: str) -> list[str]:
-        return [token.strip() for token in raw_value.replace("\n", ",").split(",") if token.strip()]
+        return [
+            token.strip()
+            for token in raw_value.replace("\n", ",").split(",")
+            if token.strip()
+        ]
 
     def clean(self):
         cleaned_data = super().clean()
@@ -115,7 +137,11 @@ class ConnectCampaignWizardForm(forms.Form):
         cohorts = self._split_tokens(cleaned_data.get("cohorts", ""))
 
         if not any([device_ids, labels, cohorts]):
-            raise ValidationError(_("Provide at least one targeting selector: device IDs, labels, or cohorts."))
+            raise ValidationError(
+                _(
+                    "Provide at least one targeting selector: device IDs, labels, or cohorts."
+                )
+            )
 
         cleaned_data["target_set"] = {
             "cohorts": cohorts,
@@ -152,7 +178,9 @@ class ConnectDeviceAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Connectivity signal"))
     def connectivity_indicator(self, obj: ConnectDevice) -> str:
-        connectivity = obj.metadata.get("connectivity") if isinstance(obj.metadata, dict) else None
+        connectivity = (
+            obj.metadata.get("connectivity") if isinstance(obj.metadata, dict) else None
+        )
         if isinstance(connectivity, str) and connectivity.strip():
             return connectivity.strip()
         return _("Unknown")
@@ -197,7 +225,9 @@ class ConnectImageReleaseAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Compatibility summary"))
     def compatibility_summary(self, obj: ConnectImageRelease) -> str:
-        tags = obj.compatibility_tags if isinstance(obj.compatibility_tags, list) else []
+        tags = (
+            obj.compatibility_tags if isinstance(obj.compatibility_tags, list) else []
+        )
         if not tags:
             return _("All tracked devices (no compatibility tags provided)")
         preview = ", ".join(str(tag) for tag in tags[:4])
@@ -227,21 +257,31 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
     search_fields = ("id", "release__name")
 
     def get_queryset(self, request: HttpRequest):
-        return super().get_queryset(request).annotate(
-            failed_count=Count(
-                "deployments",
-                filter=Q(deployments__status=ConnectUpdateDeployment.Status.FAILED),
-            ),
-            succeeded_count=Count(
-                "deployments",
-                filter=Q(deployments__status=ConnectUpdateDeployment.Status.SUCCEEDED),
-            ),
-            total_count=Count("deployments"),
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                failed_count=Count(
+                    "deployments",
+                    filter=Q(deployments__status=ConnectUpdateDeployment.Status.FAILED),
+                ),
+                succeeded_count=Count(
+                    "deployments",
+                    filter=Q(
+                        deployments__status=ConnectUpdateDeployment.Status.SUCCEEDED
+                    ),
+                ),
+                total_count=Count("deployments"),
+            )
         )
 
     def get_urls(self):
         custom_urls = [
-            path("wizard/", self.admin_site.admin_view(self.campaign_wizard_view), name="rpiconnect_campaign_wizard"),
+            path(
+                "wizard/",
+                self.admin_site.admin_view(self.campaign_wizard_view),
+                name="rpiconnect_campaign_wizard",
+            ),
             path(
                 "<int:campaign_id>/progress/",
                 self.admin_site.admin_view(self.campaign_progress_view),
@@ -257,18 +297,28 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
 
     def changelist_view(self, request: HttpRequest, extra_context=None):
         extra_context = extra_context or {}
-        extra_context["campaign_wizard_url"] = reverse("admin:rpiconnect_campaign_wizard")
+        extra_context["campaign_wizard_url"] = reverse(
+            "admin:rpiconnect_campaign_wizard"
+        )
         return super().changelist_view(request, extra_context=extra_context)
 
-    def change_view(self, request: HttpRequest, object_id: str, form_url="", extra_context=None):
+    def change_view(
+        self, request: HttpRequest, object_id: str, form_url="", extra_context=None
+    ):
         extra_context = extra_context or {}
         extra_context.update(
             {
-                "campaign_progress_url": reverse("admin:rpiconnect_campaign_progress", args=[object_id]),
-                "campaign_rollback_url": reverse("admin:rpiconnect_campaign_rollback", args=[object_id]),
+                "campaign_progress_url": reverse(
+                    "admin:rpiconnect_campaign_progress", args=[object_id]
+                ),
+                "campaign_rollback_url": reverse(
+                    "admin:rpiconnect_campaign_rollback", args=[object_id]
+                ),
             }
         )
-        return super().change_view(request, object_id, form_url=form_url, extra_context=extra_context)
+        return super().change_view(
+            request, object_id, form_url=form_url, extra_context=extra_context
+        )
 
     @admin.display(description=_("Progress"))
     def progress_summary(self, obj: ConnectUpdateCampaign) -> str:
@@ -293,8 +343,12 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
 
     def campaign_wizard_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_add_permission(request):
-            messages.error(request, _("You do not have permission to create campaigns."))
-            return HttpResponseRedirect(reverse("admin:rpiconnect_connectupdatecampaign_changelist"))
+            messages.error(
+                request, _("You do not have permission to create campaigns.")
+            )
+            return HttpResponseRedirect(
+                reverse("admin:rpiconnect_connectupdatecampaign_changelist")
+            )
 
         form = ConnectCampaignWizardForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
@@ -304,7 +358,9 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             target_set = cleaned["target_set"]
             notes_sections = [cleaned.get("notes", "").strip()]
             if cleaned.get("timing_notes"):
-                notes_sections.append(f"Timing notes: {cleaned['timing_notes'].strip()}")
+                notes_sections.append(
+                    f"Timing notes: {cleaned['timing_notes'].strip()}"
+                )
             notes = "\n\n".join(section for section in notes_sections if section)
 
             try:
@@ -323,15 +379,24 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             except CampaignServiceError as exc:
                 form.add_error(None, exc)
             else:
-                creation_event = campaign.events.filter(event_type=CampaignService.EVENT_CAMPAIGN_CREATED).first()
-                target_count = (creation_event.payload or {}).get("target_count", 0) if creation_event else 0
+                creation_event = campaign.events.filter(
+                    event_type=CampaignService.EVENT_CAMPAIGN_CREATED
+                ).first()
+                target_count = (
+                    (creation_event.payload or {}).get("target_count", 0)
+                    if creation_event
+                    else 0
+                )
                 messages.success(
                     request,
                     _("Campaign %(campaign)s created with %(count)s targeted devices.")
                     % {"campaign": campaign.pk, "count": target_count},
                 )
                 return HttpResponseRedirect(
-                    reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk])
+                    reverse(
+                        "admin:rpiconnect_connectupdatecampaign_change",
+                        args=[campaign.pk],
+                    )
                 )
 
         context = {
@@ -340,9 +405,15 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
             "title": _("Campaign wizard"),
         }
-        return TemplateResponse(request, "admin/rpiconnect/connectupdatecampaign/campaign_wizard.html", context)
+        return TemplateResponse(
+            request,
+            "admin/rpiconnect/connectupdatecampaign/campaign_wizard.html",
+            context,
+        )
 
-    def campaign_progress_view(self, request: HttpRequest, campaign_id: int) -> HttpResponse:
+    def campaign_progress_view(
+        self, request: HttpRequest, campaign_id: int
+    ) -> HttpResponse:
         if not self.has_view_or_change_permission(request):
             raise PermissionDenied
         campaign = (
@@ -354,7 +425,9 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             raise PermissionDenied
         status_counts = {
             entry["status"]: entry["count"]
-            for entry in campaign.deployments.values("status").annotate(count=Count("id")).order_by("status")
+            for entry in campaign.deployments.values("status")
+            .annotate(count=Count("id"))
+            .order_by("status")
         }
         failed_deployments = campaign.deployments.filter(
             Q(status=ConnectUpdateDeployment.Status.FAILED)
@@ -368,36 +441,76 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             "status_counts": status_counts,
             "title": _("Live campaign progress"),
         }
-        return TemplateResponse(request, "admin/rpiconnect/connectupdatecampaign/progress.html", context)
+        return TemplateResponse(
+            request, "admin/rpiconnect/connectupdatecampaign/progress.html", context
+        )
 
-    def rollback_campaign_view(self, request: HttpRequest, campaign_id: int) -> HttpResponse:
-        campaign = ConnectUpdateCampaign.objects.select_related("release").get(pk=campaign_id)
-        if not self.has_change_permission(request, campaign) or not self.has_add_permission(request):
+    def rollback_campaign_view(
+        self, request: HttpRequest, campaign_id: int
+    ) -> HttpResponse:
+        campaign = ConnectUpdateCampaign.objects.select_related("release").get(
+            pk=campaign_id
+        )
+        if not self.has_change_permission(
+            request, campaign
+        ) or not self.has_add_permission(request):
             raise PermissionDenied
         if request.method != "POST":
-            messages.warning(request, _("Use the rollback button from the campaign form to confirm this action."))
-            return HttpResponseRedirect(reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]))
+            messages.warning(
+                request,
+                _(
+                    "Use the rollback button from the campaign form to confirm this action."
+                ),
+            )
+            return HttpResponseRedirect(
+                reverse(
+                    "admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]
+                )
+            )
 
         previous_release = self._find_previous_known_good_release(campaign)
         if previous_release is None:
-            messages.error(request, _("No previous known-good release could be identified for rollback."))
-            return HttpResponseRedirect(reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]))
+            messages.error(
+                request,
+                _("No previous known-good release could be identified for rollback."),
+            )
+            return HttpResponseRedirect(
+                reverse(
+                    "admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]
+                )
+            )
 
         successful_device_ids = list(
-            campaign.deployments.filter(status=ConnectUpdateDeployment.Status.SUCCEEDED).values_list(
-                "device__device_id", flat=True
-            )
+            campaign.deployments.filter(
+                status=ConnectUpdateDeployment.Status.SUCCEEDED
+            ).values_list("device__device_id", flat=True)
         )
         if not successful_device_ids:
-            messages.error(request, _("Rollback requires at least one succeeded deployment in the source campaign."))
-            return HttpResponseRedirect(reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]))
+            messages.error(
+                request,
+                _(
+                    "Rollback requires at least one succeeded deployment in the source campaign."
+                ),
+            )
+            return HttpResponseRedirect(
+                reverse(
+                    "admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]
+                )
+            )
 
         rollback_campaign = CampaignService().create_campaign(
             release=previous_release,
-            target_set={"cohorts": [], "device_ids": successful_device_ids, "labels": []},
+            target_set={
+                "cohorts": [],
+                "device_ids": successful_device_ids,
+                "labels": [],
+            },
             strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
             created_by=request.user,
-            notes=_("Rollback from campaign %(campaign)s to previous known-good release.") % {"campaign": campaign.pk},
+            notes=_(
+                "Rollback from campaign %(campaign)s to previous known-good release."
+            )
+            % {"campaign": campaign.pk},
             override_conflicts=True,
         )
         CampaignService().start_campaign(rollback_campaign, created_by=request.user)
@@ -408,10 +521,15 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
             % {"release": previous_release, "rollback": rollback_campaign.pk},
         )
         return HttpResponseRedirect(
-            reverse("admin:rpiconnect_connectupdatecampaign_change", args=[rollback_campaign.pk])
+            reverse(
+                "admin:rpiconnect_connectupdatecampaign_change",
+                args=[rollback_campaign.pk],
+            )
         )
 
-    def _find_previous_known_good_release(self, campaign: ConnectUpdateCampaign) -> ConnectImageRelease | None:
+    def _find_previous_known_good_release(
+        self, campaign: ConnectUpdateCampaign
+    ) -> ConnectImageRelease | None:
         successful_device_ids = campaign.deployments.filter(
             status=ConnectUpdateDeployment.Status.SUCCEEDED
         ).values_list("device_id", flat=True)

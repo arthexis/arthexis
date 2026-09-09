@@ -123,12 +123,18 @@ async def test_historical_start_replay_is_idempotent():
     )
 
     assert second["transactionId"] == first["transactionId"]
-    assert await database_sync_to_async(
-        Transaction.objects.filter(charger=consumer.charger).count
-    )() == 1
-    assert await database_sync_to_async(
-        RFIDAttempt.objects.filter(transaction_id=first["transactionId"]).count
-    )() == 1
+    assert (
+        await database_sync_to_async(
+            Transaction.objects.filter(charger=consumer.charger).count
+        )()
+        == 1
+    )
+    assert (
+        await database_sync_to_async(
+            RFIDAttempt.objects.filter(transaction_id=first["transactionId"]).count
+        )()
+        == 1
+    )
 
     store.transactions.pop(consumer.store_key, None)
     store.end_session_log(consumer.store_key)
@@ -168,9 +174,12 @@ async def test_reused_call_id_with_different_historical_payload_is_not_deduplica
     )
 
     assert second["transactionId"] != first["transactionId"]
-    assert await database_sync_to_async(
-        Transaction.objects.filter(charger=consumer.charger).count
-    )() == 2
+    assert (
+        await database_sync_to_async(
+            Transaction.objects.filter(charger=consumer.charger).count
+        )()
+        == 2
+    )
 
     store.transactions.pop(consumer.store_key, None)
     store.end_session_log(consumer.store_key)

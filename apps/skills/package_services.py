@@ -1202,9 +1202,7 @@ def _import_codex_skill_package_archive(
             summary["hooks"] = [{"slug": entry["slug"]} for entry in validated_hooks]
             summary["retired_hooks"] = [
                 {"slug": hook.slug}
-                for hook in _retired_operator_framework_core_hooks_for_preview(
-                    manifest
-                )
+                for hook in _retired_operator_framework_core_hooks_for_preview(manifest)
             ]
             return summary
 

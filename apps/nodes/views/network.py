@@ -278,6 +278,7 @@ def import_chargers(request):
         {"status": "ok", "chargers": processed, "transactions": imported}
     )
 
+
 @csrf_exempt
 def net_message(request):
     """Receive a network message and continue propagation."""
@@ -313,7 +314,9 @@ def net_message(request):
     try:
         msg = NetMessage.receive_payload(data, sender=node)
     except ValueError as exc:
-        logger.warning("Rejected invalid network message from node %s: %s", node.pk, exc)
+        logger.warning(
+            "Rejected invalid network message from node %s: %s", node.pk, exc
+        )
         return JsonResponse({"detail": "invalid message"}, status=400)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
 

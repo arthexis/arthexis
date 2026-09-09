@@ -12,11 +12,9 @@ from .apps import ARTHEXIS_EXTERNAL_APPS
 from .base import BASE_DIR
 from .external_dbs import external_app_database_alias_mapping
 
-
 _ARTHEXIS_PATHS = resolve_arthexis_paths(project_root=BASE_DIR)
 _USE_DATA_DIR = (
-    _ARTHEXIS_PATHS.mode is ArthexisMode.INSTALLED
-    or "ARTHEXIS_DATA_DIR" in os.environ
+    _ARTHEXIS_PATHS.mode is ArthexisMode.INSTALLED or "ARTHEXIS_DATA_DIR" in os.environ
 )
 
 

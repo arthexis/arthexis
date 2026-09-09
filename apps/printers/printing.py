@@ -96,7 +96,9 @@ def build_qr_label_image(payload: str, spec: QRLabelSpec | None = None) -> Image
 
     canvas = Image.new("L", (spec.width, spec.height), 255)
     qr_image = _make_qr_image(payload)
-    qr_size = max(24, min(spec.qr_size, spec.width - (spec.margin * 2), spec.height - 56))
+    qr_size = max(
+        24, min(spec.qr_size, spec.width - (spec.margin * 2), spec.height - 56)
+    )
     qr_image = qr_image.resize((qr_size, qr_size), Image.Resampling.NEAREST)
     canvas.paste(qr_image, ((spec.width - qr_size) // 2, spec.margin))
 
@@ -202,14 +204,18 @@ def _text_width(
     return bbox[2] - bbox[0]
 
 
-def pack_monochrome_raster(image: Image.Image, *, threshold: int = 180) -> tuple[int, int, bytes]:
+def pack_monochrome_raster(
+    image: Image.Image, *, threshold: int = 180
+) -> tuple[int, int, bytes]:
     """Pack a label image into the one-bit row raster used by Phomemo M220."""
 
     width, height = image.size
     if width % 8:
         raise ValueError("Image width must be divisible by 8")
     bytes_per_line = width // 8
-    black_white = image.convert("L").point(lambda pixel: 0 if pixel < threshold else 255, "1")
+    black_white = image.convert("L").point(
+        lambda pixel: 0 if pixel < threshold else 255, "1"
+    )
     pixels = black_white.load()
     raster = bytearray()
     for y in range(height):
@@ -231,7 +237,11 @@ def build_phomemo_m220_job(
 ) -> bytes:
     """Build a raw Phomemo M220 raster print job."""
 
-    for name, value in (("speed", speed), ("density", density), ("media_type", media_type)):
+    for name, value in (
+        ("speed", speed),
+        ("density", density),
+        ("media_type", media_type),
+    ):
         if value < 0 or value > 255:
             raise ValueError(f"{name} must fit in one byte")
     bytes_per_line, height, raster = pack_monochrome_raster(image)
@@ -368,15 +378,14 @@ def write_windows_usb(
                 None,
             )
             if not ok:
-                raise OSError(ctypes.get_last_error(), f"WriteFile failed at offset {offset}")
+                raise OSError(
+                    ctypes.get_last_error(), f"WriteFile failed at offset {offset}"
+                )
             total += written.value
             if written.value != len(chunk):
                 raise OSError(
                     ctypes.get_last_error(),
-                    (
-                        f"short write at offset {offset}: "
-                        f"{written.value}/{len(chunk)}"
-                    ),
+                    (f"short write at offset {offset}: {written.value}/{len(chunk)}"),
                 )
             if delay_seconds:
                 time.sleep(delay_seconds)

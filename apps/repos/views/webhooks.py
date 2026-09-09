@@ -65,8 +65,10 @@ def _extract_payload(request: HttpRequest) -> tuple[ParsedWebhookPayload, str]:
 
     payload_field = request.POST.get("payload")
     content_type = request.content_type or ""
-    if payload_field is None and raw_body and content_type.startswith(
-        "application/x-www-form-urlencoded"
+    if (
+        payload_field is None
+        and raw_body
+        and content_type.startswith("application/x-www-form-urlencoded")
     ):
         payload_values = parse_qs(raw_body, keep_blank_values=True).get("payload")
         if payload_values:
@@ -150,20 +152,26 @@ def _verify_signature(request: HttpRequest, secret: str) -> bool:
     raw_bytes = request.body or b""
     signature_256 = request.headers.get("X-Hub-Signature-256", "")
     if signature_256:
-        expected = "sha256=" + hmac.new(
-            secret.encode("utf-8"),
-            raw_bytes,
-            hashlib.sha256,
-        ).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(
+                secret.encode("utf-8"),
+                raw_bytes,
+                hashlib.sha256,
+            ).hexdigest()
+        )
         return hmac.compare_digest(signature_256, expected)
 
     signature = request.headers.get("X-Hub-Signature", "")
     if signature:
-        expected = "sha1=" + hmac.new(
-            secret.encode("utf-8"),
-            raw_bytes,
-            hashlib.sha1,
-        ).hexdigest()
+        expected = (
+            "sha1="
+            + hmac.new(
+                secret.encode("utf-8"),
+                raw_bytes,
+                hashlib.sha1,
+            ).hexdigest()
+        )
         return hmac.compare_digest(signature, expected)
 
     return False
@@ -254,7 +262,11 @@ def github_webhook(
     if is_verified:
         try:
             assess_github_issue_event(event)
-        except Exception:  # pragma: no cover - defensive guard to keep webhook ingestion resilient
-            logger.exception("GitHub issue spam assessment failed for event_id=%s", event.pk)
+        except (
+            Exception
+        ):  # pragma: no cover - defensive guard to keep webhook ingestion resilient
+            logger.exception(
+                "GitHub issue spam assessment failed for event_id=%s", event.pk
+            )
 
     return JsonResponse({"status": "ok", "event_id": event.pk})

@@ -99,7 +99,9 @@ class SiteConfigurationViewMixin:
         if created or updated:
             self.message_user(
                 request,
-                _("Loaded %(created)s new and %(updated)s existing site configurations.")
+                _(
+                    "Loaded %(created)s new and %(updated)s existing site configurations."
+                )
                 % {"created": created, "updated": updated},
                 messages.SUCCESS,
             )
@@ -292,7 +294,10 @@ class SiteConfigurationViewMixin:
         ]
 
     def _build_subdomain_form(self, queryset):
-        values = [value or "" for value in queryset.values_list("managed_subdomains", flat=True)]
+        values = [
+            value or ""
+            for value in queryset.values_list("managed_subdomains", flat=True)
+        ]
         unique_values = set(values)
         if len(unique_values) == 1:
             initial = unique_values.pop()
@@ -313,7 +318,9 @@ class SiteConfigurationViewMixin:
             try:
                 config.full_clean()
             except ValidationError as exc:
-                self.message_user(request, f"Error updating {config}: {exc}", messages.ERROR)
+                self.message_user(
+                    request, f"Error updating {config}: {exc}", messages.ERROR
+                )
                 continue
             config.save(update_fields=["managed_subdomains"])
             updated = True
@@ -326,7 +333,9 @@ class SiteConfigurationViewMixin:
         else:
             self.message_user(
                 request,
-                _("Managed subdomain prefixes already match the selected configurations."),
+                _(
+                    "Managed subdomain prefixes already match the selected configurations."
+                ),
                 messages.INFO,
             )
 

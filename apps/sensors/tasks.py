@@ -54,9 +54,7 @@ def read_configured_thermometer(thermometer: Thermometer) -> Decimal | None:
         getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
     ).strip()
     i2c_paths = (
-        [i2c_path_template.format(slug=thermometer.slug)]
-        if i2c_path_template
-        else None
+        [i2c_path_template.format(slug=thermometer.slug)] if i2c_path_template else None
     )
     return read_temperature(source=source, w1_paths=w1_paths, i2c_paths=i2c_paths)
 
@@ -186,7 +184,9 @@ def _match_usb_tracker(
             if not re.search(tracker.required_file_regex, content, flags=re.MULTILINE):
                 return None
         except re.error as exc:
-            raise ValueError(f"Invalid regex for tracker {tracker.slug}: {exc}") from exc
+            raise ValueError(
+                f"Invalid regex for tracker {tracker.slug}: {exc}"
+            ) from exc
 
     return candidate
 

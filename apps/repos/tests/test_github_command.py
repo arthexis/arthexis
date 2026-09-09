@@ -14,10 +14,14 @@ from apps.repos.models import GitHubToken
 def test_github_set_token_user_stores_after_validation(monkeypatch):
     user_model = get_user_model()
     user = user_model.objects.create_user(username="alice", password="x")
-    monkeypatch.setattr("apps.repos.services.github.validate_token", lambda _token: (True, "ok", "octocat"))
+    monkeypatch.setattr(
+        "apps.repos.services.github.validate_token",
+        lambda _token: (True, "ok", "octocat"),
+    )
 
-    with patch("apps.repos.management.commands.github.getpass", return_value="tok"), patch(
-        "builtins.input", return_value="y"
+    with (
+        patch("apps.repos.management.commands.github.getpass", return_value="tok"),
+        patch("builtins.input", return_value="y"),
     ):
         call_command("github", "set-token", "--user", user.username)
 
@@ -29,11 +33,16 @@ def test_github_set_token_user_stores_after_validation(monkeypatch):
 @pytest.mark.django_db
 def test_github_set_token_global_stores_in_env(monkeypatch, tmp_path):
     env_file = tmp_path / "arthexis.env"
-    monkeypatch.setattr("apps.repos.management.commands.github.env_path", lambda: env_file)
-    monkeypatch.setattr("apps.repos.services.github.validate_token", lambda _token: (True, "ok", ""))
+    monkeypatch.setattr(
+        "apps.repos.management.commands.github.env_path", lambda: env_file
+    )
+    monkeypatch.setattr(
+        "apps.repos.services.github.validate_token", lambda _token: (True, "ok", "")
+    )
 
-    with patch("apps.repos.management.commands.github.getpass", return_value="tok2"), patch(
-        "builtins.input", return_value="yes"
+    with (
+        patch("apps.repos.management.commands.github.getpass", return_value="tok2"),
+        patch("builtins.input", return_value="yes"),
     ):
         call_command("github", "set-token", "--global")
 

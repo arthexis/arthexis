@@ -1,7 +1,7 @@
 import socket
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Iterator
 
 _HOSTNAME = socket.gethostname()
 _ACTIVE_APP: ContextVar[str] = ContextVar("active_app", default=_HOSTNAME)

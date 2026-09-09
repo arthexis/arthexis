@@ -21,7 +21,9 @@ class AuthorizationActionHandler:
         tag = None
         tag_created = False
         if id_tag and not self.consumer._is_direct_ocpp_account(account, id_tag):
-            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
+            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
+                id_tag
+            )
 
         decision = await self.consumer._evaluate_authorization_policy(
             id_tag=id_tag,

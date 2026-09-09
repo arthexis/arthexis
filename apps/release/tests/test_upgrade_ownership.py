@@ -38,7 +38,9 @@ def test_auto_upgrade_celery_task_names_keep_transition_aliases():
     assert release_tasks.verify_auto_upgrade_health.name == (
         "apps.release.tasks.auto_upgrade.tasks.verify_auto_upgrade_health"
     )
-    assert "apps.core.tasks.auto_upgrade.tasks.check_github_updates" in current_app.tasks
+    assert (
+        "apps.core.tasks.auto_upgrade.tasks.check_github_updates" in current_app.tasks
+    )
     assert (
         "apps.core.tasks.auto_upgrade.tasks.verify_auto_upgrade_health"
         in current_app.tasks

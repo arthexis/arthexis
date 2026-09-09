@@ -15,7 +15,9 @@ class Command(BaseCommand):
     help = "Copy a local source file, such as a .mse-set package, into managed media storage."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("path", help="Local source file path to copy into the suite.")
+        parser.add_argument(
+            "path", help="Local source file path to copy into the suite."
+        )
         parser.add_argument("--name", help="Optional display name for the source file.")
         parser.add_argument(
             "--source-type",

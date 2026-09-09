@@ -25,8 +25,12 @@ class Command(BaseCommand):
             "action",
             choices=["start", "end", "status", "check", "monitor"],
         )
-        parser.add_argument("--reason", default="", help="Operator-facing freeze reason.")
-        parser.add_argument("--until", help="Freeze end timestamp or duration in hours.")
+        parser.add_argument(
+            "--reason", default="", help="Operator-facing freeze reason."
+        )
+        parser.add_argument(
+            "--until", help="Freeze end timestamp or duration in hours."
+        )
         parser.add_argument("--hours", type=float, help="Freeze duration in hours.")
         parser.add_argument("--json", action="store_true", help="Emit JSON output.")
         parser.add_argument(

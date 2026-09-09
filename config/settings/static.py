@@ -25,9 +25,7 @@ WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 # Shared admin CSS pipeline: load a framework base first, then global app-shell
 # styles, then optional active app stylesheets discovered per admin request.
 ADMIN_BASE_STYLESHEET = "core/admin_ui_framework.css"
-ADMIN_GLOBAL_STYLESHEETS = (
-    "sites/css/admin/base_site.css",
-)
+ADMIN_GLOBAL_STYLESHEETS = ("sites/css/admin/base_site.css",)
 ADMIN_APP_STYLESHEETS: dict[str, str] = {}
 
 # Allow development and freshly-updated environments to serve assets which have

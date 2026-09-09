@@ -48,7 +48,9 @@ COOKIE_HEADER_RE = re.compile(
 def _redact_exception_path(value: object, *, broad_tokens: bool = True) -> str:
     path = str(value or "")
     path = INVITATION_PATH_RE.sub(
-        lambda match: f"{match.group('prefix')}[REDACTED]/[REDACTED]{match.group('suffix')}",
+        lambda match: (
+            f"{match.group('prefix')}[REDACTED]/[REDACTED]{match.group('suffix')}"
+        ),
         path,
     )
     token_re = SENSITIVE_PATH_TOKEN_RE if broad_tokens else UUID_PATH_TOKEN_RE

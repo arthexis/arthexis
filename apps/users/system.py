@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Callable, Iterator, Literal, Tuple, overload
+from collections.abc import Callable, Iterator
+from typing import Literal, Tuple, overload
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from apps.groups.security import ensure_default_staff_groups
 
-
-SystemUserCheck = Tuple[str, str, Callable[[object], bool]]
+SystemUserCheck = tuple[str, str, Callable[[object], bool]]
 
 
 _SYSTEM_USER_CHECKS: tuple[SystemUserCheck, ...] = (
@@ -19,7 +19,11 @@ _SYSTEM_USER_CHECKS: tuple[SystemUserCheck, ...] = (
         "is_deleted",
         lambda user: getattr(user, "is_deleted", False),
     ),
-    ("account is inactive", "is_active", lambda user: not getattr(user, "is_active", True)),
+    (
+        "account is inactive",
+        "is_active",
+        lambda user: not getattr(user, "is_active", True),
+    ),
     (
         "account is not marked as staff",
         "is_staff",
@@ -35,7 +39,11 @@ _SYSTEM_USER_CHECKS: tuple[SystemUserCheck, ...] = (
         "operate_as",
         lambda user: getattr(user, "operate_as_id", None),
     ),
-    ("account has a usable password", "password", lambda user: user.has_usable_password()),
+    (
+        "account has a usable password",
+        "password",
+        lambda user: user.has_usable_password(),
+    ),
 )
 
 
@@ -124,14 +132,12 @@ def ensure_default_admin_user(
     """Return the configured default admin user, creating or repairing it as needed."""
 
     User = get_user_model()
-    resolved_username = (
-        str(
-            username
-            or getattr(settings, "DEFAULT_ADMIN_USERNAME", "")
-            or getattr(User, "SYSTEM_USERNAME", "")
-            or "arthexis"
-        ).strip()
-    )
+    resolved_username = str(
+        username
+        or getattr(settings, "DEFAULT_ADMIN_USERNAME", "")
+        or getattr(User, "SYSTEM_USERNAME", "")
+        or "arthexis"
+    ).strip()
     if not resolved_username:
         return None
 

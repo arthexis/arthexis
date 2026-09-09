@@ -29,7 +29,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Forward the alias command to the consolidated release CLI."""
 
-        self.stdout.write("`run_release_data_transforms` is a supported alias for `release run-data-transforms`.")
+        self.stdout.write(
+            "`run_release_data_transforms` is a supported alias for `release run-data-transforms`."
+        )
         command_args = ["release", "run-data-transforms"]
         transform = options.get("transform")
         if transform:

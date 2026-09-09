@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from datetime import timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
@@ -92,6 +92,7 @@ from config.offline import requires_network
 from utils.rate_limit_fallback import fallback_rate_limit_allows
 
 logger = logging.getLogger(__name__)
+
 
 class RateLimitedConsumerMixin:
     """Local fallback limiter for OCPP websocket connections."""
@@ -991,7 +992,7 @@ class CSMSConsumer(
             ocpp_version or "unknown",
             extra={"payload": normalized_payload},
         )
-        current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
+        current_time = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         return {
             "currentTime": current_time,
             "interval": 300,

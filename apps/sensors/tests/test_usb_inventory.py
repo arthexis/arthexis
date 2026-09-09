@@ -63,7 +63,9 @@ def test_usb_inventory_matches_kindle_claim(settings, monkeypatch, tmp_path):
     assert usb_inventory.claimed_paths("kindle-postbox") == [str(mount)]
 
 
-def test_usb_inventory_matches_live_kindle_shape_claim_alias(settings, monkeypatch, tmp_path):
+def test_usb_inventory_matches_live_kindle_shape_claim_alias(
+    settings, monkeypatch, tmp_path
+):
     key_mount = tmp_path / "bastion"
     kindle_mount = tmp_path / "kindle"
     key_mount.mkdir()

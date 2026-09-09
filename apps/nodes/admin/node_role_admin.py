@@ -3,18 +3,15 @@ import subprocess
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib import admin
-from django.contrib import messages
-from django.db.models import Count
-from django.db.models import Exists, OuterRef
+from django.contrib import admin, messages
+from django.db.models import Count, Exists, OuterRef
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.systemctl import _systemctl_command
+from apps.locals.user_data import EntityModelAdmin
 from apps.services.lifecycle import SERVICE_NAME_LOCK, lock_dir, read_service_name
 
-from apps.locals.user_data import EntityModelAdmin
-
-from ..models import NodeRole, Node
+from ..models import Node, NodeRole
 from .forms import NodeRoleAdminForm
 
 _VALID_UNIT_NAME = re.compile(r"^[\w@.-]+(?:\.service)?$")
@@ -40,15 +37,14 @@ class NodeRoleAdmin(EntityModelAdmin):
             current_relation=Node.Relation.SELF,
             role_id=OuterRef("pk"),
         )
-        return (
-            qs.annotate(
-                _registered=Count("node", distinct=True),
-                _is_assigned_to_this_node=Exists(self_nodes),
-            )
-            .prefetch_related("features")
-        )
+        return qs.annotate(
+            _registered=Count("node", distinct=True),
+            _is_assigned_to_this_node=Exists(self_nodes),
+        ).prefetch_related("features")
 
-    @admin.display(description="Ours", boolean=True, ordering="_is_assigned_to_this_node")
+    @admin.display(
+        description="Ours", boolean=True, ordering="_is_assigned_to_this_node"
+    )
     def is_assigned_to_this_node(self, obj):
         return bool(getattr(obj, "_is_assigned_to_this_node", False))
 
@@ -91,9 +87,10 @@ class NodeRoleAdmin(EntityModelAdmin):
             return
         role = roles[0]
 
-        local_node = Node.get_local() or Node.objects.filter(
-            current_relation=Node.Relation.SELF
-        ).first()
+        local_node = (
+            Node.get_local()
+            or Node.objects.filter(current_relation=Node.Relation.SELF).first()
+        )
         if local_node is None:
             self.message_user(
                 request,
@@ -115,7 +112,9 @@ class NodeRoleAdmin(EntityModelAdmin):
             self._restart_suite_service(request)
 
     def _restart_suite_service(self, request):
-        unit_name = read_service_name(lock_dir(Path(settings.BASE_DIR)) / SERVICE_NAME_LOCK)
+        unit_name = read_service_name(
+            lock_dir(Path(settings.BASE_DIR)) / SERVICE_NAME_LOCK
+        )
         if not unit_name:
             self.message_user(
                 request,
@@ -136,7 +135,8 @@ class NodeRoleAdmin(EntityModelAdmin):
         if not _VALID_UNIT_NAME.fullmatch(unit_name):
             self.message_user(
                 request,
-                _("Invalid configured suite service name: %(unit)s.") % {"unit": unit_name},
+                _("Invalid configured suite service name: %(unit)s.")
+                % {"unit": unit_name},
                 level=messages.ERROR,
             )
             return

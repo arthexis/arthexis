@@ -73,6 +73,7 @@ PASSKEY_CHALLENGE_SESSION_KEY = "passkey_login_challenge"
 NFC_LOGIN_FEATURE_SLUG = "nfc-login"
 RFID_FEATURE_SLUGS = ("rfid", "rfid-scanner")
 
+
 class _GraphvizDeprecationFilter(logging.Filter):
     """Filter out Graphviz debug logs about positional arg legacy warnings."""
 
@@ -208,9 +209,7 @@ def _build_model_graph(models):
 
         verbose_name = str(model._meta.verbose_name)
         if verbose_name and verbose_name != model._meta.object_name:
-            rows.append(
-                '<tr><td colspan="2"><i>' f"{escape(verbose_name)}" "</i></td></tr>"
-            )
+            rows.append(f'<tr><td colspan="2"><i>{escape(verbose_name)}</i></td></tr>')
 
         for field in model._meta.concrete_fields:
             if field.auto_created and not field.concrete:

@@ -258,12 +258,14 @@ class DiagnosticsActionsMixin(ActionServiceMixin):
             request,
             queryset,
             expires_at=timezone.now() + timedelta(days=30),
-            success_message=lambda count: ngettext(
-                "Requested diagnostics from %(count)d charger.",
-                "Requested diagnostics from %(count)d chargers.",
-                count,
-            )
-            % {"count": count},
+            success_message=lambda count: (
+                ngettext(
+                    "Requested diagnostics from %(count)d charger.",
+                    "Requested diagnostics from %(count)d chargers.",
+                    count,
+                )
+                % {"count": count}
+            ),
         )
 
     @admin.action(description="Setup CP Diagnostics")
@@ -272,12 +274,14 @@ class DiagnosticsActionsMixin(ActionServiceMixin):
             request,
             queryset,
             expires_at=timezone.now() + timedelta(days=30),
-            success_message=lambda count: ngettext(
-                "Set up diagnostics upload for %(count)d charger.",
-                "Set up diagnostics upload for %(count)d chargers.",
-                count,
-            )
-            % {"count": count},
+            success_message=lambda count: (
+                ngettext(
+                    "Set up diagnostics upload for %(count)d charger.",
+                    "Set up diagnostics upload for %(count)d chargers.",
+                    count,
+                )
+                % {"count": count}
+            ),
         )
 
     @admin.action(description="Get diagnostics")

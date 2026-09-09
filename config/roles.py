@@ -37,7 +37,9 @@ def role_requires_shared_channel_layer(role_name: Any) -> bool:
     return normalize_role(role_name) in SHARED_CHANNEL_LAYER_ROLES
 
 
-def validate_role_settings(values: Mapping[str, Any], *, strict: bool | None = None) -> None:
+def validate_role_settings(
+    values: Mapping[str, Any], *, strict: bool | None = None
+) -> None:
     """Validate role naming only, without enforcing role-specific feature restrictions.
 
     Parameters:

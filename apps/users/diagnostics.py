@@ -54,7 +54,9 @@ def capture_request_exception(*, request, exception: Exception) -> None:
     )
 
 
-def create_manual_feedback(*, user, summary: str, details: str = "") -> UserDiagnosticEvent | None:
+def create_manual_feedback(
+    *, user, summary: str, details: str = ""
+) -> UserDiagnosticEvent | None:
     """Create a manual feedback diagnostic event when enabled for the user."""
 
     profile = _active_profile_for_user(user)
@@ -77,7 +79,9 @@ def create_manual_feedback(*, user, summary: str, details: str = "") -> UserDiag
     )
 
 
-def build_diagnostic_bundle(*, user, title: str = "", limit: int = 50) -> UserDiagnosticBundle:
+def build_diagnostic_bundle(
+    *, user, title: str = "", limit: int = 50
+) -> UserDiagnosticBundle:
     """Create and return a diagnostics bundle for the given user."""
 
     profile = _active_profile_for_user(user)
@@ -95,7 +99,9 @@ def build_diagnostic_bundle(*, user, title: str = "", limit: int = 50) -> UserDi
             f"- [{event.source}] {event.occurred_at.isoformat()} {event.summary}"
         )
         if event.request_method or event.request_path:
-            lines.append(f"  request: {event.request_method} {event.request_path}".rstrip())
+            lines.append(
+                f"  request: {event.request_method} {event.request_path}".rstrip()
+            )
         if event.details:
             lines.append(f"  details: {event.details}")
         lines.append(f"  fingerprint: {event.fingerprint}")
@@ -127,7 +133,9 @@ def attach_exception_signal(sender, request=None, **kwargs) -> None:
     try:
         capture_request_exception(request=request, exception=exception)
     except (ObjectDoesNotExist, RuntimeError, ValueError):
-        logger.debug("Skipping diagnostics capture due to runtime guard.", exc_info=True)
+        logger.debug(
+            "Skipping diagnostics capture due to runtime guard.", exc_info=True
+        )
     except Exception:
         logger.exception("Unexpected failure capturing user diagnostics.")
 

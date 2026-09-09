@@ -176,7 +176,12 @@ class NetworkConnectionAdmin(DjangoObjectActions, admin.ModelAdmin):
                     },
                 )
 
-        return {"created": created, "updated": updated, "errors": errors, "count": len(scanned)}
+        return {
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+            "count": len(scanned),
+        }
 
     def run_nmcli_scan_view(self, request):
         opts = self.model._meta
@@ -384,6 +389,4 @@ class APClientAdmin(DjangoObjectActions, admin.ModelAdmin):
                     for error in result["errors"]:
                         self.message_user(request, error, messages.WARNING)
 
-        return TemplateResponse(
-            request, "admin/nmcli/apclient/run_scan.html", context
-        )
+        return TemplateResponse(request, "admin/nmcli/apclient/run_scan.html", context)

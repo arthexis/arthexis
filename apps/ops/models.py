@@ -18,7 +18,9 @@ from apps.base.models import Entity
 
 logger = logging.getLogger(__name__)
 
-VALIDATION_SQL_DISABLED_MESSAGE = _("Custom SQL validation is disabled for security reasons.")
+VALIDATION_SQL_DISABLED_MESSAGE = _(
+    "Custom SQL validation is disabled for security reasons."
+)
 
 
 def _sanitize_remediation_url(remediation_url: str) -> str:
@@ -49,7 +51,9 @@ def validate_local_absolute_path_url(start_url: str) -> None:
 
     path = escape_leading_slashes(parts.path)
     if not path.startswith("/"):
-        raise ValidationError(_("Start URL must start with '/' and include no scheme or host."))
+        raise ValidationError(
+            _("Start URL must start with '/' and include no scheme or host.")
+        )
 
 
 class OperationScreen(Entity):
@@ -64,12 +68,16 @@ class OperationScreen(Entity):
     description = models.TextField()
     start_url = models.CharField(
         max_length=500,
-        help_text=_("Local absolute path where this operation starts, without scheme or host."),
+        help_text=_(
+            "Local absolute path where this operation starts, without scheme or host."
+        ),
         validators=[validate_local_absolute_path_url],
     )
     validation_sql = models.TextField(
         blank=True,
-        help_text=_("Optional SQL query returning a truthy scalar when validation passes."),
+        help_text=_(
+            "Optional SQL query returning a truthy scalar when validation passes."
+        ),
     )
     priority = models.PositiveIntegerField(default=100)
     owner = models.ForeignKey(
@@ -79,11 +87,15 @@ class OperationScreen(Entity):
         blank=True,
         related_name="owned_operations",
     )
-    scope = models.CharField(max_length=20, choices=Scope.choices, default=Scope.PER_USER)
+    scope = models.CharField(
+        max_length=20, choices=Scope.choices, default=Scope.PER_USER
+    )
     recurrence_days = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=_("Number of days after completion when this operation becomes pending again."),
+        help_text=_(
+            "Number of days after completion when this operation becomes pending again."
+        ),
     )
     is_required = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -103,7 +115,9 @@ class OperationScreen(Entity):
 
         super().clean()
         if self.recurrence_days is not None and self.recurrence_days < 1:
-            raise ValidationError({"recurrence_days": _("Recurrence must be at least one day.")})
+            raise ValidationError(
+                {"recurrence_days": _("Recurrence must be at least one day.")}
+            )
         validate_local_absolute_path_url(self.start_url)
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
@@ -174,15 +188,21 @@ class OperationExecution(Entity):
         ordering = ("-performed_at",)
         verbose_name = _("Operation Execution")
         verbose_name_plural = _("Operation Executions")
-        indexes = [models.Index(fields=["operation", "user", "-performed_at"], name="ops_exec_op_user_date")]
+        indexes = [
+            models.Index(
+                fields=["operation", "user", "-performed_at"],
+                name="ops_exec_op_user_date",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         """Run optional operation SQL validation when logging execution."""
 
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and not {"validation_passed", "validation_output"}.intersection(
-            set(update_fields)
-        ):
+        if update_fields is not None and not {
+            "validation_passed",
+            "validation_output",
+        }.intersection(set(update_fields)):
             super().save(*args, **kwargs)
             return
         if self.validation_passed is None:
@@ -263,7 +283,9 @@ class SecurityAlertEvent(Entity):
                 detail=detail,
                 remediation_url=safe_remediation_url,
                 occurrence_count=F("occurrence_count") + 1,
-                last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
+                last_occurred_at=Greatest(
+                    F("last_occurred_at"), Value(event_timestamp)
+                ),
                 is_active=True,
                 updated_at=Now(),
             )
@@ -322,7 +344,9 @@ class OperatorJourneyStep(Entity):
     )
     help_text = models.TextField(
         blank=True,
-        help_text=_("Optional extra help for manual actions required outside Arthexis."),
+        help_text=_(
+            "Optional extra help for manual actions required outside Arthexis."
+        ),
     )
     iframe_url = models.CharField(
         max_length=500,

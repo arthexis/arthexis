@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from apps.media.models import MediaBucket, MediaFile
 
-
 pytestmark = pytest.mark.django_db
 
 
@@ -47,8 +46,12 @@ def test_media_bucket_upload_allows_anonymous_for_expiring_bucket(client) -> Non
     assert MediaFile.objects.count() == 1
 
 
-def test_media_bucket_upload_allows_authenticated_for_non_expiring_bucket(client) -> None:
-    user = get_user_model().objects.create_user(username="alice", password="test-pass-123")
+def test_media_bucket_upload_allows_authenticated_for_non_expiring_bucket(
+    client,
+) -> None:
+    user = get_user_model().objects.create_user(
+        username="alice", password="test-pass-123"
+    )
     bucket = MediaBucket.objects.create(slug="auth-bucket", name="Auth")
     client.force_login(user)
 

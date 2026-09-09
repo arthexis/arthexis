@@ -91,7 +91,9 @@ class InventoryReport:
 
 
 def _is_readme(path: Path) -> bool:
-    return path.suffix.lower() in DOCUMENT_SUFFIXES and path.name.lower().startswith("readme")
+    return path.suffix.lower() in DOCUMENT_SUFFIXES and path.name.lower().startswith(
+        "readme"
+    )
 
 
 def _is_document(path: Path) -> bool:
@@ -101,7 +103,11 @@ def _is_document(path: Path) -> bool:
 
 
 def _is_source_adjacent(path: Path) -> bool:
-    return path.suffix.lower() in SOURCE_SUFFIXES and bool(path.parts) and path.parts[0] in SOURCE_ROOTS
+    return (
+        path.suffix.lower() in SOURCE_SUFFIXES
+        and bool(path.parts)
+        and path.parts[0] in SOURCE_ROOTS
+    )
 
 
 def _is_preserved_source_adjacent(path: Path) -> bool:

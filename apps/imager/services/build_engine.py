@@ -771,7 +771,7 @@ def _render_bootstrap_script(
     script = script.replace(
         "ARTHEXIS_BUNDLE=/usr/local/share/arthexis/arthexis-suite.tar.gz",
         "ARTHEXIS_INITIAL_PROFILE_REQUIRES_NFTABLES="
-        f'{"1" if initial_profile_requires_nftables else "0"}\n'
+        f"{'1' if initial_profile_requires_nftables else '0'}\n"
         "ARTHEXIS_BUNDLE=/usr/local/share/arthexis/arthexis-suite.tar.gz",
     )
     if bootstrap_user:

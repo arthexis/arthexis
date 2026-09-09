@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from channels.db import database_sync_to_async
 
+from apps.ocpp.consumers.csms import persistence
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-
-from apps.ocpp.consumers.csms import persistence
 
 
 class MeteringHandlersMixin:

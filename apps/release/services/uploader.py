@@ -7,9 +7,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
 
 from apps.release import git_utils
@@ -37,7 +38,7 @@ class PostPublishWarning(ReleaseError):
         message: str,
         *,
         uploaded: Sequence[str],
-        followups: Optional[Sequence[str]] = None,
+        followups: Sequence[str] | None = None,
     ) -> None:
         super().__init__(message)
         self.uploaded = list(uploaded)
@@ -56,7 +57,7 @@ def upload_with_retries(
     repository: str,
     retries: int = 3,
     cooldown: float = 3.0,
-    env: Optional[dict[str, str]] = None,
+    env: dict[str, str] | None = None,
 ) -> None:
     last_output = ""
     merged_env = os.environ.copy()
@@ -82,12 +83,10 @@ def upload_with_retries(
 
         if is_retryable_twine_error(combined):
             raise ReleaseError(
-                "Twine upload to {repo} failed after {attempts} attempts due to a network interruption. "
+                f"Twine upload to {repository} failed after {attempt} attempts due to a network interruption. "
                 "Check your internet connection, wait a moment, then rerun the release command. "
                 "If uploads continue to fail, manually run `python -m twine upload dist/*` once the network "
-                "stabilizes.\n\nLast error:\n{error}".format(
-                    repo=repository, attempts=attempt, error=last_output
-                )
+                f"stabilizes.\n\nLast error:\n{last_output}"
             )
 
         raise ReleaseError(last_output)
@@ -95,7 +94,7 @@ def upload_with_retries(
     raise ReleaseError(last_output)
 
 
-def _environment_git_credentials() -> Optional[GitCredentials]:
+def _environment_git_credentials() -> GitCredentials | None:
     """Return Git credentials from environment variables when available."""
 
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
@@ -145,7 +144,7 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
 
 
-def _git_tag_commit(tag_name: str) -> Optional[str]:
+def _git_tag_commit(tag_name: str) -> str | None:
     """Return the commit referenced by ``tag_name`` in the local repository."""
 
     for ref in (f"{tag_name}^{{}}", tag_name):
@@ -162,7 +161,7 @@ def _git_tag_commit(tag_name: str) -> Optional[str]:
     return None
 
 
-def _git_remote_tag_commit(remote: str, tag_name: str) -> Optional[str]:
+def _git_remote_tag_commit(remote: str, tag_name: str) -> str | None:
     """Return the commit referenced by ``tag_name`` on ``remote`` if it exists."""
 
     proc = subprocess.run(
@@ -186,16 +185,18 @@ def _git_remote_tag_commit(remote: str, tag_name: str) -> Optional[str]:
     return commit
 
 
-def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcessError) -> None:
+def _raise_git_authentication_error(
+    tag_name: str, exc: subprocess.CalledProcessError
+) -> None:
     details = _format_subprocess_error(exc)
     message = (
-        "Git authentication failed while pushing tag {tag}. "
+        f"Git authentication failed while pushing tag {tag_name}. "
         "Configure your local environment to authenticate with the repository "
         "(for example, set up an SSH key or configure a GitHub token in your git "
         "credential helper), then rerun the publish step or push the tag manually "
-        "with `git push origin {tag}`. "
+        f"with `git push origin {tag_name}`. "
         "See docs/development/package-release-process.md#git-authentication-for-tag-pushes."
-    ).format(tag=tag_name)
+    )
     if details:
         message = f"{message} Git reported: {details}"
     raise ReleaseError(message) from exc
@@ -219,9 +220,9 @@ def _push_tag(tag_name: str) -> None:
                 # Another process already pushed the tag; treat as success.
                 return
             message = (
-                "Git rejected tag {tag} because it already exists on the remote. "
+                f"Git rejected tag {tag_name} because it already exists on the remote. "
                 "Delete the remote tag or choose a new version before retrying."
-            ).format(tag=tag_name)
+            )
             raise ReleaseError(message) from exc
         if not _git_authentication_missing(exc):
             raise
@@ -261,9 +262,7 @@ def _push_tag(tag_name: str) -> None:
     if auth_error is not None:
         _raise_git_authentication_error(tag_name, auth_error)
     raise ReleaseError(
-        "Git authentication failed while pushing tag {tag}. Configure Git credentials and try again.".format(
-            tag=tag_name
-        )
+        f"Git authentication failed while pushing tag {tag_name}. Configure Git credentials and try again."
     )
 
 
@@ -271,8 +270,8 @@ def publish(
     *,
     package: Package = DEFAULT_PACKAGE,
     version: str,
-    creds: Optional[Credentials] = None,
-    repositories: Optional[Sequence[RepositoryTarget]] = None,
+    creds: Credentials | None = None,
+    repositories: Sequence[RepositoryTarget] | None = None,
 ) -> list[str]:
     """Upload the existing distribution to one or more repositories."""
 
@@ -284,13 +283,10 @@ def publish(
                 raise ReleaseError(f"Missing credentials for {target.name}") from exc
             return target.credentials
 
-        candidate = (
-            creds
-            or Credentials(
-                token=os.environ.get("PYPI_API_TOKEN"),
-                username=os.environ.get("PYPI_USERNAME"),
-                password=os.environ.get("PYPI_PASSWORD"),
-            )
+        candidate = creds or Credentials(
+            token=os.environ.get("PYPI_API_TOKEN"),
+            username=os.environ.get("PYPI_USERNAME"),
+            password=os.environ.get("PYPI_PASSWORD"),
         )
         if candidate is None or not candidate.has_auth():
             raise ReleaseError("Missing PyPI credentials")
@@ -352,14 +348,12 @@ def publish(
         if uploaded:
             uploads = ", ".join(uploaded)
             if details:
-                message = (
-                    f"Upload to {uploads} completed, but creating git tag {tag_name} failed: {details}"
-                )
+                message = f"Upload to {uploads} completed, but creating git tag {tag_name} failed: {details}"
             else:
-                message = (
-                    f"Upload to {uploads} completed, but creating git tag {tag_name} failed."
-                )
-            followups = [f"Create and push git tag {tag_name} manually once the repository is ready."]
+                message = f"Upload to {uploads} completed, but creating git tag {tag_name} failed."
+            followups = [
+                f"Create and push git tag {tag_name} manually once the repository is ready."
+            ]
             raise PostPublishWarning(
                 message,
                 uploaded=uploaded,
@@ -390,10 +384,10 @@ def publish(
 
 def check_pypi_readiness(
     *,
-    release: Optional[PackageRelease] = None,
-    package: Optional[Package] = None,
-    creds: Optional[Credentials] = None,
-    repositories: Optional[Sequence[RepositoryTarget]] = None,
+    release: PackageRelease | None = None,
+    package: Package | None = None,
+    creds: Credentials | None = None,
+    repositories: Sequence[RepositoryTarget] | None = None,
 ) -> PyPICheckResult:
     """Validate connectivity and credentials required for PyPI uploads."""
 
@@ -475,7 +469,10 @@ def check_pypi_readiness(
             elif credential_source == "environment":
                 add("success", f"Using {auth_kind} from environment variables")
             elif credential_source == "repository":
-                add("success", f"Using {auth_kind} supplied by repository target configuration")
+                add(
+                    "success",
+                    f"Using {auth_kind} supplied by repository target configuration",
+                )
 
     try:
         proc = subprocess.run(

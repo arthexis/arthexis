@@ -11,7 +11,12 @@ class VariableAdmin(EntityModelAdmin):
         "attribute_status",
         "updated_on",
     )
-    list_filter = ("component_name", "variable_name", "attribute_type", "attribute_status")
+    list_filter = (
+        "component_name",
+        "variable_name",
+        "attribute_type",
+        "attribute_status",
+    )
     search_fields = (
         "charger__charger_id",
         "component_name",

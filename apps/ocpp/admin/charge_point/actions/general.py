@@ -20,9 +20,17 @@ class GeneralActionsMixin(ActionServiceMixin):
                 charger,
                 action="TriggerMessage",
                 payload=payload,
-                pending_payload={"trigger_target": "StatusNotification", "trigger_connector": charger.connector_id},
-                timeout_kwargs={"timeout": 5.0, "message": "TriggerMessage StatusNotification timed out"},
+                pending_payload={
+                    "trigger_target": "StatusNotification",
+                    "trigger_connector": charger.connector_id,
+                },
+                timeout_kwargs={
+                    "timeout": 5.0,
+                    "message": "TriggerMessage StatusNotification timed out",
+                },
             ):
                 requested += 1
         if requested:
-            self.message_user(request, f"Requested status update from {requested} charger(s)")
+            self.message_user(
+                request, f"Requested status update from {requested} charger(s)"
+            )

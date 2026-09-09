@@ -6,7 +6,6 @@ import re
 
 from django.conf import settings
 
-
 _ADMIN_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 _RESERVED_ADMIN_PREFIXES = {"i18n", "__debug__"}
 

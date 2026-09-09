@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from apps.nginx.models import SiteConfiguration
 
@@ -23,7 +23,9 @@ def parse_ids(ids_value: str) -> list[int]:
     return ids
 
 
-def get_configurations(ids_value: str, *, select_all: bool) -> Iterable[SiteConfiguration]:
+def get_configurations(
+    ids_value: str, *, select_all: bool
+) -> Iterable[SiteConfiguration]:
     if select_all:
         return SiteConfiguration.objects.all()
 

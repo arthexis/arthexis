@@ -136,7 +136,12 @@ def test_data_parent_directory_does_not_make_log_file_sensitive(tmp_path: Path) 
     log_path.write_text("safe diagnostic line\n", encoding="utf-8")
 
     assert error_report.is_sensitive_path(log_path, base_dir=base_dir) is False
-    assert error_report.is_sensitive_path(base_dir / "media" / "capture.log", base_dir=base_dir) is True
+    assert (
+        error_report.is_sensitive_path(
+            base_dir / "media" / "capture.log", base_dir=base_dir
+        )
+        is True
+    )
 
 
 def test_redact_text_removes_token_only_url_credentials() -> None:
@@ -148,7 +153,9 @@ def test_redact_text_removes_token_only_url_credentials() -> None:
     assert "https://<redacted>@github.com/arthexis/arthexis.git" in redacted
 
 
-def test_upload_report_uses_explicit_method(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_upload_report_uses_explicit_method(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     report_path = tmp_path / "report.zip"
     report_path.write_bytes(b"zip")
     captured: dict[str, object] = {}

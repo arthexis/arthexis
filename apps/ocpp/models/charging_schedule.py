@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .charging_profile import ChargingProfile
 
+
 class ChargingSchedule(Entity):
     """Charging schedule linked to a :class:`ChargingProfile`."""
 
@@ -209,7 +210,9 @@ class ChargingSchedule(Entity):
                         else {}
                     ),
                 }
-                for period in (periods if periods is not None else self.charging_schedule_periods)
+                for period in (
+                    periods if periods is not None else self.charging_schedule_periods
+                )
             ],
         }
 

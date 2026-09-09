@@ -11,7 +11,9 @@ from typing import Any
 
 
 def default_checkout() -> Path:
-    return Path(os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")).expanduser()
+    return Path(
+        os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")
+    ).expanduser()
 
 
 def find_workflow(checkout: Path) -> Path | None:
@@ -26,13 +28,21 @@ def find_workflow(checkout: Path) -> Path | None:
 def inspect(checkout: Path) -> dict[str, Any]:
     path = find_workflow(checkout)
     if not path:
-        return {"checkout": str(checkout), "ok": False, "error": "publish workflow not found"}
+        return {
+            "checkout": str(checkout),
+            "ok": False,
+            "error": "publish workflow not found",
+        }
     text = path.read_text(encoding="utf-8", errors="replace")
     lower = text.lower()
     checks = {
         "tag_trigger_hint": "tags:" in lower or "refs/tags" in lower or "v*" in lower,
-        "github_release_hint": "gh release" in lower or "softprops/action-gh-release" in lower or "release:" in lower,
-        "pypi_hint": "pypi" in lower or "twine" in lower or "pypa/gh-action-pypi-publish" in lower,
+        "github_release_hint": "gh release" in lower
+        or "softprops/action-gh-release" in lower
+        or "release:" in lower,
+        "pypi_hint": "pypi" in lower
+        or "twine" in lower
+        or "pypa/gh-action-pypi-publish" in lower,
         "manual_dispatch_hint": "workflow_dispatch" in lower,
     }
     requirements = {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .meter_value import MeterValue
 
+
 class MeterReadingManager(EntityManager):
     def _normalize_kwargs(self, kwargs: dict) -> dict:
         normalized = dict(kwargs)
@@ -35,6 +36,7 @@ class MeterReadingManager(EntityManager):
         return super().get_or_create(
             defaults=defaults, **self._normalize_kwargs(kwargs)
         )
+
 
 class MeterReading(MeterValue):
     """Proxy model for backwards compatibility."""

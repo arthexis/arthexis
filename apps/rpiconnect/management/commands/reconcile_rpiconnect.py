@@ -13,7 +13,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         service = IngestionService()
-        result = service.reconcile_deployments(status_fetcher=default_reconciliation_status_fetcher)
+        result = service.reconcile_deployments(
+            status_fetcher=default_reconciliation_status_fetcher
+        )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Reconciliation complete: checked={result.checked}, repaired={result.repaired}"

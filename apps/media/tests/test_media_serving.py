@@ -93,6 +93,7 @@ class ProtectedMediaServingTests(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
+
     def test_inactive_staff_user_cannot_fetch_direct_filefield_media(self):
         inactive_staff = get_user_model().objects.create_user(
             username="inactive-direct-media-staff",
@@ -123,6 +124,7 @@ class ProtectedMediaServingTests(TestCase):
         response = self.client.get(media_file.file.url)
 
         self.assertEqual(response.status_code, 200)
+
     def test_anonymous_user_can_fetch_configured_module_favicon(self):
         media_file = create_media_file(
             bucket=get_module_favicon_bucket(),

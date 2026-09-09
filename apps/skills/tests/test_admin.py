@@ -404,7 +404,10 @@ def test_import_package_blocks_staff_without_agent_and_hook_permissions(
 
     response = client.post(
         reverse("admin:skills_skill_import_package"),
-        {"action": "preview", "package": _valid_package_upload("blocked-agent-hook-perms")},
+        {
+            "action": "preview",
+            "package": _valid_package_upload("blocked-agent-hook-perms"),
+        },
     )
 
     assert response.status_code == 403

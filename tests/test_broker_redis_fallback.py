@@ -12,7 +12,9 @@ def test_shared_role_default_redis_broker_is_reused(monkeypatch):
     monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
     monkeypatch.delenv("BROKER_URL", raising=False)
 
-    assert resolve_redis_broker_fallback(node_role="Control") == "redis://localhost:6379/0"
+    assert (
+        resolve_redis_broker_fallback(node_role="Control") == "redis://localhost:6379/0"
+    )
 
 
 def test_explicit_memory_broker_is_not_reused_as_redis(monkeypatch):

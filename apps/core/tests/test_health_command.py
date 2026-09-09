@@ -242,14 +242,20 @@ def test_health_command_text_limits_force_to_supported_targets() -> None:
         "report_github": True,
     }
 
-    assert health_command._health_command_text(
-        options,
-        definition=health_command.HEALTH_CHECKS["core.admin"],
-    ) == "manage.py health --target core.admin --force --report-github"
-    assert health_command._health_command_text(
-        options,
-        definition=health_command.HEALTH_CHECKS["core.time"],
-    ) == "manage.py health --target core.time --report-github"
+    assert (
+        health_command._health_command_text(
+            options,
+            definition=health_command.HEALTH_CHECKS["core.admin"],
+        )
+        == "manage.py health --target core.admin --force --report-github"
+    )
+    assert (
+        health_command._health_command_text(
+            options,
+            definition=health_command.HEALTH_CHECKS["core.time"],
+        )
+        == "manage.py health --target core.time --report-github"
+    )
 
 
 def test_health_github_reporting_skips_when_feature_disabled(monkeypatch) -> None:
@@ -339,9 +345,7 @@ def test_health_github_reporting_redacts_sensitive_values() -> None:
     assert "bar" not in redacted
 
 
-def test_health_fingerprint_is_scoped_to_node_identity(
-    monkeypatch, settings
-) -> None:
+def test_health_fingerprint_is_scoped_to_node_identity(monkeypatch, settings) -> None:
     settings.NODE_ROLE = "Terminal"
     definition = HealthCheckDefinition(
         target="core.synthetic",
@@ -489,12 +493,15 @@ def test_health_github_reporting_creates_labeled_issue(
     assert calls["repository"] == "demo"
     assert calls["labels"] == ("automation", "bug", "priority: high")
     assert calls["title"] == "Health check failed: core.synthetic"
-    assert health_reporting.health_check_fingerprint_marker(
-        health_reporting.health_check_fingerprint(
-            definition,
-            command_text=command_text,
+    assert (
+        health_reporting.health_check_fingerprint_marker(
+            health_reporting.health_check_fingerprint(
+                definition,
+                command_text=command_text,
+            )
         )
-    ) in calls["body"]
+        in calls["body"]
+    )
     assert "token=[REDACTED]" in calls["body"]
     assert "secret-value" not in calls["body"]
 
@@ -613,8 +620,7 @@ def test_health_github_reporting_finds_existing_issue_after_first_page(
     github_service = _patch_health_issue_client(monkeypatch)
     monkeypatch.setattr(health_reporting, "_reporting_enabled", lambda: True)
     issues = [
-        {"number": number, "state": "open", "body": ""}
-        for number in range(1, 102)
+        {"number": number, "state": "open", "body": ""} for number in range(1, 102)
     ]
     issues.append(
         {
@@ -849,9 +855,7 @@ def test_health_github_reporting_recovery_ignores_other_option_issue(
     monkeypatch.setattr(
         github_service,
         "create_issue_comment",
-        lambda *args, **kwargs: pytest.fail(
-            "other option issue must not be commented"
-        ),
+        lambda *args, **kwargs: pytest.fail("other option issue must not be commented"),
     )
     monkeypatch.setattr(
         github_service,

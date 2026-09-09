@@ -9,8 +9,8 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET
 
-from apps.ocpp import markdown as rendering
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
+from apps.ocpp import markdown as rendering
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
 from apps.sites.utils import (
@@ -552,14 +552,18 @@ def charger_session_search(request, cid, connector=None):
                 start_date = date_obj
                 end_date = start_date + timedelta(days=1)
                 quick_range = ""
-            start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+            start = timezone.make_aware(
+                datetime.combine(start_date, datetime.min.time())
+            )
             end = timezone.make_aware(datetime.combine(end_date, datetime.min.time()))
             qs = Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
             if charger.connector_id is None:
                 qs = qs.filter(charger__charger_id=cid)
             else:
                 qs = qs.filter(charger=charger)
-            transactions = annotate_transaction_energy_bounds(qs).order_by("-start_time")
+            transactions = annotate_transaction_energy_bounds(qs).order_by(
+                "-start_time"
+            )
         except ValueError:
             transactions = []
             quick_range = ""

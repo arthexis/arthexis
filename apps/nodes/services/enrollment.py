@@ -16,7 +16,16 @@ def _normalize_scope(scope: str) -> str:
     return normalized_scope
 
 
-def _record_event(*, node: Node, enrollment: NodeEnrollment | None, action: str, actor=None, from_state: str = "", to_state: str = "", details: dict | None = None):
+def _record_event(
+    *,
+    node: Node,
+    enrollment: NodeEnrollment | None,
+    action: str,
+    actor=None,
+    from_state: str = "",
+    to_state: str = "",
+    details: dict | None = None,
+):
     NodeEnrollmentEvent.objects.create(
         node=node,
         enrollment=enrollment,
@@ -65,16 +74,26 @@ def issue_enrollment_token(
     _record_event(
         node=node,
         enrollment=enrollment,
-        action=(NodeEnrollmentEvent.Action.TOKEN_REISSUED if reissue else NodeEnrollmentEvent.Action.TOKEN_ISSUED),
+        action=(
+            NodeEnrollmentEvent.Action.TOKEN_REISSUED
+            if reissue
+            else NodeEnrollmentEvent.Action.TOKEN_ISSUED
+        ),
         actor=actor,
         from_state=current_state,
         to_state=node.mesh_enrollment_state,
-        details={"site_id": enrollment.site_id, "token_hint": enrollment.token_hint, "scope": enrollment.scope},
+        details={
+            "site_id": enrollment.site_id,
+            "token_hint": enrollment.token_hint,
+            "scope": enrollment.scope,
+        },
     )
     return enrollment, token
 
 
-def submit_public_key(*, node: Node, token: str, public_key: str, site: Site | None = None):
+def submit_public_key(
+    *, node: Node, token: str, public_key: str, site: Site | None = None
+):
     token_hash = NodeEnrollment.hash_token(token)
     with transaction.atomic():
         enrollment = (
@@ -108,7 +127,11 @@ def submit_public_key(*, node: Node, token: str, public_key: str, site: Site | N
     _record_event(
         node=node,
         enrollment=enrollment,
-        action=(NodeEnrollmentEvent.Action.KEY_ROTATED if old_key and old_key != public_key else NodeEnrollmentEvent.Action.PUBLIC_KEY_SUBMITTED),
+        action=(
+            NodeEnrollmentEvent.Action.KEY_ROTATED
+            if old_key and old_key != public_key
+            else NodeEnrollmentEvent.Action.PUBLIC_KEY_SUBMITTED
+        ),
         from_state=current_state,
         to_state=node.mesh_enrollment_state,
         details={"site_id": site.id if site else enrollment.site_id},
@@ -122,7 +145,11 @@ def approve_enrollment(*, node: Node, actor=None):
     node.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
     node.save(update_fields=["mesh_enrollment_state"])
 
-    enrollment = node.enrollments.filter(status=NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED).order_by("-created_at").first()
+    enrollment = (
+        node.enrollments.filter(status=NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED)
+        .order_by("-created_at")
+        .first()
+    )
     if enrollment:
         enrollment.status = NodeEnrollment.Status.ACTIVE
         enrollment.save(update_fields=["status", "updated_at"])

@@ -39,7 +39,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Forward the alias command to the consolidated release CLI."""
 
-        self.stdout.write("`apply_release_migrations` is a supported alias for `release apply-migrations`.")
+        self.stdout.write(
+            "`apply_release_migrations` is a supported alias for `release apply-migrations`."
+        )
         call_command(
             "release",
             "apply-migrations",

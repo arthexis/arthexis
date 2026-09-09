@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 pytestmark = [pytest.mark.gate_upgrade]
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -44,9 +43,7 @@ def test_predeploy_orchestrator_stops_service_stack_before_migrations() -> None:
     main_start = script.index('log_event "deploy_orchestration" "start"')
     stop_index = script.index("control_service_stack stop", main_start)
     migrate_index = script.index("run_predeploy_migrations", stop_index)
-    deploy_index = script.index(
-        'if [ -x "${DEPLOY_CMD[0]}" ]; then'
-    )
+    deploy_index = script.index('if [ -x "${DEPLOY_CMD[0]}" ]; then')
     start_index = script.index("control_service_stack start", deploy_index)
 
     assert stop_index < migrate_index < deploy_index < start_index

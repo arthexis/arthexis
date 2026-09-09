@@ -337,8 +337,7 @@ class FeedbackIssueConfigurationAdminMixin:
                 level=messages.WARNING,
             )
         elif (
-            github_issue_reporting_feature.is_enabled
-            != github_issue_reporting_enabled
+            github_issue_reporting_feature.is_enabled != github_issue_reporting_enabled
         ):
             github_issue_reporting_feature.is_enabled = github_issue_reporting_enabled
             github_issue_reporting_feature.save(update_fields=["is_enabled"])

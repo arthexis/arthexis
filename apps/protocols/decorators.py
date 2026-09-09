@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from apps.protocols import registry
 from apps.protocols.models import ProtocolCall
@@ -8,7 +9,9 @@ from apps.protocols.models import ProtocolCall
 F = TypeVar("F", bound=Callable)
 
 
-def protocol_call(protocol_slug: str, direction: str, call_name: str) -> Callable[[F], F]:
+def protocol_call(
+    protocol_slug: str, direction: str, call_name: str
+) -> Callable[[F], F]:
     """Decorator to mark a callable as implementing a protocol call.
 
     The decorator registers the callable for coverage tracking and annotates

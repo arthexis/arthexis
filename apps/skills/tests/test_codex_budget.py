@@ -55,9 +55,7 @@ def test_budget_freeze_threshold_creates_freeze_and_cache(tmp_path, settings):
     assert freeze.ends_at == reset_at
     assert "950/1000" in freeze.reason
     cache_payload = json.loads(
-        (tmp_path / "work" / "codex" / "freeze-state.json").read_text(
-            encoding="utf-8"
-        )
+        (tmp_path / "work" / "codex" / "freeze-state.json").read_text(encoding="utf-8")
     )
     assert cache_payload["active"] is True
 

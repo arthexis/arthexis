@@ -43,7 +43,9 @@ def set_writable_sqlite_env(var_name: str, fallback: Path) -> None:
     """Set SQLite env vars to writable paths while preserving valid caller overrides."""
 
     configured = os.environ.get(var_name)
-    if configured and (sqlite_uses_special_name(configured) or sqlite_path_is_writable(configured)):
+    if configured and (
+        sqlite_uses_special_name(configured) or sqlite_path_is_writable(configured)
+    ):
         _SQLITE_PATH_SOURCES[var_name] = "caller-provided"
         return
     os.environ[var_name] = str(fallback)
@@ -62,8 +64,12 @@ def configure_ephemeral_sqlite_paths() -> None:
         atexit.register(lambda root=db_root: shutil.rmtree(root, ignore_errors=True))
 
     worker_suffix = sqlite_worker_suffix()
-    set_writable_sqlite_env("ARTHEXIS_SQLITE_PATH", db_root / f"default-{worker_suffix}.sqlite3")
-    set_writable_sqlite_env("ARTHEXIS_SQLITE_TEST_PATH", db_root / f"test-{worker_suffix}.sqlite3")
+    set_writable_sqlite_env(
+        "ARTHEXIS_SQLITE_PATH", db_root / f"default-{worker_suffix}.sqlite3"
+    )
+    set_writable_sqlite_env(
+        "ARTHEXIS_SQLITE_TEST_PATH", db_root / f"test-{worker_suffix}.sqlite3"
+    )
 
 
 def sqlite_env_summary() -> dict[str, dict[str, str]]:

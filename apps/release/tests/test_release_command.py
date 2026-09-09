@@ -64,8 +64,9 @@ def test_builder_release_uploads_before_pushing_git_state(
     )
     monkeypatch.setattr(
         "apps.release.services.builder._run",
-        lambda cmd, check=True, cwd=None: events.append(("run", tuple(cmd)))
-        or SimpleNamespace(),
+        lambda cmd, check=True, cwd=None: (
+            events.append(("run", tuple(cmd))) or SimpleNamespace()
+        ),
     )
     monkeypatch.setitem(
         __import__("sys").modules,
@@ -151,8 +152,9 @@ def test_promote_stages_only_release_metadata_files(
     )
     monkeypatch.setattr(
         "apps.release.services.builder._run",
-        lambda cmd, check=True, cwd=None: commands.append(tuple(cmd))
-        or SimpleNamespace(),
+        lambda cmd, check=True, cwd=None: (
+            commands.append(tuple(cmd)) or SimpleNamespace()
+        ),
     )
 
     promote(version="1.2.3")
@@ -185,8 +187,9 @@ def test_promote_fails_when_unexpected_modified_files_exist(
     )
     monkeypatch.setattr(
         "apps.release.services.builder._run",
-        lambda cmd, check=True, cwd=None: commands.append(tuple(cmd))
-        or SimpleNamespace(),
+        lambda cmd, check=True, cwd=None: (
+            commands.append(tuple(cmd)) or SimpleNamespace()
+        ),
     )
 
     with pytest.raises(ReleaseError) as exc_info:
@@ -243,7 +246,9 @@ def test_git_modified_paths_handles_rename_and_ignored_paths(
     }
 
 
-def test_run_tests_defaults_to_pytest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_tests_defaults_to_pytest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     calls: list[tuple[str, ...]] = []
 
     def fake_run(cmd, capture_output=True, text=True):

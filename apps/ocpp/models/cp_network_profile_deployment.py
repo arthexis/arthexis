@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .cp_network_profile import CPNetworkProfile
 
+
 class CPNetworkProfileDeployment(Entity):
     """Track SetNetworkProfile deployments for specific charge points."""
 
@@ -26,12 +27,12 @@ class CPNetworkProfileDeployment(Entity):
         related_name="network_profile_deployments",
         verbose_name=_("Node"),
     )
-    ocpp_message_id = models.CharField(
-        _("OCPP message ID"), max_length=64, blank=True
-    )
+    ocpp_message_id = models.CharField(_("OCPP message ID"), max_length=64, blank=True)
     status = models.CharField(_("Status"), max_length=32, blank=True)
     status_info = models.CharField(_("Status details"), max_length=255, blank=True)
-    status_timestamp = models.DateTimeField(_("Status timestamp"), null=True, blank=True)
+    status_timestamp = models.DateTimeField(
+        _("Status timestamp"), null=True, blank=True
+    )
     requested_at = models.DateTimeField(_("Requested at"), auto_now_add=True)
     completed_at = models.DateTimeField(_("Completed at"), null=True, blank=True)
     request_payload = models.JSONField(default=dict, blank=True)

@@ -28,6 +28,7 @@ def test_ownable_clean_requires_owner():
     token.user = user
     token.full_clean()  # does not raise
 
+
 @pytest.mark.django_db
 @pytest.mark.sigil_roots
 def test_object_sigils_resolve_owner_and_members():
@@ -45,6 +46,7 @@ def test_object_sigils_resolve_owner_and_members():
     members = json.loads(resolved_members)
     assert user.username in members
 
+
 @pytest.mark.django_db
 def test_owned_object_helpers_return_direct_and_indirect_lists():
     user = get_user_model().objects.create(username="owner-links")
@@ -60,11 +62,14 @@ def test_owned_object_helpers_return_direct_and_indirect_lists():
 
     direct, via = get_owned_objects_for_user(user)
     assert any(link.label == str(direct_token) for link in direct)
-    assert any(link.label == str(group_token) and link.via == group.name for link in via)
+    assert any(
+        link.label == str(group_token) and link.via == group.name for link in via
+    )
 
     direct_group, via_members = get_owned_objects_for_group(group)
     assert any(link.label == str(group_token) for link in direct_group)
     assert any(link.via == user.username for link in via_members)
+
 
 @pytest.mark.django_db
 def test_ownable_admins_use_mixin():
@@ -76,9 +81,9 @@ def test_ownable_admins_use_mixin():
         if admin_instance is None:
             # Inline-only models are not registered directly with the admin site.
             continue
-        assert isinstance(
-            admin_instance, OwnableAdminMixin
-        ), f"{model.__name__} admin must include OwnableAdminMixin"
+        assert isinstance(admin_instance, OwnableAdminMixin), (
+            f"{model.__name__} admin must include OwnableAdminMixin"
+        )
 
 
 @pytest.mark.django_db
@@ -92,7 +97,9 @@ def test_ownable_admin_form_supports_exactly_one_owner_configuration():
             fields = "__all__"
 
     User = get_user_model()
-    user = User.objects.create_user(username="exact-owner", email="exact-owner@example.com")
+    user = User.objects.create_user(
+        username="exact-owner", email="exact-owner@example.com"
+    )
     group = SecurityGroup.objects.create(name="Exact Owner Group")
 
     no_owner_form = ExactlyOneGitHubTokenOwnerForm(

@@ -159,7 +159,9 @@ def test_sample_thermometers_records_ambient_and_soc_history(monkeypatch) -> Non
     assert soc.readings.count() == 1
 
 
-def test_sample_thermometers_skips_missing_soc_sensor_quietly(monkeypatch, caplog) -> None:
+def test_sample_thermometers_skips_missing_soc_sensor_quietly(
+    monkeypatch, caplog
+) -> None:
     thermometer = Thermometer.objects.create(
         name="SoC Temperature",
         slug="soc-temperature",

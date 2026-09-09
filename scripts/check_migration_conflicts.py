@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +86,9 @@ def _parse_migration_module(path: Path) -> ast.Module:
     except OSError as exc:
         raise MigrationParseError(f"Unable to read migration file {path}.") from exc
     except SyntaxError as exc:
-        raise MigrationParseError(f"Unable to parse migration file {path}: {exc.msg}") from exc
+        raise MigrationParseError(
+            f"Unable to parse migration file {path}: {exc.msg}"
+        ) from exc
 
 
 def _parse_assignment_tuples(path: Path, attribute_name: str) -> list[tuple[str, str]]:
@@ -97,7 +99,9 @@ def _parse_assignment_tuples(path: Path, attribute_name: str) -> list[tuple[str,
     except OSError as exc:
         raise MigrationParseError(f"Unable to read migration file {path}.") from exc
     except SyntaxError as exc:
-        raise MigrationParseError(f"Unable to parse migration file {path}: {exc.msg}") from exc
+        raise MigrationParseError(
+            f"Unable to parse migration file {path}: {exc.msg}"
+        ) from exc
 
     for node in module.body:
         if not isinstance(node, ast.ClassDef) or node.name != "Migration":
@@ -143,7 +147,9 @@ def _parse_dependencies(path: Path) -> list[tuple[str, str]]:
     except OSError as exc:
         raise MigrationParseError(f"Unable to read migration file {path}.") from exc
     except SyntaxError as exc:
-        raise MigrationParseError(f"Unable to parse migration file {path}: {exc.msg}") from exc
+        raise MigrationParseError(
+            f"Unable to parse migration file {path}: {exc.msg}"
+        ) from exc
 
     for node in module.body:
         if not isinstance(node, ast.ClassDef) or node.name != "Migration":
@@ -465,7 +471,9 @@ def _configured_app_label(app_dir: Path) -> str:
         name = None
         for statement in node.body:
             if isinstance(statement, ast.Assign):
-                if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+                if len(statement.targets) != 1 or not isinstance(
+                    statement.targets[0], ast.Name
+                ):
                     continue
                 target_name = statement.targets[0].id
                 value_node = statement.value
@@ -477,7 +485,11 @@ def _configured_app_label(app_dir: Path) -> str:
             else:
                 continue
 
-            if value_node is None or not isinstance(value_node, ast.Constant) or not isinstance(value_node.value, str):
+            if (
+                value_node is None
+                or not isinstance(value_node, ast.Constant)
+                or not isinstance(value_node.value, str)
+            ):
                 continue
             if target_name == "label":
                 label = value_node.value
@@ -515,7 +527,9 @@ def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
     return sorted(files, key=lambda item: (item.number, item.name))
 
 
-def _leaf_migrations(files: list[MigrationFile], dependencies_by_name: dict[str, list[tuple[str, str]]]) -> list[MigrationFile]:
+def _leaf_migrations(
+    files: list[MigrationFile], dependencies_by_name: dict[str, list[tuple[str, str]]]
+) -> list[MigrationFile]:
     """Return migrations that are not depended on by another local migration."""
 
     pointed_to: set[str] = set()
@@ -530,14 +544,18 @@ def _leaf_migrations(files: list[MigrationFile], dependencies_by_name: dict[str,
 def _is_merge_migration(migration_name: str) -> bool:
     """Return whether ``migration_name`` looks like a merge migration."""
 
-    suffix = migration_name.split("_", 1)[1] if "_" in migration_name else migration_name
+    suffix = (
+        migration_name.split("_", 1)[1] if "_" in migration_name else migration_name
+    )
     return bool(MERGE_NAME_PATTERN.search(suffix))
 
 
 def _has_required_suffix(migration_name: str) -> bool:
     """Return whether ``migration_name`` follows the ticket/PR suffix policy."""
 
-    suffix = migration_name.split("_", 1)[1] if "_" in migration_name else migration_name
+    suffix = (
+        migration_name.split("_", 1)[1] if "_" in migration_name else migration_name
+    )
     if suffix in NAMES_WITHOUT_SUFFIX:
         return True
     if _is_merge_migration(migration_name):
@@ -554,12 +572,10 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         return []
 
     dependencies_by_name = {
-        migration.name: _parse_dependencies(migration.path)
-        for migration in files
+        migration.name: _parse_dependencies(migration.path) for migration in files
     }
     replaces_by_name = {
-        migration.name: _parse_replaces(migration.path)
-        for migration in files
+        migration.name: _parse_replaces(migration.path) for migration in files
     }
     replaced_names = {
         replace_name
@@ -568,13 +584,19 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         if replace_app == files[0].app_label
     }
 
-    active_files = [migration for migration in files if migration.name not in replaced_names]
+    active_files = [
+        migration for migration in files if migration.name not in replaced_names
+    ]
     leaves = _leaf_migrations(active_files, dependencies_by_name)
-    merge_files = [migration for migration in active_files if _is_merge_migration(migration.name)]
+    merge_files = [
+        migration for migration in active_files if _is_merge_migration(migration.name)
+    ]
 
     errors: list[str] = []
     if len(leaves) > 1:
-        leaf_paths = ", ".join(migration.path.relative_to(repo_root).as_posix() for migration in leaves)
+        leaf_paths = ", ".join(
+            migration.path.relative_to(repo_root).as_posix() for migration in leaves
+        )
         errors.append(
             "duplicate leaf migrations detected; resolve by creating/adjusting a merge migration "
             f"for app '{files[0].app_label}'. Leaves: {leaf_paths}"
@@ -584,11 +606,18 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
     merge_chain = [
         migration
         for migration in merge_files
-        if any(dep_app == files[0].app_label and dep_name in merge_name_set for dep_app, dep_name in dependencies_by_name[migration.name])
+        if any(
+            dep_app == files[0].app_label and dep_name in merge_name_set
+            for dep_app, dep_name in dependencies_by_name[migration.name]
+        )
     ]
-    if len(merge_files) > 1 and (len(merge_chain) > 0 or len([leaf for leaf in leaves if _is_merge_migration(leaf.name)]) > 1):
+    if len(merge_files) > 1 and (
+        len(merge_chain) > 0
+        or len([leaf for leaf in leaves if _is_merge_migration(leaf.name)]) > 1
+    ):
         merge_paths = ", ".join(
-            migration.path.relative_to(repo_root).as_posix() for migration in merge_files
+            migration.path.relative_to(repo_root).as_posix()
+            for migration in merge_files
         )
         errors.append(
             "suspicious parallel merge chain detected; multiple merge migrations exist in "
@@ -612,7 +641,8 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
     ]
     if invalid_names:
         invalid_paths = ", ".join(
-            migration.path.relative_to(repo_root).as_posix() for migration in invalid_names
+            migration.path.relative_to(repo_root).as_posix()
+            for migration in invalid_names
         )
         errors.append(
             "migration naming policy violation in "
@@ -869,7 +899,7 @@ def build_migration_impact_report(
 
     return {
         "base_ref": base_ref,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "git": {
             "base": _git_ref(repo_root, base_ref),
             "head": _git_ref(repo_root, "HEAD"),
@@ -952,8 +982,6 @@ def format_migration_impact_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-
-
 def _git_changed_app_labels(repo_root: Path) -> set[str]:
     """Return app labels that have migration-file changes in the current branch."""
 
@@ -1023,7 +1051,9 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
             if not app_dir.is_dir():
                 continue
             migrations_dir = app_dir / "migrations"
-            if migrations_dir.exists() and any(migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")):
+            if migrations_dir.exists() and any(
+                migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")
+            ):
                 labels.add(app_dir.name)
         return labels
 
@@ -1043,6 +1073,7 @@ def _git_changed_app_labels(repo_root: Path) -> set[str]:
         )
 
     return _labels_from_diff_paths(diff.stdout)
+
 
 def _local_installed_app_labels(repo_root: Path) -> list[str]:
     """Return installed local app labels when Django settings are available."""
@@ -1070,7 +1101,10 @@ def _local_installed_app_labels(repo_root: Path) -> list[str]:
         labels.append(app_config.label)
     return labels
 
-def run_checks(repo_root: Path = REPO_ROOT, *, app_labels: set[str] | None = None) -> int:
+
+def run_checks(
+    repo_root: Path = REPO_ROOT, *, app_labels: set[str] | None = None
+) -> int:
     """Run migration conflict checks and return a process exit code."""
 
     all_errors: list[str] = []
@@ -1079,11 +1113,15 @@ def run_checks(repo_root: Path = REPO_ROOT, *, app_labels: set[str] | None = Non
         changed_migration_paths = _git_changed_migration_paths(repo_root)
         changed_labels = _migration_labels_from_paths(changed_migration_paths)
         if not changed_labels:
-            print("Migration conflict pre-check skipped: no changed migration files detected.")
+            print(
+                "Migration conflict pre-check skipped: no changed migration files detected."
+            )
             return 0
 
         installed_labels = set(_local_installed_app_labels(repo_root))
-        target_labels = changed_labels & installed_labels if installed_labels else changed_labels
+        target_labels = (
+            changed_labels & installed_labels if installed_labels else changed_labels
+        )
     else:
         target_labels = set(app_labels)
 
@@ -1128,7 +1166,9 @@ def main() -> int:
     try:
         return run_checks()
     except (MigrationParseError, OSError) as exc:
-        raise MigrationCheckError(f"Migration conflict pre-check failed: {exc}") from exc
+        raise MigrationCheckError(
+            f"Migration conflict pre-check failed: {exc}"
+        ) from exc
 
 
 if __name__ == "__main__":

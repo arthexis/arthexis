@@ -254,9 +254,7 @@ def test_command_card_print_label_uses_template_qr_target_path(
     )
 
     result = json.loads(stdout.getvalue())
-    assert result["label_print"]["payload"] == (
-        "https://suite.example/imager/burn/"
-    )
+    assert result["label_print"]["payload"] == ("https://suite.example/imager/burn/")
 
 
 def test_command_card_label_existing_card_does_not_rewrite(

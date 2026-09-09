@@ -17,7 +17,8 @@ from django.http import (
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.text import get_valid_filename
-from django.utils.translation import gettext as _, ngettext
+from django.utils.translation import gettext as _
+from django.utils.translation import ngettext
 
 from .admin import _iter_entity_admin_models, _supports_seed_datum, _supports_user_datum
 from .fixtures import (
@@ -127,9 +128,7 @@ def _seed_data_allowed_models() -> dict[str, tuple[type, admin.ModelAdmin]]:
     return allowed
 
 
-def _seed_fixture_entries_authorized(
-    request, entries: list[dict]
-) -> tuple[bool, str]:
+def _seed_fixture_entries_authorized(request, entries: list[dict]) -> tuple[bool, str]:
     allowed = _seed_data_allowed_models()
     for obj in entries:
         if not isinstance(obj, dict):
@@ -326,9 +325,7 @@ def _user_data_view(request):
                 args=[obj.pk],
             )
             fixture = fixture_path(request.user, obj)
-            items.append(
-                {"url": url, "label": str(obj), "fixture_name": fixture.name}
-            )
+            items.append({"url": url, "label": str(obj), "fixture_name": fixture.name})
         sections.append({"opts": model._meta, "items": items})
     fixture_status = _user_fixture_status(request.user)
     context = admin.site.each_context(request)
@@ -392,6 +389,7 @@ def _apply_user_fixture_paths(request, paths, *, action_label: str, empty_messag
         messages.success(request, message)
     else:
         messages.warning(request, _("No user data fixtures were applied."))
+
 
 def _user_data_apply_fixtures(request):
     if request.method != "POST":

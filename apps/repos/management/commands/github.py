@@ -5,10 +5,9 @@ from __future__ import annotations
 from argparse import ArgumentParser
 from getpass import getpass
 
-from filelock import FileLock, Timeout
-
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from filelock import FileLock, Timeout
 
 from apps.core.management.commands.env import env_path, read_env, write_env
 from apps.repos.models import GitHubToken
@@ -22,7 +21,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         subparsers = parser.add_subparsers(dest="action", required=True)
-        set_token = subparsers.add_parser("set-token", help="Validate and store a GitHub token.")
+        set_token = subparsers.add_parser(
+            "set-token", help="Validate and store a GitHub token."
+        )
         target_group = set_token.add_mutually_exclusive_group(required=True)
         target_group.add_argument(
             "--global",
@@ -53,7 +54,11 @@ class Command(BaseCommand):
             raise CommandError(f"Token validation failed: {message}")
 
         self.stdout.write(self.style.SUCCESS(message))
-        target_label = "global environment" if options.get("global_target") else f"user {options.get('user')}"
+        target_label = (
+            "global environment"
+            if options.get("global_target")
+            else f"user {options.get('user')}"
+        )
         try:
             confirm = input(f"Store token for {target_label}? [y/N]: ").strip().lower()
         except (EOFError, KeyboardInterrupt) as exc:
@@ -64,11 +69,15 @@ class Command(BaseCommand):
 
         if options.get("global_target"):
             self._store_global_token(token)
-            self.stdout.write(self.style.SUCCESS("Stored token as GITHUB_TOKEN in arthexis.env."))
+            self.stdout.write(
+                self.style.SUCCESS("Stored token as GITHUB_TOKEN in arthexis.env.")
+            )
             return
 
         username = str(options.get("user") or "").strip()
-        self._store_user_token(username=username, token=token, github_login=github_login)
+        self._store_user_token(
+            username=username, token=token, github_login=github_login
+        )
         self.stdout.write(self.style.SUCCESS(f"Stored token for user '{username}'."))
 
     def _store_global_token(self, token: str) -> None:
@@ -80,9 +89,13 @@ class Command(BaseCommand):
                 values["GITHUB_TOKEN"] = token
                 write_env(path, values)
         except Timeout as exc:
-            raise CommandError("Could not acquire file lock to store GITHUB_TOKEN.") from exc
+            raise CommandError(
+                "Could not acquire file lock to store GITHUB_TOKEN."
+            ) from exc
 
-    def _store_user_token(self, *, username: str, token: str, github_login: str) -> None:
+    def _store_user_token(
+        self, *, username: str, token: str, github_login: str
+    ) -> None:
         if not username:
             raise CommandError("--user requires a username.")
 

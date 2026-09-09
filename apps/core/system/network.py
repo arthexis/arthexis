@@ -7,9 +7,8 @@ from urllib.parse import urlparse
 from django.http import HttpResponseRedirect
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from config.request_utils import is_https_request
 from apps.release import git_utils
-
+from config.request_utils import is_https_request
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ def _github_repo_path(remote_url: str | None) -> str:
     return f"{owner}/{repo}"
 
 
-@lru_cache()
+@lru_cache
 def _github_commit_url_base() -> str:
     """Return the GitHub commit URL template for the configured repository."""
 

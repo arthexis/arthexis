@@ -64,4 +64,6 @@ class Command(BaseCommand):
                 )
 
         if errors:
-            raise CommandError("One or more configurations failed. Review the output above.")
+            raise CommandError(
+                "One or more configurations failed. Review the output above."
+            )

@@ -1,8 +1,9 @@
 import json
 import uuid
 
-from django.utils import timezone
 from channels.db import database_sync_to_async
+from django.utils import timezone
+
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -13,12 +14,12 @@ from ...models import (
     CertificateStatusCheck,
     Charger,
 )
-from ...services import certificate_signing
 from ...payload_types import (
     CertificateHashData,
     CertificateStatusResponsePayload,
     OCSPResultPayload,
 )
+from ...services import certificate_signing
 from ...services.certificate_status import (
     STATE_ACCEPTED,
     STATE_NOT_FOUND,
@@ -38,7 +39,9 @@ class CertificatesMixin:
             if found:
                 return found
 
-        charger_id = getattr(target, "charger_id", "") or getattr(self, "charger_id", "")
+        charger_id = getattr(target, "charger_id", "") or getattr(
+            self, "charger_id", ""
+        )
 
         if charger_id:
             # This logic is intended to find or create the aggregate charger record,
@@ -179,7 +182,9 @@ class CertificatesMixin:
             persisted_status = CertificateStatusCheck.STATUS_ERROR
 
             if target is not None:
-                outcome = check_certificate_status(hash_data=certificate_hash_data, target=target)
+                outcome = check_certificate_status(
+                    hash_data=certificate_hash_data, target=target
+                )
                 ocsp_result: OCSPResultPayload = outcome.ocsp_result
                 status_info = outcome.status_info
 
@@ -241,9 +246,7 @@ class CertificatesMixin:
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
-    async def _handle_sign_certificate_action(
-        self, payload, msg_id, raw, text_data
-    ):
+    async def _handle_sign_certificate_action(self, payload, msg_id, raw, text_data):
         csr_value = payload.get("csr")
         if csr_value is None:
             csr_value = ""
@@ -379,7 +382,9 @@ class CertificatesMixin:
             status=CertificateOperation.STATUS_PENDING,
         )
         if request_pk:
-            await database_sync_to_async(CertificateRequest.objects.filter(pk=request_pk).update)(
+            await database_sync_to_async(
+                CertificateRequest.objects.filter(pk=request_pk).update
+            )(
                 signed_certificate=certificate_chain,
                 status=CertificateRequest.STATUS_PENDING,
                 status_info="Certificate sent to charge point.",

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Awaitable, Callable, Protocol
+from typing import Protocol
 
 
 class CallErrorContext(Protocol):
@@ -12,8 +13,7 @@ class CallErrorContext(Protocol):
     charger_id: str | None
     store_key: str
 
-    async def _update_local_authorization_state(self, version: int | None) -> None:
-        ...
+    async def _update_local_authorization_state(self, version: int | None) -> None: ...
 
     async def _update_change_availability_state(
         self,
@@ -23,8 +23,7 @@ class CallErrorContext(Protocol):
         requested_at: datetime | str | None,
         *,
         details: str = "",
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 CallErrorHandler = Callable[

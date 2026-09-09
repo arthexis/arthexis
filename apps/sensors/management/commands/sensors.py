@@ -110,7 +110,6 @@ class Command(BaseCommand):
             f"scanned={result['scanned']} matched={result['matched']} failed={result['failed']}"
         )
 
-
     def _handle_usb_inventory(self, **options):
         self._local_control_node_or_error()
         if not usb_inventory.has_usb_inventory_tools():

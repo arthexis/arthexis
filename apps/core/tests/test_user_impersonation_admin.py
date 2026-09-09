@@ -47,7 +47,9 @@ class UserImpersonationAdminTests(TestCase):
 
     def test_stop_impersonation_restores_original_superuser(self):
         self.client.force_login(self.superuser)
-        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+        self.client.post(
+            reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        )
 
         response = self.client.post(reverse("stop-impersonation"))
 
@@ -59,7 +61,9 @@ class UserImpersonationAdminTests(TestCase):
 
     def test_stop_impersonation_logs_out_when_impersonator_missing(self):
         self.client.force_login(self.superuser)
-        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+        self.client.post(
+            reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        )
         session = self.client.session
         session[IMPERSONATOR_SESSION_KEY] = 999999
         session.save()
@@ -123,7 +127,9 @@ class UserImpersonationAdminTests(TestCase):
 
     def test_stop_impersonation_next_url_rejects_external_target(self):
         self.client.force_login(self.superuser)
-        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+        self.client.post(
+            reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        )
 
         response = self.client.post(
             reverse("stop-impersonation"),

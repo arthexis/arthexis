@@ -1,5 +1,9 @@
 from .package import Package, PackageManager
-from .package_release import PackageRelease, PackageReleaseManager, validate_relative_url
+from .package_release import (
+    PackageRelease,
+    PackageReleaseManager,
+    validate_relative_url,
+)
 from .release_permission import ReleasePermission
 
 __all__ = [

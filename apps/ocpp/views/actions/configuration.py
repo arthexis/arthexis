@@ -21,7 +21,9 @@ from .common import (
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetConfiguration")
-def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_get_configuration(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     request = getattr(context, "request", None)
     user = getattr(request, "user", None) if request else None
     is_superuser = getattr(user, "is_superuser", False) if user else False
@@ -39,12 +41,16 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
         elif isinstance(raw_key, (list, tuple)):
             for entry in raw_key:
                 if not isinstance(entry, str):
-                    return JsonResponse({"detail": "key entries must be strings"}, status=400)
+                    return JsonResponse(
+                        {"detail": "key entries must be strings"}, status=400
+                    )
                 entry_text = entry.strip()
                 if entry_text:
                     keys.append(entry_text)
         else:
-            return JsonResponse({"detail": "key must be a string or list of strings"}, status=400)
+            return JsonResponse(
+                {"detail": "key must be a string or list of strings"}, status=400
+            )
         if keys:
             payload["key"] = keys
     message_id = uuid.uuid4().hex
@@ -69,10 +75,12 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
         message_id,
         action=ocpp_action,
         log_key=context.log_key,
-        message=str(_(
-            "GetConfiguration timed out: charger did not respond"
-            " (operation may not be supported)"
-        )),
+        message=str(
+            _(
+                "GetConfiguration timed out: charger did not respond"
+                " (operation may not be supported)"
+            )
+        ),
     )
     return ActionCall(
         msg=msg,
@@ -83,7 +91,9 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
 
 
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeConfiguration")
-def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_change_configuration(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     raw_key = data.get("key")
     if not isinstance(raw_key, str) or not raw_key.strip():
         return JsonResponse({"detail": "key required"}, status=400)
@@ -148,14 +158,22 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetVariables")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetVariables")
-def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
-    raw_entries = data.get("getVariableData") or data.get("variables") or data.get("get_variable_data")
+def _handle_get_variables(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    raw_entries = (
+        data.get("getVariableData")
+        or data.get("variables")
+        or data.get("get_variable_data")
+    )
     if not isinstance(raw_entries, (list, tuple)) or not raw_entries:
         return JsonResponse({"detail": "getVariableData required"}, status=400)
     entries: list[dict[str, object]] = []
     for entry in raw_entries:
         if not isinstance(entry, dict):
-            return JsonResponse({"detail": "getVariableData entries must be objects"}, status=400)
+            return JsonResponse(
+                {"detail": "getVariableData entries must be objects"}, status=400
+            )
         payload_entry, error = _build_component_variable_payload(entry)
         if error:
             return JsonResponse({"detail": error}, status=400)
@@ -192,14 +210,22 @@ def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetVariables")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetVariables")
-def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
-    raw_entries = data.get("setVariableData") or data.get("variables") or data.get("set_variable_data")
+def _handle_set_variables(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    raw_entries = (
+        data.get("setVariableData")
+        or data.get("variables")
+        or data.get("set_variable_data")
+    )
     if not isinstance(raw_entries, (list, tuple)) or not raw_entries:
         return JsonResponse({"detail": "setVariableData required"}, status=400)
     entries: list[dict[str, object]] = []
     for entry in raw_entries:
         if not isinstance(entry, dict):
-            return JsonResponse({"detail": "setVariableData entries must be objects"}, status=400)
+            return JsonResponse(
+                {"detail": "setVariableData entries must be objects"}, status=400
+            )
         attribute_value = entry.get("attributeValue")
         if attribute_value in (None, ""):
             return JsonResponse({"detail": "attributeValue required"}, status=400)
@@ -241,7 +267,9 @@ def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
-def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_get_base_report(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     request_id_value = data.get("requestId") or data.get("request_id")
     try:
         request_id = int(request_id_value) if request_id_value is not None else None
@@ -297,12 +325,16 @@ def _handle_get_report(context: ActionContext, data: dict) -> JsonResponse | Act
     component_criteria = data.get("componentCriteria") or data.get("component_criteria")
     if component_criteria not in (None, ""):
         if not isinstance(component_criteria, (list, tuple)) or not component_criteria:
-            return JsonResponse({"detail": "componentCriteria must be a list"}, status=400)
+            return JsonResponse(
+                {"detail": "componentCriteria must be a list"}, status=400
+            )
         payload["componentCriteria"] = list(component_criteria)
     component_variable = data.get("componentVariable") or data.get("component_variable")
     if component_variable not in (None, ""):
         if not isinstance(component_variable, (list, tuple)) or not component_variable:
-            return JsonResponse({"detail": "componentVariable must be a list"}, status=400)
+            return JsonResponse(
+                {"detail": "componentVariable must be a list"}, status=400
+            )
         entries: list[dict[str, object]] = []
         for entry in component_variable:
             if not isinstance(entry, dict):

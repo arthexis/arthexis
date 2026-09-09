@@ -1,4 +1,5 @@
 """Card-related models for the cards app."""
+
 from __future__ import annotations
 
 import base64
@@ -41,7 +42,10 @@ def _system_fonts() -> list[tuple[str, str]]:
             for font_path in root.rglob(pattern):
                 label = font_path.stem.replace("_", " ")
                 fonts[str(font_path)] = label
-    choices = [(path, label) for path, label in sorted(fonts.items(), key=lambda item: item[1].lower())]
+    choices = [
+        (path, label)
+        for path, label in sorted(fonts.items(), key=lambda item: item[1].lower())
+    ]
     return choices
 
 
@@ -62,13 +66,17 @@ class CardFace(Entity):
         verbose_name=_("Background"),
     )
 
-    overlay_one_text = models.TextField(blank=True, default="", help_text=_("Primary overlay text."))
+    overlay_one_text = models.TextField(
+        blank=True, default="", help_text=_("Primary overlay text.")
+    )
     overlay_one_font = models.CharField(max_length=255, blank=True, default="")
     overlay_one_font_size = models.PositiveIntegerField(default=28)
     overlay_one_x = models.IntegerField(default=0)
     overlay_one_y = models.IntegerField(default=0)
 
-    overlay_two_text = models.TextField(blank=True, default="", help_text=_("Secondary overlay text."))
+    overlay_two_text = models.TextField(
+        blank=True, default="", help_text=_("Secondary overlay text.")
+    )
     overlay_two_font = models.CharField(max_length=255, blank=True, default="")
     overlay_two_font_size = models.PositiveIntegerField(default=24)
     overlay_two_x = models.IntegerField(default=0)
@@ -107,11 +115,15 @@ class CardFace(Entity):
         for text in texts:
             if not text:
                 continue
-            tokens.update(match.group(1) for match in cls.SIGIL_PATTERN.finditer(str(text)))
+            tokens.update(
+                match.group(1) for match in cls.SIGIL_PATTERN.finditer(str(text))
+            )
         return sorted(tokens)
 
     @staticmethod
-    def _resolve_token(token: str, *, current=None, overrides: dict[str, str] | None = None) -> str:
+    def _resolve_token(
+        token: str, *, current=None, overrides: dict[str, str] | None = None
+    ) -> str:
         overrides = {k.lower(): v for k, v in (overrides or {}).items()}
         override = overrides.get(token.lower())
         if override is not None:
@@ -140,12 +152,19 @@ class CardFace(Entity):
         super().clean()
         self._validate_background()
         if self.fixed_back_id and self.fixed_back_id == self.pk:
-            raise ValidationError({"fixed_back": _("A card face cannot be its own back.")})
+            raise ValidationError(
+                {"fixed_back": _("A card face cannot be its own back.")}
+            )
 
     def save(self, *args, **kwargs):
         previous_back_id = None
         if self.pk:
-            previous_back_id = type(self).all_objects.filter(pk=self.pk).values_list("fixed_back_id", flat=True).first()
+            previous_back_id = (
+                type(self)
+                .all_objects.filter(pk=self.pk)
+                .values_list("fixed_back_id", flat=True)
+                .first()
+            )
         super().save(*args, **kwargs)
 
         if previous_back_id and previous_back_id != self.fixed_back_id:
@@ -163,7 +182,9 @@ class CardFace(Entity):
     def _validate_background(self):
         file = self.background_file
         if not file:
-            raise ValidationError({"background_media": _("A background image is required.")})
+            raise ValidationError(
+                {"background_media": _("A background image is required.")}
+            )
         if file.size and file.size > self.BACKGROUND_MAX_BYTES:
             raise ValidationError(
                 {
@@ -192,7 +213,9 @@ class CardFace(Entity):
         except ValidationError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
-            raise ValidationError({"background_media": _(f"Invalid background image: {exc}")}) from exc
+            raise ValidationError(
+                {"background_media": _(f"Invalid background image: {exc}")}
+            ) from exc
 
     @classmethod
     def validate_background_file(cls, file: File):
@@ -251,10 +274,14 @@ class CardFace(Entity):
             draw = ImageDraw.Draw(canvas)
             if overlay_one_text:
                 font_one = self._load_font(overlay_one_font, overlay_one_size)
-                draw.text(overlay_one_position, overlay_one_text, font=font_one, fill="black")
+                draw.text(
+                    overlay_one_position, overlay_one_text, font=font_one, fill="black"
+                )
             if overlay_two_text:
                 font_two = self._load_font(overlay_two_font, overlay_two_size)
-                draw.text(overlay_two_position, overlay_two_text, font=font_two, fill="black")
+                draw.text(
+                    overlay_two_position, overlay_two_text, font=font_two, fill="black"
+                )
             buffer = BytesIO()
             canvas.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("ascii")

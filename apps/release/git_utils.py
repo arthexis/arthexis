@@ -11,7 +11,7 @@ def git_remote_url(
     *,
     base_dir: Path | None = None,
     use_push_url: bool = False,
-) -> Optional[str]:
+) -> str | None:
     cmd = ["git", "remote", "get-url"]
     if use_push_url:
         cmd.append("--push")
@@ -33,7 +33,7 @@ def remote_url_with_credentials(
     *,
     username: str,
     password: str,
-) -> Optional[str]:
+) -> str | None:
     if not username or not password:
         return None
     parsed = urlsplit(url)
@@ -45,4 +45,6 @@ def remote_url_with_credentials(
     if not username or not password:
         return None
     netloc = f"{username}:{password}@{host}"
-    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+    return urlunsplit(
+        (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+    )

@@ -14,7 +14,6 @@ from apps.core.system_ui import (
     suite_offline_period,
 )
 
-
 WINDOW_HOURS = 72
 
 
@@ -62,20 +61,14 @@ class Command(BaseCommand):
         uptime_seconds = max(int(uptime_seconds), 0)
         downtime_seconds = max(int(window_duration - uptime_seconds), 0)
 
-        self.stdout.write(
-            f"Suite offline/online summary (last {WINDOW_HOURS} hours):"
-        )
+        self.stdout.write(f"Suite offline/online summary (last {WINDOW_HOURS} hours):")
         self.stdout.write(
             f"  Window: {format_datetime(window_start)} to {format_datetime(now)}"
         )
         self.stdout.write("")
         self.stdout.write("Totals:")
-        self.stdout.write(
-            f"  Online: {_format_duration_hms(uptime_seconds)}"
-        )
-        self.stdout.write(
-            f"  Offline: {_format_duration_hms(downtime_seconds)}"
-        )
+        self.stdout.write(f"  Online: {_format_duration_hms(uptime_seconds)}")
+        self.stdout.write(f"  Offline: {_format_duration_hms(downtime_seconds)}")
         self.stdout.write("")
         self.stdout.write("Timeline:")
 
@@ -88,6 +81,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  - {status_label}: {format_datetime(start)} -> {format_datetime(end)} ({duration_label})"
             )
+
+
 def _format_duration_hms(seconds: int | None) -> str:
     """Format a duration value in seconds using hour/minute/second units."""
 

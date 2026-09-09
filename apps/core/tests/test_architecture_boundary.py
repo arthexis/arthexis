@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 CORE_DIR = Path(__file__).resolve().parents[1]
 
 # These are legacy ceilings, not desired end-state APIs. Refactor steps may remove
@@ -47,7 +46,10 @@ def _literal_assignment(path: Path, name: str):
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
-        if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+        if not any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in node.targets
+        ):
             continue
         return ast.literal_eval(node.value)
     raise AssertionError(f"{path} does not define a literal {name} assignment")

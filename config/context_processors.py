@@ -3,12 +3,13 @@ import logging
 import re
 import socket
 
-from apps.sites import admin_badges
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
+
+from apps.sites import admin_badges
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"

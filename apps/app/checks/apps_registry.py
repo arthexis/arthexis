@@ -183,9 +183,7 @@ def get_apps_registry_configuration_errors() -> list[Error]:
             )
 
     allowed_project_apps = (
-        set(project_local_apps)
-        | set(optional_project_local_apps)
-        | set(project_apps)
+        set(project_local_apps) | set(optional_project_local_apps) | set(project_apps)
     )
     for app_path in installed_apps:
         if not app_path.startswith("apps."):

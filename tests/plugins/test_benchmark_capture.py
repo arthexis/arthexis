@@ -36,7 +36,10 @@ def test_benchmark_payload_groups_counts_and_slowest_tests():
         "test_count": 2,
         "status_counts": {"failed": 1, "passed": 1},
     }
-    assert payload["slowest_tests"][0]["nodeid"] == "apps/sites/tests/test_slow.py::test_slow"
+    assert (
+        payload["slowest_tests"][0]["nodeid"]
+        == "apps/sites/tests/test_slow.py::test_slow"
+    )
     assert payload["groups"][0]["name"] == "apps.sites"
     assert payload["groups"][0]["duration_seconds"] == 1.5
 

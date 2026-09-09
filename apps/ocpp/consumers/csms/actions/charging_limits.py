@@ -32,7 +32,9 @@ class ClearedChargingLimitActionHandler:
             message += f": {', '.join(details)}"
         store.add_log(self.consumer.store_key, message, log_type="charger")
 
-        await database_sync_to_async(report_persistence.persist_cleared_charging_limit_event)(
+        await database_sync_to_async(
+            report_persistence.persist_cleared_charging_limit_event
+        )(
             charger=self.consumer.charger,
             aggregate_charger=self.consumer.aggregate_charger,
             charger_id=getattr(self.consumer, "charger_id", None),
@@ -58,7 +60,9 @@ class NotifyChargingLimitActionHandler:
             charging_limit = {}
         source_value = str(charging_limit.get("chargingLimitSource") or "").strip()
         grid_critical_value = charging_limit.get("isGridCritical")
-        grid_critical = bool(grid_critical_value) if grid_critical_value is not None else None
+        grid_critical = (
+            bool(grid_critical_value) if grid_critical_value is not None else None
+        )
 
         schedules = payload_data.get("chargingSchedule")
         if not isinstance(schedules, list):

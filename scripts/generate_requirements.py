@@ -7,7 +7,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-
 PYPROJECT_PATH = Path("pyproject.toml")
 RUNTIME_REQUIREMENTS_PATH = Path("requirements.txt")
 CI_REQUIREMENTS_PATH = Path("requirements-ci.txt")
@@ -71,12 +70,16 @@ def _load_dependencies(pyproject_path: Path) -> tuple[list[str], list[str]]:
 
     invalid_entries = [entry for entry in dependencies if not isinstance(entry, str)]
     if invalid_entries:
-        raise RequirementsGenerationError("Found non-string dependency entries in pyproject.toml")
+        raise RequirementsGenerationError(
+            "Found non-string dependency entries in pyproject.toml"
+        )
 
     return runtime_dependencies, ci_dependencies
 
 
-def _build_requirements_text(dependencies: list[str], header_lines: tuple[str, ...]) -> str:
+def _build_requirements_text(
+    dependencies: list[str], header_lines: tuple[str, ...]
+) -> str:
     """Build normalized requirements content with generation metadata."""
     lines = [*header_lines, "", *sorted(set(dependencies), key=str.lower)]
     return "\n".join(lines) + "\n"
@@ -106,7 +109,9 @@ def check_requirements(
 ) -> bool:
     """Return whether committed requirements content matches generated output."""
     runtime_dependencies, ci_dependencies = _load_dependencies(pyproject_path)
-    expected_runtime = _build_requirements_text(runtime_dependencies, RUNTIME_HEADER_LINES)
+    expected_runtime = _build_requirements_text(
+        runtime_dependencies, RUNTIME_HEADER_LINES
+    )
     expected_ci = _build_requirements_text(ci_dependencies, CI_HEADER_LINES)
 
     current_runtime = (
@@ -133,7 +138,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.check:
-        if check_requirements(PYPROJECT_PATH, RUNTIME_REQUIREMENTS_PATH, CI_REQUIREMENTS_PATH):
+        if check_requirements(
+            PYPROJECT_PATH, RUNTIME_REQUIREMENTS_PATH, CI_REQUIREMENTS_PATH
+        ):
             print("requirements.txt and requirements-ci.txt are up to date")
             return 0
         print(
@@ -143,7 +150,9 @@ def main() -> int:
         )
         return 1
 
-    generate_requirements(PYPROJECT_PATH, RUNTIME_REQUIREMENTS_PATH, CI_REQUIREMENTS_PATH)
+    generate_requirements(
+        PYPROJECT_PATH, RUNTIME_REQUIREMENTS_PATH, CI_REQUIREMENTS_PATH
+    )
     print("Regenerated requirements.txt and requirements-ci.txt from pyproject.toml")
     return 0
 

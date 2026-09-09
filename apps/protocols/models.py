@@ -45,7 +45,9 @@ class ProtocolCall(models.Model):
         (CSMS_TO_CP, "CSMS to charge point"),
     )
 
-    protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE, related_name="calls")
+    protocol = models.ForeignKey(
+        Protocol, on_delete=models.CASCADE, related_name="calls"
+    )
     name = models.CharField(max_length=128)
     direction = models.CharField(max_length=16, choices=DIRECTIONS)
 
@@ -60,4 +62,3 @@ class ProtocolCall(models.Model):
 
     def natural_key(self):  # pragma: no cover - used by fixtures
         return (*self.protocol.natural_key(), self.name, self.direction)
-

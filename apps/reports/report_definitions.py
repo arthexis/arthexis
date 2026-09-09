@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as datetime_timezone
 from typing import Any
 
@@ -182,9 +182,7 @@ class ReportProductActivityDefinition(ReportDefinition):
                     }
                 ) from exc
             if timezone.is_naive(created_since):
-                created_since = timezone.make_aware(
-                    created_since, datetime_timezone.utc
-                )
+                created_since = timezone.make_aware(created_since, UTC)
 
         if errors:
             raise ValidationError(errors)

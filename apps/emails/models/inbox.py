@@ -3,8 +3,8 @@ import logging
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from apps.users.models import Profile as CoreProfile
 from apps.sigils.fields import SigilShortAutoField
+from apps.users.models import Profile as CoreProfile
 
 logger = logging.getLogger(__name__)
 
@@ -195,8 +195,8 @@ class EmailInbox(CoreProfile):
             return "".join(decoded)
 
         if self.protocol == self.IMAP:
-            import imaplib
             import email
+            import imaplib
 
             def _decode_imap_bytes(value):
                 if isinstance(value, bytes):
@@ -227,7 +227,11 @@ class EmailInbox(CoreProfile):
                     charset = None
 
                     def _quote_bytes(raw: bytes) -> bytes:
-                        return b'"' + raw.replace(b"\\", b"\\\\").replace(b'"', b'\\"') + b'"'
+                        return (
+                            b'"'
+                            + raw.replace(b"\\", b"\\\\").replace(b'"', b'\\"')
+                            + b'"'
+                        )
 
                     def _append(term: str, value: str):
                         nonlocal charset
@@ -295,8 +299,8 @@ class EmailInbox(CoreProfile):
                 except Exception:  # pragma: no cover - best effort cleanup
                     pass
 
-        import poplib
         import email
+        import poplib
 
         conn = (
             poplib.POP3_SSL(self.host, self.port)

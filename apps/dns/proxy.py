@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import socketserver
 import threading
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 import dns.message
 import dns.query

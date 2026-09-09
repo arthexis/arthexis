@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -17,13 +17,15 @@ def _stable_disk_usage(monkeypatch):
 def _write_file(path: Path, *, days_old: int, content: str = "log\n") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    stamp = (datetime.now(timezone.utc) - timedelta(days=days_old)).timestamp()
+    stamp = (datetime.now(UTC) - timedelta(days=days_old)).timestamp()
     path.chmod(0o644)
     path.touch()
     os.utime(path, (stamp, stamp))
 
 
-def test_run_log_retention_applies_two_year_default_to_archived_logs(settings, tmp_path):
+def test_run_log_retention_applies_two_year_default_to_archived_logs(
+    settings, tmp_path
+):
     settings.LOG_DIR = str(tmp_path)
     _write_file(tmp_path / "archive" / "station.log.1", days_old=731)
     _write_file(tmp_path / "archive" / "station.log.1.recent", days_old=10)
@@ -150,7 +152,9 @@ def test_run_log_retention_preserves_in_progress_session_json_during_disk_pressu
         content='[\n  {"message": "boot"}',
     )
     levels = iter([85.0, 85.0, 70.0])
-    monkeypatch.setattr(log_retention, "_disk_usage_percent", lambda _path: next(levels))
+    monkeypatch.setattr(
+        log_retention, "_disk_usage_percent", lambda _path: next(levels)
+    )
 
     result = log_retention.run_log_retention()
 
@@ -167,7 +171,7 @@ def test_run_log_retention_trims_stale_malformed_session_json_bytes(
     session_log = tmp_path / "sessions" / "CID" / "202404240001.json"
     session_log.parent.mkdir(parents=True, exist_ok=True)
     session_log.write_bytes(b'[\n  {"message": "\xff"}')
-    stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
+    stamp = (datetime.now(UTC) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
     result = log_retention.run_log_retention()
@@ -184,7 +188,7 @@ def test_run_log_retention_trims_completed_session_json_with_invalid_bytes(
     session_log = tmp_path / "sessions" / "CID" / "202404240002.json"
     session_log.parent.mkdir(parents=True, exist_ok=True)
     session_log.write_bytes(b'[\n  {"message": "\xff"}\n]\n')
-    stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
+    stamp = (datetime.now(UTC) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
     result = log_retention.run_log_retention()
@@ -200,7 +204,7 @@ def test_run_log_retention_trims_large_completed_session_json(settings, tmp_path
     session_log.write_bytes(
         b"[" + (b'{"message":"boot"},\n' * 5000) + b'{"message":"stop"}]\n'
     )
-    stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
+    stamp = (datetime.now(UTC) - timedelta(days=731)).timestamp()
     os.utime(session_log, (stamp, stamp))
 
     result = log_retention.run_log_retention()
@@ -224,7 +228,9 @@ def test_run_log_retention_sends_alert_when_disk_remains_high(
     )
 
     levels = iter([85.0, 85.0, 85.0, 85.0, 85.0, 85.0])
-    monkeypatch.setattr(log_retention, "_disk_usage_percent", lambda _path: next(levels))
+    monkeypatch.setattr(
+        log_retention, "_disk_usage_percent", lambda _path: next(levels)
+    )
 
     calls: list[tuple[float, float]] = []
 

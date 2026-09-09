@@ -6,8 +6,8 @@ import base64
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import AnonymousUser
 from django.http import JsonResponse
 
 from .policy import allow_authenticated_signature_fallback

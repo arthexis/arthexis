@@ -42,7 +42,9 @@ def run(cmd: list[str], cwd: Path | None = None) -> dict[str, Any]:
 
 def git(checkout: Path, args: list[str]) -> dict[str, Any]:
     safe_directory = checkout.as_posix()
-    return run(["git", "-c", f"safe.directory={safe_directory}", "-C", str(checkout), *args])
+    return run(
+        ["git", "-c", f"safe.directory={safe_directory}", "-C", str(checkout), *args]
+    )
 
 
 def gh_json(args: list[str]) -> Any:
@@ -169,7 +171,10 @@ def evidence_error(value: Any, *, allow_not_found: bool = False) -> str:
         return ""
     error = str(value["error"])
     lower_error = error.lower()
-    if allow_not_found and ("release not found" in lower_error or "could not resolve to a release" in lower_error):
+    if allow_not_found and (
+        "release not found" in lower_error
+        or "could not resolve to a release" in lower_error
+    ):
         return ""
     return error
 
@@ -179,7 +184,11 @@ def probe_failed(value: Any) -> str:
         return "missing probe result"
     if int(value.get("returncode") or 0) == 0:
         return ""
-    return str(value.get("stderr") or value.get("stdout") or f"returncode {value.get('returncode')}")
+    return str(
+        value.get("stderr")
+        or value.get("stdout")
+        or f"returncode {value.get('returncode')}"
+    )
 
 
 def decide(result: dict[str, Any]) -> dict[str, Any]:
@@ -200,10 +209,9 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
 
     if not git_evidence_failed and result["git"]["status"].get("stdout"):
         blockers.append("checkout is dirty")
-    if (
-        not git_evidence_failed
-        and result["git"]["head"].get("stdout") != result["git"]["originMain"].get("stdout")
-    ):
+    if not git_evidence_failed and result["git"]["head"].get("stdout") != result["git"][
+        "originMain"
+    ].get("stdout"):
         blockers.append("local main is not at origin/main")
 
     for key in ("latestRelease", "openPullRequests", "readinessIssue"):
@@ -212,7 +220,9 @@ def decide(result: dict[str, Any]) -> dict[str, Any]:
             blockers.append(f"{key} lookup failed: {error}")
         elif not isinstance(result.get(key), list):
             blockers.append(f"{key} lookup did not return expected list evidence")
-    release_error = evidence_error(result.get("releaseForVersion"), allow_not_found=True)
+    release_error = evidence_error(
+        result.get("releaseForVersion"), allow_not_found=True
+    )
     if release_error:
         blockers.append(f"releaseForVersion lookup failed: {release_error}")
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.utils.translation import gettext_lazy as _
 
-
 # Map of normalized OCPP status values to human readable labels and colors.
 STATUS_BADGE_MAP: dict[str, tuple[str, str]] = {
     "available": (_("Available"), "#0d6efd"),
@@ -23,4 +22,3 @@ STATUS_BADGE_MAP: dict[str, tuple[str, str]] = {
 
 # Error codes that indicate "no error" according to the OCPP specification.
 ERROR_OK_VALUES = {"", "noerror", "no_error"}
-

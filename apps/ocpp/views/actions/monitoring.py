@@ -1,10 +1,9 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -23,7 +22,9 @@ from .common import (
 def _handle_set_monitoring_base(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
-    monitoring_base = data.get("monitoringBase") or data.get("monitoring_base") or data.get("base")
+    monitoring_base = (
+        data.get("monitoringBase") or data.get("monitoring_base") or data.get("base")
+    )
     if monitoring_base in (None, ""):
         return JsonResponse({"detail": "monitoringBase required"}, status=400)
     payload = {"monitoringBase": monitoring_base}
@@ -62,7 +63,11 @@ def _handle_set_monitoring_base(
 def _handle_set_monitoring_level(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
-    monitoring_level = data.get("severity") or data.get("monitoringLevel") or data.get("monitoring_level")
+    monitoring_level = (
+        data.get("severity")
+        or data.get("monitoringLevel")
+        or data.get("monitoring_level")
+    )
     try:
         severity = int(monitoring_level)
     except (TypeError, ValueError):
@@ -103,18 +108,27 @@ def _handle_set_monitoring_level(
 def _handle_set_variable_monitoring(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
-    raw_entries = data.get("setMonitoringData") or data.get("monitoringData") or data.get("set_monitoring_data")
+    raw_entries = (
+        data.get("setMonitoringData")
+        or data.get("monitoringData")
+        or data.get("set_monitoring_data")
+    )
     if not isinstance(raw_entries, (list, tuple)) or not raw_entries:
         return JsonResponse({"detail": "setMonitoringData required"}, status=400)
     entries: list[dict[str, object]] = []
     for entry in raw_entries:
         if not isinstance(entry, dict):
-            return JsonResponse({"detail": "setMonitoringData entries must be objects"}, status=400)
+            return JsonResponse(
+                {"detail": "setMonitoringData entries must be objects"}, status=400
+            )
         payload_entry, error = _build_component_variable_payload(entry)
         if error:
             return JsonResponse({"detail": error}, status=400)
         variable_monitoring = entry.get("variableMonitoring")
-        if not isinstance(variable_monitoring, (list, tuple)) or not variable_monitoring:
+        if (
+            not isinstance(variable_monitoring, (list, tuple))
+            or not variable_monitoring
+        ):
             return JsonResponse(
                 {"detail": "variableMonitoring required for each entry"},
                 status=400,
@@ -171,7 +185,9 @@ def _handle_clear_variable_monitoring(
         try:
             normalized_ids.append(int(entry))
         except (TypeError, ValueError):
-            return JsonResponse({"detail": "monitoring ids must be integers"}, status=400)
+            return JsonResponse(
+                {"detail": "monitoring ids must be integers"}, status=400
+            )
     payload = {"id": normalized_ids}
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearVariableMonitoring"
@@ -222,12 +238,16 @@ def _handle_get_monitoring_report(
     monitoring_criteria = data.get("monitoringCriteria")
     if monitoring_criteria not in (None, ""):
         if not isinstance(monitoring_criteria, (list, tuple)):
-            return JsonResponse({"detail": "monitoringCriteria must be a list"}, status=400)
+            return JsonResponse(
+                {"detail": "monitoringCriteria must be a list"}, status=400
+            )
         payload["monitoringCriteria"] = list(monitoring_criteria)
     component_variable = data.get("componentVariable") or data.get("component_variable")
     if component_variable not in (None, ""):
         if not isinstance(component_variable, (list, tuple)):
-            return JsonResponse({"detail": "componentVariable must be a list"}, status=400)
+            return JsonResponse(
+                {"detail": "componentVariable must be a list"}, status=400
+            )
         payload["componentVariable"] = list(component_variable)
     message_id = uuid.uuid4().hex
     ocpp_action = "GetMonitoringReport"

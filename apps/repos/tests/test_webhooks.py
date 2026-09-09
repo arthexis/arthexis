@@ -22,9 +22,7 @@ def test_github_webhook_form_payload_array_is_preserved(client):
     )
     response = client.post(
         url,
-        data=urllib.parse.urlencode(
-            {"payload": json.dumps([{"action": "opened"}])}
-        ),
+        data=urllib.parse.urlencode({"payload": json.dumps([{"action": "opened"}])}),
         content_type="application/x-www-form-urlencoded",
     )
 
@@ -77,11 +75,14 @@ def test_github_webhook_app_signature_verifies(client):
     url = reverse("repos:github-webhook-app", kwargs={"app_slug": app.webhook_slug})
     payload = {"action": "opened"}
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     response = client.post(
         url,
@@ -129,17 +130,22 @@ def test_github_webhook_returns_ok_when_spam_assessment_fails(client, monkeypatc
     url = reverse("repos:github-webhook")
     payload = {"repository": {"owner": {"login": repo.owner}, "name": repo.name}}
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     def raise_assessment_error(event):
         del event
         raise RuntimeError("assessment failed")
 
-    monkeypatch.setattr("apps.repos.views.webhooks.assess_github_issue_event", raise_assessment_error)
+    monkeypatch.setattr(
+        "apps.repos.views.webhooks.assess_github_issue_event", raise_assessment_error
+    )
 
     response = client.post(
         url,
@@ -170,11 +176,14 @@ def test_github_webhook_verifies_default_route_with_installation_secret(client):
     url = reverse("repos:github-webhook")
     payload = {"installation": {"id": 4242}, "action": "opened"}
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     response = client.post(
         url,
@@ -199,11 +208,14 @@ def test_github_webhook_verifies_with_sigil_secret(client, monkeypatch):
     url = reverse("repos:github-webhook")
     payload = {"action": "opened"}
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        "sigilsecret".encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            b"sigilsecret",
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     response = client.post(
         url,

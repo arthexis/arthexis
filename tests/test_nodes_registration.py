@@ -54,7 +54,9 @@ class _SessionHarness:
         return self.post_behavior(url)
 
 
-def _visitor_node_info_payload(*, mac_address: str, address: str = "203.0.113.10") -> dict[str, object]:
+def _visitor_node_info_payload(
+    *, mac_address: str, address: str = "203.0.113.10"
+) -> dict[str, object]:
     return {
         "hostname": "visitor-host",
         "mac_address": mac_address,
@@ -65,7 +67,9 @@ def _visitor_node_info_payload(*, mac_address: str, address: str = "203.0.113.10
     }
 
 
-def _register_visitor_proxy_request_payload(*, with_8888: bool = False) -> dict[str, str]:
+def _register_visitor_proxy_request_payload(
+    *, with_8888: bool = False
+) -> dict[str, str]:
     base = "https://visitor.test:8888" if with_8888 else "https://visitor.test"
     return {
         "visitor_info_url": f"{base}/nodes/info/",
@@ -373,7 +377,13 @@ def test_register_visitor_proxy_success_paths(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("hostname", "mac_address", "patch_payload_builder", "post_behavior", "expected_detail"),
+    (
+        "hostname",
+        "mac_address",
+        "patch_payload_builder",
+        "post_behavior",
+        "expected_detail",
+    ),
     [
         pytest.param(
             "local-partial-failure",

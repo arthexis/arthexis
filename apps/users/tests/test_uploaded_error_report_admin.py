@@ -74,7 +74,9 @@ def test_uploaded_error_report_form_rejects_oversized_zip():
     assert form.errors["package"] == ["Package exceeds the 25 MB upload limit."]
 
 
-def test_uploaded_error_report_admin_creates_report_for_valid_zip(admin_client, monkeypatch, settings, tmp_path):
+def test_uploaded_error_report_admin_creates_report_for_valid_zip(
+    admin_client, monkeypatch, settings, tmp_path
+):
     settings.MEDIA_ROOT = tmp_path
     monkeypatch.setattr("apps.users.admin.enqueue_task", lambda *args, **kwargs: True)
 
@@ -85,7 +87,9 @@ def test_uploaded_error_report_admin_creates_report_for_valid_zip(admin_client, 
 
     report = UploadedErrorReport.objects.get()
     assert response.status_code == 302
-    assert response["Location"] == reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+    assert response["Location"] == reverse(
+        "admin:users_uploadederrorreport_change", args=[report.pk]
+    )
     assert report.source_label == "ops"
     assert report.package.name.endswith(".zip")
 
@@ -119,19 +123,25 @@ def test_uploaded_error_report_admin_marks_failed_when_sync_fallback_raises(
 
     report = UploadedErrorReport.objects.get()
     assert response.status_code == 302
-    assert response["Location"] == reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+    assert response["Location"] == reverse(
+        "admin:users_uploadederrorreport_change", args=[report.pk]
+    )
     assert report.status == UploadedErrorReport.Status.FAILED
     assert report.error == "analysis unavailable"
 
 
-def test_uploaded_error_report_change_page_refreshes_only_while_processing(admin_client, settings, tmp_path):
+def test_uploaded_error_report_change_page_refreshes_only_while_processing(
+    admin_client, settings, tmp_path
+):
     settings.MEDIA_ROOT = tmp_path
     report = UploadedErrorReport.objects.create(
         package=_zip_upload(),
         status=UploadedErrorReport.Status.COMPLETE,
     )
 
-    response = admin_client.get(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
+    response = admin_client.get(
+        reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+    )
 
     assert response.status_code == 200
     assert b'http-equiv="refresh"' not in response.content
@@ -139,13 +149,17 @@ def test_uploaded_error_report_change_page_refreshes_only_while_processing(admin
 
     report.status = UploadedErrorReport.Status.PROCESSING
     report.save(update_fields=["status"])
-    response = admin_client.get(reverse("admin:users_uploadederrorreport_change", args=[report.pk]))
+    response = admin_client.get(
+        reverse("admin:users_uploadederrorreport_change", args=[report.pk])
+    )
 
     assert response.status_code == 200
     assert b'http-equiv="refresh"' in response.content
 
 
-def test_analyze_uploaded_error_report_marks_known_analysis_errors_failed(monkeypatch, settings, tmp_path):
+def test_analyze_uploaded_error_report_marks_known_analysis_errors_failed(
+    monkeypatch, settings, tmp_path
+):
     settings.MEDIA_ROOT = tmp_path
     report = UploadedErrorReport.objects.create(package=_zip_upload())
     seen_paths = []

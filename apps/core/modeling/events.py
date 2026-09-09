@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -43,7 +43,7 @@ class CanonicalEvent:
         actor: str | None = None,
         policy: EventPolicy | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "CanonicalEvent":
+    ) -> CanonicalEvent:
         if not dimension_id.strip():
             raise ValueError("dimension_id is required")
         if not intent.strip():
@@ -58,7 +58,7 @@ class CanonicalEvent:
         )
         return cls(
             event_id=f"evt_{uuid4().hex}",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             dimension_id=dimension_id,
             intent=intent,
             payload=payload,

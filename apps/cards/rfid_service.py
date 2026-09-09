@@ -22,7 +22,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as datetime_timezone
 from pathlib import Path
 from typing import Any
@@ -213,7 +213,7 @@ class ScanQueue:
         with self._condition:
             self._queue.append(result)
             self._last_scan = result
-            self._last_scan_at = datetime.now(datetime_timezone.utc)
+            self._last_scan_at = datetime.now(UTC)
             self._condition.notify_all()
 
     def get(self, timeout: float | None = None) -> dict[str, Any] | None:
@@ -233,7 +233,7 @@ class ScanQueue:
 class RFIDServiceState:
     def __init__(self) -> None:
         self.queue = ScanQueue()
-        self.started_at = datetime.now(datetime_timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.stop_event = threading.Event()
         self.worker_thread: threading.Thread | None = None
         self._last_emitted_rfid: str | None = None
@@ -866,7 +866,7 @@ def mask_rfid(value: Any) -> str | None:
 
 
 def utc_now_iso() -> str:
-    return datetime.now(datetime_timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def has_deep_scan_data(payload: dict[str, Any]) -> bool:

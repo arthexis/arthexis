@@ -105,9 +105,9 @@ def test_github_workflows_do_not_define_windows_gates() -> None:
 
         workflow_values = [str(value) for value in _walk_values(workflow)]
         for token in forbidden_workflow_tokens:
-            assert not any(
-                token in value for value in workflow_values
-            ), f"{workflow_path.name} references {token}"
+            assert not any(token in value for value in workflow_values), (
+                f"{workflow_path.name} references {token}"
+            )
 
         windows_path_triggers = [
             path
@@ -115,8 +115,7 @@ def test_github_workflows_do_not_define_windows_gates() -> None:
             if ".bat" in path.lower()
         ]
         assert not windows_path_triggers, (
-            f"{workflow_path.name} gates Windows batch changes: "
-            f"{windows_path_triggers}"
+            f"{workflow_path.name} gates Windows batch changes: {windows_path_triggers}"
         )
 
 

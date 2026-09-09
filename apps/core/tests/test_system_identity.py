@@ -96,12 +96,16 @@ def test_shared_roles_require_external_channel_layer(settings):
 
 def test_public_commands_expose_identity(monkeypatch):
     stdout = StringIO()
-    monkeypatch.setattr("apps.core.management.commands.node_role.node_role", lambda: "Satellite")
+    monkeypatch.setattr(
+        "apps.core.management.commands.node_role.node_role", lambda: "Satellite"
+    )
     call_command("node_role", stdout=stdout)
     assert stdout.getvalue().strip() == "Satellite"
 
     stdout = StringIO()
-    monkeypatch.setattr("apps.core.management.commands.version.version", lambda: "1.2.3")
+    monkeypatch.setattr(
+        "apps.core.management.commands.version.version", lambda: "1.2.3"
+    )
     call_command("version", stdout=stdout)
     assert stdout.getvalue().strip() == "1.2.3"
 

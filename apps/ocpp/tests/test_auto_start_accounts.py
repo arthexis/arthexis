@@ -34,7 +34,9 @@ def test_auto_start_account_reuses_only_service_accounts():
 
 @pytest.mark.django_db
 def test_rfid_fallback_account_requires_service_account():
-    CustomerAccount.objects.create(name=RFID_FALLBACK_ACCOUNT_NAME, service_account=False)
+    CustomerAccount.objects.create(
+        name=RFID_FALLBACK_ACCOUNT_NAME, service_account=False
+    )
 
     with pytest.raises(CommandError, match="fallback account is not a service account"):
         get_or_create_rfid_fallback_account()

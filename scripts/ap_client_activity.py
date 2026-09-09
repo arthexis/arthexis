@@ -8,7 +8,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_STATE_DIR = BASE_DIR / ".state" / "ap_portal"
 
@@ -56,7 +55,11 @@ def _load_jsonl(path: Path, limit: int | None = None) -> list[dict[str, Any]]:
 def _load_authorized(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    return {line.strip().lower() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
+    return {
+        line.strip().lower()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
 
 
 def build_report(state_dir: Path, limit: int) -> dict[str, Any]:
@@ -105,7 +108,9 @@ def build_report(state_dir: Path, limit: int) -> dict[str, Any]:
         "event_types": dict(sorted(event_types.items())),
         "clients": sorted(
             clients.values(),
-            key=lambda item: str(item.get("last_event_at") or item.get("accepted_at") or ""),
+            key=lambda item: str(
+                item.get("last_event_at") or item.get("accepted_at") or ""
+            ),
             reverse=True,
         ),
     }
@@ -126,11 +131,15 @@ def print_text_report(report: dict[str, Any]) -> None:
         email = client.get("email", "")
         authorized = "authorized" if client.get("authorized") else "blocked"
         last_event = client.get("last_event_type", "")
-        print(f"  {mac} {ip_address} {authorized} events={client.get('event_count', 0)} {last_event} {email}")
+        print(
+            f"  {mac} {ip_address} {authorized} events={client.get('event_count', 0)} {last_event} {email}"
+        )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Summarize Arthexis AP client activity logs.")
+    parser = argparse.ArgumentParser(
+        description="Summarize Arthexis AP client activity logs."
+    )
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON.")

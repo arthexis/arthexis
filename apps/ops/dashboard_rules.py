@@ -14,6 +14,7 @@ def evaluate_required_operations_rule() -> dict[str, object]:
     missing = required.exclude(executions__isnull=False).count()
     if missing:
         return rule_failure(
-            _("%(count)s required operation(s) have never been completed.") % {"count": missing}
+            _("%(count)s required operation(s) have never been completed.")
+            % {"count": missing}
         )
     return rule_success(_("All required operations have at least one completion."))

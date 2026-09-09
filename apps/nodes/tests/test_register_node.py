@@ -578,7 +578,9 @@ def test_next_gway_number_endpoint_respects_minimum_number(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_next_gway_number_endpoint_bounds_custom_prefix_for_reservation_lock(monkeypatch):
+def test_next_gway_number_endpoint_bounds_custom_prefix_for_reservation_lock(
+    monkeypatch,
+):
     monkeypatch.setenv("ARTHEXIS_GWAY_RESERVATION_TOKEN", GWAY_RESERVATION_TOKEN)
     raw_prefix = "GWAY " + ("Alpha-" * 20)
     expected_prefix = handlers._clean_gway_number_prefix(raw_prefix)

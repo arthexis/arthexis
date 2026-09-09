@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import UTC, datetime, timedelta
+from datetime import timezone as datetime_timezone
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -30,7 +31,7 @@ class OdooQuoteReportParams:
     recent_product_limit: int = 10
 
     @classmethod
-    def from_request(cls, request) -> "OdooQuoteReportParams":
+    def from_request(cls, request) -> OdooQuoteReportParams:
         """Build validated report parameters from a Django request.
 
         Parameters:
@@ -118,7 +119,9 @@ def _parse_positive_int(
     return parsed
 
 
-def assemble_odoo_quote_report_data(profile, *, params: OdooQuoteReportParams) -> OdooQuoteReportData:
+def assemble_odoo_quote_report_data(
+    profile, *, params: OdooQuoteReportParams
+) -> OdooQuoteReportData:
     """Fetch and normalize raw Odoo data needed for the quote report.
 
     Parameters:
@@ -170,7 +173,9 @@ def assemble_odoo_quote_report_data(profile, *, params: OdooQuoteReportParams) -
             order="name asc",
         )
     except Exception as exc:
-        raise OdooQuoteReportError("Unable to fetch quote report data from Odoo.") from exc
+        raise OdooQuoteReportError(
+            "Unable to fetch quote report data from Odoo."
+        ) from exc
 
     return OdooQuoteReportData(
         template_stats=[
@@ -235,12 +240,18 @@ def _fetch_quotes(profile, *, params: OdooQuoteReportParams) -> list[dict[str, o
     for quote in quotes:
         tag_ids.update(quote.get("tag_ids") or [])
         currency_info = quote.get("currency_id")
-        if isinstance(currency_info, (list, tuple)) and currency_info and currency_info[0]:
+        if (
+            isinstance(currency_info, (list, tuple))
+            and currency_info
+            and currency_info[0]
+        ):
             currency_ids.add(currency_info[0])
 
     tag_map: dict[int, str] = {}
     if tag_ids:
-        for tag in profile.execute("sale.order.tag", "read", list(tag_ids), fields=["name"]):
+        for tag in profile.execute(
+            "sale.order.tag", "read", list(tag_ids), fields=["name"]
+        ):
             tag_id = tag.get("id")
             if tag_id is not None:
                 tag_map[tag_id] = tag.get("name", "")
@@ -263,16 +274,23 @@ def _fetch_quotes(profile, *, params: OdooQuoteReportParams) -> list[dict[str, o
             "partner_id": quote.get("partner_id"),
             "activity_type_id": quote.get("activity_type_id"),
             "activity_summary": quote.get("activity_summary") or "",
-            "tag_names": [tag_map.get(tag_id, str(tag_id)) for tag_id in quote.get("tag_ids") or []],
+            "tag_names": [
+                tag_map.get(tag_id, str(tag_id))
+                for tag_id in quote.get("tag_ids") or []
+            ],
             "create_date": quote.get("create_date"),
             "amount_total": quote.get("amount_total") or 0,
-            "currency": _resolve_currency_details(quote.get("currency_id"), currency_map),
+            "currency": _resolve_currency_details(
+                quote.get("currency_id"), currency_map
+            ),
         }
         for quote in quotes
     ]
 
 
-def _resolve_currency_details(currency_info, currency_map: dict[int, dict[str, str]]) -> dict[str, str]:
+def _resolve_currency_details(
+    currency_info, currency_map: dict[int, dict[str, str]]
+) -> dict[str, str]:
     """Resolve a quote currency record into a compact display dictionary.
 
     Parameters:
@@ -299,7 +317,9 @@ def _resolve_currency_details(currency_info, currency_map: dict[int, dict[str, s
     }
 
 
-def build_odoo_quote_report_context_data(report_data: OdooQuoteReportData) -> dict[str, list[dict[str, object]]]:
+def build_odoo_quote_report_context_data(
+    report_data: OdooQuoteReportData,
+) -> dict[str, list[dict[str, object]]]:
     """Convert raw report data into template-friendly presentation rows.
 
     Parameters:
@@ -312,7 +332,9 @@ def build_odoo_quote_report_context_data(report_data: OdooQuoteReportData) -> di
     return {
         "template_stats": report_data.template_stats,
         "quotes": [_present_quote(quote) for quote in report_data.quotes],
-        "recent_products": [_present_product(product) for product in report_data.recent_products],
+        "recent_products": [
+            _present_product(product) for product in report_data.recent_products
+        ],
         "installed_modules": report_data.installed_modules,
     }
 
@@ -328,7 +350,9 @@ def _present_quote(quote: dict[str, object]) -> dict[str, object]:
     """
 
     partner = quote.get("partner_id")
-    customer = partner[1] if isinstance(partner, (list, tuple)) and len(partner) >= 2 else ""
+    customer = (
+        partner[1] if isinstance(partner, (list, tuple)) and len(partner) >= 2 else ""
+    )
     activity_type = quote.get("activity_type_id")
     activity_name = (
         activity_type[1]
@@ -406,6 +430,6 @@ def parse_odoo_datetime(value) -> datetime | None:
                     return None
     assert dt is not None
     if timezone.is_naive(dt):
-        tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
+        tzinfo = getattr(timezone, "utc", UTC)
         dt = timezone.make_aware(dt, tzinfo)
     return dt

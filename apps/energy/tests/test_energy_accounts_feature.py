@@ -79,7 +79,9 @@ async def test_authorize_accepts_account_without_credits_when_parameter_disabled
     )
     await database_sync_to_async(_enable_energy_accounts)()
     tag = await database_sync_to_async(RFID.objects.create)(rfid="EA002", allowed=True)
-    account = await database_sync_to_async(CustomerAccount.objects.create)(name="EA002ACC")
+    account = await database_sync_to_async(CustomerAccount.objects.create)(
+        name="EA002ACC"
+    )
     await database_sync_to_async(account.rfids.add)(tag)
 
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -133,7 +135,9 @@ def test_public_connector_page_create_account_creates_user_and_account(client):
     )
     user = get_user_model().objects.get(username="new-energy-user")
     assert CustomerAccount.objects.filter(user=user).exists()
-    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    localhost_backend = (
+        f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    )
     assert client.session[BACKEND_SESSION_KEY] != localhost_backend
 
 
@@ -160,8 +164,12 @@ def test_public_connector_page_create_account_rejects_hidden_charger(client):
 
 
 @pytest.mark.django_db
-@override_settings(AUTHENTICATION_BACKENDS=["apps.users.backends.LocalhostAdminBackend"])
-def test_public_connector_page_create_account_skips_login_with_unsafe_only_backends(client):
+@override_settings(
+    AUTHENTICATION_BACKENDS=["apps.users.backends.LocalhostAdminBackend"]
+)
+def test_public_connector_page_create_account_skips_login_with_unsafe_only_backends(
+    client,
+):
     _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-EA-UNSAFE-ONLY", connector_id=1)
     page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
@@ -178,7 +186,10 @@ def test_public_connector_page_create_account_skips_login_with_unsafe_only_backe
 
     assert response.status_code == 200
     messages = [message.message for message in get_messages(response.wsgi_request)]
-    assert "Account created, but you are not signed in. Please sign in to switch to the new account." in messages
+    assert (
+        "Account created, but you are not signed in. Please sign in to switch to the new account."
+        in messages
+    )
     assert BACKEND_SESSION_KEY not in client.session
 
 
@@ -211,7 +222,9 @@ def test_public_connector_page_create_account_rejects_authenticated_post(client)
 
 
 @pytest.mark.django_db
-def test_public_connector_page_create_account_rejects_password_failing_validators(client):
+def test_public_connector_page_create_account_rejects_password_failing_validators(
+    client,
+):
     _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-EA-WEAK-PASSWORD", connector_id=1)
     page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
@@ -247,7 +260,9 @@ def test_charger_account_summary_excludes_null_account_sessions(client):
         start_time=timezone.now(),
     )
 
-    response = client.get(reverse("ocpp:charger-account-summary", args=[charger.charger_id]))
+    response = client.get(
+        reverse("ocpp:charger-account-summary", args=[charger.charger_id])
+    )
 
     assert response.status_code == 200
     assert response.context["account"] is None

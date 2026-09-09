@@ -148,7 +148,9 @@ class Command(BaseCommand):
                 write_env(path, values)
                 return values
         except Timeout as exc:
-            raise CommandError("Could not acquire lock to modify arthexis.env.") from exc
+            raise CommandError(
+                "Could not acquire lock to modify arthexis.env."
+            ) from exc
 
     def _read_and_print(
         self,
@@ -179,7 +181,9 @@ class Command(BaseCommand):
         list_values = options.get("list")
 
         if not any([set_pairs, get_keys, delete_keys, list_values]):
-            raise CommandError("Provide at least one action: --set, --get, --delete, --list.")
+            raise CommandError(
+                "Provide at least one action: --set, --get, --delete, --list."
+            )
 
         for key, _value in set_pairs:
             _validate_key(key)

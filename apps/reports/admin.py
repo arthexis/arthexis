@@ -25,7 +25,13 @@ class SQLReportProductInline(admin.TabularInline):
     model = SQLReportProduct
     extra = 0
     can_delete = False
-    fields = ("created_at", "report_type", "row_count", "duration_ms", "renderer_template_name")
+    fields = (
+        "created_at",
+        "report_type",
+        "row_count",
+        "duration_ms",
+        "renderer_template_name",
+    )
     readonly_fields = fields
 
     def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
@@ -79,7 +85,14 @@ class SQLReportAdmin(admin.ModelAdmin):
         ),
         (
             _("Runtime"),
-            {"fields": ("last_run_at", "last_run_duration", "created_at", "updated_at")},
+            {
+                "fields": (
+                    "last_run_at",
+                    "last_run_duration",
+                    "created_at",
+                    "updated_at",
+                )
+            },
         ),
     )
 
@@ -104,7 +117,9 @@ class SQLReportAdmin(admin.ModelAdmin):
     maintained_report_catalog.short_description = _("Shipped reports")
 
     @admin.action(description=_("Run selected reports"))
-    def run_selected_reports(self, request: HttpRequest, queryset: QuerySet[SQLReport]) -> None:
+    def run_selected_reports(
+        self, request: HttpRequest, queryset: QuerySet[SQLReport]
+    ) -> None:
         """Execute selected reports and report success or failure in admin."""
 
         successes = 0

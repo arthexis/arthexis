@@ -2,12 +2,12 @@ from typing import Optional
 
 from django.contrib.sites.models import Site
 from django.contrib.sites.shortcuts import get_current_site
-from django.db import DatabaseError
 from django.core.exceptions import DisallowedHost
+from django.db import DatabaseError
 from django.http.request import split_domain_port
 
 
-def get_site(request) -> Optional[Site]:
+def get_site(request) -> Site | None:
     """Return a real :class:`Site` instance for the request host.
 
     The lookup ignores any port component so ``127.0.0.1:8888`` matches a

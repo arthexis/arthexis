@@ -14,6 +14,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.db.models import Count, Max, Min, Sum
 
+
 class SafeDjangoJSONEncoder(DjangoJSONEncoder):
     """JSON encoder that handles bytes and falls back to string conversion."""
 
@@ -103,7 +104,9 @@ def resolve_entity_lookup(
             except FieldDoesNotExist:
                 invalid_lookup = True
                 field_obj = None
-            if field_obj and isinstance(field_obj, (models.CharField, models.TextField)):
+            if field_obj and isinstance(
+                field_obj, (models.CharField, models.TextField)
+            ):
                 lookup = {f"{field_name}__iexact": instance_id}
             else:
                 lookup = {field_name: instance_id}

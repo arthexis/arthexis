@@ -9,7 +9,6 @@ from django.db import connection, transaction
 
 from apps.reports.models import SQLReport
 
-
 LEGACY_REPORT_TYPE = "legacy_archived"
 LEGACY_COLUMN = "legacy_definition"
 REPORT_TABLE = SQLReport._meta.db_table
@@ -52,7 +51,9 @@ class Command(BaseCommand):
         if options["delete"] and records:
             ids = [record["id"] for record in records]
             with transaction.atomic():
-                SQLReport.objects.filter(pk__in=ids, report_type=LEGACY_REPORT_TYPE).delete()
+                SQLReport.objects.filter(
+                    pk__in=ids, report_type=LEGACY_REPORT_TYPE
+                ).delete()
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Exported and deleted {len(ids)} archived report(s): {output_path}"

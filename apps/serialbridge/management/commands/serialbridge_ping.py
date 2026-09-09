@@ -10,4 +10,6 @@ class Command(BaseCommand):
         parser.add_argument("--peer", required=True)
 
     def handle(self, *args, **options):
-        call_command("serialbridge", "ping", interface=options["interface"], peer=options["peer"])
+        call_command(
+            "serialbridge", "ping", interface=options["interface"], peer=options["peer"]
+        )

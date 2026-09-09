@@ -5,15 +5,19 @@ from pathlib import Path
 
 import pytest
 
-HOOK_PATH = Path(__file__).resolve().parents[3] / "scripts" / "certbot" / "godaddy_hook.py"
+HOOK_PATH = (
+    Path(__file__).resolve().parents[3] / "scripts" / "certbot" / "godaddy_hook.py"
+)
 SPEC = importlib.util.spec_from_file_location("godaddy_hook", HOOK_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
 
+
 def test_zone_and_name_validates_zone_override_suffix():
     with pytest.raises(RuntimeError, match="GODADDY_ZONE"):
         MODULE._zone_and_name("_acme-challenge.example.com", "other.com")
+
 
 def test_emit_log_writes_to_configured_log_file(tmp_path, capsys, monkeypatch):
     log_path = tmp_path / "hook.log"
@@ -25,6 +29,7 @@ def test_emit_log_writes_to_configured_log_file(tmp_path, capsys, monkeypatch):
     assert "diagnostic-message" in captured.out
     assert "diagnostic-message" in log_path.read_text(encoding="utf-8")
 
+
 def test_zone_and_name_derives_zone_without_override(capsys):
     zone, host = MODULE._zone_and_name("_acme-challenge.example.com")
 
@@ -33,14 +38,18 @@ def test_zone_and_name_derives_zone_without_override(capsys):
     assert host == "_acme-challenge"
     assert "derived zone 'example.com'" in captured.out
 
+
 def test_fetch_existing_txt_values_returns_empty_for_404(monkeypatch):
     class Response:
         status_code = 404
         text = "not found"
 
-    monkeypatch.setattr(MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(
+        MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response()
+    )
 
     assert MODULE._fetch_existing_txt_values("example.com", "_acme-challenge") == []
+
 
 def test_upsert_txt_record_replaces_existing_records(monkeypatch):
     calls: list[tuple[str, str, object]] = []
@@ -50,7 +59,9 @@ def test_upsert_txt_record_replaces_existing_records(monkeypatch):
     monkeypatch.setenv("GODADDY_ZONE", "example.com")
     monkeypatch.setenv("GODADDY_DNS_WAIT_SECONDS", "0")
 
-    monkeypatch.setattr(MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: ["old"])
+    monkeypatch.setattr(
+        MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: ["old"]
+    )
 
     class Response:
         status_code = 200
@@ -84,6 +95,7 @@ def test_upsert_txt_record_replaces_existing_records(monkeypatch):
     ]
     assert wait_calls == []
 
+
 def test_upsert_txt_record_uses_300_second_default_wait(monkeypatch):
     monkeypatch.setenv("CERTBOT_DOMAIN", "example.com")
     monkeypatch.setenv("CERTBOT_VALIDATION", "new-value")
@@ -94,8 +106,12 @@ def test_upsert_txt_record_uses_300_second_default_wait(monkeypatch):
         status_code = 200
         text = "ok"
 
-    monkeypatch.setattr(MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(
+        MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: []
+    )
+    monkeypatch.setattr(
+        MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response()
+    )
 
     wait_calls: list[dict[str, object]] = []
 
@@ -110,6 +126,7 @@ def test_upsert_txt_record_uses_300_second_default_wait(monkeypatch):
     assert wait_calls[0]["timeout_seconds"] == 300
     assert wait_calls[1]["timeout_seconds"] == 300
 
+
 def test_cleanup_txt_record_removes_only_current_validation_value(monkeypatch):
     calls: list[tuple[str, str, object]] = []
 
@@ -117,7 +134,9 @@ def test_cleanup_txt_record_removes_only_current_validation_value(monkeypatch):
     monkeypatch.setenv("CERTBOT_VALIDATION", "new-value")
     monkeypatch.setenv("GODADDY_ZONE", "example.com")
     monkeypatch.setattr(
-        MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: ["old", "new-value"]
+        MODULE,
+        "_fetch_existing_txt_values",
+        lambda *_args, **_kwargs: ["old", "new-value"],
     )
 
     class Response:
@@ -140,6 +159,7 @@ def test_cleanup_txt_record_removes_only_current_validation_value(monkeypatch):
         )
     ]
 
+
 def test_cleanup_txt_record_requires_validation_env(monkeypatch):
     monkeypatch.setenv("CERTBOT_DOMAIN", "example.com")
     monkeypatch.setenv("GODADDY_ZONE", "example.com")
@@ -148,7 +168,10 @@ def test_cleanup_txt_record_requires_validation_env(monkeypatch):
     with pytest.raises(RuntimeError, match="CERTBOT_VALIDATION"):
         MODULE._cleanup_txt_record()
 
-def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(monkeypatch):
+
+def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(
+    monkeypatch,
+):
     monkeypatch.setattr(MODULE.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(MODULE.time, "time", iter([0, 0]).__next__)
     monkeypatch.setattr(
@@ -165,4 +188,3 @@ def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(monk
         expected_value="expected-value",
         timeout_seconds=1,
     )
-

@@ -175,7 +175,11 @@ class EmailTransaction(Entity):
         super().clean()
         if not (self.collector_id or self.inbox_id or self.outbox_id):
             raise ValidationError(
-                {"direction": _("Select an inbox, collector or outbox for the transaction.")}
+                {
+                    "direction": _(
+                        "Select an inbox, collector or outbox for the transaction."
+                    )
+                }
             )
         if self.direction == self.INBOUND and not (self.collector_id or self.inbox_id):
             raise ValidationError(

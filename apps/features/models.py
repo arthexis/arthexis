@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.core.models import Ownable
+
 from .versioning import current_suite_version, is_baseline_version_reached
 
 
@@ -191,7 +192,9 @@ class Feature(Ownable):
             return 0
         return len(parameters)
 
-    def set_enabled(self, enabled: bool, *, update_fields: list[str] | None = None) -> bool:
+    def set_enabled(
+        self, enabled: bool, *, update_fields: list[str] | None = None
+    ) -> bool:
         """Set and persist enabled state, returning whether a transition occurred."""
 
         next_state = bool(enabled)
@@ -234,7 +237,9 @@ class Feature(Ownable):
     def baseline_reached(self, *, current_version: str | None = None) -> bool:
         """Return whether the current suite version reaches this feature baseline."""
 
-        resolved_current = current_suite_version() if current_version is None else current_version
+        resolved_current = (
+            current_suite_version() if current_version is None else current_version
+        )
         return is_baseline_version_reached(
             baseline_version=self.baseline_version,
             current_version=resolved_current,
@@ -248,11 +253,17 @@ class Feature(Ownable):
             inferred_name = self.infer_main_app_name(self.code_locations)
             if inferred_name:
                 Application = django_apps.get_model("app", "Application")
-                db_alias = kwargs.get("using") or self._state.db or router.db_for_write(
-                    Application,
-                    instance=self,
+                db_alias = (
+                    kwargs.get("using")
+                    or self._state.db
+                    or router.db_for_write(
+                        Application,
+                        instance=self,
+                    )
                 )
-                app, _ = Application.objects.using(db_alias).get_or_create(name=inferred_name)
+                app, _ = Application.objects.using(db_alias).get_or_create(
+                    name=inferred_name
+                )
                 self.main_app = app
                 if update_fields is not None:
                     kwargs["update_fields"] = sorted({*update_fields, "main_app"})

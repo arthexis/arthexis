@@ -17,7 +17,9 @@ from apps.core import environment
 def test_admin_config_view_renders_section_jump_links(
     admin_client, monkeypatch, config_sections, expected_jump_links
 ):
-    monkeypatch.setattr(environment, "_group_django_settings", lambda _: config_sections)
+    monkeypatch.setattr(
+        environment, "_group_django_settings", lambda _: config_sections
+    )
     response = admin_client.get(reverse("admin:config"))
     content = response.content.decode()
 

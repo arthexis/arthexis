@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class MeterValueDateFilter(admin.SimpleListFilter):
     title = "Timestamp"
     parameter_name = "timestamp_range"
@@ -29,6 +30,7 @@ class MeterValueDateFilter(admin.SimpleListFilter):
             cutoff = now - timedelta(days=30)
             return queryset.filter(timestamp__lt=cutoff)
         return queryset
+
 
 class MeterValueAdmin(EntityModelAdmin):
     list_display = (

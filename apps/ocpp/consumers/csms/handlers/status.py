@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 
 from channels.db import database_sync_to_async
@@ -153,7 +153,7 @@ class StatusHandlersMixin:
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
-        current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
+        current_time = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         reply_payload = {"currentTime": current_time}
         now = timezone.now()
         self.charger.last_heartbeat = now

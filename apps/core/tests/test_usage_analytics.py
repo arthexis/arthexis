@@ -221,9 +221,7 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
                 return_value=[],
             ),
             patch("apps.features.utils.Feature.objects.filter") as feature_filter,
-            patch(
-                "apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()
-            ),
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()),
         ):
             self.assertFalse(usage_analytics_enabled())
 
@@ -271,9 +269,7 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
                 "apps.features.utils.Feature.objects.filter",
                 return_value=feature_queryset,
             ) as feature_filter,
-            patch(
-                "apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()
-            ),
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()),
         ):
             with patch(
                 "apps.features.utils.connection.atomic_blocks", [first_atomic_block]

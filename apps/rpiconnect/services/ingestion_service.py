@@ -86,7 +86,9 @@ class IngestionService:
 
         checked = 0
         repaired = 0
-        deployments = ConnectUpdateDeployment.objects.select_related("device", "campaign")
+        deployments = ConnectUpdateDeployment.objects.select_related(
+            "device", "campaign"
+        )
         deployments = deployments.exclude(
             status__in=[
                 ConnectUpdateDeployment.Status.SUCCEEDED,
@@ -156,7 +158,11 @@ class IngestionService:
 
         deployment = self._resolve_deployment(payload, device_id)
         campaign = deployment.campaign if deployment else None
-        device = deployment.device if deployment else ConnectDevice.objects.filter(device_id=device_id).first()
+        device = (
+            deployment.device
+            if deployment
+            else ConnectDevice.objects.filter(device_id=device_id).first()
+        )
 
         payload_snippet = {
             "event_type": event_type,
@@ -237,18 +243,24 @@ class IngestionService:
     ) -> ConnectUpdateDeployment | None:
         deployment_id = payload.get("deployment_id")
         if deployment_id is not None:
-            deployment = ConnectUpdateDeployment.objects.select_related("campaign", "device").filter(
-                pk=deployment_id
-            ).first()
+            deployment = (
+                ConnectUpdateDeployment.objects.select_related("campaign", "device")
+                .filter(pk=deployment_id)
+                .first()
+            )
             if deployment and deployment.device.device_id == device_id:
                 return deployment
 
         campaign_id = payload.get("campaign_id")
         if campaign_id is not None:
-            deployment = ConnectUpdateDeployment.objects.select_related("campaign", "device").filter(
-                campaign_id=campaign_id,
-                device__device_id=device_id,
-            ).first()
+            deployment = (
+                ConnectUpdateDeployment.objects.select_related("campaign", "device")
+                .filter(
+                    campaign_id=campaign_id,
+                    device__device_id=device_id,
+                )
+                .first()
+            )
             if deployment:
                 return deployment
 
@@ -259,12 +271,16 @@ class IngestionService:
             .first()
         )
 
-    def _schedule_retry(self, deployment: ConnectUpdateDeployment, *, failure_classification: str) -> None:
+    def _schedule_retry(
+        self, deployment: ConnectUpdateDeployment, *, failure_classification: str
+    ) -> None:
         if deployment.retry_attempts >= deployment.retry_max_attempts:
             return
         deployment.retry_attempts += 1
         deployment.failure_classification = failure_classification
-        deployment.next_retry_at = timezone.now() + timedelta(seconds=deployment.retry_cooldown_seconds)
+        deployment.next_retry_at = timezone.now() + timedelta(
+            seconds=deployment.retry_cooldown_seconds
+        )
         deployment.save(
             update_fields=[
                 "retry_attempts",
@@ -283,7 +299,8 @@ class IngestionService:
             return failure_stage
 
         haystack = " ".join(
-            str(payload.get(key) or "") for key in ("failure_stage", "error", "status", "details")
+            str(payload.get(key) or "")
+            for key in ("failure_stage", "error", "status", "details")
         ).lower()
         for keyword, classification in self.FAILURE_KEYWORDS:
             if keyword in haystack:
@@ -324,5 +341,7 @@ class IngestionService:
 def default_reconciliation_status_fetcher(deployment: ConnectUpdateDeployment) -> str:
     """Default status fetcher hook used when remote polling is unavailable."""
 
-    metadata = deployment.error_payload if isinstance(deployment.error_payload, dict) else {}
+    metadata = (
+        deployment.error_payload if isinstance(deployment.error_payload, dict) else {}
+    )
     return str(metadata.get("remote_status") or "")

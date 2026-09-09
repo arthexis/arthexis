@@ -16,7 +16,9 @@ from apps.users.error_report_analysis import (
 
 
 class Command(BaseCommand):
-    help = "Build user diagnostics bundles and analyze downloaded error-report packages."
+    help = (
+        "Build user diagnostics bundles and analyze downloaded error-report packages."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(

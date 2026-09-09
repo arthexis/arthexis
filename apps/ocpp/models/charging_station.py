@@ -60,4 +60,3 @@ class ChargingStation(Ownable):
         """Return the station identifier."""
 
         return self.station_id
-

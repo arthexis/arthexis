@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Resolve sigils in text using the Django project configuration."""
+
 from __future__ import annotations
 
 import argparse

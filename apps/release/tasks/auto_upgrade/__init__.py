@@ -5,11 +5,11 @@ from utils.revision import get_revision
 
 from .locks import AUTO_UPGRADE_SKIP_LOCK_NAME, _read_auto_upgrade_failure_count
 from .tasks import (
-    AutoUpgradeMode,
-    AutoUpgradeRepositoryState,
     SEVERITY_CRITICAL,
     SEVERITY_LOW,
     SEVERITY_NORMAL,
+    AutoUpgradeMode,
+    AutoUpgradeRepositoryState,
     _broadcast_upgrade_start_message,
     _ci_status_for_revision,
     _current_revision,

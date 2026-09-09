@@ -49,14 +49,18 @@ class ReconciliationTests(TestCase):
         service = IngestionService()
 
         result = service.reconcile_deployments(
-            status_fetcher=lambda deployment: "succeeded" if deployment.pk == self.deployment.pk else "",
+            status_fetcher=lambda deployment: (
+                "succeeded" if deployment.pk == self.deployment.pk else ""
+            ),
         )
 
         self.assertEqual(result.checked, 1)
         self.assertEqual(result.repaired, 1)
 
         self.deployment.refresh_from_db()
-        self.assertEqual(self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED)
+        self.assertEqual(
+            self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED
+        )
         self.assertTrue(
             ConnectCampaignEvent.objects.filter(
                 deployment=self.deployment,
@@ -76,7 +80,9 @@ class ReconciliationTests(TestCase):
         )
         service = IngestionService()
 
-        result = service.reconcile_deployments(status_fetcher=lambda deployment: "succeeded")
+        result = service.reconcile_deployments(
+            status_fetcher=lambda deployment: "succeeded"
+        )
 
         self.assertEqual(result.checked, 1)
 
@@ -94,9 +100,7 @@ class ReconciliationTests(TestCase):
         service = IngestionService()
         result = service.reconcile_deployments(
             status_fetcher=lambda deployment: (
-                "succeeded"
-                if deployment.pk == pending_deployment.pk
-                else "failed"
+                "succeeded" if deployment.pk == pending_deployment.pk else "failed"
             ),
         )
 
@@ -106,10 +110,14 @@ class ReconciliationTests(TestCase):
         self.deployment.refresh_from_db()
         pending_deployment.refresh_from_db()
         self.assertEqual(self.deployment.status, ConnectUpdateDeployment.Status.FAILED)
-        self.assertEqual(pending_deployment.status, ConnectUpdateDeployment.Status.PENDING)
+        self.assertEqual(
+            pending_deployment.status, ConnectUpdateDeployment.Status.PENDING
+        )
 
     def test_reconciliation_command_uses_default_polling_hook(self) -> None:
         call_command("reconcile_rpiconnect")
 
         self.deployment.refresh_from_db()
-        self.assertEqual(self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED)
+        self.assertEqual(
+            self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED
+        )

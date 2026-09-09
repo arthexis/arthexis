@@ -44,8 +44,18 @@ def test_rfid_service_debug_stops_active_unit(tmp_path, capsys, monkeypatch):
     assert "Stopping rfid-demo.service" in output
     assert "Stopped rfid-demo.service" in output
     assert run_mock.call_args_list == [
-        call(["systemctl", "is-active", "rfid-demo.service"], capture_output=True, text=True, check=False),
-        call(["systemctl", "stop", "rfid-demo.service"], capture_output=True, text=True, check=False),
+        call(
+            ["systemctl", "is-active", "rfid-demo.service"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ),
+        call(
+            ["systemctl", "stop", "rfid-demo.service"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ),
     ]
 
 
@@ -120,10 +130,20 @@ def test_rfid_scan_requires_feature(monkeypatch):
     rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
     dummy_node = SimpleNamespace()
     monkeypatch.setattr(rfid_command.Node, "get_local", lambda: dummy_node)
-    monkeypatch.setattr(rfid_command, "is_feature_active_for_node", lambda *, node, slug: False)
-    monkeypatch.setattr(rfid_command, "scan_sources", lambda **kwargs: (_ for _ in ()).throw(AssertionError("scan_sources should not run")))
+    monkeypatch.setattr(
+        rfid_command, "is_feature_active_for_node", lambda *, node, slug: False
+    )
+    monkeypatch.setattr(
+        rfid_command,
+        "scan_sources",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("scan_sources should not run")
+        ),
+    )
 
-    with pytest.raises(rfid_command.CommandError, match="rfid-scanner feature is not active"):
+    with pytest.raises(
+        rfid_command.CommandError, match="rfid-scanner feature is not active"
+    ):
         call_command("rfid", "check", "--scan", "--no-irq")
 
 
@@ -151,7 +171,9 @@ def test_rfid_scan_no_irq_bypasses_attempt_polling(monkeypatch):
     """`rfid check --scan --no-irq` should use the direct scanner path."""
 
     rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
-    monkeypatch.setattr(rfid_command.Command, "_scanner_feature_available", lambda _self: True)
+    monkeypatch.setattr(
+        rfid_command.Command, "_scanner_feature_available", lambda _self: True
+    )
     monkeypatch.setattr(
         rfid_command.Command,
         "_scan_via_attempt",
@@ -179,7 +201,11 @@ def test_rfid_scan_no_irq_empty_result_bypasses_service_state(monkeypatch):
     monkeypatch.setattr(
         rfid_command,
         "scan_sources",
-        lambda **kwargs: {"rfid": None, "label_id": None, "no_irq": kwargs.get("no_irq")},
+        lambda **kwargs: {
+            "rfid": None,
+            "label_id": None,
+            "no_irq": kwargs.get("no_irq"),
+        },
     )
     monkeypatch.setattr(rfid_command, "service_available", lambda: False)
 

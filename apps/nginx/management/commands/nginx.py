@@ -44,12 +44,32 @@ class ConfigureMixin:
     def add_configure_arguments(self, parser) -> None:
         """Register arguments used to apply or remove managed nginx configuration."""
 
-        parser.add_argument("--mode", default=None, help="nginx mode (internal or public)")
-        parser.add_argument("--port", type=int, default=None, help="Application port proxied by nginx")
-        parser.add_argument("--role", default=None, help="Role label to persist alongside the configuration")
-        parser.add_argument("--ip6", action="store_true", help="Include IPv6 listeners in the rendered configuration")
-        parser.add_argument("--remove", action="store_true", help="Remove nginx configuration instead of applying it")
-        parser.add_argument("--no-reload", action="store_true", help="Skip nginx reload/restart after applying changes")
+        parser.add_argument(
+            "--mode", default=None, help="nginx mode (internal or public)"
+        )
+        parser.add_argument(
+            "--port", type=int, default=None, help="Application port proxied by nginx"
+        )
+        parser.add_argument(
+            "--role",
+            default=None,
+            help="Role label to persist alongside the configuration",
+        )
+        parser.add_argument(
+            "--ip6",
+            action="store_true",
+            help="Include IPv6 listeners in the rendered configuration",
+        )
+        parser.add_argument(
+            "--remove",
+            action="store_true",
+            help="Remove nginx configuration instead of applying it",
+        )
+        parser.add_argument(
+            "--no-reload",
+            action="store_true",
+            help="Skip nginx reload/restart after applying changes",
+        )
         parser.add_argument(
             "--static-ip",
             default=None,
@@ -88,7 +108,9 @@ class ConfigureMixin:
         if not options["remove"]:
             # Validation-only precheck: ensure --static-ip is public-routable or
             # we can detect at least one public interface address.
-            static_ip = self._parse_static_ip(str(options.get("static_ip") or "").strip())
+            static_ip = self._parse_static_ip(
+                str(options.get("static_ip") or "").strip()
+            )
             if static_ip is None:
                 public_ips = self._detect_public_ips()
                 if not public_ips:
@@ -128,7 +150,9 @@ class ConfigureMixin:
         write_apply_status(self, result)
 
         if options["sites_config"]:
-            self.stdout.write(f"Managed site definitions read from {Path(config.site_entries_path).resolve()}")
+            self.stdout.write(
+                f"Managed site definitions read from {Path(config.site_entries_path).resolve()}"
+            )
         if options["sites_destination"]:
             self.stdout.write(f"Managed sites written to {config.site_destination}")
 
@@ -140,7 +164,9 @@ class ConfigureMixin:
         try:
             ipaddress.ip_address(value)
         except ValueError as exc:
-            raise CommandError(f"--static-ip must be a valid IPv4 or IPv6 address: {value}") from exc
+            raise CommandError(
+                f"--static-ip must be a valid IPv4 or IPv6 address: {value}"
+            ) from exc
         if not self._is_public_routable_ip(value):
             raise CommandError(f"--static-ip must be public-routable: {value}")
         return value
@@ -172,7 +198,11 @@ class ConfigureMixin:
                 if host:
                     candidates.add(host)
 
-        return sorted(candidate for candidate in candidates if self._is_public_routable_ip(candidate))
+        return sorted(
+            candidate
+            for candidate in candidates
+            if self._is_public_routable_ip(candidate)
+        )
 
 
 class Command(ConfigureMixin, BaseCommand):

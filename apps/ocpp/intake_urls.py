@@ -16,4 +16,3 @@ urlpatterns = [
         name="charger-vendor-submission-thanks",
     ),
 ]
-

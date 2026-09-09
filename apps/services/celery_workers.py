@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import logging
 import subprocess
+from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
@@ -14,7 +14,6 @@ from apps.core.systemctl import _systemctl_command
 from apps.features.parameters import get_feature_parameter
 
 from .lifecycle import lock_dir, read_service_name
-
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,12 @@ def restart_celery_service(*, base_dir: Path | None = None) -> bool:
 
     unit_name = f"celery-{service_name}.service"
     try:
-        result = subprocess.run([*command, "restart", unit_name], check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            [*command, "restart", unit_name],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
         if result.returncode != 0:
             logger.warning(
                 "Failed to restart celery service %s (exit code %d). stderr: %s",
@@ -90,10 +94,14 @@ def restart_celery_service(*, base_dir: Path | None = None) -> bool:
     return True
 
 
-def sync_celery_workers_from_feature(*, base_dir: Path | None = None) -> tuple[int, bool]:
+def sync_celery_workers_from_feature(
+    *, base_dir: Path | None = None
+) -> tuple[int, bool]:
     """Persist worker count from suite feature parameters and restart Celery service."""
 
-    cache.delete(f"feature-param:{CELERY_WORKERS_FEATURE_SLUG}:{CELERY_WORKERS_PARAM_KEY}")
+    cache.delete(
+        f"feature-param:{CELERY_WORKERS_FEATURE_SLUG}:{CELERY_WORKERS_PARAM_KEY}"
+    )
     worker_count = configured_worker_count()
     persist_worker_count(worker_count, base_dir=base_dir)
     restarted = restart_celery_service(base_dir=base_dir)

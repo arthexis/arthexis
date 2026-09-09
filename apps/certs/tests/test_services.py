@@ -8,6 +8,7 @@ import pytest
 
 from apps.certs import services
 
+
 def test_verify_certificate_success(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"
     certificate_key_path = tmp_path / "privkey.pem"
@@ -41,6 +42,7 @@ def test_verify_certificate_success(tmp_path, monkeypatch):
     assert any("valid until" in message for message in result.messages)
     assert any("Certificate and key match" in message for message in result.messages)
 
+
 def test_verify_certificate_detects_key_mismatch(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"
     certificate_key_path = tmp_path / "privkey.pem"
@@ -73,6 +75,7 @@ def test_verify_certificate_detects_key_mismatch(tmp_path, monkeypatch):
     assert result.ok is False
     assert any("do not match" in message for message in result.messages)
 
+
 def test_generate_self_signed_certificate_with_subject_alt_names(tmp_path, monkeypatch):
     certificate_path = tmp_path / "fullchain.pem"
     certificate_key_path = tmp_path / "privkey.pem"
@@ -98,6 +101,7 @@ def test_generate_self_signed_certificate_with_subject_alt_names(tmp_path, monke
     assert "-config" in command
     assert "-extensions" in command
 
+
 def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     monkeypatch, tmp_path
 ):
@@ -120,6 +124,7 @@ def test_request_certbot_certificate_without_sudo_omits_empty_prefix(
     )
 
     assert captured["command"][0] == "certbot"
+
 
 def test_build_godaddy_certbot_command_honors_sandbox_override():
     """GoDaddy certbot env should honor explicit sandbox override values."""
@@ -145,6 +150,7 @@ def test_build_godaddy_certbot_command_honors_sandbox_override():
 
     assert env["GODADDY_USE_SANDBOX"] == "0"
 
+
 def test_extract_live_certificate_paths_from_certbot_output_returns_paths():
     """Extractor should parse certbot output paths used by issuance workflows."""
     output = (
@@ -159,6 +165,7 @@ def test_extract_live_certificate_paths_from_certbot_output_returns_paths():
         Path("/etc/letsencrypt/live/example.com/fullchain.pem"),
         Path("/etc/letsencrypt/live/example.com/privkey.pem"),
     )
+
 
 def test_build_godaddy_certbot_command_preserves_env_and_hooks():
     """GoDaddy certbot command should preserve env and include both manual hooks."""
@@ -196,6 +203,7 @@ def test_build_godaddy_certbot_command_preserves_env_and_hooks():
     assert env["GODADDY_CUSTOMER_ID"] == "cust123"
     assert env["GODADDY_ZONE"] == "example.com"
 
+
 def test_request_certbot_certificate_missing_certbot_includes_supported_os_guidance(
     monkeypatch, tmp_path
 ):
@@ -226,6 +234,7 @@ def test_request_certbot_certificate_missing_certbot_includes_supported_os_guida
     assert "Ubuntu 22.04 / 24.04" in message
     assert "apt install -y certbot" in message
 
+
 def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_guidance(
     monkeypatch, tmp_path
 ):
@@ -239,7 +248,11 @@ def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_gu
     monkeypatch.setattr(
         services,
         "_read_os_release_fields",
-        lambda: {"ID": "UBUNTU", "ID_LIKE": "Debian", "PRETTY_NAME": "Ubuntu 24.04 LTS"},
+        lambda: {
+            "ID": "UBUNTU",
+            "ID_LIKE": "Debian",
+            "PRETTY_NAME": "Ubuntu 24.04 LTS",
+        },
     )
 
     with pytest.raises(services.CertbotError) as exc_info:
@@ -255,6 +268,7 @@ def test_request_certbot_certificate_missing_certbot_binary_without_sudo_uses_gu
     assert "No such file or directory" in message
     assert "Ubuntu 22.04 / 24.04 & Debian-based hosts" in message
     assert "Detected Debian-family OS" in message
+
 
 def test_request_certbot_certificate_challenge_failure_raises_specific_exception(
     monkeypatch, tmp_path
@@ -273,7 +287,13 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
         services.socket,
         "getaddrinfo",
         lambda _domain, port, *_args, **_kwargs: [
-            (services.socket.AF_INET, services.socket.SOCK_STREAM, services.socket.IPPROTO_TCP, "", ("192.0.2.1", port)),
+            (
+                services.socket.AF_INET,
+                services.socket.SOCK_STREAM,
+                services.socket.IPPROTO_TCP,
+                "",
+                ("192.0.2.1", port),
+            ),
         ],
     )
 
@@ -305,7 +325,10 @@ def test_request_certbot_certificate_repairs_stale_live_directory_and_retries(
         calls.append(command)
         if command[:2] == ["rm", "-rf"]:
             return ""
-        if command[0] == "certbot" and len([c for c in calls if c and c[0] == "certbot"]) == 1:
+        if (
+            command[0] == "certbot"
+            and len([c for c in calls if c and c[0] == "certbot"]) == 1
+        ):
             raise RuntimeError("live directory exists for example.com")
         return "ok"
 
@@ -325,7 +348,9 @@ def test_request_certbot_certificate_repairs_stale_live_directory_and_retries(
         sudo="",
     )
 
-    certbot_calls = [command for command in calls if command and command[0] == "certbot"]
+    certbot_calls = [
+        command for command in calls if command and command[0] == "certbot"
+    ]
     assert result == "ok"
     assert len(certbot_calls) == 2
     cleanup_cmd = ["rm", "-rf", "/etc/letsencrypt/live/example.com"]
@@ -355,7 +380,9 @@ def test_request_certbot_certificate_live_directory_conflict_with_renewal_config
     monkeypatch.setattr(services, "_path_exists", fake_path_exists)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
 
-    with pytest.raises(services.CertbotError, match="live directory exists for example.com"):
+    with pytest.raises(
+        services.CertbotError, match="live directory exists for example.com"
+    ):
         services.request_certbot_certificate(
             domain="example.com",
             email="ops@example.com",
@@ -366,6 +393,7 @@ def test_request_certbot_certificate_live_directory_conflict_with_renewal_config
         )
 
     assert ["rm", "-rf", "/etc/letsencrypt/live/example.com"] not in calls
+
 
 def test_verify_certificate_handles_permission_error():
     """Permission errors while probing certificate paths should not crash verification."""
@@ -383,7 +411,9 @@ def test_verify_certificate_handles_permission_error():
     result = services.verify_certificate(
         domain="example.com",
         certificate_path=RestrictedPath("/etc/letsencrypt/live/example/fullchain.pem"),
-        certificate_key_path=RestrictedPath("/etc/letsencrypt/live/example/privkey.pem"),
+        certificate_key_path=RestrictedPath(
+            "/etc/letsencrypt/live/example/privkey.pem"
+        ),
         sudo="",
     )
 
@@ -395,6 +425,7 @@ def test_verify_certificate_handles_permission_error():
         "Certificate key path is not accessible" in message
         for message in result.messages
     )
+
 
 def test_ensure_certbot_available_missing_sudo_reports_sudo_guidance(monkeypatch):
     """Missing sudo binary should return sudo-specific guidance."""
@@ -412,6 +443,7 @@ def test_ensure_certbot_available_missing_sudo_reports_sudo_guidance(monkeypatch
     assert "configured sudo executable is not available" in message
     assert "apt install -y certbot" not in message
 
+
 def test_ensure_certbot_available_runtime_errors_are_wrapped(monkeypatch):
     """Non-missing-certbot runtime errors should still raise CertbotError."""
 
@@ -423,7 +455,10 @@ def test_ensure_certbot_available_runtime_errors_are_wrapped(monkeypatch):
     with pytest.raises(services.CertbotError, match="sudo: a password is required"):
         services.ensure_certbot_available()
 
-def test_ensure_certbot_available_missing_certbot_includes_supported_os_guidance(monkeypatch):
+
+def test_ensure_certbot_available_missing_certbot_includes_supported_os_guidance(
+    monkeypatch,
+):
     """Missing certbot preflight checks should provide actionable install guidance."""
 
     def fake_run(command: list[str], *, env=None):  # noqa: ARG001

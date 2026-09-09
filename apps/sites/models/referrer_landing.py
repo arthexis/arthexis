@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReferrerLandingManager(models.Manager):
-    def match_for_site(self, site: Site, referer: str) -> "ReferrerLanding | None":
+    def match_for_site(self, site: Site, referer: str) -> ReferrerLanding | None:
         domain = extract_referrer_domain(referer)
         if not domain or site is None:
             return None

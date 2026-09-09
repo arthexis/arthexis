@@ -9,7 +9,9 @@ from apps.imager import usb_stability
 
 
 def _completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
-    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
+    return subprocess.CompletedProcess(
+        args=[], returncode=returncode, stdout=stdout, stderr=""
+    )
 
 
 def test_quiet_usb_pollers_stops_and_restores_active_units(monkeypatch) -> None:
@@ -71,14 +73,49 @@ def test_quiet_usb_pollers_stops_and_restores_active_units(monkeypatch) -> None:
     assert system_states["bastion-usb-refresh.service"] == "active"
     assert system_states["kindle-postbox.service"] == "active"
     assert user_states["gvfs-udisks2-volume-monitor.service"] == "active"
-    assert ["sudo", "-n", "systemctl", "stop", "arthexis-usb-inventory.service"] in commands
-    assert ["sudo", "-n", "systemctl", "stop", "arthexis-usb-inventory.timer"] in commands
-    assert ["sudo", "-n", "systemctl", "stop", "bastion-usb-refresh.service"] in commands
+    assert [
+        "sudo",
+        "-n",
+        "systemctl",
+        "stop",
+        "arthexis-usb-inventory.service",
+    ] in commands
+    assert [
+        "sudo",
+        "-n",
+        "systemctl",
+        "stop",
+        "arthexis-usb-inventory.timer",
+    ] in commands
+    assert [
+        "sudo",
+        "-n",
+        "systemctl",
+        "stop",
+        "bastion-usb-refresh.service",
+    ] in commands
     assert ["sudo", "-n", "systemctl", "stop", "kindle-postbox.service"] in commands
-    assert ["systemctl", "--user", "stop", "gvfs-udisks2-volume-monitor.service"] in commands
-    assert ["sudo", "-n", "systemctl", "start", "bastion-usb-refresh.service"] in commands
+    assert [
+        "systemctl",
+        "--user",
+        "stop",
+        "gvfs-udisks2-volume-monitor.service",
+    ] in commands
+    assert [
+        "sudo",
+        "-n",
+        "systemctl",
+        "start",
+        "bastion-usb-refresh.service",
+    ] in commands
     assert ["sudo", "-n", "systemctl", "start", "kindle-postbox.service"] in commands
-    assert ["sudo", "-n", "rm", "-f", str(usb_stability.BASTION_USB_REFRESH_HOLD)] in commands
+    assert [
+        "sudo",
+        "-n",
+        "rm",
+        "-f",
+        str(usb_stability.BASTION_USB_REFRESH_HOLD),
+    ] in commands
     assert messages[0].startswith("quiet-usb: pausing")
     assert messages[-1].startswith("quiet-usb: restoring")
 
@@ -187,7 +224,9 @@ def test_quiet_usb_pollers_yields_when_setup_step_raises(monkeypatch) -> None:
         "restore-system",
         "release-hold",
     ]
-    assert any("failed to install bastion refresh hold" in message for message in messages)
+    assert any(
+        "failed to install bastion refresh hold" in message for message in messages
+    )
 
 
 def test_quiet_usb_pollers_attempts_all_restore_steps_after_failure(

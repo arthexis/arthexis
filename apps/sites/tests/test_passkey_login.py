@@ -13,6 +13,7 @@ from apps.users.models import PasskeyCredential
 
 pytestmark = [pytest.mark.django_db]
 
+
 @pytest.fixture
 def user():
     """Create a user eligible for passkey login tests."""
@@ -22,6 +23,7 @@ def user():
         email="passkey@example.com",
         password="secret",
     )
+
 
 @pytest.fixture
 def passkey(user):
@@ -36,12 +38,15 @@ def passkey(user):
         user_handle="user-handle",
     )
 
+
 def test_passkey_login_options_sets_challenge_in_session(client, monkeypatch):
     """Options endpoint should issue public key options and persist challenge."""
 
     monkeypatch.setattr(
         "apps.sites.views.management.build_authentication_options",
-        lambda request: SimpleNamespace(data={"challenge": "abc"}, challenge="session-challenge"),
+        lambda request: SimpleNamespace(
+            data={"challenge": "abc"}, challenge="session-challenge"
+        ),
     )
 
     response = client.post(reverse("pages:passkey-login-options"))
@@ -49,6 +54,7 @@ def test_passkey_login_options_sets_challenge_in_session(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"publicKey": {"challenge": "abc"}}
     assert client.session["passkey_login_challenge"] == "session-challenge"
+
 
 def test_passkey_login_verify_authenticates_user(client, passkey, monkeypatch):
     """Verify endpoint should authenticate and update sign count after valid assertion."""
@@ -104,6 +110,7 @@ def test_passkey_login_verify_rejects_missing_challenge(client):
     assert response.status_code == 400
     assert response.json()["detail"]
 
+
 def test_passkey_login_verify_rejects_unknown_credential(client):
     """Verify endpoint should reject credentials that are not registered."""
 
@@ -131,7 +138,10 @@ def test_passkey_login_verify_rejects_unknown_credential(client):
     assert response.status_code == 400
     assert response.json()["detail"]
 
-def test_passkey_login_verify_rejects_invalid_json_structure(client, passkey, monkeypatch):
+
+def test_passkey_login_verify_rejects_invalid_json_structure(
+    client, passkey, monkeypatch
+):
     """Verify endpoint should reject malformed WebAuthn payload structures."""
 
     session = client.session

@@ -31,7 +31,9 @@ def _load_manifest_payload(path: Path) -> dict[str, object]:
         with path.open("rb") as handle:
             payload = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ExtensionError(f"Unable to read extension metadata from {path}: {exc}") from exc
+        raise ExtensionError(
+            f"Unable to read extension metadata from {path}: {exc}"
+        ) from exc
     if not isinstance(payload, dict):
         raise ExtensionError(f"{path}: expected a TOML table.")
     return payload
@@ -56,9 +58,13 @@ def _parse_suite_feature(
     if not slug:
         raise ExtensionError(f"{path}: suite_features.slug is required.")
     if not display:
-        raise ExtensionError(f"{path}: suite_features.display is required for {slug!r}.")
+        raise ExtensionError(
+            f"{path}: suite_features.display is required for {slug!r}."
+        )
     if not main_app:
-        raise ExtensionError(f"{path}: suite_features.main_app is required for {slug!r}.")
+        raise ExtensionError(
+            f"{path}: suite_features.main_app is required for {slug!r}."
+        )
     if not isinstance(enabled_by_default, bool):
         raise ExtensionError(
             f"{path}: suite_features.enabled_by_default must be true or false."

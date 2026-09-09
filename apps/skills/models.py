@@ -322,9 +322,7 @@ class CodexTokenBudget(Entity):
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
-                    warning_threshold_percent__lt=models.F(
-                        "freeze_threshold_percent"
-                    )
+                    warning_threshold_percent__lt=models.F("freeze_threshold_percent")
                 ),
                 name="skills_codexbudget_warning_lt_freeze",
             ),

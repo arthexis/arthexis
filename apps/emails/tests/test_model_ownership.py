@@ -1,5 +1,4 @@
 import pytest
-
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
 
@@ -8,7 +7,6 @@ from apps.emails.models import (
     EmailTransaction,
     EmailTransactionAttachment,
 )
-
 
 EMAIL_MODELS = (
     EmailArtifact,

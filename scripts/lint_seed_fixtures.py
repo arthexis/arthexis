@@ -3,15 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
-import argparse
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
-
 
 
 def _load_fixture_entries(path: Path) -> list[dict]:
@@ -28,7 +27,9 @@ def _load_fixture_entries(path: Path) -> list[dict]:
     return [entry for entry in data if isinstance(entry, dict)]
 
 
-def _iter_fixture_files(fixtures_root: Path, fixture_paths: list[Path] | None = None) -> list[Path]:
+def _iter_fixture_files(
+    fixtures_root: Path, fixture_paths: list[Path] | None = None
+) -> list[Path]:
     """Return fixture files to lint.
 
     Args:
@@ -133,8 +134,8 @@ def _resolve_fixture_paths(paths: list[str]) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     """Run fixture linting and return an exit code."""
 
-    from django.conf import settings
     import django
+    from django.conf import settings
 
     args = _parse_args(argv)
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")

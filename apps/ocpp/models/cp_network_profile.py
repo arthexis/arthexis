@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class CPNetworkProfile(Entity):
     """Network profile that can be provisioned via SetNetworkProfile."""
 

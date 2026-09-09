@@ -30,10 +30,7 @@ def test_expected_gpio_absence_classification() -> None:
         "No such file or directory: '/dev/spidev0.0'"
     )
 
-    assert (
-        is_expected_gpio_absence(missing_device_message)
-        is True
-    )
+    assert is_expected_gpio_absence(missing_device_message) is True
     assert (
         is_expected_gpio_absence(
             "Failed to initialize RFID hardware: permission denied"

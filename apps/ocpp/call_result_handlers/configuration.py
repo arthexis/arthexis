@@ -13,7 +13,9 @@ async def change_configuration(ctx: HandlerContext) -> bool:
     Persistence updates: stores pending call result and may update ``ChargerConfiguration`` snapshot.
     """
 
-    return await legacy.handle_change_configuration_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_change_configuration_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def get_configuration(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def get_configuration(ctx: HandlerContext) -> bool:
     Persistence updates: stores pending call result and persists current ``ChargerConfiguration`` values.
     """
 
-    return await legacy.handle_get_configuration_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_get_configuration_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def trigger_message(ctx: HandlerContext) -> bool:
@@ -33,7 +37,9 @@ async def trigger_message(ctx: HandlerContext) -> bool:
     Persistence updates: records pending result and may register follow-up trigger workflow.
     """
 
-    return await legacy.handle_trigger_message_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_trigger_message_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def reset(ctx: HandlerContext) -> bool:
@@ -43,7 +49,9 @@ async def reset(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result only.
     """
 
-    return await legacy.handle_reset_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_reset_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def change_availability(ctx: HandlerContext) -> bool:
@@ -53,7 +61,9 @@ async def change_availability(ctx: HandlerContext) -> bool:
     Persistence updates: pending call result and consumer availability state update.
     """
 
-    return await legacy.handle_change_availability_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_change_availability_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def unlock_connector(ctx: HandlerContext) -> bool:
@@ -63,7 +73,9 @@ async def unlock_connector(ctx: HandlerContext) -> bool:
     Persistence updates: logs and pending call result.
     """
 
-    return await legacy.handle_unlock_connector_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_unlock_connector_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def set_network_profile(ctx: HandlerContext) -> bool:
@@ -73,7 +85,9 @@ async def set_network_profile(ctx: HandlerContext) -> bool:
     Persistence updates: marks ``CPNetworkProfileDeployment`` status for the request metadata.
     """
 
-    return await legacy.handle_set_network_profile_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_set_network_profile_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_change_configuration_result = legacy_adapter(change_configuration)

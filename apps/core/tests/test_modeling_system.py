@@ -33,6 +33,7 @@ class PrefixTransformer(BaseTransformer):
             metadata=dict(event.context.metadata),
         )
 
+
 def _registry_with_dimensions() -> ModelRegistry:
     registry = ModelRegistry()
     registry.register_dimension(
@@ -58,10 +59,12 @@ def _registry_with_dimensions() -> ModelRegistry:
     )
     return registry
 
+
 def test_registry_requires_unique_dimensions() -> None:
     registry = _registry_with_dimensions()
     with pytest.raises(ValueError, match="already registered"):
         registry.register_dimension(DimensionSpec(dimension_id="cli", name="CLI"))
+
 
 def test_registry_path_resolution() -> None:
     registry = _registry_with_dimensions()
@@ -83,6 +86,7 @@ def test_registry_path_resolution() -> None:
     )
     path = registry.find_path("cli", "billing")
     assert [spec.name for spec in path] == ["cli_to_ocpp", "ocpp_to_billing"]
+
 
 def test_orchestrator_routes_across_transformations() -> None:
     registry = _registry_with_dimensions()

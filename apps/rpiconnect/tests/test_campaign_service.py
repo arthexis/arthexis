@@ -74,7 +74,9 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
     def test_canary_strategy_schedules_only_initial_stage(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -88,7 +90,9 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
     def test_rejects_conflicts_for_later_stages_without_override(self) -> None:
         self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             canary_size=1,
             created_by=self.user,
@@ -122,7 +126,9 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
             )
 
     def test_rejects_non_list_target_selectors(self) -> None:
-        with self.assertRaisesMessage(CampaignServiceError, "target_set.device_ids must be a list."):
+        with self.assertRaisesMessage(
+            CampaignServiceError, "target_set.device_ids must be a list."
+        ):
             self.service.create_campaign(
                 release=self.release,
                 target_set={"device_ids": self.device_a.device_id},
@@ -131,7 +137,9 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
             )
 
     def test_rejects_non_object_target_set(self) -> None:
-        with self.assertRaisesMessage(CampaignServiceError, "target_set must be an object."):
+        with self.assertRaisesMessage(
+            CampaignServiceError, "target_set must be an object."
+        ):
             self.service.create_campaign(
                 release=self.release,
                 target_set=None,
@@ -203,7 +211,9 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
     def test_campaign_summary_provides_per_device_aggregation(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            target_set={
+                "device_ids": [self.device_a.device_id, self.device_b.device_id]
+            },
             strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
             created_by=self.user,
         )
@@ -213,4 +223,6 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
         self.assertEqual(summary["total_devices"], 2)
         self.assertEqual(summary["counts"]["pending"], 2)
         self.assertEqual(summary["per_device"][0]["device_id"], self.device_a.device_id)
-        self.assertEqual(ConnectCampaignEvent.objects.filter(campaign=campaign).count(), 2)
+        self.assertEqual(
+            ConnectCampaignEvent.objects.filter(campaign=campaign).count(), 2
+        )

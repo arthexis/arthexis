@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 
 class PyprojectNormalizationError(RuntimeError):
@@ -42,7 +41,9 @@ def _replace_array_block(section_text: str, key: str, values: list[str]) -> str:
     body_start = start + len(start_marker)
     body_end = section_text.find("\n]", body_start)
     if body_end == -1:
-        raise PyprojectNormalizationError(f"Unterminated array definition for key: {key}")
+        raise PyprojectNormalizationError(
+            f"Unterminated array definition for key: {key}"
+        )
 
     replacement = f"{key} = {_format_array(values)}"
     return f"{section_text[:start]}{replacement}{section_text[body_end + 3 :]}"
@@ -71,10 +72,13 @@ def normalize_pyproject(content: str) -> str:
 
     optional_groups: dict[str, list[str]] = project.get("optional-dependencies", {})
     sorted_optional_groups = {
-        group: sorted(values, key=str.lower) for group, values in optional_groups.items()
+        group: sorted(values, key=str.lower)
+        for group, values in optional_groups.items()
     }
 
-    before_project, project_section, after_project = _split_section(content, PROJECT_DEP_HEADER)
+    before_project, project_section, after_project = _split_section(
+        content, PROJECT_DEP_HEADER
+    )
     project_section = _replace_array_block(project_section, "dependencies", deps)
     content = f"{before_project}{project_section}{after_project}"
 
@@ -101,7 +105,9 @@ def main() -> int:
 
     if args.check:
         if original != normalized:
-            print("pyproject.toml dependencies are not normalized. Run scripts/sort_pyproject_deps.py")
+            print(
+                "pyproject.toml dependencies are not normalized. Run scripts/sort_pyproject_deps.py"
+            )
             return 1
         print("pyproject.toml dependencies are normalized")
         return 0

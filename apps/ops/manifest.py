@@ -4,5 +4,4 @@ DJANGO_APPS = [
     "apps.ops",
 ]
 
-REQUIRES_APPS = [
-]
+REQUIRES_APPS = []

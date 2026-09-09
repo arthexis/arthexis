@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from django.contrib import admin
@@ -40,7 +40,7 @@ def trust_certificate(request):
         certificate_path = str(path)
         certificate_filename = path.name
         certificate_filesize = stats.st_size
-        certificate_modified = datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc)
+        certificate_modified = datetime.fromtimestamp(stats.st_mtime, tz=UTC)
     context = {
         **admin.site.each_context(request),
         "certificate_available": resolved is not None,

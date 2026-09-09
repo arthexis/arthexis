@@ -1,4 +1,5 @@
 """Models for managed service credentials."""
+
 from __future__ import annotations
 
 import base64
@@ -32,7 +33,9 @@ class ServiceToken(models.Model):
     secret_hash = models.CharField(max_length=255)
     scopes = models.JSONField(default=list, blank=True)
     expires_at = models.DateTimeField(db_index=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -56,7 +59,10 @@ class ServiceToken(models.Model):
         verbose_name_plural = "Service Tokens"
         permissions = [
             ("manage_service_tokens", "Can manage service token lifecycle"),
-            ("reveal_service_token_secret", "Can reveal newly created service token secrets"),
+            (
+                "reveal_service_token_secret",
+                "Can reveal newly created service token secrets",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -71,7 +77,7 @@ class ServiceToken(models.Model):
         scopes: list[str],
         expires_at,
         rotated_from=None,
-    ) -> tuple["ServiceToken", str]:
+    ) -> tuple[ServiceToken, str]:
         raw_secret = f"atk_{secrets.token_urlsafe(30)}"
         secret_hash = make_password(raw_secret)
         token_prefix = raw_secret[:16]
@@ -79,7 +85,9 @@ class ServiceToken(models.Model):
             name=name.strip(),
             token_prefix=token_prefix,
             secret_hash=secret_hash,
-            scopes=sorted({scope.strip() for scope in scopes if scope and scope.strip()}),
+            scopes=sorted(
+                {scope.strip() for scope in scopes if scope and scope.strip()}
+            ),
             expires_at=expires_at,
             created_by=actor,
             rotated_from=rotated_from,
@@ -103,7 +111,9 @@ class ServiceToken(models.Model):
     def clean(self) -> None:
         super().clean()
         errors = {}
-        if not isinstance(self.scopes, list) or any(not isinstance(item, str) for item in self.scopes):
+        if not isinstance(self.scopes, list) or any(
+            not isinstance(item, str) for item in self.scopes
+        ):
             errors["scopes"] = "Scopes must be a list of strings."
         if self.expires_at:
             now = timezone.now()
@@ -124,7 +134,9 @@ class ServiceToken(models.Model):
         self.status = self.Status.REVOKED
         self.revoked_at = timezone.now()
         self.revoked_reason = reason.strip()
-        self.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
+        self.save(
+            update_fields=["status", "revoked_at", "revoked_reason", "updated_at"]
+        )
         ServiceTokenEvent.record(
             token=self,
             event_type=ServiceTokenEvent.EventType.REVOKED,
@@ -142,7 +154,9 @@ class ServiceTokenEvent(models.Model):
         REVOKED = "revoked", "Revoked"
         ROTATED = "rotated", "Rotated"
 
-    token = models.ForeignKey(ServiceToken, on_delete=models.CASCADE, related_name="events")
+    token = models.ForeignKey(
+        ServiceToken, on_delete=models.CASCADE, related_name="events"
+    )
     event_type = models.CharField(max_length=24, choices=EventType.choices)
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -164,12 +178,19 @@ class ServiceTokenEvent(models.Model):
         return f"{self.token_id}:{self.event_type}:{actor}"
 
     @classmethod
-    def record(cls, *, token: ServiceToken, event_type: str, actor, details: dict | None = None):
+    def record(
+        cls, *, token: ServiceToken, event_type: str, actor, details: dict | None = None
+    ):
         payload = details or {}
-        payload.setdefault("audit_fingerprint", hashlib.sha256(
-            f"{token.pk}:{event_type}:{timezone.now().isoformat()}".encode()
-        ).hexdigest()[:16])
-        return cls.objects.create(token=token, event_type=event_type, actor=actor, details=payload)
+        payload.setdefault(
+            "audit_fingerprint",
+            hashlib.sha256(
+                f"{token.pk}:{event_type}:{timezone.now().isoformat()}".encode()
+            ).hexdigest()[:16],
+        )
+        return cls.objects.create(
+            token=token, event_type=event_type, actor=actor, details=payload
+        )
 
 
 class GeneralServiceToken(models.Model):
@@ -197,7 +218,9 @@ class GeneralServiceToken(models.Model):
         help_text="Optional SG filter. Empty means all SGs the user can access.",
     )
     expires_at = models.DateTimeField(db_index=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True
+    )
     retired_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_reason = models.CharField(max_length=300, blank=True, default="")
@@ -215,8 +238,14 @@ class GeneralServiceToken(models.Model):
         verbose_name = "General Service Token"
         verbose_name_plural = "General Service Tokens"
         permissions = [
-            ("manage_general_service_tokens", "Can manage general service token lifecycle"),
-            ("reveal_general_service_token_secret", "Can reveal newly created general service token secrets"),
+            (
+                "manage_general_service_tokens",
+                "Can manage general service token lifecycle",
+            ),
+            (
+                "reveal_general_service_token_secret",
+                "Can reveal newly created general service token secrets",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -234,9 +263,13 @@ class GeneralServiceToken(models.Model):
     @classmethod
     def _encode_jwt(cls, payload: dict) -> str:
         header = {"alg": "HS256", "typ": "JWT"}
-        header_part = cls._urlsafe_b64(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))
-        payload_part = cls._urlsafe_b64(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
-        signing_input = f"{header_part}.{payload_part}".encode("utf-8")
+        header_part = cls._urlsafe_b64(
+            json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+        payload_part = cls._urlsafe_b64(
+            json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+        signing_input = f"{header_part}.{payload_part}".encode()
         signature = hmac.new(
             settings.SECRET_KEY.encode("utf-8"),
             signing_input,
@@ -251,7 +284,7 @@ class GeneralServiceToken(models.Model):
         if len(parts) != 3:
             return None
         try:
-            signing_input = f"{parts[0]}.{parts[1]}".encode("utf-8")
+            signing_input = f"{parts[0]}.{parts[1]}".encode()
             expected_signature = hmac.new(
                 settings.SECRET_KEY.encode("utf-8"),
                 signing_input,
@@ -281,7 +314,7 @@ class GeneralServiceToken(models.Model):
         expires_at,
         security_groups: list[SecurityGroup] | None = None,
         claims: dict | None = None,
-    ) -> tuple["GeneralServiceToken", str]:
+    ) -> tuple[GeneralServiceToken, str]:
         issued_at = timezone.now()
         selected_groups = list(security_groups or [])
         group_ids = sorted({group.id for group in selected_groups})
@@ -334,7 +367,9 @@ class GeneralServiceToken(models.Model):
         )
         if updated:
             retired_ids = set(
-                cls.objects.filter(id__in=expired_ids, status=cls.Status.RETIRED, retired_at=now).values_list("id", flat=True)
+                cls.objects.filter(
+                    id__in=expired_ids, status=cls.Status.RETIRED, retired_at=now
+                ).values_list("id", flat=True)
             )
             events = [
                 GeneralServiceTokenEvent(
@@ -350,7 +385,9 @@ class GeneralServiceToken(models.Model):
         return int(updated)
 
     @classmethod
-    def authenticate_jwt(cls, raw_token: str) -> tuple["GeneralServiceToken" | None, dict | None, str]:
+    def authenticate_jwt(
+        cls, raw_token: str
+    ) -> tuple[GeneralServiceToken | None, dict | None, str]:
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         token = cls.objects.select_related("user").filter(token_hash=token_hash).first()
         if token is None:
@@ -382,7 +419,9 @@ class GeneralServiceToken(models.Model):
         if self.expires_at <= now:
             errors["expires_at"] = "Expiry must be in the future."
         elif self.expires_at > now + timedelta(days=self.MAX_EXPIRY_DAYS):
-            errors["expires_at"] = f"Expiry exceeds policy limit of {self.MAX_EXPIRY_DAYS} days."
+            errors["expires_at"] = (
+                f"Expiry exceeds policy limit of {self.MAX_EXPIRY_DAYS} days."
+            )
         if errors:
             raise ValidationError(errors)
 
@@ -401,7 +440,9 @@ class GeneralServiceToken(models.Model):
         self.status = self.Status.REVOKED
         self.revoked_at = timezone.now()
         self.revoked_reason = reason.strip()
-        self.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
+        self.save(
+            update_fields=["status", "revoked_at", "revoked_reason", "updated_at"]
+        )
         GeneralServiceTokenEvent.record(
             token=self,
             event_type=GeneralServiceTokenEvent.EventType.REVOKED,
@@ -445,9 +486,21 @@ class GeneralServiceTokenEvent(models.Model):
         return f"{self.token_id}:{self.event_type}:{actor}"
 
     @classmethod
-    def record(cls, *, token: GeneralServiceToken, event_type: str, actor, details: dict | None = None):
+    def record(
+        cls,
+        *,
+        token: GeneralServiceToken,
+        event_type: str,
+        actor,
+        details: dict | None = None,
+    ):
         payload = details or {}
-        payload.setdefault("audit_fingerprint", hashlib.sha256(
-            f"{token.pk}:{event_type}:{timezone.now().isoformat()}".encode()
-        ).hexdigest()[:16])
-        return cls.objects.create(token=token, event_type=event_type, actor=actor, details=payload)
+        payload.setdefault(
+            "audit_fingerprint",
+            hashlib.sha256(
+                f"{token.pk}:{event_type}:{timezone.now().isoformat()}".encode()
+            ).hexdigest()[:16],
+        )
+        return cls.objects.create(
+            token=token, event_type=event_type, actor=actor, details=payload
+        )

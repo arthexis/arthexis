@@ -74,7 +74,9 @@ def test_create_remote_upgrade_request_queues_targeted_net_message(
     assert request.channel == "unstable"
     assert message.filter_node == downstream_node
     assert message.target_limit == 1
-    assert message.control_payload["remote_upgrade_request"]["uuid"] == str(request.uuid)
+    assert message.control_payload["remote_upgrade_request"]["uuid"] == str(
+        request.uuid
+    )
     assert propagated == [message]
 
 
@@ -180,7 +182,9 @@ def test_receive_remote_upgrade_request_env_false_disables_satellite(
         "_trigger_upgrade_check",
         lambda channel_override=None: trigger_calls.append(channel_override) or True,
     )
-    monkeypatch.setattr(remote_upgrade, "_send_remote_upgrade_response", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        remote_upgrade, "_send_remote_upgrade_response", lambda *args, **kwargs: None
+    )
 
     request = remote_upgrade.receive_remote_upgrade_request(
         {
@@ -234,7 +238,9 @@ def test_receive_remote_upgrade_request_accepts_once_when_opted_in(
     }
 
     first = remote_upgrade.receive_remote_upgrade_request(payload, sender=upstream_node)
-    second = remote_upgrade.receive_remote_upgrade_request(payload, sender=upstream_node)
+    second = remote_upgrade.receive_remote_upgrade_request(
+        payload, sender=upstream_node
+    )
 
     assert first is not None
     assert second is not None
@@ -258,7 +264,9 @@ def test_receive_remote_upgrade_request_rejects_wrong_target(
         "is_suite_feature_enabled",
         lambda slug, default=False: True,
     )
-    monkeypatch.setattr(remote_upgrade, "_send_remote_upgrade_response", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        remote_upgrade, "_send_remote_upgrade_response", lambda *args, **kwargs: None
+    )
 
     request = remote_upgrade.receive_remote_upgrade_request(
         {
@@ -649,7 +657,9 @@ def test_receive_remote_upgrade_request_rejects_invalid_channel(
 
 
 @pytest.mark.django_db
-def test_receive_remote_upgrade_response_updates_origin_record(local_node, downstream_node):
+def test_receive_remote_upgrade_response_updates_origin_record(
+    local_node, downstream_node
+):
     request = RemoteUpgradeRequest.objects.create(
         origin_node=local_node,
         target_node=downstream_node,

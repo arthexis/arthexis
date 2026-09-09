@@ -33,9 +33,12 @@ def test_validate_call_envelope_returns_typed_payload():
         action=OCPPAction("StatusNotification"),
         payload={"connectorId": 1},
     )
-    assert validate_message_envelope(
-        [2, "call-1", "StatusNotification", {"connectorId": 1}]
-    ) == envelope
+    assert (
+        validate_message_envelope(
+            [2, "call-1", "StatusNotification", {"connectorId": 1}]
+        )
+        == envelope
+    )
 
 
 def test_validate_call_result_envelope_returns_typed_payload():
@@ -59,9 +62,12 @@ def test_validate_call_error_envelope_returns_typed_payload():
         description="Unsupported action",
         details={"vendor": "ACME"},
     )
-    assert validate_message_envelope(
-        [4, "call-3", "NotSupported", "Unsupported action", {"vendor": "ACME"}]
-    ) == envelope
+    assert (
+        validate_message_envelope(
+            [4, "call-3", "NotSupported", "Unsupported action", {"vendor": "ACME"}]
+        )
+        == envelope
+    )
 
 
 def test_validated_protocol_scalars_use_domain_brands_without_runtime_wrappers():

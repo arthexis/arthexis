@@ -221,18 +221,18 @@ def build_chargers_parser(parser: argparse.ArgumentParser) -> None:
     auth_subparsers.add_parser("clear", parents=[selector_parent])
 
     enable_autostart_parser = subparsers.add_parser(
-        'enable-autostart',
+        "enable-autostart",
         parents=[selector_parent],
-        help='Start charging with an idTag whenever the charger reports Preparing.',
-        description='Start charging with an idTag whenever the charger reports Preparing.',
+        help="Start charging with an idTag whenever the charger reports Preparing.",
+        description="Start charging with an idTag whenever the charger reports Preparing.",
     )
-    enable_autostart_parser.add_argument('id_tag')
+    enable_autostart_parser.add_argument("id_tag")
 
     subparsers.add_parser(
-        'disable-autostart',
+        "disable-autostart",
         parents=[selector_parent],
-        help='Disable automatic remote starts when the charger reports Preparing.',
-        description='Disable automatic remote starts when the charger reports Preparing.',
+        help="Disable automatic remote starts when the charger reports Preparing.",
+        description="Disable automatic remote starts when the charger reports Preparing.",
     )
 
     rename_parser = subparsers.add_parser(

@@ -15,12 +15,19 @@ VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.]+)?$")
 
 
 def default_checkout() -> Path:
-    return Path(os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")).expanduser()
+    return Path(
+        os.environ.get("ARTHEXIS_REPO", Path.home() / "Repos" / "arthexis")
+    ).expanduser()
 
 
 def run(cmd: list[str], cwd: Path) -> dict[str, Any]:
     proc = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
-    return {"cmd": cmd, "returncode": proc.returncode, "stdout": proc.stdout.strip(), "stderr": proc.stderr.strip()}
+    return {
+        "cmd": cmd,
+        "returncode": proc.returncode,
+        "stdout": proc.stdout.strip(),
+        "stderr": proc.stderr.strip(),
+    }
 
 
 def add_check(output: dict[str, Any], name: str, ok: bool, detail: str = "") -> None:
@@ -30,9 +37,19 @@ def add_check(output: dict[str, Any], name: str, ok: bool, detail: str = "") -> 
     output["checks"].append(check)
 
 
-def collect_checks(checkout: Path, version: str, args: argparse.Namespace) -> dict[str, Any]:
-    output: dict[str, Any] = {"checkout": str(checkout), "version": version, "write": args.write, "push": args.push, "checks": []}
-    add_check(output, "version-format", bool(VERSION_RE.match(version)), "expected vX.Y.Z")
+def collect_checks(
+    checkout: Path, version: str, args: argparse.Namespace
+) -> dict[str, Any]:
+    output: dict[str, Any] = {
+        "checkout": str(checkout),
+        "version": version,
+        "write": args.write,
+        "push": args.push,
+        "checks": [],
+    }
+    add_check(
+        output, "version-format", bool(VERSION_RE.match(version)), "expected vX.Y.Z"
+    )
 
     status = run(["git", "status", "--short"], checkout)
     output["status"] = status
@@ -43,20 +60,27 @@ def collect_checks(checkout: Path, version: str, args: argparse.Namespace) -> di
         "dirty checkout requires --allow-dirty",
     )
 
-    local_tag = run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{version}"], checkout)
+    local_tag = run(
+        ["git", "rev-parse", "-q", "--verify", f"refs/tags/{version}"], checkout
+    )
     remote_tag = run(["git", "ls-remote", "--tags", args.remote, version], checkout)
     output["localTag"] = local_tag
     output["remoteTag"] = remote_tag
     add_check(
         output,
         "tag-absent",
-        remote_tag["returncode"] == 0 and not (local_tag["returncode"] == 0 or remote_tag["stdout"]),
-        "remote tag probe failed" if remote_tag["returncode"] != 0 else "tag already exists",
+        remote_tag["returncode"] == 0
+        and not (local_tag["returncode"] == 0 or remote_tag["stdout"]),
+        "remote tag probe failed"
+        if remote_tag["returncode"] != 0
+        else "tag already exists",
     )
     return output
 
 
-def write_release_tag(output: dict[str, Any], checkout: Path, args: argparse.Namespace) -> None:
+def write_release_tag(
+    output: dict[str, Any], checkout: Path, args: argparse.Namespace
+) -> None:
     version = str(output["version"])
     tag_cmd = ["git", "tag", "-a", version, "-m", args.message or f"Release {version}"]
     push_cmd = ["git", "push", args.remote, version]
@@ -73,7 +97,12 @@ def write_exit_code(output: dict[str, Any], write: bool) -> int:
     if not all(item["ok"] for item in output["checks"]):
         return 1
     if write:
-        return int(output.get("pushResult", output.get("tagResult", {"returncode": 0})).get("returncode") or 0)
+        return int(
+            output.get("pushResult", output.get("tagResult", {"returncode": 0})).get(
+                "returncode"
+            )
+            or 0
+        )
     return 0
 
 

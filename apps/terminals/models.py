@@ -26,14 +26,24 @@ class AgentTerminal(Profile):
         related_name="agent_terminals",
         null=True,
         blank=True,
-        help_text=_("Node role this terminal definition applies to. Defaults to Terminal role."),
+        help_text=_(
+            "Node role this terminal definition applies to. Defaults to Terminal role."
+        ),
     )
-    executable = models.CharField(max_length=255, blank=True, help_text=_("Optional executable command."))
-    launch_command = models.TextField(blank=True, help_text=_("Command to send after launch."))
-    launch_prompt = models.TextField(blank=True, help_text=_("Prompt text to send after command."))
+    executable = models.CharField(
+        max_length=255, blank=True, help_text=_("Optional executable command.")
+    )
+    launch_command = models.TextField(
+        blank=True, help_text=_("Command to send after launch.")
+    )
+    launch_prompt = models.TextField(
+        blank=True, help_text=_("Prompt text to send after command.")
+    )
     prompt_blocks = models.JSONField(default=list, blank=True)
     auto_close_on_exit = models.BooleanField(default=False)
-    prompt_block_mode = models.CharField(max_length=8, choices=LOOP_CHOICES, default=LOOP_END)
+    prompt_block_mode = models.CharField(
+        max_length=8, choices=LOOP_CHOICES, default=LOOP_END
+    )
     startup_maximized = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -51,7 +61,10 @@ class AgentTerminal(Profile):
             raise ValidationError({"prompt_blocks": _("Prompt blocks must be a list.")})
 
     def resolved_executable(self) -> str:
-        return resolve_sigils((self.executable or "").strip(), current=None) or "x-terminal-emulator"
+        return (
+            resolve_sigils((self.executable or "").strip(), current=None)
+            or "x-terminal-emulator"
+        )
 
     def resolved_launch_command(self) -> str:
         return resolve_sigils(self.launch_command or "", current=None)

@@ -1,7 +1,7 @@
 import io
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -25,8 +25,8 @@ class EstimateCommandTests(SimpleTestCase):
             second.write_text("b" * 25, encoding="utf-8")
 
             file_dates = {
-                first: datetime(2024, 1, 1, tzinfo=timezone.utc),
-                second: datetime(2024, 2, 1, tzinfo=timezone.utc),
+                first: datetime(2024, 1, 1, tzinfo=UTC),
+                second: datetime(2024, 2, 1, tzinfo=UTC),
             }
 
             stdout = io.StringIO()
@@ -58,9 +58,13 @@ class EstimateCommandTests(SimpleTestCase):
             command.stdout = io.StringIO()
             command.stderr = io.StringIO()
 
-            with patch("apps.core.management.commands.estimate.settings.BASE_DIR", repo_root):
+            with patch(
+                "apps.core.management.commands.estimate.settings.BASE_DIR", repo_root
+            ):
                 with patch.object(command, "_load_git_created_dates", return_value={}):
-                    file_dates = command._resolve_file_dates([migration_file], apps_dir=apps_dir)
+                    file_dates = command._resolve_file_dates(
+                        [migration_file], apps_dir=apps_dir
+                    )
 
             assert migration_file in file_dates
             assert "using file mtime instead" in command.stderr.getvalue()
@@ -75,8 +79,12 @@ class EstimateCommandTests(SimpleTestCase):
             command = Command()
             command.stderr = io.StringIO()
 
-            with patch("apps.core.management.commands.estimate.settings.BASE_DIR", repo_root):
-                git_dates = command._load_git_created_dates(repo_root=repo_root, apps_dir=external_apps)
+            with patch(
+                "apps.core.management.commands.estimate.settings.BASE_DIR", repo_root
+            ):
+                git_dates = command._load_git_created_dates(
+                    repo_root=repo_root, apps_dir=external_apps
+                )
 
             assert git_dates == {}
 
@@ -95,7 +103,9 @@ class EstimateCommandTests(SimpleTestCase):
                 stderr="shallow update not allowed",
             )
             with patch("subprocess.run", side_effect=error):
-                git_dates = command._load_git_created_dates(repo_root=repo_root, apps_dir=apps_dir)
+                git_dates = command._load_git_created_dates(
+                    repo_root=repo_root, apps_dir=apps_dir
+                )
 
             assert git_dates == {}
             assert "Unable to inspect git history" in command.stderr.getvalue()

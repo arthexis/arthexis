@@ -38,7 +38,9 @@ class RfidPeerSyncSignatureTests(TestCase):
         payload = {"requester": "invalid-sig"}
         for url in (reverse("rfid-export"), reverse("rfid-import")):
             with self.subTest(url=url):
-                response, _body = self._post_json(url, payload, signature="not-base64!!")
+                response, _body = self._post_json(
+                    url, payload, signature="not-base64!!"
+                )
                 self.assertEqual(response.status_code, 403)
                 self.assertEqual(response.json(), {"detail": "invalid signature"})
 

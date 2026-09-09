@@ -93,7 +93,9 @@ class IngestionApiTests(TestCase):
         self.assertEqual(ConnectIngestionEvent.objects.count(), 1)
 
         self.deployment.refresh_from_db()
-        self.assertEqual(self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED)
+        self.assertEqual(
+            self.deployment.status, ConnectUpdateDeployment.Status.SUCCEEDED
+        )
         self.assertTrue(
             ConnectCampaignEvent.objects.filter(
                 deployment=self.deployment,

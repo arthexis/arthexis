@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ipaddress
 import os
-from pathlib import Path
 import socket
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from django.conf import settings
@@ -51,9 +51,13 @@ def _resolve_local_role_name() -> str:
     return "Terminal"
 
 
-def register_current(node_model: type["Node"], notify_peers: bool = True) -> tuple["Node", bool]:
+def register_current(
+    node_model: type[Node], notify_peers: bool = True
+) -> tuple[Node, bool]:
     """Create or update the local node entry for ``node_model``."""
-    hostname_override = (os.environ.get("NODE_HOSTNAME") or os.environ.get("HOSTNAME") or "").strip()
+    hostname_override = (
+        os.environ.get("NODE_HOSTNAME") or os.environ.get("HOSTNAME") or ""
+    ).strip()
     hostname = hostname_override or socket.gethostname()
     network_hostname = os.environ.get("NODE_PUBLIC_HOSTNAME", "").strip()
     if not network_hostname:
@@ -92,7 +96,9 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     if direct_address and direct_address not in ipv4_candidates:
         ipv4_candidates.append(direct_address)
 
-    ordered_ipv4 = node_model.order_ipv4_addresses(node_model.sanitize_ipv4_addresses(ipv4_candidates))
+    ordered_ipv4 = node_model.order_ipv4_addresses(
+        node_model.sanitize_ipv4_addresses(ipv4_candidates)
+    )
     ipv4_address = ordered_ipv4[0] if ordered_ipv4 else ""
     serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else ""
     ipv6_address = node_model._select_preferred_ip(ipv6_candidates) or ""
@@ -114,10 +120,14 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     installed_revision = rev_value if rev_value else ""
     mac = node_model.get_current_mac()
     host_instance_id = node_model.get_host_instance_id()
-    local_registration_logger.info("Local node registration started hostname=%s mac=%s", hostname, mac)
+    local_registration_logger.info(
+        "Local node registration started hostname=%s mac=%s", hostname, mac
+    )
 
     endpoint_override = os.environ.get("NODE_PUBLIC_ENDPOINT", "").strip()
-    slug = slugify(endpoint_override or hostname) or node_model._generate_unique_public_endpoint(hostname or mac)
+    slug = slugify(
+        endpoint_override or hostname
+    ) or node_model._generate_unique_public_endpoint(hostname or mac)
     node = None
     if host_instance_id is not None and host_instance_id != "":
         node = node_model.objects.filter(
@@ -172,10 +182,20 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
             update_fields.append("role")
         if update_fields:
             node.save(update_fields=update_fields)
-            local_registration_logger.info("Local node registration updated node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+            local_registration_logger.info(
+                "Local node registration updated node_id=%s endpoint=%s address=%s",
+                node.id,
+                node.public_endpoint,
+                node.address,
+            )
         else:
             node.refresh_features()
-            local_registration_logger.info("Local node registration refreshed node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+            local_registration_logger.info(
+                "Local node registration refreshed node_id=%s endpoint=%s address=%s",
+                node.id,
+                node.public_endpoint,
+                node.address,
+            )
         created = False
     else:
         node = node_model.objects.create(**defaults)
@@ -183,7 +203,12 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
         if desired_role:
             node.role = desired_role
             node.save(update_fields=["role"])
-        local_registration_logger.info("Local node registration created node_id=%s endpoint=%s address=%s", node.id, node.public_endpoint, node.address)
+        local_registration_logger.info(
+            "Local node registration created node_id=%s endpoint=%s address=%s",
+            node.id,
+            node.public_endpoint,
+            node.address,
+        )
 
     if created and node.role is None:
         terminal = NodeRole.objects.filter(name="Terminal").first()

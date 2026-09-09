@@ -6,10 +6,14 @@ from celery import shared_task
 
 from apps.release.tasks.auto_upgrade.tasks import (
     check_github_updates as _check_github_updates,
+)
+from apps.release.tasks.auto_upgrade.tasks import (
     verify_auto_upgrade_health as _verify_auto_upgrade_health,
 )
 from apps.release.tasks.maintenance import (
     run_release_data_transform as _run_release_data_transform,
+)
+from apps.release.tasks.maintenance import (
     run_scheduled_release as _run_scheduled_release,
 )
 

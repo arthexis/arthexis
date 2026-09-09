@@ -213,9 +213,7 @@ def test_staff_feedback_does_not_capture_screenshot(rf, settings, tmp_path):
     assert not story.screenshot
 
 
-def test_public_feedback_does_not_capture_screenshot(
-    rf, settings, tmp_path
-):
+def test_public_feedback_does_not_capture_screenshot(rf, settings, tmp_path):
     settings.USER_STORY_THROTTLE_SECONDS = 0
     settings.MEDIA_ROOT = tmp_path / "media"
     request = rf.post("/feedback/user-story/", data=_feedback_payload(path="/"))
@@ -253,9 +251,7 @@ def test_public_feedback_does_not_capture_screenshot_with_internal_path(
     assert not story.allow_feedback_issue_label_tags
 
 
-def test_public_feedback_does_not_allow_issue_label_tags(
-    rf, settings, tmp_path
-):
+def test_public_feedback_does_not_allow_issue_label_tags(rf, settings, tmp_path):
     settings.USER_STORY_THROTTLE_SECONDS = 0
     settings.MEDIA_ROOT = tmp_path / "media"
     request = rf.post(

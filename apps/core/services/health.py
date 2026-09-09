@@ -139,9 +139,7 @@ def run_health_checks(
         except Exception as exc:  # pragma: no cover - unexpected failures
             has_failures = True
             failure_message = f"Unexpected failure in {definition.target}: {exc}"
-            stderr.write(
-                style.ERROR(failure_message)
-            )
+            stderr.write(style.ERROR(failure_message))
             if report_github:
                 report_health_check_failure(
                     definition=definition,

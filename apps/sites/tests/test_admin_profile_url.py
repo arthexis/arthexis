@@ -37,12 +37,16 @@ def test_admin_profile_url_falls_back_when_teams_user_not_resolvable(monkeypatch
 
     monkeypatch.setattr(admin_extras.apps, "get_model", fake_get_model)
     monkeypatch.setattr(admin_extras.admin.site, "_registry", registry)
-    monkeypatch.setattr(admin_extras, "_admin_model_instance", fake_admin_model_instance)
+    monkeypatch.setattr(
+        admin_extras, "_admin_model_instance", fake_admin_model_instance
+    )
     monkeypatch.setattr(admin_extras, "_admin_has_access", lambda *args, **kwargs: True)
     monkeypatch.setattr(
         admin_extras,
         "_admin_change_url",
-        lambda model, candidate_user: f"/admin/{model._meta.app_label}/{model._meta.model_name}/{candidate_user.pk}/change/",
+        lambda model, candidate_user: (
+            f"/admin/{model._meta.app_label}/{model._meta.model_name}/{candidate_user.pk}/change/"
+        ),
     )
 
     url = admin_extras.admin_profile_url({"request": object()}, user)

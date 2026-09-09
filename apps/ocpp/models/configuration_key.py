@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class ConfigurationKey(Entity):
     """Single configurationKey entry from a GetConfiguration payload."""
 

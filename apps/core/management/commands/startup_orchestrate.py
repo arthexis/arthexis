@@ -8,7 +8,7 @@ import shlex
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from io import StringIO
 from pathlib import Path
 
@@ -27,7 +27,9 @@ class Command(BaseCommand):
     help = "Run startup orchestration and emit process-launch decisions as JSON."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("--port", required=True, help="Backend port for startup metadata.")
+        parser.add_argument(
+            "--port", required=True, help="Backend port for startup metadata."
+        )
         parser.add_argument(
             "--lock-dir",
             default=None,
@@ -54,7 +56,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         started_monotonic = time.monotonic()
         started_at_epoch = int(time.time())
-        started_at_iso = datetime.now(timezone.utc).isoformat()
+        started_at_iso = datetime.now(UTC).isoformat()
 
         base_dir = Path(settings.BASE_DIR)
         lock_dir = Path(options.get("lock_dir") or (base_dir / ".locks"))
@@ -71,7 +73,9 @@ class Command(BaseCommand):
         celery_mode = options["celery_mode"]
 
         systemd_units = self._read_systemd_units(lock_dir)
-        systemd_celery_units = self._has_systemd_celery_units(service_name, systemd_units)
+        systemd_celery_units = self._has_systemd_celery_units(
+            service_name, systemd_units
+        )
         payload: dict[str, object] = {
             "status": "ok",
             "port": str(options["port"]),
@@ -91,7 +95,9 @@ class Command(BaseCommand):
 
         self._write_startup_started_lock(startup_started_lock, started_at_epoch)
 
-        preflight_ok, preflight_status = self._run_preflight(lock_dir=lock_dir, base_dir=base_dir)
+        preflight_ok, preflight_status = self._run_preflight(
+            lock_dir=lock_dir, base_dir=base_dir
+        )
         payload["checks"].append(preflight_status)
 
         maintenance_ok, maintenance_status = self._run_startup_maintenance()
@@ -122,10 +128,16 @@ class Command(BaseCommand):
         if payload["status"] != "ok":
             raise CommandError("startup orchestration failed")
 
-    def _run_preflight(self, *, lock_dir: Path, base_dir: Path) -> tuple[bool, dict[str, str]]:
+    def _run_preflight(
+        self, *, lock_dir: Path, base_dir: Path
+    ) -> tuple[bool, dict[str, str]]:
         helper_script = base_dir / "scripts" / "helpers" / "runserver_preflight.sh"
         if not helper_script.is_file():
-            return False, {"name": "runserver_preflight", "status": "error", "detail": "helper script missing"}
+            return False, {
+                "name": "runserver_preflight",
+                "status": "error",
+                "detail": "helper script missing",
+            }
 
         quoted_helper = shlex.quote(str(helper_script))
         env = {
@@ -146,11 +158,19 @@ class Command(BaseCommand):
             detail = "ok"
             if result.stdout.strip():
                 detail = result.stdout.strip().splitlines()[-1]
-            return True, {"name": "runserver_preflight", "status": "ok", "detail": detail}
+            return True, {
+                "name": "runserver_preflight",
+                "status": "ok",
+                "detail": detail,
+            }
 
         stderr = (result.stderr or "").strip().splitlines()
         detail = stderr[-1] if stderr else "runserver preflight failed"
-        return False, {"name": "runserver_preflight", "status": "error", "detail": detail}
+        return False, {
+            "name": "runserver_preflight",
+            "status": "error",
+            "detail": detail,
+        }
 
     def _run_startup_maintenance(self) -> tuple[bool, dict[str, str]]:
         stdout = StringIO()
@@ -184,7 +204,11 @@ class Command(BaseCommand):
     def _read_systemd_units(lock_dir: Path) -> set[str]:
         path = lock_dir / SYSTEMD_UNITS_LOCK
         try:
-            return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
+            return {
+                line.strip()
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            }
         except OSError:
             return set()
 
@@ -193,7 +217,10 @@ class Command(BaseCommand):
             return False
         return any(
             self._has_unit(service_name=service_name, units=units, template=template)
-            for template in ("celery-{service_name}.service", "celery-beat-{service_name}.service")
+            for template in (
+                "celery-{service_name}.service",
+                "celery-beat-{service_name}.service",
+            )
         )
 
     @staticmethod
@@ -228,8 +255,10 @@ class Command(BaseCommand):
     ) -> None:
         finished_at_epoch = int(time.time())
         payload = {
-            "started_at": datetime.fromtimestamp(started_at_epoch, tz=timezone.utc).isoformat(),
-            "finished_at": datetime.fromtimestamp(finished_at_epoch, tz=timezone.utc).isoformat(),
+            "started_at": datetime.fromtimestamp(started_at_epoch, tz=UTC).isoformat(),
+            "finished_at": datetime.fromtimestamp(
+                finished_at_epoch, tz=UTC
+            ).isoformat(),
             "duration_seconds": duration_seconds,
             "status": status,
             "phase": phase,

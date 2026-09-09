@@ -24,6 +24,7 @@ requires_odoo = pytest.mark.skipif(
     reason="Odoo admin form tests require apps.odoo in INSTALLED_APPS.",
 )
 
+
 @requires_odoo
 @pytest.mark.django_db
 def test_odoo_employee_admin_form_requires_password_on_create(admin_user):

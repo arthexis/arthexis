@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class DataTransferMessage(Entity):
     """Persisted record of OCPP DataTransfer exchanges."""
 
@@ -56,9 +57,7 @@ class DataTransferMessage(Entity):
                 fields=["ocpp_message_id"],
                 name="ocpp_datatr_ocpp_me_70d17f_idx",
             ),
-            models.Index(
-                fields=["vendor_id"], name="ocpp_datatr_vendor__59e1c7_idx"
-            ),
+            models.Index(fields=["vendor_id"], name="ocpp_datatr_vendor__59e1c7_idx"),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation

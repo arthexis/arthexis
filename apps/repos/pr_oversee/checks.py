@@ -66,7 +66,9 @@ def _check_order_key(check: Mapping[str, Any], index: int) -> tuple[int, str]:
 def _normalized_check_label(value: object) -> str:
     if value is None:
         return ""
-    return "".join(character for character in str(value).casefold() if character.isalnum())
+    return "".join(
+        character for character in str(value).casefold() if character.isalnum()
+    )
 
 
 def _check_surface_labels(check: Mapping[str, Any]) -> tuple[object, ...]:
@@ -98,10 +100,9 @@ def is_advisory_check(check: Mapping[str, Any]) -> bool:
 
     app = _coerce_mapping(check.get("app"))
     if "app" in check:
-        return (
-            _normalized_check_label(app.get("name")) in TRUSTED_SONAR_APP_LABELS
-            and _has_advisory_sonar_label(check)
-        )
+        return _normalized_check_label(
+            app.get("name")
+        ) in TRUSTED_SONAR_APP_LABELS and _has_advisory_sonar_label(check)
 
     return False
 

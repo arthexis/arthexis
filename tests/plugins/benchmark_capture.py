@@ -6,7 +6,7 @@ import json
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -64,7 +64,7 @@ def pytest_configure(config: pytest.Config) -> None:
     global _RECORDS, _SESSION_STARTED_AT, _SESSION_START_MONOTONIC
     _RECORDS = {}
     _SESSION_START_MONOTONIC = time.perf_counter()
-    _SESSION_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    _SESSION_STARTED_AT = datetime.now(UTC).isoformat()
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
@@ -92,7 +92,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         list(_RECORDS.values()),
         duration_seconds=time.perf_counter() - _SESSION_START_MONOTONIC,
         exitstatus=exitstatus,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         started_at=_SESSION_STARTED_AT,
         top_limit=top_limit,
     )

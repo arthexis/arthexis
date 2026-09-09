@@ -1,5 +1,6 @@
 from .common_imports import *
 
+
 class SecurityEventAdmin(EntityModelAdmin):
     list_display = (
         "charger",

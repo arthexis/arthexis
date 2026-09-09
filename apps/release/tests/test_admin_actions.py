@@ -32,7 +32,7 @@ def test_release_action_resumes_ongoing_release_process(db, tmp_path) -> None:
 
         assert response.status_code == 302
         assert response.url == (
-            f'{reverse("release-progress", args=[release.pk, "publish"])}?resume=1'
+            f"{reverse('release-progress', args=[release.pk, 'publish'])}?resume=1"
         )
 
 

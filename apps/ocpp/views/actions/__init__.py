@@ -5,16 +5,6 @@ from utils.api import api_login_required
 
 from ... import store
 from ...models import ChargingProfile
-from .common import (
-    CALL_EXPECTED_STATUSES,
-    ActionCall,
-    ActionContext,
-    _ensure_charger_access,
-    _evaluate_pending_call_result,
-    _get_or_create_charger,
-    _normalize_connector_slug,
-    _parse_request_body,
-)
 from . import (
     certificates,
     charging_profiles,
@@ -25,6 +15,16 @@ from . import (
     monitoring,
     network_profiles,
     reservations,
+)
+from .common import (
+    CALL_EXPECTED_STATUSES,
+    ActionCall,
+    ActionContext,
+    _ensure_charger_access,
+    _evaluate_pending_call_result,
+    _get_or_create_charger,
+    _normalize_connector_slug,
+    _parse_request_body,
 )
 from .registry import ACTION_HANDLERS
 
@@ -60,9 +60,7 @@ def dispatch_action(request, cid, connector=None):
     connector_value, _normalized_slug = _normalize_connector_slug(connector)
     log_key = store.identity_key(cid, connector_value)
     charger_obj = _get_or_create_charger(cid, connector_value)
-    access_response = _ensure_charger_access(
-        request.user, charger_obj, request=request
-    )
+    access_response = _ensure_charger_access(request.user, charger_obj, request=request)
     if access_response is not None:
         return access_response
     ws = store.get_connection(cid, connector_value)

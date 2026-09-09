@@ -1,9 +1,9 @@
+import json
 from collections import OrderedDict
 from typing import Any
 
 from django import forms
 from django.forms.widgets import ClearableFileInput
-import json
 
 
 class CopyColorWidget(forms.TextInput):

@@ -15,12 +15,20 @@ from apps.nodes.views.network import net_message_pull
 
 
 @pytest.mark.django_db
-def test_net_message_pull_accepts_trusted_key_hints_with_stale_requester_uuid(monkeypatch):
-    requester_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    requester_public_key = requester_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+def test_net_message_pull_accepts_trusted_key_hints_with_stale_requester_uuid(
+    monkeypatch,
+):
+    requester_private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    requester_public_key = (
+        requester_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     stale_uuid = uuid.uuid4()
     live_uuid = uuid.uuid4()
 
@@ -34,10 +42,14 @@ def test_net_message_pull_accepts_trusted_key_hints_with_stale_requester_uuid(mo
     )
 
     local_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    local_public_key = local_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    local_public_key = (
+        local_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     local_node = Node.objects.create(
         hostname="self-node",
         mac_address="aa:bb:cc:dd:ee:99",
@@ -81,11 +93,17 @@ def test_net_message_pull_accepts_trusted_key_hints_with_stale_requester_uuid(mo
 
 @pytest.mark.django_db
 def test_net_message_pull_drops_queued_remote_upgrade_controls(monkeypatch):
-    requester_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    requester_public_key = requester_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    requester_private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    requester_public_key = (
+        requester_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     requester_node = Node.objects.create(
         hostname="downstream",
         mac_address="aa:bb:cc:dd:ee:21",
@@ -95,10 +113,14 @@ def test_net_message_pull_drops_queued_remote_upgrade_controls(monkeypatch):
     )
 
     local_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    local_public_key = local_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    local_public_key = (
+        local_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     local_node = Node.objects.create(
         hostname="self-node",
         mac_address="aa:bb:cc:dd:ee:98",
@@ -153,11 +175,17 @@ def test_net_message_pull_drops_queued_remote_upgrade_controls(monkeypatch):
 
 @pytest.mark.django_db
 def test_net_message_pull_delivers_flagged_local_remote_upgrade_controls(monkeypatch):
-    requester_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    requester_public_key = requester_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    requester_private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    requester_public_key = (
+        requester_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     requester_node = Node.objects.create(
         hostname="downstream",
         mac_address="aa:bb:cc:dd:ee:22",
@@ -167,10 +195,14 @@ def test_net_message_pull_delivers_flagged_local_remote_upgrade_controls(monkeyp
     )
 
     local_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    local_public_key = local_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    local_public_key = (
+        local_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     local_node = Node.objects.create(
         hostname="self-node",
         mac_address="aa:bb:cc:dd:ee:97",
@@ -233,11 +265,17 @@ def test_net_message_pull_delivers_flagged_local_remote_upgrade_controls(monkeyp
 
 @pytest.mark.django_db
 def test_net_message_pull_drops_stale_seen_marker_without_local_flag(monkeypatch):
-    requester_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    requester_public_key = requester_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    requester_private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    requester_public_key = (
+        requester_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     requester_node = Node.objects.create(
         hostname="downstream",
         mac_address="aa:bb:cc:dd:ee:23",
@@ -247,10 +285,14 @@ def test_net_message_pull_drops_stale_seen_marker_without_local_flag(monkeypatch
     )
 
     local_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    local_public_key = local_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    local_public_key = (
+        local_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     local_node = Node.objects.create(
         hostname="self-node",
         mac_address="aa:bb:cc:dd:ee:96",

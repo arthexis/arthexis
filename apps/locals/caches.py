@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import itertools
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
 from django.db import models
 from django.utils import timezone

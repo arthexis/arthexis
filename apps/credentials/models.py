@@ -12,7 +12,7 @@ from apps.media.utils import ensure_media_bucket
 from apps.sigils.fields import SigilShortAutoField
 
 
-def ssh_key_upload_path(instance: "SSHAccount", filename: str) -> str:
+def ssh_key_upload_path(instance: SSHAccount, filename: str) -> str:
     node_identifier = instance.node_id or "unassigned"
     return f"ssh_accounts/{node_identifier}/{Path(filename).name}"
 

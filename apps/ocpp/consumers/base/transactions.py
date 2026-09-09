@@ -20,15 +20,27 @@ from .historical_transactions import (
 
 class TransactionConsumer(Protocol):
     async def _handle_transaction_event_legacy(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse: ...
 
     async def _handle_start_transaction_legacy(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse: ...
 
     async def _handle_stop_transaction_legacy(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse: ...
 
 
@@ -100,7 +112,11 @@ class TransactionHandler:
         self.consumer = consumer
 
     async def handle_transaction_event(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse:
         """Handle OCPP 2.x ``TransactionEvent`` messages with DB persistence."""
 
@@ -109,7 +125,11 @@ class TransactionHandler:
         )
 
     async def handle_start_transaction(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse:
         """Handle OCPP 1.6 ``StartTransaction`` and persist transaction rows."""
 
@@ -137,7 +157,11 @@ class TransactionHandler:
         return response
 
     async def handle_stop_transaction(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse:
         """Handle OCPP 1.6 ``StopTransaction`` and finalize transaction rows."""
 

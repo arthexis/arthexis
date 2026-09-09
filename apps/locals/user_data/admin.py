@@ -73,11 +73,11 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         else:
             context["is_user_datum"] = False
             context["is_seed_datum"] = False
-        context["seed_datum_editable"] = (
-            supports_seed_datum
-            and (obj is None or not _seed_datum_is_default(obj, index=fixture_index))
+        context["seed_datum_editable"] = supports_seed_datum and (
+            obj is None or not _seed_datum_is_default(obj, index=fixture_index)
         )
         return super().render_change_form(request, context, add, change, form_url, obj)
+
 
 class ImportExportAdminMixin:
     """Provide import/export actions for all model admins."""
@@ -132,7 +132,9 @@ class ImportExportAdminMixin:
         export_querystring.pop("format", None)
         if self.has_view_permission(request):
             extra_context.setdefault("model_export_url", self._export_url())
-            extra_context.setdefault("export_querystring", export_querystring.urlencode())
+            extra_context.setdefault(
+                "export_querystring", export_querystring.urlencode()
+            )
         if self.has_add_permission(request) or self.has_change_permission(request):
             extra_context.setdefault("model_import_url", self._import_url())
         return super().changelist_view(request, extra_context=extra_context)
@@ -248,14 +250,18 @@ class ImportExportAdminMixin:
         finally:
             request.GET = original_get
         total_export_count = queryset.count() if not export_format else None
-        queryset, exporting_selected, selected_ids = self._selected_queryset(request, queryset)
+        queryset, exporting_selected, selected_ids = self._selected_queryset(
+            request, queryset
+        )
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
         include_header = params.get("include_header") == "on"
         if request.method == "POST" and export_format:
             selected_export_column_names = request.POST.getlist("export_columns")
             if not selected_export_column_names:
-                return HttpResponseBadRequest(_("Select at least one column to export."))
+                return HttpResponseBadRequest(
+                    _("Select at least one column to export.")
+                )
             export_field_by_name = {field.name: field for field in export_fields}
             selected_export_column_names = self._ordered_unique_names(
                 selected_export_column_names
@@ -313,9 +319,7 @@ class ImportExportAdminMixin:
                 )
                 return response
             return HttpResponseBadRequest(_("Unsupported export format."))
-        changelist_url = reverse(
-            f"admin:{opts.app_label}_{opts.model_name}_changelist"
-        )
+        changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         context = admin.site.each_context(request)
         selected_name_set = set(export_field_names)
         identifier_name_set = self._get_import_identifier_field_names()
@@ -353,9 +357,7 @@ class ImportExportAdminMixin:
         if not (can_add or can_change):
             raise PermissionDenied
         opts = self.model._meta
-        changelist_url = reverse(
-            f"admin:{opts.app_label}_{opts.model_name}_changelist"
-        )
+        changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         if request.method == "POST" and request.FILES.get("import_file"):
             imported = 0
             import_file = request.FILES["import_file"]
@@ -392,18 +394,19 @@ class ImportExportAdminMixin:
                             )
                         deserialized_object.save()
                         imported += 1
-            except (DeserializationError, IntegrityError, ValidationError, ValueError) as exc:
+            except (
+                DeserializationError,
+                IntegrityError,
+                ValidationError,
+                ValueError,
+            ) as exc:
                 self.message_user(
                     request,
                     _("Error processing import: %(error)s") % {"error": exc},
                     level=messages.ERROR,
                 )
                 return HttpResponseRedirect(_safe_next_url(request) or changelist_url)
-            name = (
-                opts.verbose_name
-                if imported == 1
-                else opts.verbose_name_plural
-            )
+            name = opts.verbose_name if imported == 1 else opts.verbose_name_plural
             self.message_user(
                 request,
                 ngettext(
@@ -424,6 +427,7 @@ class ImportExportAdminMixin:
             }
         )
         return TemplateResponse(request, self.import_template, context)
+
 
 class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelAdmin):
     """ModelAdmin base class for :class:`Entity` models."""
@@ -654,7 +658,9 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
             if not _seed_datum_is_default(obj, index=fixture_index):
                 seed_requested = request.POST.get("_seed_datum") == "on"
                 if getattr(obj, "is_seed_data", False) != seed_requested:
-                    manager = getattr(type(obj), "all_objects", type(obj)._default_manager)
+                    manager = getattr(
+                        type(obj), "all_objects", type(obj)._default_manager
+                    )
                     manager.filter(pk=obj.pk).update(is_seed_data=seed_requested)
                     obj.is_seed_data = seed_requested
         if copied:
@@ -780,8 +786,6 @@ def _iter_entity_admin_models():
             continue
         seen.add(concrete_model)
         yield model, model_admin
-
-
 
 
 def _supports_user_datum(model) -> bool:

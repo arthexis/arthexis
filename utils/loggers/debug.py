@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from typing import Pattern
+from dataclasses import dataclass
+from re import Pattern
 
 
 @dataclass(frozen=True)
@@ -50,9 +50,7 @@ def parse_debug_logging(
 
     if "," in normalized:
         apps = {
-            entry.strip().lower()
-            for entry in normalized.split(",")
-            if entry.strip()
+            entry.strip().lower() for entry in normalized.split(",") if entry.strip()
         }
         if apps:
             return DebugLoggingControl(False, frozenset(apps), None)
@@ -61,8 +59,6 @@ def parse_debug_logging(
     try:
         pattern = re.compile(normalized, re.IGNORECASE)
     except re.error:
-        return DebugLoggingControl(
-            False, frozenset({normalized.lower()}), None
-        )
+        return DebugLoggingControl(False, frozenset({normalized.lower()}), None)
 
     return DebugLoggingControl(False, None, pattern)

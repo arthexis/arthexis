@@ -92,12 +92,16 @@ def _probe_download_url(download_url: str) -> tuple[bool, str]:
         else:
             try:
                 resolved_hosts = {
-                    ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
+                    ip_address(record[4][0])
+                    for record in getaddrinfo(hostname, None, type=0)
                 }
             except OSError as exc:
                 reason = getattr(exc, "strerror", str(exc))
                 return False, str(reason)
-            if any(any(getattr(ip_value, flag) for flag in BLOCKED_ADDRESS_FLAGS) for ip_value in resolved_hosts):
+            if any(
+                any(getattr(ip_value, flag) for flag in BLOCKED_ADDRESS_FLAGS)
+                for ip_value in resolved_hosts
+            ):
                 return False, blocked_message
             selected_ip = sorted(str(ip_value) for ip_value in resolved_hosts)[0]
             resolution_context = _pin_hostname_resolution(hostname, selected_ip)
@@ -131,7 +135,9 @@ def _probe_download_url(download_url: str) -> tuple[bool, str]:
 class RaspberryPiImageBuildForm(forms.Form):
     """Collect operator input for Raspberry Pi image generation from admin UI."""
 
-    name = forms.CharField(max_length=120, help_text=_("Artifact identifier, for example v0-5-0."))
+    name = forms.CharField(
+        max_length=120, help_text=_("Artifact identifier, for example v0-5-0.")
+    )
     base_image_uri = forms.CharField(
         max_length=500,
         help_text=_("Base image URI or local path (file://, local path, or https://)."),
@@ -156,17 +162,23 @@ class RaspberryPiImageBuildForm(forms.Form):
     )
     skip_customize = forms.BooleanField(
         required=False,
-        help_text=_("Copy the base image without injecting Arthexis bootstrap scripts."),
+        help_text=_(
+            "Copy the base image without injecting Arthexis bootstrap scripts."
+        ),
     )
     recovery_ssh_user = forms.CharField(
         max_length=64,
         required=False,
-        help_text=_("Recovery SSH username used when public keys are provided; defaults to arthe."),
+        help_text=_(
+            "Recovery SSH username used when public keys are provided; defaults to arthe."
+        ),
     )
     recovery_authorized_keys = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
-        help_text=_("OpenSSH public keys to authorize for first-boot recovery access, one per line."),
+        help_text=_(
+            "OpenSSH public keys to authorize for first-boot recovery access, one per line."
+        ),
     )
     skip_recovery_ssh = forms.BooleanField(
         required=False,
@@ -178,7 +190,11 @@ class RaspberryPiImageBuildForm(forms.Form):
 
         name = self.cleaned_data["name"].strip()
         if not name or name in {".", ".."} or "/" in name or "\\" in name:
-            raise ValidationError(_("Artifact name must not contain path separators or traversal segments."))
+            raise ValidationError(
+                _(
+                    "Artifact name must not contain path separators or traversal segments."
+                )
+            )
         return name
 
     def clean_recovery_authorized_keys(self) -> list[str]:
@@ -214,9 +230,15 @@ class RaspberryPiImageBuildForm(forms.Form):
         recovery_ssh_user = str(cleaned.get("recovery_ssh_user") or "").strip()
         if skip_recovery_ssh and (recovery_authorized_keys or recovery_ssh_user):
             raise ValidationError(
-                _("Recovery SSH fields cannot be combined with the explicit recovery SSH skip option.")
+                _(
+                    "Recovery SSH fields cannot be combined with the explicit recovery SSH skip option."
+                )
             )
-        if not skip_customize and not skip_recovery_ssh and not recovery_authorized_keys:
+        if (
+            not skip_customize
+            and not skip_recovery_ssh
+            and not recovery_authorized_keys
+        ):
             raise ValidationError(
                 _(
                     "Recovery SSH is required for customized image builds. "
@@ -260,9 +282,14 @@ class RaspberryPiImageBuildForm(forms.Form):
 
     @staticmethod
     def _base_image_roots() -> tuple[Path, ...]:
-        configured_roots = getattr(settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None)
+        configured_roots = getattr(
+            settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None
+        )
         if configured_roots:
-            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+            return tuple(
+                Path(root).expanduser().resolve(strict=False)
+                for root in configured_roots
+            )
 
         return (Path(settings.BASE_DIR).resolve(strict=False), Path("/tmp"))
 
@@ -270,7 +297,10 @@ class RaspberryPiImageBuildForm(forms.Form):
     def _output_roots() -> tuple[Path, ...]:
         configured_roots = getattr(settings, "IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS", None)
         if configured_roots:
-            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+            return tuple(
+                Path(root).expanduser().resolve(strict=False)
+                for root in configured_roots
+            )
 
         return (Path(settings.BASE_DIR).resolve(strict=False),)
 
@@ -285,7 +315,9 @@ class RaspberryPiImageBuildForm(forms.Form):
         local_path = self._clean_local_path(base_image_uri, allow_file_uri=True)
 
         if not self._resolved_within(local_path, self._base_image_roots()):
-            raise ValidationError(_("Base image path is outside allowed image directories."))
+            raise ValidationError(
+                _("Base image path is outside allowed image directories.")
+            )
 
         return str(local_path)
 
@@ -296,7 +328,9 @@ class RaspberryPiImageBuildForm(forms.Form):
         output_path = self._clean_local_path(output_dir, allow_file_uri=False)
 
         if not self._resolved_within(output_path, self._output_roots()):
-            raise ValidationError(_("Output directory is outside allowed output directories."))
+            raise ValidationError(
+                _("Output directory is outside allowed output directories.")
+            )
 
         return str(output_path)
 
@@ -307,10 +341,31 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("create_rpi_image",)
-    list_display = ("name", "target", "build_engine", "build_profile", "output_filename", "download_uri", "created_at")
+    list_display = (
+        "name",
+        "target",
+        "build_engine",
+        "build_profile",
+        "output_filename",
+        "download_uri",
+        "created_at",
+    )
     list_filter = ("target", "created_at")
-    search_fields = ("name", "target", "output_filename", "download_uri", "base_image_uri")
-    readonly_fields = ("build_engine", "build_profile", "sha256", "size_bytes", "created_at", "updated_at")
+    search_fields = (
+        "name",
+        "target",
+        "output_filename",
+        "download_uri",
+        "base_image_uri",
+    )
+    readonly_fields = (
+        "build_engine",
+        "build_profile",
+        "sha256",
+        "size_bytes",
+        "created_at",
+        "updated_at",
+    )
 
     def get_urls(self):
         custom_urls = [
@@ -331,7 +386,9 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
         return list(self.changelist_actions)
 
     def create_rpi_image(self, request, queryset=None):
-        return HttpResponseRedirect(reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"))
+        return HttpResponseRedirect(
+            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image")
+        )
 
     create_rpi_image.label = _("Create RPI image")
     create_rpi_image.short_description = _("Create RPI image")
@@ -346,7 +403,9 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
         artifact: RaspberryPiImageArtifact | None = None
         artifact_id = request.GET.get("artifact")
         if artifact_id and artifact_id.isdigit():
-            artifact = RaspberryPiImageArtifact.objects.filter(pk=int(artifact_id)).first()
+            artifact = RaspberryPiImageArtifact.objects.filter(
+                pk=int(artifact_id)
+            ).first()
 
         changelist_url = reverse("admin:imager_raspberrypiimageartifact_changelist")
         if request.method == "POST" and form.is_valid():
@@ -366,7 +425,10 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
             except (ImagerBuildError, OSError) as exc:
                 messages.error(request, str(exc))
             else:
-                messages.success(request, _("RPI image '%(name)s' was created.") % {"name": cleaned["name"]})
+                messages.success(
+                    request,
+                    _("RPI image '%(name)s' was created.") % {"name": cleaned["name"]},
+                )
                 artifact = RaspberryPiImageArtifact.objects.filter(
                     output_path=str(build_result.output_path),
                 ).first()
@@ -396,7 +458,9 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
             context,
         )
 
-    def test_download_url_view(self, request: HttpRequest, artifact_id: int) -> HttpResponse:
+    def test_download_url_view(
+        self, request: HttpRequest, artifact_id: int
+    ) -> HttpResponse:
         """Probe an artifact download URL from the admin wizard workflow."""
 
         if not self.has_view_permission(request):

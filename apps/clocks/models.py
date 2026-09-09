@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Iterable
+
+from collections.abc import Iterable
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -40,7 +41,7 @@ class ClockDevice(Entity):
         bus_numbers: Iterable[int] | None = None,
         scanner=None,
         return_objects: bool = False,
-    ) -> tuple[int, int] | tuple[int, int, list["ClockDevice"], list["ClockDevice"]]:
+    ) -> tuple[int, int] | tuple[int, int, list[ClockDevice], list[ClockDevice]]:
         """Synchronize :class:`ClockDevice` entries for ``node``.
 
         Returns a ``(created, updated)`` tuple.
@@ -102,7 +103,9 @@ class ClockDevice(Entity):
         return created, updated
 
     @classmethod
-    def has_clock_device(cls, *, bus_numbers: Iterable[int] | None = None, scanner=None) -> bool:
+    def has_clock_device(
+        cls, *, bus_numbers: Iterable[int] | None = None, scanner=None
+    ) -> bool:
         """Return ``True`` when a clock device is available."""
 
         from .utils import discover_clock_devices

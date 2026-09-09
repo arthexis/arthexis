@@ -8,7 +8,6 @@ from apps.core.auto_upgrade import append_auto_upgrade_log
 
 from .locks import _read_network_failure_count, _write_network_failure_count
 
-
 logger = logging.getLogger(__name__)
 
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3

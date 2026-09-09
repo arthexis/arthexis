@@ -57,7 +57,9 @@ def test_disable_default_site_for_public_mode(monkeypatch):
     assert calls == [["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"]]
 
 
-def test_apply_nginx_configuration_preserves_other_site_entries(monkeypatch, tmp_path: Path):
+def test_apply_nginx_configuration_preserves_other_site_entries(
+    monkeypatch, tmp_path: Path
+):
     """Regression: applying one Arthexis config must not remove unrelated nginx entries."""
 
     calls: list[list[str]] = []
@@ -73,7 +75,9 @@ def test_apply_nginx_configuration_preserves_other_site_entries(monkeypatch, tmp
     monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
     monkeypatch.setattr(services, "ensure_nginx_in_path", lambda: True)
     monkeypatch.setattr(services.shutil, "which", lambda _: "/usr/sbin/nginx")
-    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(
+        services, "generate_unified_config", lambda *_, **__: "server {}"
+    )
     monkeypatch.setattr(services, "_write_config_with_sudo", lambda *_, **__: None)
     monkeypatch.setattr(services, "_ensure_site_enabled", lambda *_, **__: None)
     monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
@@ -103,7 +107,9 @@ def test_apply_nginx_configuration_uses_site_destination_when_provided(
     enabled_calls: list[Path] = []
 
     monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
-    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(
+        services, "generate_unified_config", lambda *_, **__: "server {}"
+    )
     monkeypatch.setattr(
         services,
         "_write_config_with_sudo",
@@ -131,12 +137,19 @@ def test_apply_nginx_configuration_uses_site_destination_when_provided(
     assert write_calls == [tmp_path / "managed.conf"]
     assert enabled_calls == [tmp_path / "managed.conf"]
 
-def test_apply_nginx_configuration_does_not_cleanup_on_render_error(monkeypatch, tmp_path: Path):
+
+def test_apply_nginx_configuration_does_not_cleanup_on_render_error(
+    monkeypatch, tmp_path: Path
+):
     """No destructive cleanup should run when unified rendering fails validation."""
 
     monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
     monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
-    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: (_ for _ in ()).throw(ValueError("bad json")))
+    monkeypatch.setattr(
+        services,
+        "generate_unified_config",
+        lambda *_, **__: (_ for _ in ()).throw(ValueError("bad json")),
+    )
 
     with pytest.raises(services.ValidationError):
         services.apply_nginx_configuration(

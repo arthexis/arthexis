@@ -1,11 +1,10 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -38,7 +37,9 @@ def _handle_set_network_profile(
     network_profile = CPNetworkProfile.objects.filter(pk=profile_id).first()
     if network_profile is None:
         return JsonResponse({"detail": "network profile not found"}, status=404)
-    charger = context.charger or _get_or_create_charger(context.cid, context.connector_value)
+    charger = context.charger or _get_or_create_charger(
+        context.cid, context.connector_value
+    )
     if charger is None:
         return JsonResponse({"detail": "charger not found"}, status=404)
     payload = network_profile.build_payload()

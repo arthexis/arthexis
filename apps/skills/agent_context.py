@@ -73,11 +73,15 @@ def _agent_tier(
     suite_feature_ids: set[int] | None = None,
 ) -> tuple[int, str]:
     role_id = getattr(node, "role_id", None)
-    node_feature_ids = node_feature_ids if node_feature_ids is not None else (
-        _enabled_node_features(node)
+    node_feature_ids = (
+        node_feature_ids
+        if node_feature_ids is not None
+        else (_enabled_node_features(node))
     )
-    suite_feature_ids = suite_feature_ids if suite_feature_ids is not None else (
-        _enabled_suite_features(node)
+    suite_feature_ids = (
+        suite_feature_ids
+        if suite_feature_ids is not None
+        else (_enabled_suite_features(node))
     )
     if role_id and any(role.pk == role_id for role in agent.node_roles.all()):
         return 0, "Node Role"

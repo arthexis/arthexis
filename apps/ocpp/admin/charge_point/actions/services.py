@@ -106,16 +106,38 @@ class ActionServiceMixin:
             connector_value = charger.connector_id
         ws = store.get_connection(charger.charger_id, connector_value)
         if ws is None:
-            self.message_user(request, f"{charger}: no active connection", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.LOCAL, status=ControlOperationEvent.Status.FAILED, detail="No active websocket connection", request_payload=payload)
+            self.message_user(
+                request, f"{charger}: no active connection", level=messages.ERROR
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.LOCAL,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="No active websocket connection",
+                request_payload=payload,
+            )
             return False
         message_id = uuid.uuid4().hex
         msg = json.dumps([2, message_id, action, payload])
         try:
             async_to_sync(ws.send)(msg)
         except Exception as exc:  # pragma: no cover - network error
-            self.message_user(request, f"{charger}: failed to send {action} ({exc})", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.LOCAL, status=ControlOperationEvent.Status.FAILED, detail=str(exc), request_payload=payload)
+            self.message_user(
+                request,
+                f"{charger}: failed to send {action} ({exc})",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.LOCAL,
+                status=ControlOperationEvent.Status.FAILED,
+                detail=str(exc),
+                request_payload=payload,
+            )
             return False
         log_key = store.identity_key(charger.charger_id, connector_value)
         store.add_log(log_key, f"< {msg}", log_type="charger")
@@ -129,23 +151,43 @@ class ActionServiceMixin:
         tracking_payload.update(pending_payload)
         store.register_pending_call(message_id, tracking_payload)
         if timeout_kwargs is not None:
-            store.schedule_call_timeout(message_id, log_key=log_key, action=action, **timeout_kwargs)
-        self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.LOCAL, status=ControlOperationEvent.Status.SENT, request_payload=payload, transaction_id=pending_payload.get("transaction_id"))
+            store.schedule_call_timeout(
+                message_id, log_key=log_key, action=action, **timeout_kwargs
+            )
+        self._log_control_operation(
+            request,
+            charger=charger,
+            action=action,
+            transport=ControlOperationEvent.Transport.LOCAL,
+            status=ControlOperationEvent.Status.SENT,
+            request_payload=payload,
+            transaction_id=pending_payload.get("transaction_id"),
+        )
         return True
 
     def _prepare_remote_credentials(self, request):
         """Load signing credentials for remote node actions."""
         local = Node.get_local()
         if not local or not local.uuid:
-            self.message_user(request, "Local node is not registered; remote actions are unavailable.", level=messages.ERROR)
+            self.message_user(
+                request,
+                "Local node is not registered; remote actions are unavailable.",
+                level=messages.ERROR,
+            )
             return None, None
         private_key = local.get_private_key()
         if private_key is None:
-            self.message_user(request, "Local node private key is unavailable; remote actions are disabled.", level=messages.ERROR)
+            self.message_user(
+                request,
+                "Local node private key is unavailable; remote actions are disabled.",
+                level=messages.ERROR,
+            )
             return None, None
         return local, private_key
 
-    def _iter_chargers(self, request, queryset) -> Iterator[tuple[Charger, bool, Node | None, Any]]:
+    def _iter_chargers(
+        self, request, queryset
+    ) -> Iterator[tuple[Charger, bool, Node | None, Any]]:
         """Yield chargers with resolved local/remote dispatch context."""
         local_node = private_key = None
         remote_unavailable = False
@@ -154,7 +196,11 @@ class ActionServiceMixin:
                 yield charger, True, None, None
                 continue
             if not charger.allow_remote:
-                self.message_user(request, f"{charger}: remote administration is disabled.", level=messages.ERROR)
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
                 continue
             if remote_unavailable:
                 continue
@@ -165,20 +211,61 @@ class ActionServiceMixin:
                     continue
             yield charger, False, local_node, private_key
 
-    def _call_remote_action(self, request, local_node: Node, private_key, charger: Charger, action: str, extra: dict[str, Any] | None = None) -> tuple[bool, dict[str, Any]]:
+    def _call_remote_action(
+        self,
+        request,
+        local_node: Node,
+        private_key,
+        charger: Charger,
+        action: str,
+        extra: dict[str, Any] | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
         """Invoke a remote action on the charger's managing node."""
         if not charger.node_origin:
-            self.message_user(request, f"{charger}: remote node information is missing.", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail="Remote node information is missing")
+            self.message_user(
+                request,
+                f"{charger}: remote node information is missing.",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="Remote node information is missing",
+            )
             return False, {}
         origin = charger.node_origin
         if not origin.port:
-            self.message_user(request, f"{charger}: remote node port is not configured.", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail="Remote node port is not configured")
+            self.message_user(
+                request,
+                f"{charger}: remote node port is not configured.",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="Remote node port is not configured",
+            )
             return False, {}
         if not origin.get_remote_host_candidates():
-            self.message_user(request, f"{charger}: remote node connection details are incomplete.", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail="Remote node connection details are incomplete")
+            self.message_user(
+                request,
+                f"{charger}: remote node connection details are incomplete.",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="Remote node connection details are incomplete",
+            )
             return False, {}
 
         payload: dict[str, Any] = {
@@ -196,44 +283,130 @@ class ActionServiceMixin:
         try:
             signature = private_key.sign(
                 payload_json.encode(),
-                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
             headers["X-Signature"] = base64.b64encode(signature).decode()
         except ValueError as exc:
-            self.message_user(request, f"Unable to sign remote action payload; remote action aborted ({exc}).", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail=str(exc), request_payload=payload)
+            self.message_user(
+                request,
+                f"Unable to sign remote action payload; remote action aborted ({exc}).",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail=str(exc),
+                request_payload=payload,
+            )
             return False, {}
 
         url = next(origin.iter_remote_urls("/nodes/network/chargers/action/"), "")
         if not url:
-            self.message_user(request, f"{charger}: no reachable hosts were reported for the remote node.", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail="No reachable remote host", request_payload=payload)
+            self.message_user(
+                request,
+                f"{charger}: no reachable hosts were reported for the remote node.",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="No reachable remote host",
+                request_payload=payload,
+            )
             return False, {}
         try:
             response = requests.post(url, data=payload_json, headers=headers, timeout=5)
         except RequestException as exc:
-            self.message_user(request, f"{charger}: failed to contact remote node ({exc}).", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail=str(exc), request_payload=payload)
+            self.message_user(
+                request,
+                f"{charger}: failed to contact remote node ({exc}).",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail=str(exc),
+                request_payload=payload,
+            )
             return False, {}
 
         try:
             data = response.json()
         except ValueError:
-            self.message_user(request, f"{charger}: invalid response from remote node.", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail="Invalid JSON response", request_payload=payload)
+            self.message_user(
+                request,
+                f"{charger}: invalid response from remote node.",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail="Invalid JSON response",
+                request_payload=payload,
+            )
             return False, {}
         if not isinstance(data, dict):
-            self.message_user(request, f"{charger}: {response.text or 'Remote node rejected the request.'}", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail=response.text or "Remote node rejected the request", request_payload=payload)
+            self.message_user(
+                request,
+                f"{charger}: {response.text or 'Remote node rejected the request.'}",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail=response.text or "Remote node rejected the request",
+                request_payload=payload,
+            )
             return False, {}
         if response.status_code != 200 or data.get("status") != "ok":
             detail = data.get("detail")
-            self.message_user(request, f"{charger}: {detail or response.text or 'Remote node rejected the request.'}", level=messages.ERROR)
-            self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.FAILED, detail=str(detail or response.text or "Remote node rejected the request"), request_payload=payload, response_payload=data if isinstance(data, dict) else {})
+            self.message_user(
+                request,
+                f"{charger}: {detail or response.text or 'Remote node rejected the request.'}",
+                level=messages.ERROR,
+            )
+            self._log_control_operation(
+                request,
+                charger=charger,
+                action=action,
+                transport=ControlOperationEvent.Transport.REMOTE,
+                status=ControlOperationEvent.Status.FAILED,
+                detail=str(
+                    detail or response.text or "Remote node rejected the request"
+                ),
+                request_payload=payload,
+                response_payload=data if isinstance(data, dict) else {},
+            )
             return False, {}
         updates = data.get("updates", {})
-        self._log_control_operation(request, charger=charger, action=action, transport=ControlOperationEvent.Transport.REMOTE, status=ControlOperationEvent.Status.SENT, request_payload=payload, response_payload=data if isinstance(data, dict) else {})
+        self._log_control_operation(
+            request,
+            charger=charger,
+            action=action,
+            transport=ControlOperationEvent.Transport.REMOTE,
+            status=ControlOperationEvent.Status.SENT,
+            request_payload=payload,
+            response_payload=data if isinstance(data, dict) else {},
+        )
         return True, updates if isinstance(updates, dict) else {}
 
     def _apply_remote_updates(self, charger: Charger, updates: dict[str, Any]) -> None:
@@ -247,7 +420,9 @@ class ActionServiceMixin:
             if field in self._REMOTE_DATETIME_FIELDS and isinstance(value, str):
                 parsed = parse_datetime(value)
                 if parsed and timezone.is_naive(parsed):
-                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                    parsed = timezone.make_aware(
+                        parsed, timezone.get_current_timezone()
+                    )
                 applied[field] = parsed
             else:
                 applied[field] = value

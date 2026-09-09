@@ -1,10 +1,9 @@
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.utils import timezone
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -51,7 +50,9 @@ def _handle_get_composite_schedule(
     if rate_unit:
         payload["chargingRateUnit"] = rate_unit
 
-    connector_value = evse_payload if evse_payload is not None else (context.connector_value or 0)
+    connector_value = (
+        evse_payload if evse_payload is not None else (context.connector_value or 0)
+    )
     charger = context.charger or _get_or_create_charger(context.cid, connector_value)
     if charger is None:
         return JsonResponse({"detail": "charger not found"}, status=404)
@@ -119,9 +120,7 @@ def _handle_set_charging_profile(
         return JsonResponse({"detail": "profileId required"}, status=400)
 
     profile = (
-        ChargingProfile.objects.select_related("schedule")
-        .filter(pk=profile_pk)
-        .first()
+        ChargingProfile.objects.select_related("schedule").filter(pk=profile_pk).first()
     )
     if profile is None:
         return JsonResponse({"detail": "charging profile not found"}, status=404)
@@ -142,7 +141,9 @@ def _handle_set_charging_profile(
 
     payload = profile.as_set_charging_profile_request(
         connector_id=connector_value,
-        schedule_payload=schedule_override if isinstance(schedule_override, dict) else None,
+        schedule_payload=schedule_override
+        if isinstance(schedule_override, dict)
+        else None,
     )
     message_id = uuid.uuid4().hex
     ocpp_action = "SetChargingProfile"
@@ -216,7 +217,9 @@ def _handle_clear_charging_profile(
     criteria_payload: dict[str, object] = {}
     if criteria not in (None, ""):
         if not isinstance(criteria, dict):
-            return JsonResponse({"detail": "chargingProfileCriteria must be an object"}, status=400)
+            return JsonResponse(
+                {"detail": "chargingProfileCriteria must be an object"}, status=400
+            )
 
         parsed = _parse_int(criteria.get("chargingProfileId"), "chargingProfileId")
         if isinstance(parsed, JsonResponse):
@@ -244,7 +247,9 @@ def _handle_clear_charging_profile(
             criteria_payload["chargingProfilePurpose"] = str(purpose)
 
         if not criteria_payload:
-            return JsonResponse({"detail": "chargingProfileCriteria must include a filter"}, status=400)
+            return JsonResponse(
+                {"detail": "chargingProfileCriteria must include a filter"}, status=400
+            )
 
     if (
         charging_profile_id is None
@@ -253,7 +258,9 @@ def _handle_clear_charging_profile(
         and not criteria_payload
     ):
         return JsonResponse(
-            {"detail": "chargingProfileId, stackLevel, evseId, or chargingProfileCriteria required"},
+            {
+                "detail": "chargingProfileId, stackLevel, evseId, or chargingProfileCriteria required"
+            },
             status=400,
         )
 
@@ -332,8 +339,12 @@ def _handle_get_charging_profiles(
             try:
                 charging_profile["chargingProfileId"] = int(profile_id_value)
             except (TypeError, ValueError):
-                return JsonResponse({"detail": "chargingProfileId must be an integer"}, status=400)
-        purpose = data.get("chargingProfilePurpose") or data.get("charging_profile_purpose")
+                return JsonResponse(
+                    {"detail": "chargingProfileId must be an integer"}, status=400
+                )
+        purpose = data.get("chargingProfilePurpose") or data.get(
+            "charging_profile_purpose"
+        )
         if purpose not in (None, ""):
             charging_profile["chargingProfilePurpose"] = purpose
         stack_level_value = data.get("stackLevel") or data.get("stack_level")
@@ -341,13 +352,20 @@ def _handle_get_charging_profiles(
             try:
                 charging_profile["stackLevel"] = int(stack_level_value)
             except (TypeError, ValueError):
-                return JsonResponse({"detail": "stackLevel must be an integer"}, status=400)
-        limit_source = data.get("chargingLimitSource") or data.get("charging_limit_source")
+                return JsonResponse(
+                    {"detail": "stackLevel must be an integer"}, status=400
+                )
+        limit_source = data.get("chargingLimitSource") or data.get(
+            "charging_limit_source"
+        )
         if limit_source not in (None, ""):
             charging_profile["chargingLimitSource"] = limit_source
     if not isinstance(charging_profile, dict):
         return JsonResponse({"detail": "chargingProfile must be an object"}, status=400)
-    payload: dict[str, object] = {"requestId": request_id, "chargingProfile": charging_profile}
+    payload: dict[str, object] = {
+        "requestId": request_id,
+        "chargingProfile": charging_profile,
+    }
     if evse_id is not None:
         payload["evseId"] = evse_id
     message_id = uuid.uuid4().hex

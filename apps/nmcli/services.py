@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
 
 from django.utils import timezone
 
@@ -219,7 +219,9 @@ def _parse_station_dump(output: str) -> list[dict[str, object]]:
 
 
 def _find_active_ap_connections() -> list[tuple[str, str]]:
-    output = _run_nmcli(["-t", "-f", "NAME,DEVICE,TYPE", "connection", "show", "--active"])
+    output = _run_nmcli(
+        ["-t", "-f", "NAME,DEVICE,TYPE", "connection", "show", "--active"]
+    )
     ap_connections: list[tuple[str, str]] = []
     for line in output.splitlines():
         if not line:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import *
 from .cp_firmware import CPFirmware
 
+
 class CPFirmwareDeployment(Entity):
     """Track firmware rollout attempts for specific charge points."""
 
@@ -34,12 +35,12 @@ class CPFirmwareDeployment(Entity):
         related_name="firmware_deployments",
         verbose_name=_("Node"),
     )
-    ocpp_message_id = models.CharField(
-        _("OCPP message ID"), max_length=64, blank=True
-    )
+    ocpp_message_id = models.CharField(_("OCPP message ID"), max_length=64, blank=True)
     status = models.CharField(_("Status"), max_length=32, blank=True)
     status_info = models.CharField(_("Status details"), max_length=255, blank=True)
-    status_timestamp = models.DateTimeField(_("Status timestamp"), null=True, blank=True)
+    status_timestamp = models.DateTimeField(
+        _("Status timestamp"), null=True, blank=True
+    )
     requested_at = models.DateTimeField(_("Requested at"), auto_now_add=True)
     completed_at = models.DateTimeField(_("Completed at"), null=True, blank=True)
     retrieve_date = models.DateTimeField(_("Retrieve date"), null=True, blank=True)

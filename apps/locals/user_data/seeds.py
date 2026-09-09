@@ -144,7 +144,8 @@ def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
         unique_field_names = [
             field.name
             for field in model._meta.concrete_fields
-            if getattr(field, "unique", False) and not getattr(field, "primary_key", False)
+            if getattr(field, "unique", False)
+            and not getattr(field, "primary_key", False)
         ]
         for field_name in unique_field_names:
             field_value = fields.get(field_name)
@@ -171,7 +172,9 @@ def _seed_fixture_has_unapplied_entries(entries: list[dict]) -> bool:
     return False
 
 
-def load_local_seed_zips(*, verbosity: int = 0, only_paths: list[Path] | None = None) -> int:
+def load_local_seed_zips(
+    *, verbosity: int = 0, only_paths: list[Path] | None = None
+) -> int:
     from apps.core.fixtures import ensure_seed_data_flags
 
     loaded = 0

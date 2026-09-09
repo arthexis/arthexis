@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -12,7 +12,9 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone as dj_timezone
 
 from apps.ocpp import store
-from apps.ocpp.management.commands._ocpp_command_helpers import add_trace_extract_arguments
+from apps.ocpp.management.commands._ocpp_command_helpers import (
+    add_trace_extract_arguments,
+)
 from apps.ocpp.models import Transaction, annotate_transaction_energy_bounds
 
 logger = logging.getLogger(__name__)
@@ -48,9 +50,7 @@ class TraceExtractCommand(BaseCommand):
                 Path(out_path).write_text(
                     json.dumps(extract, indent=2, ensure_ascii=False), encoding="utf-8"
                 )
-                self.stdout.write(
-                    self.style.SUCCESS(f"Wrote extract to {out_path}")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Wrote extract to {out_path}"))
 
             if log_path:
                 window = self._transaction_window(transaction)
@@ -95,7 +95,9 @@ class TraceExtractCommand(BaseCommand):
             )
 
     def _get_transaction(self, value: str) -> Transaction:
-        qs = Transaction.objects.select_related("charger").prefetch_related("meter_values")
+        qs = Transaction.objects.select_related("charger").prefetch_related(
+            "meter_values"
+        )
         if value.isdigit():
             tx = qs.filter(pk=int(value)).first()
             if tx:
@@ -107,24 +109,35 @@ class TraceExtractCommand(BaseCommand):
 
     def _list_transactions(self, limit: int | None) -> list[Transaction]:
         qs = annotate_transaction_energy_bounds(
-            Transaction.objects.select_related("charger").prefetch_related("meter_values")
+            Transaction.objects.select_related("charger").prefetch_related(
+                "meter_values"
+            )
         )
         kw_field = DecimalField(max_digits=12, decimal_places=3)
-        qs = qs.annotate(
-            energy_start=Coalesce(
-                ExpressionWrapper(F("meter_start") / Value(1000.0), output_field=kw_field),
-                F("meter_energy_start"),
-            ),
-            energy_end=Coalesce(
-                ExpressionWrapper(F("meter_stop") / Value(1000.0), output_field=kw_field),
-                F("meter_energy_end"),
-            ),
-        ).annotate(
-            energy_delta=ExpressionWrapper(
-                F("energy_end") - F("energy_start"),
-                output_field=kw_field,
+        qs = (
+            qs.annotate(
+                energy_start=Coalesce(
+                    ExpressionWrapper(
+                        F("meter_start") / Value(1000.0), output_field=kw_field
+                    ),
+                    F("meter_energy_start"),
+                ),
+                energy_end=Coalesce(
+                    ExpressionWrapper(
+                        F("meter_stop") / Value(1000.0), output_field=kw_field
+                    ),
+                    F("meter_energy_end"),
+                ),
             )
-        ).filter(energy_delta__gt=0).order_by("-start_time")
+            .annotate(
+                energy_delta=ExpressionWrapper(
+                    F("energy_end") - F("energy_start"),
+                    output_field=kw_field,
+                )
+            )
+            .filter(energy_delta__gt=0)
+            .order_by("-start_time")
+        )
         if limit is None:
             return list(qs)
         return list(qs[:limit])
@@ -201,7 +214,9 @@ class TraceExtractCommand(BaseCommand):
                     "energy": str(mv.energy) if mv.energy is not None else None,
                     "voltage": str(mv.voltage) if mv.voltage is not None else None,
                     "current_import": (
-                        str(mv.current_import) if mv.current_import is not None else None
+                        str(mv.current_import)
+                        if mv.current_import is not None
+                        else None
                     ),
                     "current_offered": (
                         str(mv.current_offered)
@@ -218,9 +233,7 @@ class TraceExtractCommand(BaseCommand):
         }
         return {
             "format": "ocpp-extract-v1",
-            "generated_at": datetime.now(timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z"),
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "transactions": [transaction_entry],
             "chargers": chargers,
             "session_log": session_entries,
@@ -260,7 +273,7 @@ class TraceExtractCommand(BaseCommand):
                 try:
                     timestamp = datetime.strptime(
                         timestamp_raw, "%Y-%m-%d %H:%M:%S.%f"
-                    ).replace(tzinfo=timezone.utc)
+                    ).replace(tzinfo=UTC)
                 except ValueError:
                     skipped += 1
                     continue

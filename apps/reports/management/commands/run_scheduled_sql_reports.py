@@ -8,4 +8,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         processed = run_due_scheduled_reports()
-        self.stdout.write(self.style.SUCCESS(f"Processed {processed} scheduled SQL report(s)."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Processed {processed} scheduled SQL report(s).")
+        )

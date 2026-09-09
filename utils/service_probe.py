@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import http.client
-from pathlib import Path
 import re
 import shlex
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 
 RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
@@ -277,7 +277,9 @@ def _build_parser() -> argparse.ArgumentParser:
             conflicts while creating subcommands.
     """
 
-    parser = argparse.ArgumentParser(description="Arthexis runtime service probing helpers.")
+    parser = argparse.ArgumentParser(
+        description="Arthexis runtime service probing helpers."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     detect_parser = subparsers.add_parser("detect-runserver-port")

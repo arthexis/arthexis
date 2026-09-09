@@ -54,7 +54,7 @@ class PackageRelease(Entity):
         return (self.package.name, self.version)
 
     @staticmethod
-    def _format_patch_with_epoch(parsed: "Version", *, increment: int = 1) -> str:
+    def _format_patch_with_epoch(parsed: Version, *, increment: int = 1) -> str:
         """Return a patch-bumped version string preserving the epoch."""
 
         bumped_patch = f"{parsed.major}.{parsed.minor}.{parsed.micro + increment}"

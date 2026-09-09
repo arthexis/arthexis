@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 import importlib
 import re
+from pathlib import Path
 
 from django.conf import settings
+
 
 class NameRepresentationMixin:
     """Provide a name-based ``__str__`` for models with a ``name`` field."""
@@ -49,7 +50,7 @@ def _format_upgrade_body(version: str, revision: str) -> str:
         parts.append(f"v{display_version}")
     if revision:
         rev_clean = re.sub(r"[^0-9A-Za-z]", "", revision)
-        rev_short = (rev_clean[-6:] if rev_clean else revision[-6:])
+        rev_short = rev_clean[-6:] if rev_clean else revision[-6:]
         parts.append(f"r{rev_short}")
     return " ".join(parts).strip()
 
@@ -67,7 +68,9 @@ def _matches_release_revision(version: str, revision: str) -> bool:
         package_release_module = importlib.import_module("apps.release.models")
         package_release = getattr(package_release_module, "PackageRelease", None)
     except (ImportError, RuntimeError) as exc:
-        if isinstance(exc, RuntimeError) and "isn't in an application in INSTALLED_APPS" not in str(exc):
+        if isinstance(
+            exc, RuntimeError
+        ) and "isn't in an application in INSTALLED_APPS" not in str(exc):
             raise
         return False
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import CommandError
@@ -16,7 +16,10 @@ from apps.certs.services import (
     ensure_certbot_available,
 )
 from apps.nginx.config_utils import slugify
-from apps.nginx.management.commands.https_parts.config_apply import _apply_config, _get_or_create_config
+from apps.nginx.management.commands.https_parts.config_apply import (
+    _apply_config,
+    _get_or_create_config,
+)
 from apps.nginx.management.commands.https_parts.constants import (
     CERTBOT_HTTP01_BOOTSTRAP_MESSAGE,
     FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING,
@@ -42,7 +45,9 @@ def _restore_https_config_after_http01_bootstrap(
 ) -> None:
     """Restore persisted/runtime site protocol to HTTPS after HTTP-01 bootstrap."""
 
-    SiteConfiguration.objects.filter(pk=config.pk).update(protocol="https", enabled=True)
+    SiteConfiguration.objects.filter(pk=config.pk).update(
+        protocol="https", enabled=True
+    )
     config.refresh_from_db(fields=["protocol", "enabled"])
     _apply_config(service, config, reload=reload)
 
@@ -121,7 +126,9 @@ def _get_or_create_certificate(
 
     slug = slugify(domain)
     if use_local:
-        base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        base_path = (
+            Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        )
         defaults = {
             "domain": domain,
             "certificate_path": str(base_path / "fullchain.pem"),
@@ -152,10 +159,14 @@ def _get_or_create_certificate(
             certificate.challenge_type = CertbotCertificate.ChallengeType.NGINX
             updated_fields.append("challenge_type")
         if not certificate.certificate_path:
-            certificate.certificate_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+            certificate.certificate_path = (
+                f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+            )
             updated_fields.append("certificate_path")
         if not certificate.certificate_key_path:
-            certificate.certificate_key_path = f"/etc/letsencrypt/live/{domain}/privkey.pem"
+            certificate.certificate_key_path = (
+                f"/etc/letsencrypt/live/{domain}/privkey.pem"
+            )
             updated_fields.append("certificate_key_path")
         if updated_fields:
             certificate.save(update_fields=[*updated_fields, "updated_at"])

@@ -24,7 +24,9 @@ class Command(ConfigureMixin, BaseCommand):
     def handle(self, *args, **options):
         """Forward the alias command to the consolidated nginx CLI."""
 
-        self.stdout.write("`nginx_configure` is a supported alias for `nginx --configure`.")
+        self.stdout.write(
+            "`nginx_configure` is a supported alias for `nginx --configure`."
+        )
         call_command(
             "nginx",
             "--configure",

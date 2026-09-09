@@ -53,7 +53,10 @@ class SiteConfiguration(models.Model):
     role = models.CharField(max_length=64, default="Terminal")
     port = models.PositiveIntegerField(
         default=8888,
-        validators=[validators.MinValueValidator(1), validators.MaxValueValidator(65535)],
+        validators=[
+            validators.MinValueValidator(1),
+            validators.MaxValueValidator(65535),
+        ],
     )
     certificate = models.ForeignKey(
         "certs.CertificateBase",
@@ -78,12 +81,16 @@ class SiteConfiguration(models.Model):
     expected_path = models.CharField(
         max_length=255,
         default="/etc/nginx/sites-enabled/arthexis.conf",
-        help_text=_("Filesystem path where the managed nginx configuration is applied."),
+        help_text=_(
+            "Filesystem path where the managed nginx configuration is applied."
+        ),
     )
     site_entries_path = models.CharField(
         max_length=255,
         default="scripts/generated/nginx-sites.json",
-        help_text=_("Staged site definitions to include when rendering managed servers."),
+        help_text=_(
+            "Staged site definitions to include when rendering managed servers."
+        ),
     )
     site_destination = models.CharField(
         max_length=255,
@@ -120,7 +127,9 @@ class SiteConfiguration(models.Model):
         super().clean()
         parse_subdomain_prefixes(self.managed_subdomains)
 
-    def apply(self, *, reload: bool = True, remove: bool = False) -> services.ApplyResult:
+    def apply(
+        self, *, reload: bool = True, remove: bool = False
+    ) -> services.ApplyResult:
         """Apply or remove the managed nginx configuration."""
 
         if remove:
@@ -145,7 +154,9 @@ class SiteConfiguration(models.Model):
         if result.validated:
             self.last_validated_at = timezone.now()
         self.last_message = result.message
-        self.save(update_fields=["last_applied_at", "last_validated_at", "last_message"])
+        self.save(
+            update_fields=["last_applied_at", "last_validated_at", "last_message"]
+        )
         return result
 
     def validate_only(self) -> services.ApplyResult:
@@ -158,7 +169,7 @@ class SiteConfiguration(models.Model):
         return result
 
     @classmethod
-    def get_default(cls) -> "SiteConfiguration":
+    def get_default(cls) -> SiteConfiguration:
         """Get or create the default configuration using lock-file discovery defaults."""
 
         lock_dir = Path(settings.BASE_DIR) / ".locks"
@@ -188,7 +199,9 @@ class SiteConfiguration(models.Model):
     ) -> dict[str, object]:
         """Load nginx configuration files from disk into persisted SiteConfiguration rows."""
 
-        resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
+        resolved_base = (
+            Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
+        )
         lock_dir = resolved_base / ".locks"
         mode = _read_lock(lock_dir, "nginx_mode.lck", "internal").lower()
         if mode not in {"internal", "public"}:
@@ -197,7 +210,8 @@ class SiteConfiguration(models.Model):
         default_port = _read_int_lock(lock_dir, "backend_port.lck", 8888)
         site_entries_path = cls._meta.get_field("site_entries_path").get_default()
         resolved_site_path = site_path or Path(
-            getattr(settings, "NGINX_SITE_PATH", "") or "/etc/nginx/sites-enabled/arthexis.conf"
+            getattr(settings, "NGINX_SITE_PATH", "")
+            or "/etc/nginx/sites-enabled/arthexis.conf"
         )
         candidate_paths = _discover_site_config_paths(resolved_site_path)
 
@@ -215,7 +229,9 @@ class SiteConfiguration(models.Model):
                 results["errors"].append(_format_local_load_error(path, exc))
                 continue
 
-            name = _extract_server_name(content) or default_certificate_domain_from_settings(settings)
+            name = _extract_server_name(
+                content
+            ) or default_certificate_domain_from_settings(settings)
             if not name:
                 name = path.stem
 

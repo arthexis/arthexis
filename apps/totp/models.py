@@ -1,8 +1,7 @@
 """Compatibility exports for the shared django-otp TOTP device model."""
 
 from django_otp.plugins.otp_totp.models import TOTPDevice
-from django_otp.util import hex_validator
-from django_otp.util import random_hex
+from django_otp.util import hex_validator, random_hex
 
 
 def default_key() -> str:

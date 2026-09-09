@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
-import re
 
 from .models import SigilRoot
 from .scanner import scan_sigil_tokens
@@ -63,7 +63,9 @@ def parse_script(text: str) -> list[ScriptInstruction]:
                     f"line {line_number}: invalid LET identifier `{identifier_raw.strip()}`"
                 )
             if not expression:
-                raise ScriptParseError(f"line {line_number}: LET expression cannot be empty")
+                raise ScriptParseError(
+                    f"line {line_number}: LET expression cannot be empty"
+                )
             instructions.append(
                 ScriptInstruction(
                     action="LET",
@@ -77,7 +79,9 @@ def parse_script(text: str) -> list[ScriptInstruction]:
         if line.upper().startswith("EMIT "):
             expression = line[5:].strip()
             if not expression:
-                raise ScriptParseError(f"line {line_number}: EMIT expression cannot be empty")
+                raise ScriptParseError(
+                    f"line {line_number}: EMIT expression cannot be empty"
+                )
             instructions.append(
                 ScriptInstruction(
                     action="EMIT",

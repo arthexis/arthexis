@@ -33,7 +33,8 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
     actions = ["deploy_selected_records", "validate_selected_records"]
 
     def _default_credentials_for_queryset(
-        self, queryset,
+        self,
+        queryset,
     ) -> DNSProviderCredential | None:
         credential_ids = list(
             queryset.exclude(credentials__isnull=True)
@@ -99,7 +100,9 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
 
         if successes:
             self.message_user(
-                request, f"{successes} record(s) validated successfully.", messages.SUCCESS
+                request,
+                f"{successes} record(s) validated successfully.",
+                messages.SUCCESS,
             )
 
 
@@ -134,7 +137,13 @@ class DNSProviderCredentialAdmin(OwnableAdminMixin, EntityModelAdmin):
 
 @admin.register(DNSProxyConfig)
 class DNSProxyConfigAdmin(EntityModelAdmin):
-    list_display = ("name", "listen_host", "listen_port", "is_enabled", "nmcli_connection")
+    list_display = (
+        "name",
+        "listen_host",
+        "listen_port",
+        "is_enabled",
+        "nmcli_connection",
+    )
     list_filter = ("is_enabled", "include_nmcli_dns", "use_tcp_upstream")
     search_fields = ("name", "listen_host")
     autocomplete_fields = ("nmcli_connection",)

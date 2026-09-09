@@ -12,6 +12,7 @@ from django.utils import timezone
 
 class NodeEnrollment(models.Model):
     ALLOWED_SCOPES = frozenset({"mesh:read", "ocpp:control"})
+
     class Status(models.TextChoices):
         ISSUED = "ISSUED", "Issued"
         PUBLIC_KEY_SUBMITTED = "PUBLIC_KEY_SUBMITTED", "Public key submitted"
@@ -19,8 +20,16 @@ class NodeEnrollment(models.Model):
         REVOKED = "REVOKED", "Revoked"
         EXPIRED = "EXPIRED", "Expired"
 
-    node = models.ForeignKey("nodes.Node", on_delete=models.CASCADE, related_name="enrollments")
-    site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name="node_enrollments")
+    node = models.ForeignKey(
+        "nodes.Node", on_delete=models.CASCADE, related_name="enrollments"
+    )
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="node_enrollments",
+    )
     issued_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -31,7 +40,9 @@ class NodeEnrollment(models.Model):
     token_hash = models.CharField(max_length=64, unique=True)
     token_hint = models.CharField(max_length=8)
     scope = models.CharField(max_length=64, default="mesh:read")
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.ISSUED)
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.ISSUED
+    )
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -89,7 +100,9 @@ class NodeEnrollmentEvent(models.Model):
         REVOKED = "REVOKED", "Revoked"
         KEY_ROTATED = "KEY_ROTATED", "Key rotated"
 
-    node = models.ForeignKey("nodes.Node", on_delete=models.CASCADE, related_name="enrollment_events")
+    node = models.ForeignKey(
+        "nodes.Node", on_delete=models.CASCADE, related_name="enrollment_events"
+    )
     enrollment = models.ForeignKey(
         "nodes.NodeEnrollment",
         on_delete=models.SET_NULL,

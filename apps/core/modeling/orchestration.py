@@ -44,7 +44,9 @@ class Orchestrator:
     registry: ModelRegistry
     transformers: TransformerRegistry
 
-    def route_event(self, event: CanonicalEvent, target_dimension_id: str) -> CanonicalEvent:
+    def route_event(
+        self, event: CanonicalEvent, target_dimension_id: str
+    ) -> CanonicalEvent:
         if event.dimension_id == target_dimension_id:
             return event
         path = self.registry.find_path(event.dimension_id, target_dimension_id)

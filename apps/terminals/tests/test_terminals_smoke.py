@@ -88,9 +88,16 @@ def test_launch_command_in_terminal_builds_windows_codex_command(tmp_path, monke
         working_directory=tmp_path / "repo",
     )
 
-    assert launched["command"][:4] == ["wt.exe", "new-tab", "--title", "Arthexis Secretary"]
+    assert launched["command"][:4] == [
+        "wt.exe",
+        "new-tab",
+        "--title",
+        "Arthexis Secretary",
+    ]
     assert pid_file == tmp_path / "whatsapp-secretary.pid"
-    script = (tmp_path / "scripts" / "whatsapp-secretary.ps1").read_text(encoding="utf-8")
+    script = (tmp_path / "scripts" / "whatsapp-secretary.ps1").read_text(
+        encoding="utf-8"
+    )
     assert "Set-Location -LiteralPath" in script
     assert "& 'codex' '[SECRETARY] Mara:" in script
 
@@ -116,7 +123,11 @@ def test_launch_command_in_terminal_uses_script_file_on_posix(tmp_path, monkeypa
 
     script_path = tmp_path / "scripts" / "linux-secret.sh"
     assert script_path.exists()
-    assert launched["command"][-3:] == ["sh", "-lc", f". {tasks.shlex.quote(str(script_path))}"]
+    assert launched["command"][-3:] == [
+        "sh",
+        "-lc",
+        f". {tasks.shlex.quote(str(script_path))}",
+    ]
     assert "super-secret-value" not in " ".join(launched["command"])
     metadata = pid_file.read_text(encoding="utf-8").splitlines()[1]
     assert str(script_path) in metadata
@@ -188,10 +199,19 @@ def test_is_process_running_uses_pointer_sized_windows_handle(monkeypatch):
 
     kernel32 = FakeKernel32()
     monkeypatch.setattr(tasks.os, "name", "nt", raising=False)
-    monkeypatch.setattr(ctypes, "windll", type("FakeWindll", (), {"kernel32": kernel32})(), raising=False)
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        type("FakeWindll", (), {"kernel32": kernel32})(),
+        raising=False,
+    )
 
     assert tasks._is_process_running(1234) is True
-    assert kernel32.OpenProcess.argtypes == [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    assert kernel32.OpenProcess.argtypes == [
+        wintypes.DWORD,
+        wintypes.BOOL,
+        wintypes.DWORD,
+    ]
     assert kernel32.OpenProcess.restype is wintypes.HANDLE
     assert kernel32.CloseHandle.calls == [(0x100000000,)]
 
@@ -215,18 +235,27 @@ def test_is_process_running_treats_windows_access_denied_as_running(monkeypatch)
             self.GetLastError = FakeKernelFunction(5)
 
     monkeypatch.setattr(tasks.os, "name", "nt", raising=False)
-    monkeypatch.setattr(ctypes, "windll", type("FakeWindll", (), {"kernel32": FakeKernel32()})(), raising=False)
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        type("FakeWindll", (), {"kernel32": FakeKernel32()})(),
+        raising=False,
+    )
 
     assert tasks._is_process_running(1234) is True
 
 
-def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritable(tmp_path, monkeypatch):
+def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritable(
+    tmp_path, monkeypatch
+):
     monkeypatch.delenv("ARTHEXIS_TERMINAL_STATE_DIR", raising=False)
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
     monkeypatch.setattr(tasks, "_is_windows", lambda: False)
     monkeypatch.setattr(tasks.os, "access", lambda path, mode: False)
-    monkeypatch.setattr(tasks.Path, "home", staticmethod(lambda: tmp_path / "missing-home"))
+    monkeypatch.setattr(
+        tasks.Path, "home", staticmethod(lambda: tmp_path / "missing-home")
+    )
 
     assert tasks._terminal_state_dir() == tmp_path / "tmp" / "arthexis-agent-terminals"
 
@@ -284,7 +313,9 @@ def test_command_metadata_is_unquoted_and_single_line():
 def test_admin_owner_fields_remain_editable_for_ownable_validation(db):
     admin = AgentTerminalAdmin(AgentTerminal, AdminSite())
     request = RequestFactory().get("/admin/terminals/agentterminal/")
-    request.user = User.objects.create_superuser(username="owner-admin", password="secret")
+    request.user = User.objects.create_superuser(
+        username="owner-admin", password="secret"
+    )
 
     readonly_fields = set(admin.get_readonly_fields(request))
     assert {"user", "group"}.isdisjoint(readonly_fields)

@@ -28,7 +28,9 @@ def general_token_staff_user(db):
 
 
 @pytest.mark.django_db
-def test_general_service_token_create_requires_reveal_permission(client, general_token_staff_user):
+def test_general_service_token_create_requires_reveal_permission(
+    client, general_token_staff_user
+):
     manage_permission = Permission.objects.get(codename="manage_general_service_tokens")
     general_token_staff_user.user_permissions.add(manage_permission)
     client.force_login(general_token_staff_user)
@@ -51,7 +53,9 @@ def test_general_service_token_create_requires_reveal_permission(client, general
 @pytest.mark.django_db
 def test_issue_general_service_token_includes_expected_claims():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer", password="pass12345", is_staff=True)
+    actor = user_model.objects.create_user(
+        username="issuer", password="pass12345", is_staff=True
+    )
     target = user_model.objects.create_user(username="token-user", password="pass12345")
     group = SecurityGroup.objects.create(name="Ops")
     target.groups.add(group)
@@ -82,8 +86,12 @@ def test_issue_general_service_token_includes_expected_claims():
 @pytest.mark.django_db
 def test_security_group_filter_requires_user_membership():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer-2", password="pass12345", is_staff=True)
-    target = user_model.objects.create_user(username="token-user-2", password="pass12345")
+    actor = user_model.objects.create_user(
+        username="issuer-2", password="pass12345", is_staff=True
+    )
+    target = user_model.objects.create_user(
+        username="token-user-2", password="pass12345"
+    )
     allowed_group = SecurityGroup.objects.create(name="Allowed")
     denied_group = SecurityGroup.objects.create(name="Denied")
     target.groups.add(allowed_group)
@@ -103,8 +111,12 @@ def test_security_group_filter_requires_user_membership():
 @pytest.mark.django_db
 def test_authentication_retires_expired_general_service_token():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer-3", password="pass12345", is_staff=True)
-    target = user_model.objects.create_user(username="token-user-3", password="pass12345")
+    actor = user_model.objects.create_user(
+        username="issuer-3", password="pass12345", is_staff=True
+    )
+    target = user_model.objects.create_user(
+        username="token-user-3", password="pass12345"
+    )
 
     token, raw_jwt = GeneralServiceToken.issue(
         actor=actor,
@@ -131,8 +143,12 @@ def test_authentication_retires_expired_general_service_token():
 @pytest.mark.django_db
 def test_retire_general_service_tokens_command_marks_expired_tokens_retired():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer-4", password="pass12345", is_staff=True)
-    target = user_model.objects.create_user(username="token-user-4", password="pass12345")
+    actor = user_model.objects.create_user(
+        username="issuer-4", password="pass12345", is_staff=True
+    )
+    target = user_model.objects.create_user(
+        username="token-user-4", password="pass12345"
+    )
 
     expired, _ = GeneralServiceToken.issue(
         actor=actor,
@@ -199,17 +215,23 @@ def test_general_service_token_create_form_requires_custom_claims_object():
 @pytest.mark.django_db
 def test_authentication_handles_malformed_jwt_payload():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer-6", password="pass12345", is_staff=True)
-    target = user_model.objects.create_user(username="token-user-6", password="pass12345")
+    actor = user_model.objects.create_user(
+        username="issuer-6", password="pass12345", is_staff=True
+    )
+    target = user_model.objects.create_user(
+        username="token-user-6", password="pass12345"
+    )
     token, _ = GeneralServiceToken.issue(
         actor=actor,
         user=target,
         name="Malformed payload",
         expires_at=timezone.now() + timedelta(hours=1),
     )
-    header = GeneralServiceToken._urlsafe_b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8"))
+    header = GeneralServiceToken._urlsafe_b64(
+        json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8")
+    )
     malformed_payload = GeneralServiceToken._urlsafe_b64(b"\xff")
-    signing_input = f"{header}.{malformed_payload}".encode("utf-8")
+    signing_input = f"{header}.{malformed_payload}".encode()
     signature = GeneralServiceToken._urlsafe_b64(
         hmac.new(
             key=settings.SECRET_KEY.encode("utf-8"),
@@ -221,7 +243,9 @@ def test_authentication_handles_malformed_jwt_payload():
     token.token_hash = hashlib.sha256(bad_payload_jwt.encode("utf-8")).hexdigest()
     token.save(update_fields=["token_hash", "updated_at"])
 
-    authenticated, payload, error_code = GeneralServiceToken.authenticate_jwt(bad_payload_jwt)
+    authenticated, payload, error_code = GeneralServiceToken.authenticate_jwt(
+        bad_payload_jwt
+    )
 
     assert authenticated is None
     assert payload is None
@@ -231,8 +255,12 @@ def test_authentication_handles_malformed_jwt_payload():
 @pytest.mark.django_db
 def test_issue_general_service_token_uses_distinct_prefixes():
     user_model = get_user_model()
-    actor = user_model.objects.create_user(username="issuer-8", password="pass12345", is_staff=True)
-    target = user_model.objects.create_user(username="token-user-8", password="pass12345")
+    actor = user_model.objects.create_user(
+        username="issuer-8", password="pass12345", is_staff=True
+    )
+    target = user_model.objects.create_user(
+        username="token-user-8", password="pass12345"
+    )
 
     first, _ = GeneralServiceToken.issue(
         actor=actor,

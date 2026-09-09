@@ -6,10 +6,10 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
+from apps.certs.models import CertbotCertificate, CertificateBase, SelfSignedCertificate
 from apps.nginx.config_utils import slugify
-from apps.nginx.models import SiteConfiguration
 from apps.nginx.management.commands._config_selection import get_configurations
+from apps.nginx.models import SiteConfiguration
 
 
 class Command(BaseCommand):
@@ -63,7 +63,9 @@ class Command(BaseCommand):
         errors: list[str] = []
         for config in configs:
             if config.protocol != "https":
-                self.stdout.write(f"{config}: HTTPS is not enabled; skipping certificate provisioning.")
+                self.stdout.write(
+                    f"{config}: HTTPS is not enabled; skipping certificate provisioning."
+                )
                 continue
 
             certificate: CertificateBase | None = config.certificate
@@ -86,7 +88,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"{config}: {message}"))
 
         if errors:
-            raise CommandError("One or more certificates failed to provision. Review the output above.")
+            raise CommandError(
+                "One or more certificates failed to provision. Review the output above."
+            )
 
     def _create_certificate_for_config(
         self, config, *, certificate_type: str
@@ -98,7 +102,9 @@ class Command(BaseCommand):
     def _create_self_signed_certificate_for_config(self, config) -> CertificateBase:
         domain = self._get_default_certificate_domain()
         slug = slugify(domain)
-        base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        base_path = (
+            Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        )
         defaults = {
             "domain": domain,
             "certificate_path": str(base_path / "fullchain.pem"),

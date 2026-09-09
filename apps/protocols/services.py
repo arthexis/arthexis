@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 from django.db import models, transaction
 
 from apps.protocols.models import Protocol, ProtocolCall

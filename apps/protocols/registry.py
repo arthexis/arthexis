@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Sequence
 from types import ModuleType
-from typing import AbstractSet, Callable, Iterable, Protocol, Sequence, TypeAlias
+from typing import AbstractSet, Protocol, TypeAlias
 
 ProtocolHandler: TypeAlias = Callable[..., object]
 ProtocolCallRegistration: TypeAlias = tuple[str, str, str]

@@ -26,7 +26,9 @@ def current_suite_version() -> str:
     return (get_version() or "").strip()
 
 
-def is_baseline_version_reached(*, baseline_version: str | None, current_version: str | None) -> bool:
+def is_baseline_version_reached(
+    *, baseline_version: str | None, current_version: str | None
+) -> bool:
     """Return whether ``current_version`` meets or exceeds ``baseline_version``."""
 
     baseline = _parse_version(baseline_version)
@@ -43,4 +45,3 @@ __all__ = [
     "current_suite_version",
     "is_baseline_version_reached",
 ]
-

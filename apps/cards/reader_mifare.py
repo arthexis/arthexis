@@ -34,8 +34,7 @@ class ExpectedMifareAuthFailureFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage().strip()
         return not any(
-            message.startswith(expected)
-            for expected in MFRC522_EXPECTED_AUTH_MESSAGES
+            message.startswith(expected) for expected in MFRC522_EXPECTED_AUTH_MESSAGES
         )
 
 

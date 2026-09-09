@@ -3,8 +3,8 @@ import datetime
 import pytest
 from django.utils import timezone
 
-from apps.ocpp.views import common
 from apps.ocpp.status_display import STATUS_BADGE_MAP
+from apps.ocpp.views import common
 
 
 class _ChargerWithoutHelper:
@@ -59,13 +59,21 @@ class _ChargerStub:
         (None, 0, True, "heartbeat"),
     ],
 )
-def test_charger_last_seen_fallbacks(status_minutes, heartbeat_minutes, raise_attr, expected_source):
+def test_charger_last_seen_fallbacks(
+    status_minutes, heartbeat_minutes, raise_attr, expected_source
+):
     """Resolve charger last-seen values using status timestamp, then heartbeat fallback."""
 
     now = timezone.now()
-    status_ts = None if status_minutes is None else now - datetime.timedelta(minutes=status_minutes)
+    status_ts = (
+        None
+        if status_minutes is None
+        else now - datetime.timedelta(minutes=status_minutes)
+    )
     heartbeat = now - datetime.timedelta(minutes=heartbeat_minutes)
-    charger = _ChargerWithoutHelper(status_ts=status_ts, heartbeat=heartbeat, raise_attr=raise_attr)
+    charger = _ChargerWithoutHelper(
+        status_ts=status_ts, heartbeat=heartbeat, raise_attr=raise_attr
+    )
 
     expected = status_ts if expected_source == "status" else heartbeat
     assert common._charger_last_seen(charger) == expected
@@ -77,7 +85,9 @@ def test_is_untracked_origin_uses_last_updated(minutes_ago, expected):
 
     reference_time = timezone.now()
     active_delta = datetime.timedelta(minutes=5)
-    origin = _NodeStub(last_updated=reference_time - datetime.timedelta(minutes=minutes_ago))
+    origin = _NodeStub(
+        last_updated=reference_time - datetime.timedelta(minutes=minutes_ago)
+    )
     connector = _ConnectorStub(node_origin=origin)
 
     assert (
@@ -186,7 +196,9 @@ def test_active_transaction_keeps_open_row_when_it_is_latest(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_superseded(monkeypatch):
+def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_superseded(
+    monkeypatch,
+):
     """Regression: superseded cache rows should not hide a newer persisted open transaction."""
 
     charger = common.Charger.objects.create(
@@ -206,7 +218,9 @@ def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_sup
         received_start_time=timezone.now() - datetime.timedelta(minutes=5),
     )
 
-    monkeypatch.setattr(common.store, "get_transaction", lambda *_args, **_kwargs: stale_cached_tx)
+    monkeypatch.setattr(
+        common.store, "get_transaction", lambda *_args, **_kwargs: stale_cached_tx
+    )
 
     assert common._is_superseded_open_transaction(charger, stale_cached_tx) is True
     assert common._active_transaction_for_charger(charger) == fresh_open_tx
@@ -223,7 +237,9 @@ def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_sup
         ("Finalizando", "#0dcaf0", "status-charging"),
     ],
 )
-def test_status_badge_class_handles_offline_states_and_color_fallbacks(state, color, expected):
+def test_status_badge_class_handles_offline_states_and_color_fallbacks(
+    state, color, expected
+):
     """Classify localized and legacy status/color combinations into semantic badge classes."""
 
     assert common._status_badge_class(state, color) == expected

@@ -33,7 +33,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if not options.get("confirm"):
-            raise CommandError("Pass --confirm to create or update the docs admin user.")
+            raise CommandError(
+                "Pass --confirm to create or update the docs admin user."
+            )
 
         username = options["username"]
         email = options["email"]

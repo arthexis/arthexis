@@ -27,18 +27,28 @@ class Command(BaseCommand):
         subparsers = parser.add_subparsers(dest="action")
         subparsers.required = True
 
-        devices_parser = subparsers.add_parser("devices", help="List auto-discovered printer device paths.")
-        devices_parser.add_argument("--printer", choices=["phomemo-m220"], default="phomemo-m220")
+        devices_parser = subparsers.add_parser(
+            "devices", help="List auto-discovered printer device paths."
+        )
+        devices_parser.add_argument(
+            "--printer", choices=["phomemo-m220"], default="phomemo-m220"
+        )
 
         test_parser = subparsers.add_parser("test", help="Build a sample print job.")
         self._add_common_print_arguments(test_parser)
-        test_parser.add_argument("--printer", choices=["phomemo-m220"], default="phomemo-m220")
+        test_parser.add_argument(
+            "--printer", choices=["phomemo-m220"], default="phomemo-m220"
+        )
         test_parser.set_defaults(dry_run=True, text="PRINTER TEST")
 
-        print_parser = subparsers.add_parser("print-label", help="Render a text label and optionally print it.")
+        print_parser = subparsers.add_parser(
+            "print-label", help="Render a text label and optionally print it."
+        )
         self._add_common_print_arguments(print_parser)
         print_parser.add_argument("--text", required=True)
-        print_parser.add_argument("--printer", choices=["none", "phomemo-m220"], default="none")
+        print_parser.add_argument(
+            "--printer", choices=["none", "phomemo-m220"], default="none"
+        )
         print_parser.add_argument("--dry-run", action="store_true")
 
     def _add_common_print_arguments(self, parser):
@@ -49,7 +59,9 @@ class Command(BaseCommand):
         parser.add_argument("--height", type=int, default=DEFAULT_LABEL_HEIGHT)
         parser.add_argument("--qr-size", type=int, default=DEFAULT_QR_SIZE)
         parser.add_argument("--chunk-bytes", type=int, default=DEFAULT_CHUNK_BYTES)
-        parser.add_argument("--chunk-delay", type=float, default=DEFAULT_CHUNK_DELAY_SECONDS)
+        parser.add_argument(
+            "--chunk-delay", type=float, default=DEFAULT_CHUNK_DELAY_SECONDS
+        )
         parser.add_argument("--speed", type=int, default=2)
         parser.add_argument("--density", type=int, default=15)
         parser.add_argument("--usb-path")
@@ -91,7 +103,9 @@ class Command(BaseCommand):
             footer=options["footer"],
         )
         image = build_qr_label_image(options["text"], spec=spec)
-        job = build_phomemo_m220_job(image, speed=options["speed"], density=options["density"])
+        job = build_phomemo_m220_job(
+            image, speed=options["speed"], density=options["density"]
+        )
         self.stdout.write("PRINTER=phomemo-m220")
         self.stdout.write(f"COMMAND_BYTES={len(job)}")
 

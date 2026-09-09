@@ -5,6 +5,7 @@ The check re-installs the current repository in editable mode with build
 isolation and dependency resolution disabled, then runs a plain Python command
 that imports ``arthexis``.
 """
+
 from __future__ import annotations
 
 import os

@@ -71,7 +71,9 @@ class DashboardAction(models.Model):
 
         super().clean()
         if get_internal_action_spec(self.action_name) is None:
-            raise ValidationError({"action_name": _("Select a supported internal action.")})
+            raise ValidationError(
+                {"action_name": _("Select a supported internal action.")}
+            )
 
     def resolve_url(self) -> str:
         """Return the resolved URL for the configured internal action.
@@ -104,7 +106,9 @@ class StaffTask(models.Model):
     slug = models.SlugField(max_length=80, unique=True)
     label = models.CharField(max_length=120)
     description = models.CharField(max_length=255, blank=True)
-    action_name = models.CharField(max_length=50, choices=get_internal_action_choices(), default="config")
+    action_name = models.CharField(
+        max_length=50, choices=get_internal_action_choices(), default="config"
+    )
     order = models.PositiveIntegerField(default=0)
     default_enabled = models.BooleanField(default=True)
     staff_only = models.BooleanField(default=True)

@@ -9,8 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.groups.constants import AP_USER_GROUP_NAME
-from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
+from apps.groups.constants import AP_USER_GROUP_NAME, EXTERNAL_AGENT_GROUP_NAME
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
 
@@ -31,7 +30,9 @@ class PasswordCommandTests(TestCase):
     def test_sets_permanent_password_and_forces_change_by_default(self):
         """Permanent password operations should default to force password change."""
 
-        user = get_user_model().objects.create_user(username="perm-user", email="perm@example.com")
+        user = get_user_model().objects.create_user(
+            username="perm-user", email="perm@example.com"
+        )
 
         call_command("password", "perm-user", password="permanent-password-for-tests")
 
@@ -42,7 +43,9 @@ class PasswordCommandTests(TestCase):
     def test_temporary_password_can_be_targeted_by_user_id_lookup(self):
         """Users should be resolvable by id when generating temporary passwords."""
 
-        user = get_user_model().objects.create_user(username="id-user", email="id@example.com")
+        user = get_user_model().objects.create_user(
+            username="id-user", email="id@example.com"
+        )
 
         call_command("password", str(user.pk), lookup="id", temporary=True)
 
@@ -54,12 +57,16 @@ class PasswordCommandTests(TestCase):
         """Generating a new temporary password should reactivate an expired temporary user."""
 
         identifier = "expired@example.com"
-        user = get_user_model().all_objects.create_user(username=identifier, email=identifier)
+        user = get_user_model().all_objects.create_user(
+            username=identifier, email=identifier
+        )
         user.temporary_expires_at = timezone.now() - timedelta(hours=1)
         user.is_active = False
         user.save(update_fields=["temporary_expires_at", "is_active"])
 
-        with patch("apps.users.temp_passwords.generate_password", return_value="TempPass123"):
+        with patch(
+            "apps.users.temp_passwords.generate_password", return_value="TempPass123"
+        ):
             call_command("password", identifier, temporary=True, update=True)
 
         user.refresh_from_db()
@@ -116,7 +123,9 @@ class PasswordCommandTests(TestCase):
 
         Group.objects.create(name="operators")
 
-        with self.assertRaisesMessage(CommandError, "identifier is required when using --group."):
+        with self.assertRaisesMessage(
+            CommandError, "identifier is required when using --group."
+        ):
             call_command("password", group="operators")
 
     def test_access_point_user_requires_identifier(self):
@@ -131,14 +140,17 @@ class PasswordCommandTests(TestCase):
     def test_assigns_group_with_group_option(self):
         """A user should be assignable to existing groups from the password command."""
 
-        user = get_user_model().objects.create_user(username="group-user", email="group@example.com")
+        user = get_user_model().objects.create_user(
+            username="group-user", email="group@example.com"
+        )
         Group.objects.create(name="operators")
 
-        call_command("password", user.username, password="valid-pass-123", group="operators")
+        call_command(
+            "password", user.username, password="valid-pass-123", group="operators"
+        )
 
         user.refresh_from_db()
         assert user.groups.filter(name="operators").exists()
-
 
     def test_create_staff_user_defaults_to_external_agent(self):
         """Creating a staff user without explicit groups should add External Agent."""
@@ -175,10 +187,14 @@ class PasswordCommandTests(TestCase):
     def test_group_option_requires_existing_group(self):
         """A clear error should be raised when --group references an unknown group."""
 
-        user = get_user_model().objects.create_user(username="missing-group", email="missing@example.com")
+        user = get_user_model().objects.create_user(
+            username="missing-group", email="missing@example.com"
+        )
 
         with self.assertRaisesMessage(CommandError, "Unknown groups: missing"):
-            call_command("password", user.username, password="valid-pass-123", group="missing")
+            call_command(
+                "password", user.username, password="valid-pass-123", group="missing"
+            )
 
     def test_configures_access_point_user_mode(self):
         """Access-point mode should disable passwords and keep the user non-staff."""
@@ -262,7 +278,9 @@ class PasswordCommandTests(TestCase):
         assert not user.groups.filter(name=legacy_group.name).exists()
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
 
-    def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(self):
+    def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(
+        self,
+    ):
         """Failed AP group reassignment should not apply partial account hardening."""
 
         legacy_group = Group.objects.create(name="Legacy Admin")

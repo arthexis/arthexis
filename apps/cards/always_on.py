@@ -8,7 +8,7 @@ from .signals import tag_scanned
 
 logger = logging.getLogger(__name__)
 
-_thread: Optional[threading.Thread] = None
+_thread: threading.Thread | None = None
 _stop = threading.Event()
 
 

@@ -171,9 +171,7 @@ def get_or_create_crontab_schedule(
 
     with transaction.atomic():
         candidates = list(
-            manager.select_for_update(of=("self",))
-            .filter(**cron_fields)
-            .order_by("pk")
+            manager.select_for_update(of=("self",)).filter(**cron_fields).order_by("pk")
         )
         created = False
         if candidates:
@@ -210,7 +208,9 @@ def get_or_create_crontab_schedule(
             schedule.save(update_fields=["timezone"])
             changed = True
 
-        duplicate_ids = [candidate.pk for candidate in candidates if candidate.pk != schedule.pk]
+        duplicate_ids = [
+            candidate.pk for candidate in candidates if candidate.pk != schedule.pk
+        ]
         if duplicate_ids:
             from django_celery_beat.models import PeriodicTask, PeriodicTasks
 

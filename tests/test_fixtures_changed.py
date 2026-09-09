@@ -45,10 +45,13 @@ def test_select_changed_app_fixtures_falls_back_for_global_changes() -> None:
         "config/fixtures/sites.json",
     ]
 
-    assert select_changed_app_fixtures(
-        fixtures,
-        {GLOBAL_FIXTURE_BUCKET},
-    ) == fixtures
+    assert (
+        select_changed_app_fixtures(
+            fixtures,
+            {GLOBAL_FIXTURE_BUCKET},
+        )
+        == fixtures
+    )
 
 
 def test_select_changed_app_fixtures_falls_back_when_no_files_match() -> None:

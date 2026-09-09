@@ -9,9 +9,8 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-
 
 HTTP01_WEBROOT_PATH = Path("/var/www/arthexis")
 LETSENCRYPT_LIVE_PATH = Path("/etc/letsencrypt/live")
@@ -65,8 +64,6 @@ def extract_live_certificate_paths_from_certbot_output(
     return Path(cert_match.group(1)), Path(key_match.group(1))
 
 
-
-
 def ensure_certbot_available(*, sudo: str = "sudo") -> None:
     """Raise ``CertbotError`` with guidance when certbot is unavailable."""
 
@@ -90,6 +87,7 @@ def ensure_certbot_available(*, sudo: str = "sudo") -> None:
         if _is_missing_certbot_error(error_message):
             raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
         raise CertbotError(error_message) from exc
+
 
 def request_certbot_certificate(
     *,
@@ -157,7 +155,9 @@ def request_certbot_certificate(
                 error_message = str(repair_or_retry_exc)
                 cause = repair_or_retry_exc
         if _is_missing_certbot_error(error_message):
-            raise CertbotError(_build_missing_certbot_guidance(error_message)) from cause
+            raise CertbotError(
+                _build_missing_certbot_guidance(error_message)
+            ) from cause
         if _is_challenge_failure_error(error_message):
             raise CertbotChallengeError(
                 _build_challenge_failure_guidance(
@@ -281,7 +281,9 @@ def _build_challenge_failure_guidance(
         hints.append(
             f"Using HTTP-01 webroot: ensure port 80 is open and serving /.well-known/acme-challenge/ from {HTTP01_WEBROOT_PATH}."
         )
-    hints.append("Re-run with certbot -v and inspect /var/log/letsencrypt/letsencrypt.log for challenge-specific details.")
+    hints.append(
+        "Re-run with certbot -v and inspect /var/log/letsencrypt/letsencrypt.log for challenge-specific details."
+    )
     return "\n".join(hints)
 
 
@@ -482,22 +484,26 @@ def _build_godaddy_certbot_command(
         "GODADDY_ZONE",
     ]
     command = _with_sudo(["certbot"], sudo, preserve_env=preserve_env_values)
-    hook_script_path = Path(__file__).resolve().parents[2] / "scripts" / "certbot" / "godaddy_hook.py"
+    hook_script_path = (
+        Path(__file__).resolve().parents[2] / "scripts" / "certbot" / "godaddy_hook.py"
+    )
     hook_command = f"{sys.executable} {hook_script_path}"
-    command.extend([
-        "certonly",
-        "--manual",
-        "--preferred-challenges",
-        "dns",
-        "--manual-auth-hook",
-        f"{hook_command} auth",
-        "--manual-cleanup-hook",
-        f"{hook_command} cleanup",
-        "--non-interactive",
-        "--agree-tos",
-        "-d",
-        domain,
-    ])
+    command.extend(
+        [
+            "certonly",
+            "--manual",
+            "--preferred-challenges",
+            "dns",
+            "--manual-auth-hook",
+            f"{hook_command} auth",
+            "--manual-cleanup-hook",
+            f"{hook_command} cleanup",
+            "--non-interactive",
+            "--agree-tos",
+            "-d",
+            domain,
+        ]
+    )
     if email:
         command.extend(["--email", email])
     else:
@@ -617,7 +623,7 @@ def _with_sudo(
 def _parse_cert_enddate(enddate_output: str) -> datetime:
     _, value = enddate_output.split("=", 1)
     parsed = datetime.strptime(value.strip(), "%b %d %H:%M:%S %Y %Z")
-    return parsed.replace(tzinfo=timezone.utc)
+    return parsed.replace(tzinfo=UTC)
 
 
 def get_certificate_expiration(
@@ -693,7 +699,7 @@ def verify_certificate(
             enddate = get_certificate_expiration(
                 certificate_path=certificate_path, sudo=sudo
             )
-            if enddate < datetime.now(tz=timezone.utc):
+            if enddate < datetime.now(tz=UTC):
                 add_issue(f"Certificate expired on {enddate.isoformat()}.")
             else:
                 messages.append(f"Certificate valid until {enddate.isoformat()}.")

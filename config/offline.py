@@ -1,6 +1,6 @@
-import os
-import functools
 import asyncio
+import functools
+import os
 
 
 class OfflineError(RuntimeError):

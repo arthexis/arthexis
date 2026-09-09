@@ -85,7 +85,7 @@ def test_reconcile_skips_tables_without_compatible_columns(tmp_path: Path) -> No
 def test_reconcile_handles_tables_with_quotes_in_name(tmp_path: Path) -> None:
     source = tmp_path / "source.sqlite3"
     target = tmp_path / "target.sqlite3"
-    weird_table = 'odd"\'table'
+    weird_table = "odd\"'table"
 
     _exec_many(
         source,
@@ -167,9 +167,7 @@ def test_reconcile_updates_node_when_target_has_required_new_column(
 
     assert report.skipped_tables == {}
     with sqlite3.connect(target) as conn:
-        row = conn.execute(
-            "SELECT id, name, required FROM nodes_node"
-        ).fetchone()
+        row = conn.execute("SELECT id, name, required FROM nodes_node").fetchone()
     assert row == (1, "legacy identity", "retained")
 
 
@@ -198,9 +196,7 @@ def test_reconcile_restores_site_defaults_if_source_priority_copy_fails(
 
     assert "NOT NULL constraint failed" in report.skipped_tables["django_site"]
     with sqlite3.connect(target) as conn:
-        row = conn.execute(
-            "SELECT id, name, required FROM django_site"
-        ).fetchone()
+        row = conn.execute("SELECT id, name, required FROM django_site").fetchone()
     assert row == (1, "fresh default", "retained")
 
 

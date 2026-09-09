@@ -31,9 +31,7 @@ def _series_from_transaction(tx: Transaction) -> list[tuple[str, float]]:
     """
 
     points: list[tuple[str, float]] = []
-    readings = list(
-        tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
-    )
+    readings = list(tx.meter_values.filter(energy__isnull=False).order_by("timestamp"))
     start_val = float(tx.meter_start) / 1000.0 if tx.meter_start is not None else None
     for reading in readings:
         try:

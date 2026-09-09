@@ -29,19 +29,32 @@ def request_charge_point_firmware(charger_pk: int) -> bool:
 
     connector_value = charger.connector_id
     if CPFirmware.objects.filter(source_charger=charger).exists():
-        logger.debug("Skipping firmware request for %s: firmware already recorded", charger.charger_id)
+        logger.debug(
+            "Skipping firmware request for %s: firmware already recorded",
+            charger.charger_id,
+        )
         return False
 
-    if CPFirmwareRequest.objects.filter(charger=charger, responded_at__isnull=True).exists():
-        logger.debug("Skipping firmware request for %s: pending request exists", charger.charger_id)
+    if CPFirmwareRequest.objects.filter(
+        charger=charger, responded_at__isnull=True
+    ).exists():
+        logger.debug(
+            "Skipping firmware request for %s: pending request exists",
+            charger.charger_id,
+        )
         return False
 
     ws = store.get_connection(charger.charger_id, connector_value)
     if ws is None:
-        logger.info("Charge point %s is not connected; firmware request skipped", charger.charger_id)
+        logger.info(
+            "Charge point %s is not connected; firmware request skipped",
+            charger.charger_id,
+        )
         return False
 
-    vendor_setting = getattr(settings, "OCPP_AUTOMATIC_FIRMWARE_VENDOR_ID", DEFAULT_FIRMWARE_VENDOR_ID)
+    vendor_setting = getattr(
+        settings, "OCPP_AUTOMATIC_FIRMWARE_VENDOR_ID", DEFAULT_FIRMWARE_VENDOR_ID
+    )
     vendor_id = str(vendor_setting or "").strip() or DEFAULT_FIRMWARE_VENDOR_ID
     message_id = uuid.uuid4().hex
     payload = {"vendorId": vendor_id, "messageId": "DownloadFirmware"}
@@ -50,7 +63,9 @@ def request_charge_point_firmware(charger_pk: int) -> bool:
     try:
         async_to_sync(ws.send)(msg)
     except Exception as exc:  # pragma: no cover - network error
-        logger.warning("Failed to send firmware request to %s (%s)", charger.charger_id, exc)
+        logger.warning(
+            "Failed to send firmware request to %s (%s)", charger.charger_id, exc
+        )
         return False
 
     message = DataTransferMessage.objects.create(
@@ -71,7 +86,9 @@ def request_charge_point_firmware(charger_pk: int) -> bool:
     )
 
     log_key = store.identity_key(charger.charger_id, connector_value)
-    store.add_log(log_key, "Requested firmware download via DataTransfer.", log_type="charger")
+    store.add_log(
+        log_key, "Requested firmware download via DataTransfer.", log_type="charger"
+    )
     store.register_pending_call(
         message_id,
         {
@@ -102,12 +119,14 @@ def schedule_daily_firmware_snapshot_requests() -> int:
         return 0
 
     recorded = set(
-        CPFirmware.objects.filter(source_charger_id__in=charger_ids).values_list("source_charger_id", flat=True)
+        CPFirmware.objects.filter(source_charger_id__in=charger_ids).values_list(
+            "source_charger_id", flat=True
+        )
     )
     pending = set(
-        CPFirmwareRequest.objects.filter(charger_id__in=charger_ids, responded_at__isnull=True).values_list(
-            "charger_id", flat=True
-        )
+        CPFirmwareRequest.objects.filter(
+            charger_id__in=charger_ids, responded_at__isnull=True
+        ).values_list("charger_id", flat=True)
     )
 
     scheduled = 0
@@ -118,7 +137,11 @@ def schedule_daily_firmware_snapshot_requests() -> int:
         scheduled += 1
 
     if scheduled:
-        logger.info("Scheduled firmware snapshot requests for %s charge point(s)", scheduled)
+        logger.info(
+            "Scheduled firmware snapshot requests for %s charge point(s)", scheduled
+        )
     else:
-        logger.debug("No firmware snapshot requests scheduled; firmware already captured")
+        logger.debug(
+            "No firmware snapshot requests scheduled; firmware already captured"
+        )
     return scheduled

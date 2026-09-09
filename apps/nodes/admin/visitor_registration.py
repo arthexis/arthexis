@@ -24,21 +24,37 @@ class VisitorRegistrationRequest:
     visitor_scheme: str
 
     @classmethod
-    def from_http_request(cls, request, *, default_port: int = 443) -> VisitorRegistrationRequest:
-        token = (request.POST.get("token") if request.method == "POST" else None) or uuid.uuid4().hex
+    def from_http_request(
+        cls, request, *, default_port: int = 443
+    ) -> VisitorRegistrationRequest:
+        token = (
+            request.POST.get("token") if request.method == "POST" else None
+        ) or uuid.uuid4().hex
         query_host = str(request.GET.get("visitor") or "").strip()
-        post_host = str(request.POST.get("visitor_host") or "").strip() if request.method == "POST" else ""
+        post_host = (
+            str(request.POST.get("visitor_host") or "").strip()
+            if request.method == "POST"
+            else ""
+        )
         raw_host = post_host if request.method == "POST" else query_host or "127.0.0.1"
 
-        submitted_port = request.POST.get("visitor_port") if request.method == "POST" else None
+        submitted_port = (
+            request.POST.get("visitor_port") if request.method == "POST" else None
+        )
         port, invalid_port = cls._parse_port(submitted_port)
-        base, host, parsed_port, scheme = cls._build_base(raw_host, port, default_port=default_port)
+        base, host, parsed_port, scheme = cls._build_base(
+            raw_host, port, default_port=default_port
+        )
 
         visitor_error = None
         if invalid_port:
-            visitor_error = _("Visitor port is invalid. Use a value between 1 and 65535.")
+            visitor_error = _(
+                "Visitor port is invalid. Use a value between 1 and 65535."
+            )
         elif not base:
-            visitor_error = _("Visitor address missing. Reload with ?visitor=host[:port].")
+            visitor_error = _(
+                "Visitor address missing. Reload with ?visitor=host[:port]."
+            )
 
         return cls(
             token=token,
@@ -97,7 +113,12 @@ class VisitorRegistrationRequest:
 
         port = port_override or parsed_port or default_port
         host_part = f"[{hostname}]" if ":" in hostname else hostname
-        return urlunsplit((scheme, f"{host_part}:{port}", "", "", "")), hostname, port, scheme
+        return (
+            urlunsplit((scheme, f"{host_part}:{port}", "", "", "")),
+            hostname,
+            port,
+            scheme,
+        )
 
 
 @dataclass(slots=True)
@@ -114,15 +135,26 @@ class VisitorRegistrationService:
     def __init__(self, *, user):
         self.user = user
 
-    def register(self, parsed_request: VisitorRegistrationRequest) -> VisitorRegistrationResult:
+    def register(
+        self, parsed_request: VisitorRegistrationRequest
+    ) -> VisitorRegistrationResult:
         result = VisitorRegistrationResult()
 
         if parsed_request.visitor_error:
             result.status = "error"
             result.errors.append(str(parsed_request.visitor_error))
-            result.summary = {"status": "error", "message": str(parsed_request.visitor_error)}
-            result.host = {"status": "error", "message": str(parsed_request.visitor_error)}
-            result.visitor = {"status": "error", "message": str(parsed_request.visitor_error)}
+            result.summary = {
+                "status": "error",
+                "message": str(parsed_request.visitor_error),
+            }
+            result.host = {
+                "status": "error",
+                "message": str(parsed_request.visitor_error),
+            }
+            result.visitor = {
+                "status": "error",
+                "message": str(parsed_request.visitor_error),
+            }
             return result
 
         payload = json.dumps(
@@ -155,16 +187,28 @@ class VisitorRegistrationService:
             result.visitor = {"status": "error", "message": message}
             return result
 
-        if proxy_response.status_code == 200 and proxy_body.get("host") and proxy_body.get("visitor"):
+        if (
+            proxy_response.status_code == 200
+            and proxy_body.get("host")
+            and proxy_body.get("visitor")
+        ):
             host_body = proxy_body.get("host", {})
             visitor_body = proxy_body.get("visitor", {})
             if not proxy_body.get("host_requires_https", True):
                 result.warnings.append(
-                    str(_("Host node is not configured to require HTTPS. Update its Sites settings."))
+                    str(
+                        _(
+                            "Host node is not configured to require HTTPS. Update its Sites settings."
+                        )
+                    )
                 )
             if not proxy_body.get("visitor_requires_https", True):
                 result.warnings.append(
-                    str(_("Visitor node is not configured to require HTTPS. Update its Sites settings."))
+                    str(
+                        _(
+                            "Visitor node is not configured to require HTTPS. Update its Sites settings."
+                        )
+                    )
                 )
             result.status = "success"
             result.summary = {
@@ -173,12 +217,14 @@ class VisitorRegistrationService:
             }
             result.host = {
                 "status": "success",
-                "message": host_body.get("detail") or str(_("Visitor node registered with this server.")),
+                "message": host_body.get("detail")
+                or str(_("Visitor node registered with this server.")),
                 "id": host_body.get("id"),
             }
             result.visitor = {
                 "status": "success",
-                "message": visitor_body.get("detail") or str(_("Host node registered with visitor.")),
+                "message": visitor_body.get("detail")
+                or str(_("Host node registered with visitor.")),
                 "id": visitor_body.get("id"),
             }
             return result

@@ -67,7 +67,10 @@ def build_uptime_report() -> UptimeReportPayload:
 
 
 def build_uptime_segments(
-    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    shutdown_periods: list[tuple[datetime, datetime]],
 ) -> list[UptimeSegmentPayload]:
     """Build alternating online/offline segments in the reporting window."""
 
@@ -102,13 +105,17 @@ def gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict[str, object]
     return _gather_info(auto_upgrade_next_check)
 
 
-def load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str | None]:
+def load_shutdown_periods() -> tuple[
+    list[tuple[datetime, datetime | None]], str | None
+]:
     """Load shutdown periods from system uptime history."""
 
     return _load_shutdown_periods()
 
 
-def read_startup_report(*, limit: int | None = None, base_dir: Path | None = None) -> dict[str, object]:
+def read_startup_report(
+    *, limit: int | None = None, base_dir: Path | None = None
+) -> dict[str, object]:
     """Read startup report entries with optional entry limit and base dir override."""
 
     return _read_startup_report(limit=limit, base_dir=base_dir)
@@ -132,7 +139,9 @@ def system_boot_time(now: datetime) -> datetime | None:
     return _system_boot_time(now)
 
 
-def systemd_unit_status(unit: str, command: list[str] | None = None) -> ServiceStatusPayload:
+def systemd_unit_status(
+    unit: str, command: list[str] | None = None
+) -> ServiceStatusPayload:
     """Return systemd active/enabled state for ``unit``."""
 
     return _systemd_unit_status(unit, command=command)

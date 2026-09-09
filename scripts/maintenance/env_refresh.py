@@ -1093,7 +1093,7 @@ def run_database_tasks(
                     )
                 )
                 mismatch_message = (
-                    "Migration graph/version mismatch detected: " f"{mismatch_reason}."
+                    f"Migration graph/version mismatch detected: {mismatch_reason}."
                 )
                 print(mismatch_message, flush=True)
                 if auto_reconcile_on_mismatch and not migrate_reconcile:

@@ -1,7 +1,7 @@
-from io import StringIO
-from pathlib import Path
 import subprocess
 import tempfile
+from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.management import call_command

@@ -41,7 +41,9 @@ def test_cardface_form_accepts_existing_background_media_without_upload():
         content_type="image/png",
         size=32,
     )
-    form = CardFaceAdminForm(data=_cardface_data(name="Existing media", background_media=media.pk))
+    form = CardFaceAdminForm(
+        data=_cardface_data(name="Existing media", background_media=media.pk)
+    )
 
     assert form.is_valid()
     instance = form.save(commit=False)

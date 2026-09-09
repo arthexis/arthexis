@@ -20,9 +20,7 @@ def clear_connections():
 @pytest.mark.django_db
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_kiosk_live_connection_is_loopback_only(client):
-    response = client.get(
-        reverse("kiosk-live-connection"), REMOTE_ADDR="192.0.2.10"
-    )
+    response = client.get(reverse("kiosk-live-connection"), REMOTE_ADDR="192.0.2.10")
 
     assert response.status_code == 403
     assert response.json() == {"detail": "loopback only"}
@@ -58,13 +56,11 @@ def test_kiosk_live_connection_accepts_loopback_proxy_client(client):
 def test_kiosk_live_connection_reports_only_active_ocpp_websockets(client):
     connected = Charger.objects.create(charger_id="KIOSK-LIVE-1", connector_id=1)
     Charger.objects.create(charger_id="KIOSK-OFFLINE-1", connector_id=1)
-    store.connections[store.identity_key(connected.charger_id, connected.connector_id)] = (
-        object()
-    )
+    store.connections[
+        store.identity_key(connected.charger_id, connected.connector_id)
+    ] = object()
 
-    response = client.get(
-        reverse("kiosk-live-connection"), REMOTE_ADDR="127.0.0.1"
-    )
+    response = client.get(reverse("kiosk-live-connection"), REMOTE_ADDR="127.0.0.1")
 
     assert response.status_code == 200
     payload = response.json()
@@ -78,9 +74,9 @@ def test_kiosk_live_connection_reports_only_active_ocpp_websockets(client):
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_kiosk_live_connection_limits_state_to_requested_chargers(client):
     connected = Charger.objects.create(charger_id="KIOSK-LIVE-2", connector_id=1)
-    store.connections[store.identity_key(connected.charger_id, connected.connector_id)] = (
-        object()
-    )
+    store.connections[
+        store.identity_key(connected.charger_id, connected.connector_id)
+    ] = object()
 
     response = client.get(
         reverse("kiosk-live-connection"),
@@ -97,9 +93,9 @@ def test_kiosk_live_connection_limits_state_to_requested_chargers(client):
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_kiosk_live_connection_deduplicates_requested_charger_ids(client):
     connected = Charger.objects.create(charger_id="KIOSK-LIVE-3", connector_id=1)
-    store.connections[store.identity_key(connected.charger_id, connected.connector_id)] = (
-        object()
-    )
+    store.connections[
+        store.identity_key(connected.charger_id, connected.connector_id)
+    ] = object()
 
     response = client.get(
         reverse("kiosk-live-connection"),

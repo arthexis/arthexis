@@ -8,7 +8,9 @@ from apps.users.models import User
 
 
 @pytest.mark.django_db
-def test_collector_search_messages_reads_from_primary_and_additional_inboxes(monkeypatch):
+def test_collector_search_messages_reads_from_primary_and_additional_inboxes(
+    monkeypatch,
+):
     """Collectors aggregate matches from primary and additional inbox bindings."""
 
     owner = User.objects.create_user(username="collector-owner")
@@ -43,7 +45,9 @@ def test_collector_search_messages_reads_from_primary_and_additional_inboxes(mon
 
 
 @pytest.mark.django_db
-def test_collector_collect_continues_to_additional_inbox_when_primary_has_known_message(monkeypatch):
+def test_collector_collect_continues_to_additional_inbox_when_primary_has_known_message(
+    monkeypatch,
+):
     """Seen messages in primary inbox should not prevent polling secondary inboxes."""
 
     owner = User.objects.create_user(username="collector-owner-2")
@@ -98,4 +102,6 @@ def test_collector_collect_continues_to_additional_inbox_when_primary_has_known_
 
     collector.collect(limit=10)
 
-    assert collector.artifacts.filter(subject="fresh", sender="new@example.com").exists()
+    assert collector.artifacts.filter(
+        subject="fresh", sender="new@example.com"
+    ).exists()

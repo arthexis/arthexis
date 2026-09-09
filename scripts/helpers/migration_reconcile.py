@@ -59,15 +59,11 @@ def _copy_statements(
         or len(primary_key) != 1
         or primary_key[0] not in columns
     ):
-        return [
-            f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"
-        ]
+        return [f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"]
 
     update_columns = [column for column in columns if column != primary_key[0]]
     if not update_columns:
-        return [
-            f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"
-        ]
+        return [f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) {select_sql}"]
 
     quoted_primary_key = _quote_identifier(primary_key[0])
     update_sql = ", ".join(
@@ -120,7 +116,9 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
         missing_in_target = sorted(source_tables - target_tables - _SKIP_TABLES)
 
         for table in common_tables:
-            source_columns = set(_column_names(target_conn, table, database="source_db"))
+            source_columns = set(
+                _column_names(target_conn, table, database="source_db")
+            )
             target_columns = [
                 column
                 for column in _column_names(target_conn, table)
@@ -141,9 +139,7 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
             try:
                 if replace_target:
                     target_conn.execute("SAVEPOINT reconcile_source_priority")
-                    target_conn.execute(
-                        f"DELETE FROM {_quote_identifier(table)}"
-                    )
+                    target_conn.execute(f"DELETE FROM {_quote_identifier(table)}")
                 for statement in statements:
                     target_conn.execute(statement)
             except sqlite3.DatabaseError as exc:
@@ -168,6 +164,7 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
         skipped_tables=skipped_tables,
     )
 
+
 def backup_sqlite_database(db_path: Path, destination_dir: Path) -> Path:
     """Create a timestamp-free backup path for deterministic automation."""
 
@@ -176,6 +173,7 @@ def backup_sqlite_database(db_path: Path, destination_dir: Path) -> Path:
     shutil.copy2(db_path, backup_path)
     return backup_path
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -183,9 +181,12 @@ def _parse_args() -> argparse.Namespace:
             "database while ignoring missing tables."
         )
     )
-    parser.add_argument("--source", required=True, help="Path to legacy SQLite database")
+    parser.add_argument(
+        "--source", required=True, help="Path to legacy SQLite database"
+    )
     parser.add_argument("--target", required=True, help="Path to fresh SQLite database")
     return parser.parse_args()
+
 
 def main() -> int:
     args = _parse_args()

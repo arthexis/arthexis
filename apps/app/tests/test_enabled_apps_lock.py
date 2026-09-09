@@ -114,9 +114,7 @@ def test_read_enabled_apps_lock_direct_sources_from_metadata(tmp_path):
     lock_path = get_enabled_apps_lock_path(tmp_path)
     lock_path.parent.mkdir(parents=True)
     lock_path.write_text(
-        "# direct: apps.ocpp\n"
-        "# direct-source: apps.ocpp charger-facing\n"
-        "apps.ocpp\n",
+        "# direct: apps.ocpp\n# direct-source: apps.ocpp charger-facing\napps.ocpp\n",
         encoding="utf-8",
     )
 

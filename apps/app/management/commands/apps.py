@@ -67,7 +67,9 @@ class Command(BaseCommand):
         if app_label:
             app_configs = [django_apps.get_app_config(app_label)]
         else:
-            app_configs = sorted(django_apps.get_app_configs(), key=lambda cfg: cfg.label)
+            app_configs = sorted(
+                django_apps.get_app_configs(), key=lambda cfg: cfg.label
+            )
 
         for config in app_configs:
             self.stdout.write(f"- {config.label} ({config.name})")
@@ -94,9 +96,15 @@ class Command(BaseCommand):
         self.stdout.write("  flags:")
         self.stdout.write("    --app <label>            target a single app")
         self.stdout.write("    --show-flags             print this flag reference")
-        self.stdout.write("    --show-commands          list management commands by app")
-        self.stdout.write("    --reload-migrations      run migrate <app> zero then migrate")
-        self.stdout.write("    --yes                    required confirmation for destructive actions")
+        self.stdout.write(
+            "    --show-commands          list management commands by app"
+        )
+        self.stdout.write(
+            "    --reload-migrations      run migrate <app> zero then migrate"
+        )
+        self.stdout.write(
+            "    --yes                    required confirmation for destructive actions"
+        )
 
     def _write_commands(self, app_label: str) -> None:
         """List Django management commands that belong to a selected app label."""
@@ -105,7 +113,8 @@ class Command(BaseCommand):
         commands = sorted(
             name
             for name, app_name in get_commands().items()
-            if app_name and (app_name == target_name or app_name.split(".")[-1] == app_label)
+            if app_name
+            and (app_name == target_name or app_name.split(".")[-1] == app_label)
         )
         self.stdout.write("  commands:")
         if not commands:

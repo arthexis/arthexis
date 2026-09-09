@@ -47,7 +47,9 @@ class UpgradePolicyAdmin(EntityModelAdmin):
             return ngettext("%(count)d day", "%(count)d days", days) % {"count": days}
         if interval_minutes % minutes_per_hour == 0:
             hours = interval_minutes // minutes_per_hour
-            return ngettext("%(count)d hour", "%(count)d hours", hours) % {"count": hours}
+            return ngettext("%(count)d hour", "%(count)d hours", hours) % {
+                "count": hours
+            }
         return ngettext("%(count)d minute", "%(count)d minutes", interval_minutes) % {
             "count": interval_minutes
         }

@@ -92,9 +92,7 @@ class RFIDBatchApiTests(TestCase):
     def test_post_coerces_non_string_generated_label(self):
         response = self.client.post(
             reverse("rfid-batch"),
-            data=json.dumps(
-                {"rfids": [{"rfid": "FACEBEEF", "generated_label": 123}]}
-            ),
+            data=json.dumps({"rfids": [{"rfid": "FACEBEEF", "generated_label": 123}]}),
             content_type="application/json",
         )
 

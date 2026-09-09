@@ -14,7 +14,6 @@ from django.dispatch import receiver
 
 from .models import SiteProfile
 
-
 logger = logging.getLogger(__name__)
 
 

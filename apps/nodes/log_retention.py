@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -105,12 +105,10 @@ def _is_in_progress_session_log(
     if not _is_session_log_artifact(path, log_dir=log_dir):
         return False
     try:
-        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
     except OSError:
         return True
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(
-        days=MAX_LOG_RETENTION_DAYS
-    )
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=MAX_LOG_RETENTION_DAYS)
     if modified < cutoff:
         return False
     try:
@@ -172,7 +170,7 @@ def _collect_log_candidates(log_dir: Path) -> list[LogCandidate]:
         candidates.append(
             LogCandidate(
                 path=path,
-                modified=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
+                modified=datetime.fromtimestamp(st.st_mtime, tz=UTC),
                 size=st.st_size,
             )
         )
@@ -180,7 +178,7 @@ def _collect_log_candidates(log_dir: Path) -> list[LogCandidate]:
 
 
 def _delete_candidates(log_dir: Path, *, max_age_days: int) -> tuple[int, int]:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
     archive_dir = log_dir / "archive"
     deleted_files = 0
     deleted_bytes = 0
@@ -208,7 +206,7 @@ def _trim_with_policy(log_dir: Path) -> tuple[int, int]:
     deleted_files = 0
     deleted_bytes = 0
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     archive_dir = log_dir / "archive"
     for candidate in _collect_log_candidates(log_dir):
         if _is_protected_active_log(

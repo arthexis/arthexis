@@ -122,7 +122,9 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
 
         if not is_feature_active_for_node(node=node, slug="gpio-rtc"):
             if auto_enabled:
-                NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+                NodeFeatureAssignment.objects.filter(
+                    node=node, feature=feature
+                ).delete()
                 self.message_user(
                     request,
                     _("%(feature)s feature was disabled because no devices were found.")

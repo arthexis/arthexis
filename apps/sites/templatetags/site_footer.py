@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 from pathlib import Path
 
@@ -72,7 +72,7 @@ def build_footer_context(*, request=None, force_footer=False, **_kwargs):
     fresh_since = None
     if latest is not None:
         if latest.tzinfo is None:
-            latest = latest.replace(tzinfo=dt_timezone.utc)
+            latest = latest.replace(tzinfo=UTC)
         fresh_since = timezone.localtime(latest).strftime("%Y-%m-%d %H:%M")
 
     has_release_info = bool(version or revision_value or fresh_since)
@@ -81,7 +81,9 @@ def build_footer_context(*, request=None, force_footer=False, **_kwargs):
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
         if release:
-            release_url = reverse("admin:release_packagerelease_change", args=[release.pk])
+            release_url = reverse(
+                "admin:release_packagerelease_change", args=[release.pk]
+            )
 
     show_footer = force_footer or has_release_info
     return {

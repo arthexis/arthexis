@@ -20,4 +20,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         days = coerce_retention_days(options["days"])
         deleted = purge_view_history(days=days)
-        self.stdout.write(f"Purged {deleted} view history entries older than {days} days.")
+        self.stdout.write(
+            f"Purged {deleted} view history entries older than {days} days."
+        )

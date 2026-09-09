@@ -2,13 +2,12 @@ import json
 import uuid
 from datetime import timedelta
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext_lazy as _
-
-from asgiref.sync import async_to_sync
 
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -21,11 +20,11 @@ from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware")
-def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_update_firmware(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     firmware_id = (
-        data.get("firmwareId")
-        or data.get("firmware_id")
-        or data.get("firmware")
+        data.get("firmwareId") or data.get("firmware_id") or data.get("firmware")
     )
     try:
         firmware_pk = int(firmware_id)
@@ -144,11 +143,11 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware")
-def _handle_publish_firmware(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_publish_firmware(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     firmware_id = (
-        data.get("firmwareId")
-        or data.get("firmware_id")
-        or data.get("firmware")
+        data.get("firmwareId") or data.get("firmware_id") or data.get("firmware")
     )
     try:
         firmware_pk = int(firmware_id)
@@ -252,11 +251,11 @@ def _handle_publish_firmware(context: ActionContext, data: dict) -> JsonResponse
 
 @protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware")
-def _handle_unpublish_firmware(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+def _handle_unpublish_firmware(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
     firmware_id = (
-        data.get("firmwareId")
-        or data.get("firmware_id")
-        or data.get("firmware")
+        data.get("firmwareId") or data.get("firmware_id") or data.get("firmware")
     )
     firmware = None
     firmware_pk = None

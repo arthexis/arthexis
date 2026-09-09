@@ -356,7 +356,9 @@ class ClientReportSchedule(Entity):
 
         NetMessage.broadcast("Client report delivery issue", message)
 
-    def run(self, *, start: datetime_date | None = None, end: datetime_date | None = None):
+    def run(
+        self, *, start: datetime_date | None = None, end: datetime_date | None = None
+    ):
         """Generate the report, persist it and deliver notifications."""
 
         from .reporting import ClientReport

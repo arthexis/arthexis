@@ -78,8 +78,7 @@ def _read_label(path: Path) -> str:
 
 def _is_soc_thermal_zone_path(path: Path) -> bool:
     return (
-        _normalize_sensor_name(_read_label(path.with_name("type")))
-        in SOC_SENSOR_NAMES
+        _normalize_sensor_name(_read_label(path.with_name("type"))) in SOC_SENSOR_NAMES
     )
 
 
@@ -121,9 +120,7 @@ def read_soc_temperature(
             return value
 
     hwmon_candidates = list(
-        hwmon_paths
-        if hwmon_paths is not None
-        else sorted(glob(DEFAULT_SOC_HWMON_GLOB))
+        hwmon_paths if hwmon_paths is not None else sorted(glob(DEFAULT_SOC_HWMON_GLOB))
     )
     for candidate in hwmon_candidates:
         path = Path(candidate)

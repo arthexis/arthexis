@@ -152,7 +152,7 @@ class CertificateBase(Certificate):
         return self.verify(sudo=sudo)
 
     @property
-    def _specific_certificate(self) -> "CertificateBase":
+    def _specific_certificate(self) -> CertificateBase:
         if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):
             return self
         for attr in ("certbotcertificate", "selfsignedcertificate"):

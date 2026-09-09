@@ -28,7 +28,9 @@ def load_initial_profile_data(profile_path: Path) -> dict[str, object]:
             f"Initial RFID profile was not found: {profile_path}"
         ) from exc
     except tomllib.TOMLDecodeError as exc:
-        raise InitialProfileError(f"Initial RFID profile is not valid TOML: {exc}") from exc
+        raise InitialProfileError(
+            f"Initial RFID profile is not valid TOML: {exc}"
+        ) from exc
     if not isinstance(profile, dict):  # pragma: no cover - tomllib returns a dict
         raise InitialProfileError("Initial RFID profile must be a TOML table.")
     return profile
@@ -43,10 +45,14 @@ def load_pre_registered_rfids(profile_path: Path) -> tuple[str, ...]:
         raise InitialProfileError("Initial RFID profile must contain an [rfid] table.")
     rfid_section = profile["rfid"]
     if not isinstance(rfid_section, dict):
-        raise InitialProfileError("Initial RFID profile [rfid] section must be a table.")
+        raise InitialProfileError(
+            "Initial RFID profile [rfid] section must be a table."
+        )
     configured_rfids = rfid_section.get("pre_register", [])
     if not isinstance(configured_rfids, list):
-        raise InitialProfileError("Initial RFID profile rfid.pre_register must be an array.")
+        raise InitialProfileError(
+            "Initial RFID profile rfid.pre_register must be an array."
+        )
 
     normalized_rfids: list[str] = []
     rfid_field = RFID._meta.get_field("rfid")
@@ -55,7 +61,9 @@ def load_pre_registered_rfids(profile_path: Path) -> tuple[str, ...]:
             raise InitialProfileError("Initial RFID profile values must be strings.")
         normalized = RFID.normalize_code(raw_rfid)
         if not normalized:
-            raise InitialProfileError("Initial RFID profile contains an empty RFID value.")
+            raise InitialProfileError(
+                "Initial RFID profile contains an empty RFID value."
+            )
         if len(normalized) > rfid_field.max_length:
             raise InitialProfileError(
                 "Initial RFID profile contains an RFID value that is too long."

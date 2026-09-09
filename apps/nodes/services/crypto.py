@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timedelta, timezone as datetime_timezone
 import logging
+from datetime import UTC, datetime, timedelta
+from datetime import timezone as datetime_timezone
 from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def ensure_keys(node: "Node") -> None:
+def ensure_keys(node: Node) -> None:
     """Ensure ``node`` has an on-disk RSA keypair and synchronized public key."""
     security_dir = node.get_base_path() / "security"
     security_dir.mkdir(parents=True, exist_ok=True)
@@ -29,8 +30,8 @@ def ensure_keys(node: "Node") -> None:
         key_max_age = getattr(settings, "NODE_KEY_MAX_AGE", timedelta(days=90))
         if key_max_age is not None:
             try:
-                priv_mtime = datetime.fromtimestamp(priv_path.stat().st_mtime, tz=datetime_timezone.utc)
-                pub_mtime = datetime.fromtimestamp(pub_path.stat().st_mtime, tz=datetime_timezone.utc)
+                priv_mtime = datetime.fromtimestamp(priv_path.stat().st_mtime, tz=UTC)
+                pub_mtime = datetime.fromtimestamp(pub_path.stat().st_mtime, tz=UTC)
             except OSError:
                 regenerate = True
             else:
@@ -64,7 +65,7 @@ def ensure_keys(node: "Node") -> None:
         node.save(update_fields=["public_key"])
 
 
-def get_private_key(node: "Node"):
+def get_private_key(node: Node):
     """Return the loaded private key object for ``node`` when available."""
     if not node.public_endpoint:
         return None
@@ -86,7 +87,9 @@ def sign_payload(payload: str, private_key) -> tuple[str | None, str | None]:
     try:
         signature = private_key.sign(
             payload.encode(),
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
+            ),
             hashes.SHA256(),
         )
     except Exception as exc:  # pragma: no cover

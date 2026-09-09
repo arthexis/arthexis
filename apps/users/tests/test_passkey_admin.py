@@ -30,7 +30,6 @@ def test_passkey_admin_register_start_sets_session(admin_client):
     assert pending["user_id"] == user.pk
 
 
-
 def test_passkey_admin_register_finish_creates_passkey(admin_client, monkeypatch):
     user = get_user_model().objects.create_user(
         username="passkey-admin-target",

@@ -14,7 +14,7 @@ import time
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from gettext import gettext as _
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -126,7 +126,7 @@ class ReportResult:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def sanitize_filename(value: str) -> str:
@@ -157,10 +157,14 @@ def redact_text(text: str) -> str:
     redacted = PRIVATE_KEY_BLOCK_RE.sub("<redacted:private-key>", text)
     redacted = URL_USERINFO_RE.sub(r"\1<redacted>@", redacted)
     redacted = URL_TOKEN_USERINFO_RE.sub(r"\1<redacted>@", redacted)
-    redacted = AUTH_HEADER_RE.sub(lambda match: f"{match.group(1)} <redacted>", redacted)
+    redacted = AUTH_HEADER_RE.sub(
+        lambda match: f"{match.group(1)} <redacted>", redacted
+    )
     redacted = AWS_ACCESS_KEY_RE.sub("<redacted:aws-access-key>", redacted)
     redacted = SSO_KEY_RE.sub("sso-key <redacted>", redacted)
-    redacted = SECRET_KEY_RE.sub(lambda match: f"{match.group(1)}{match.group(2)}<redacted>", redacted)
+    redacted = SECRET_KEY_RE.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}<redacted>", redacted
+    )
     return redacted
 
 
@@ -214,7 +218,9 @@ class ReportBuilder:
         self.warnings: list[str] = []
         self._archive_paths: set[str] = set()
 
-    def add_text(self, archive_path: str, text: str, source_path: Path | None = None) -> None:
+    def add_text(
+        self, archive_path: str, text: str, source_path: Path | None = None
+    ) -> None:
         self.add_bytes(
             archive_path,
             redact_text(text).encode("utf-8"),
@@ -223,7 +229,9 @@ class ReportBuilder:
         )
 
     def add_json(self, archive_path: str, payload: object) -> None:
-        self.add_text(archive_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        self.add_text(
+            archive_path, json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        )
 
     def add_file_tail(self, archive_path: str, path: Path) -> None:
         if path.is_symlink():
@@ -257,7 +265,9 @@ class ReportBuilder:
         source_path: Path | None = None,
         truncated: bool = False,
     ) -> None:
-        safe_archive_path = self._dedupe_archive_path(normalize_archive_path(archive_path))
+        safe_archive_path = self._dedupe_archive_path(
+            normalize_archive_path(archive_path)
+        )
         self.entries.append(
             ReportEntry(
                 archive_path=safe_archive_path,
@@ -369,7 +379,9 @@ def discover_log_dirs(base_dir: Path) -> list[Path]:
     return existing
 
 
-def collect_log_files(base_dir: Path, config: ReportConfig, cutoff: float | None) -> list[Path]:
+def collect_log_files(
+    base_dir: Path, config: ReportConfig, cutoff: float | None
+) -> list[Path]:
     files: list[Path] = []
     for log_dir in discover_log_dirs(base_dir):
         for path in log_dir.rglob("*"):
@@ -439,7 +451,9 @@ def collect_logs(builder: ReportBuilder, cutoff: float | None) -> None:
         builder.add_text("logs/README.txt", "No readable log files found.\n")
         return
     for path in logs:
-        builder.add_file_tail(archive_path_for_source(path, builder.config.base_dir), path)
+        builder.add_file_tail(
+            archive_path_for_source(path, builder.config.base_dir), path
+        )
 
 
 def status_snapshot(base_dir: Path, log_dirs: Iterable[Path]) -> str:
@@ -577,7 +591,9 @@ def build_manifest(
         "platform": platform.platform(),
         "python_version": sys.version,
         "options": {
-            "since_seconds": int(config.since.total_seconds()) if config.since else None,
+            "since_seconds": int(config.since.total_seconds())
+            if config.since
+            else None,
             "max_log_files": config.max_log_files,
             "max_file_bytes": config.max_file_bytes,
             "upload_requested": bool(config.upload_url),
@@ -598,20 +614,23 @@ def build_manifest(
 def build_summary(manifest: dict[str, object]) -> str:
     entries = manifest.get("entries", [])
     warnings = manifest.get("warnings", [])
-    return "\n".join(
-        [
-            "Arthexis Error Report",
-            "",
-            f"Created at: {manifest['created_at']}",
-            f"Hostname: {manifest['hostname']}",
-            f"Platform: {manifest['platform']}",
-            f"Entries: {len(entries) if isinstance(entries, list) else 0}",
-            f"Warnings: {len(warnings) if isinstance(warnings, list) else 0}",
-            "",
-            "This package excludes databases, env files, private keys, backups, media, static files, caches, and venvs.",
-            "Text content and command output are redacted for common secret-bearing values.",
-        ]
-    ) + "\n"
+    return (
+        "\n".join(
+            [
+                "Arthexis Error Report",
+                "",
+                f"Created at: {manifest['created_at']}",
+                f"Hostname: {manifest['hostname']}",
+                f"Platform: {manifest['platform']}",
+                f"Entries: {len(entries) if isinstance(entries, list) else 0}",
+                f"Warnings: {len(warnings) if isinstance(warnings, list) else 0}",
+                "",
+                "This package excludes databases, env files, private keys, backups, media, static files, caches, and venvs.",
+                "Text content and command output are redacted for common secret-bearing values.",
+            ]
+        )
+        + "\n"
+    )
 
 
 def report_path_for(config: ReportConfig, created_at: datetime) -> Path:
@@ -624,7 +643,9 @@ def build_report(config: ReportConfig) -> ReportResult:
     created_at = utc_now()
     report_path = report_path_for(config, created_at)
     builder = collect_report_entries(config, created_at)
-    manifest = build_manifest(config, created_at, report_path, builder.entries, builder.warnings)
+    manifest = build_manifest(
+        config, created_at, report_path, builder.entries, builder.warnings
+    )
     manifest_entry = ReportEntry(
         archive_path="manifest.json",
         content=(json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
@@ -636,7 +657,9 @@ def build_report(config: ReportConfig) -> ReportResult:
     entries = [manifest_entry, summary_entry, *builder.entries]
 
     if config.dry_run:
-        return ReportResult(path=report_path, entries=entries, warnings=builder.warnings, dry_run=True)
+        return ReportResult(
+            path=report_path, entries=entries, warnings=builder.warnings, dry_run=True
+        )
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(report_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -650,10 +673,19 @@ def validate_upload_url(url: str, allow_insecure: bool) -> None:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(_("upload URL must be an http(s) URL with a host"))
     if parsed.scheme != "https" and not allow_insecure:
-        raise ValueError(_("upload URL must use https unless --allow-insecure-upload is set"))
+        raise ValueError(
+            _("upload URL must use https unless --allow-insecure-upload is set")
+        )
 
 
-def upload_report(path: Path, url: str, *, method: str = "PUT", timeout: int = 60, allow_insecure: bool = False) -> int:
+def upload_report(
+    path: Path,
+    url: str,
+    *,
+    method: str = "PUT",
+    timeout: int = 60,
+    allow_insecure: bool = False,
+) -> int:
     validate_upload_url(url, allow_insecure)
     method = method.upper()
     if method not in {"PUT", "POST"}:
@@ -680,14 +712,24 @@ def positive_int(value: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=_("Build an Arthexis diagnostic error-report zip."))
-    parser.add_argument("--base-dir", default=Path.cwd(), type=Path, help=argparse.SUPPRESS)
+    parser = argparse.ArgumentParser(
+        description=_("Build an Arthexis diagnostic error-report zip.")
+    )
+    parser.add_argument(
+        "--base-dir", default=Path.cwd(), type=Path, help=argparse.SUPPRESS
+    )
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--since", type=parse_duration)
-    parser.add_argument("--max-log-files", type=positive_int, default=DEFAULT_MAX_LOG_FILES)
-    parser.add_argument("--max-file-bytes", type=positive_int, default=DEFAULT_MAX_FILE_BYTES)
+    parser.add_argument(
+        "--max-log-files", type=positive_int, default=DEFAULT_MAX_LOG_FILES
+    )
+    parser.add_argument(
+        "--max-file-bytes", type=positive_int, default=DEFAULT_MAX_FILE_BYTES
+    )
     parser.add_argument("--upload-url")
-    parser.add_argument("--upload-method", default="PUT", choices=["PUT", "POST", "put", "post"])
+    parser.add_argument(
+        "--upload-method", default="PUT", choices=["PUT", "POST", "put", "post"]
+    )
     parser.add_argument("--upload-timeout", type=positive_int, default=60)
     parser.add_argument("--allow-insecure-upload", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -700,7 +742,7 @@ def _queue_upstream(path: Path, queue_dir: Path) -> Path:
     queue_dir.mkdir(parents=True, exist_ok=True)
     queued = queue_dir / path.name
     if queued.exists():
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         counter = 0
         while queued.exists():
             suffix = stamp if counter == 0 else f"{stamp}-{counter}"
@@ -735,16 +777,26 @@ def _flush_upstream_queue(
             continue
         if candidate.is_symlink() or not candidate.is_file():
             print(
-                _("Warning: skipped non-regular queued file {path}").format(path=candidate),
+                _("Warning: skipped non-regular queued file {path}").format(
+                    path=candidate
+                ),
                 file=sys.stderr,
             )
             continue
-        upload_report(candidate, upload_url, method=method, timeout=timeout, allow_insecure=allow_insecure)
+        upload_report(
+            candidate,
+            upload_url,
+            method=method,
+            timeout=timeout,
+            allow_insecure=allow_insecure,
+        )
         try:
             candidate.unlink(missing_ok=True)
         except OSError as exc:
             print(
-                _("Warning: could not delete queued file {path} after upload: {error}").format(
+                _(
+                    "Warning: could not delete queued file {path} after upload: {error}"
+                ).format(
                     path=candidate,
                     error=exc,
                 ),
@@ -776,7 +828,10 @@ def main(argv: list[str] | None = None) -> int:
         try:
             validate_upload_url(upstream_url, args.allow_insecure_upload)
         except ValueError as exc:
-            print(_("Invalid upstream upload URL: {error}").format(error=exc), file=sys.stderr)
+            print(
+                _("Invalid upstream upload URL: {error}").format(error=exc),
+                file=sys.stderr,
+            )
             return 2
 
     config = ReportConfig(
@@ -822,7 +877,11 @@ def main(argv: list[str] | None = None) -> int:
                 exclude_paths=[result.path],
             )
             if flushed:
-                print(_("Flushed queued upstream uploads: {count}").format(count=len(flushed)))
+                print(
+                    _("Flushed queued upstream uploads: {count}").format(
+                        count=len(flushed)
+                    )
+                )
         except (HTTPError, URLError, OSError, ValueError):
             pass
 
@@ -836,27 +895,45 @@ def main(argv: list[str] | None = None) -> int:
                 allow_insecure=config.allow_insecure_upload,
             )
         except (HTTPError, URLError, OSError, ValueError) as exc:
-            print(_("Upload failed; local zip remains at {path}: {error}").format(path=result.path, error=exc), file=sys.stderr)
+            print(
+                _("Upload failed; local zip remains at {path}: {error}").format(
+                    path=result.path, error=exc
+                ),
+                file=sys.stderr,
+            )
             return 2
         print(_("Uploaded error report: HTTP {status}").format(status=status))
 
     if upstream_url:
         try:
-            status = upload_report(result.path, upstream_url, method=config.upload_method, timeout=config.upload_timeout, allow_insecure=config.allow_insecure_upload)
+            status = upload_report(
+                result.path,
+                upstream_url,
+                method=config.upload_method,
+                timeout=config.upload_timeout,
+                allow_insecure=config.allow_insecure_upload,
+            )
             print(_("Sent upstream error report: HTTP {status}").format(status=status))
         except (HTTPError, URLError, OSError, ValueError):
             try:
                 queued = _queue_upstream(result.path, upstream_queue_dir)
             except OSError as exc:
                 print(
-                    _("Upstream upload failed and queueing also failed for {path}: {error}").format(
+                    _(
+                        "Upstream upload failed and queueing also failed for {path}: {error}"
+                    ).format(
                         path=result.path,
                         error=exc,
                     ),
                     file=sys.stderr,
                 )
                 return 2
-            print(_("Upstream upload unavailable; queued report at {path}").format(path=queued), file=sys.stderr)
+            print(
+                _("Upstream upload unavailable; queued report at {path}").format(
+                    path=queued
+                ),
+                file=sys.stderr,
+            )
 
     return 0
 

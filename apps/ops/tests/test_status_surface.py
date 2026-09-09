@@ -93,7 +93,9 @@ class StatusSurfaceTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
 
-    def test_status_logs_are_tenant_scoped_and_sensitive_events_hidden_for_non_staff(self):
+    def test_status_logs_are_tenant_scoped_and_sensitive_events_hidden_for_non_staff(
+        self,
+    ):
         self.client.force_login(self.owner)
 
         response = self.client.get(reverse("ops:status-logs"))
@@ -103,12 +105,16 @@ class StatusSurfaceTests(TestCase):
         excerpts = payload["log_excerpts"]
         self.assertEqual(len(excerpts), 1)
         self.assertEqual(excerpts[0]["charger_id"], "CP-OWNER")
-        self.assertTrue(all(excerpt["charger_id"] != "CP-PUBLIC" for excerpt in excerpts))
+        self.assertTrue(
+            all(excerpt["charger_id"] != "CP-PUBLIC" for excerpt in excerpts)
+        )
         lines = "\n".join(item["line"] for item in excerpts[0]["entries"])
         self.assertNotIn("SecurityEventNotification", lines)
         self.assertNotIn("tok-secret", lines)
 
-    def test_status_logs_include_sensitive_event_names_for_staff_but_redact_tokens(self):
+    def test_status_logs_include_sensitive_event_names_for_staff_but_redact_tokens(
+        self,
+    ):
         self.client.force_login(self.staff)
 
         response = self.client.get(reverse("ops:status-logs"))
@@ -125,9 +131,13 @@ class StatusSurfaceTests(TestCase):
         self.assertIn("[REDACTED]", joined_lines)
 
     def test_status_surface_scopes_failed_operations_by_visible_charger_pk(self):
-        owner_connector_one = Charger.objects.create(charger_id="CP-SHARED", connector_id=1)
+        owner_connector_one = Charger.objects.create(
+            charger_id="CP-SHARED", connector_id=1
+        )
         owner_connector_one.owner_users.add(self.owner)
-        hidden_connector_two = Charger.objects.create(charger_id="CP-SHARED", connector_id=2)
+        hidden_connector_two = Charger.objects.create(
+            charger_id="CP-SHARED", connector_id=2
+        )
         hidden_connector_two.owner_users.add(self.staff)
         ControlOperationEvent.objects.create(
             charger=owner_connector_one,
@@ -151,7 +161,11 @@ class StatusSurfaceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         events = response.json()["recent_critical_events"]
-        details = "\n".join(event["details"] for event in events if event["source"] == "control_operation")
+        details = "\n".join(
+            event["details"]
+            for event in events
+            if event["source"] == "control_operation"
+        )
         self.assertIn("Owner-visible failure", details)
         self.assertNotIn("Hidden failure", details)
 
@@ -168,12 +182,16 @@ class StatusSurfaceTests(TestCase):
         self.client.force_login(self.owner)
         tenant_response = self.client.get(reverse("ops:status-surface"))
         tenant_events = tenant_response.json()["recent_critical_events"]
-        self.assertFalse(any(event["source"] == "security_alert" for event in tenant_events))
+        self.assertFalse(
+            any(event["source"] == "security_alert" for event in tenant_events)
+        )
 
         self.client.force_login(self.staff)
         staff_response = self.client.get(reverse("ops:status-surface"))
         staff_events = staff_response.json()["recent_critical_events"]
-        security_events = [event for event in staff_events if event["source"] == "security_alert"]
+        security_events = [
+            event for event in staff_events if event["source"] == "security_alert"
+        ]
         self.assertEqual(len(security_events), 1)
         self.assertNotIn("visible-secret", security_events[0]["details"])
 
@@ -182,8 +200,14 @@ class StatusSurfaceTests(TestCase):
         other_key = store.identity_key("CP-OTHER", None)
         store.pending_calls["owner-call"] = {"log_key": owner_key}
         store.pending_calls["other-call"] = {"log_key": other_key}
-        store.monitoring_report_requests[11] = {"charger_id": "CP-OWNER", "connector_id": None}
-        store.monitoring_report_requests[12] = {"charger_id": "CP-OTHER", "connector_id": None}
+        store.monitoring_report_requests[11] = {
+            "charger_id": "CP-OWNER",
+            "connector_id": None,
+        }
+        store.monitoring_report_requests[12] = {
+            "charger_id": "CP-OTHER",
+            "connector_id": None,
+        }
 
         self.client.force_login(self.owner)
         owner_response = self.client.get(reverse("ops:status-surface"))
@@ -197,7 +221,9 @@ class StatusSurfaceTests(TestCase):
         self.assertEqual(staff_queue["pending_calls"], 2)
         self.assertEqual(staff_queue["monitoring_requests"], 2)
 
-    def test_status_surface_recent_failures_condition_counts_only_failed_operations(self):
+    def test_status_surface_recent_failures_condition_counts_only_failed_operations(
+        self,
+    ):
         ControlOperationEvent.objects.create(
             charger=self.owner_charger,
             actor=self.owner,
@@ -220,6 +246,8 @@ class StatusSurfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         recent_failures = next(
-            condition for condition in payload["status_conditions"] if condition["code"] == "recent_failures"
+            condition
+            for condition in payload["status_conditions"]
+            if condition["code"] == "recent_failures"
         )
         self.assertIn("(1)", recent_failures["summary"])

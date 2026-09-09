@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class MeterValue(Entity):
     """Parsed meter values reported by chargers."""
 

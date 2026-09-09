@@ -12,9 +12,9 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.utils.translation import gettext as _
 
+from apps.core.views.reports.common import DIRTY_COMMIT_DEFAULT_MESSAGE
 from apps.repos.models import GitHubToken
 
-from apps.core.views.reports.common import DIRTY_COMMIT_DEFAULT_MESSAGE
 from .context import (
     ReleaseContextState,
     load_release_context,

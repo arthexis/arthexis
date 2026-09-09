@@ -71,7 +71,9 @@ class AccessPointLocalUserBackendTests(TestCase):
             REMOTE_ADDR=remote_addr,
         )
 
-    def test_authenticates_local_user_with_valid_password_from_matching_ipv4_prefix(self):
+    def test_authenticates_local_user_with_valid_password_from_matching_ipv4_prefix(
+        self,
+    ):
         user = get_user_model().objects.create_user(
             username="ap-user",
             email="ap-user@example.com",

@@ -10,4 +10,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         cleared = reset_cached_statuses()
-        self.stdout.write(f"Cleared cached charger statuses for {cleared} charge points.")
+        self.stdout.write(
+            f"Cleared cached charger statuses for {cleared} charge points."
+        )

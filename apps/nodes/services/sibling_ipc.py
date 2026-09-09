@@ -45,7 +45,9 @@ def _build_register_request(payload: dict[str, object]) -> HttpRequest:
     )
 
 
-def _signature_is_valid(sender: Node, signature: str, msg_payload: dict[str, object]) -> bool:
+def _signature_is_valid(
+    sender: Node, signature: str, msg_payload: dict[str, object]
+) -> bool:
     """Verify a sibling IPC net message signature against the sender key."""
 
     if not sender.public_key:
@@ -81,7 +83,9 @@ def handle_operation(operation: str, payload: dict[str, object]) -> dict[str, ob
         if mac_address:
             sender = Node.objects.filter(mac_address__iexact=mac_address).first()
         if not sender and payload.get("public_key"):
-            sender = Node.objects.filter(public_key=str(payload.get("public_key"))).first()
+            sender = Node.objects.filter(
+                public_key=str(payload.get("public_key"))
+            ).first()
         if not _relation_is_sibling(sender):
             return {"ok": False, "detail": "sibling relation required"}
         response = register_node(_build_register_request(payload))
@@ -122,10 +126,13 @@ class _SiblingIPCHandler(socketserver.StreamRequestHandler):
             payload = data.get("payload")
             if operation and isinstance(payload, dict):
                 response = handle_operation(operation, payload)
-        self.wfile.write((json.dumps(response, separators=(",", ":")) + "\n").encode("utf-8"))
+        self.wfile.write(
+            (json.dumps(response, separators=(",", ":")) + "\n").encode("utf-8")
+        )
 
 
 if hasattr(socketserver, "UnixStreamServer"):
+
     class _SiblingIPCServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
         daemon_threads = True
 
@@ -168,7 +175,9 @@ def start_server() -> Path | None:
         logger.warning("Unable to start sibling IPC server at %s: %s", path, exc)
         return None
 
-    thread = threading.Thread(target=server.serve_forever, name="nodes-sibling-ipc", daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, name="nodes-sibling-ipc", daemon=True
+    )
     thread.start()
     _SERVER = server
     _SERVER_THREAD = thread

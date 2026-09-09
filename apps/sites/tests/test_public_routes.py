@@ -72,7 +72,9 @@ def test_favicon_route_ignores_self_relative_site_favicon(client, monkeypatch):
 
 
 def test_favicon_route_ignores_self_bare_relative_site_favicon(client, monkeypatch):
-    monkeypatch.setattr(landing, "_get_site_favicon_url", lambda _request: "favicon.ico")
+    monkeypatch.setattr(
+        landing, "_get_site_favicon_url", lambda _request: "favicon.ico"
+    )
     monkeypatch.setattr(landing.Node, "get_local", lambda: SimpleNamespace(role=None))
 
     response = client.get("/favicon.ico")
@@ -84,7 +86,9 @@ def test_favicon_route_ignores_self_bare_relative_site_favicon(client, monkeypat
 
 def test_favicon_route_ignores_self_absolute_site_favicon(client, monkeypatch):
     monkeypatch.setattr(
-        landing, "_get_site_favicon_url", lambda _request: "http://testserver/favicon.ico"
+        landing,
+        "_get_site_favicon_url",
+        lambda _request: "http://testserver/favicon.ico",
     )
     monkeypatch.setattr(landing.Node, "get_local", lambda: SimpleNamespace(role=None))
 
@@ -149,7 +153,9 @@ def test_get_role_favicon_filename_falls_back_when_role_relation_is_missing(
     assert landing._get_role_favicon_filename() == FAVICON_FILENAMES["default"]
 
 
-def test_client_report_download_enforces_login_and_ownership(client, monkeypatch, tmp_path):
+def test_client_report_download_enforces_login_and_ownership(
+    client, monkeypatch, tmp_path
+):
     user_model = get_user_model()
     owner = user_model.objects.create_user(
         username="report-owner", email="owner@example.com", password="secret"

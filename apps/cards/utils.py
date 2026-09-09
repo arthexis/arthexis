@@ -47,7 +47,7 @@ def convert_endianness_value(
 
 def build_mode_toggle(
     request: HttpRequest, *, base_path: str | None = None
-) -> Tuple[bool, str, str]:
+) -> tuple[bool, str, str]:
     """Return table mode flag and toggle details for the RFID views."""
 
     params = request.GET.copy()

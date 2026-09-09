@@ -52,6 +52,8 @@ _AUTO_DETECT_BACKOFF_SECONDS = float(
 _NOT_CONFIGURED_LOG_INTERVAL = float(
     os.environ.get("RFID_NOT_CONFIGURED_LOG_INTERVAL", "30")
 )
+
+
 class _IrqEmptyPollTracker:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -124,7 +126,9 @@ def _log_fd_snapshot(label: str) -> None:
         except Exception as exc:  # pragma: no cover - defensive guard
             samples.append(f"{fd_path.name}:<error:{exc}>")
 
-    message = f"RFID fd snapshot ({label}): count={count} limits={limits} sample={samples}"
+    message = (
+        f"RFID fd snapshot ({label}): count={count} limits={limits} sample={samples}"
+    )
     if count >= _FD_SNAPSHOT_THRESHOLD:
         logger.warning(message)
     else:
@@ -159,9 +163,7 @@ def _disable_hardware(reason: str) -> None:
         return
     _hardware_disabled_reason = reason
     log = (
-        logger.info
-        if is_expected_optional_hardware_absence(reason)
-        else logger.warning
+        logger.info if is_expected_optional_hardware_absence(reason) else logger.warning
     )
     log(
         "RFID hardware disabled for this process after setup failure: %s",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 def generate_log_request_id() -> int:
     """Return a random positive identifier suitable for OCPP log requests."""
 
@@ -9,6 +10,7 @@ def generate_log_request_id() -> int:
 
     # Limit to 31 bits to remain compatible with OCPP integer fields.
     return secrets.randbits(31) or 1
+
 
 class ChargerLogRequest(Entity):
     """Track GetLog interactions initiated against a charge point."""

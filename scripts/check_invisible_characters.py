@@ -8,12 +8,13 @@ walks text files under the repository root (excluding common binary and
 generated directories) and reports any occurrences with line and column
 numbers.
 """
+
 from __future__ import annotations
 
 import os
 import pathlib
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 # Repository root path
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -89,7 +90,9 @@ class InvisibleCharacterFinding:
     def render(self, root: pathlib.Path) -> str:
         relative = self.path.relative_to(root)
         codepoint = f"U+{ord(self.character):04X}"
-        return f"{relative}:{self.line}:{self.column} -> {self.description} ({codepoint})"
+        return (
+            f"{relative}:{self.line}:{self.column} -> {self.description} ({codepoint})"
+        )
 
 
 def _iter_candidate_files(root: pathlib.Path) -> Iterator[pathlib.Path]:
@@ -110,7 +113,9 @@ def _scan_text(path: pathlib.Path) -> str:
         return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def scan_file_for_invisible_characters(path: pathlib.Path) -> list[InvisibleCharacterFinding]:
+def scan_file_for_invisible_characters(
+    path: pathlib.Path,
+) -> list[InvisibleCharacterFinding]:
     contents = _scan_text(path)
     findings: list[InvisibleCharacterFinding] = []
     for line_number, line in enumerate(contents.splitlines(), start=1):

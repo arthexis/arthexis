@@ -22,9 +22,12 @@ def _load_spec() -> dict[str, list[str]]:
 
 def _is_not_implemented_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     statements = list(node.body)
-    if statements and isinstance(statements[0], ast.Expr) and isinstance(
-        statements[0].value, ast.Constant
-    ) and isinstance(statements[0].value.value, str):
+    if (
+        statements
+        and isinstance(statements[0], ast.Expr)
+        and isinstance(statements[0].value, ast.Constant)
+        and isinstance(statements[0].value.value, str)
+    ):
         statements = statements[1:]
     if len(statements) != 1 or not isinstance(statements[0], ast.Raise):
         return False
@@ -141,7 +144,9 @@ def _collect_stub_decorated_actions(
     )
 
 
-def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[set[str], set[str]]:
+def _collect_real_decorated_actions(
+    app_dir: Path, protocol_slug: str
+) -> tuple[set[str], set[str]]:
     """Collect protocol actions mapped to non-stub handlers for the target protocol."""
 
     cp_to_csms: set[str] = set()
@@ -159,14 +164,18 @@ def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[
     return cp_to_csms, csms_to_cp
 
 
-def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
+def run_coverage_ocpp201(
+    *, badge_path=None, json_path=None, stdout=None, stderr=None
+) -> None:
     """Generate OCPP 2.0.1 coverage output and badge."""
     app_dir = Path(__file__).resolve().parents[1]
     project_root = app_dir.parent.parent
     spec = _load_spec()
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
-    real_cp_to_csms, real_csms_to_cp = _collect_real_decorated_actions(app_dir, "ocpp201")
+    real_cp_to_csms, real_csms_to_cp = _collect_real_decorated_actions(
+        app_dir, "ocpp201"
+    )
     implemented_cp_to_csms |= real_cp_to_csms
     implemented_csms_to_cp |= real_csms_to_cp
     spec_cp_to_csms = set(spec["cp_to_csms"])
@@ -176,12 +185,22 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     missing_cp_to_csms = sorted(spec_cp_to_csms - implemented_cp_to_csms)
     missing_csms_to_cp = sorted(spec_csms_to_cp - implemented_csms_to_cp)
     stubbed_actions = _collect_stub_decorated_actions(app_dir, "ocpp201")
-    cp_to_csms_percentage = len(cp_to_csms_coverage) / len(spec_cp_to_csms) * 100 if spec_cp_to_csms else 0.0
-    csms_to_cp_percentage = len(csms_to_cp_coverage) / len(spec_csms_to_cp) * 100 if spec_csms_to_cp else 0.0
+    cp_to_csms_percentage = (
+        len(cp_to_csms_coverage) / len(spec_cp_to_csms) * 100
+        if spec_cp_to_csms
+        else 0.0
+    )
+    csms_to_cp_percentage = (
+        len(csms_to_cp_coverage) / len(spec_csms_to_cp) * 100
+        if spec_csms_to_cp
+        else 0.0
+    )
     overall_spec = spec_cp_to_csms | spec_csms_to_cp
     overall_implemented = implemented_cp_to_csms | implemented_csms_to_cp
     overall_coverage = sorted(overall_spec & overall_implemented)
-    overall_percentage = len(overall_coverage) / len(overall_spec) * 100 if overall_spec else 0.0
+    overall_percentage = (
+        len(overall_coverage) / len(overall_spec) * 100 if overall_spec else 0.0
+    )
     summary = {
         "spec": spec,
         "implemented": {
@@ -224,20 +243,33 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
             path = project_root / path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(output + "\n", encoding="utf-8")
-    badge_output = Path(badge_path) if badge_path else project_root / "media" / "ocpp201_coverage.svg"
+    badge_output = (
+        Path(badge_path)
+        if badge_path
+        else project_root / "media" / "ocpp201_coverage.svg"
+    )
     if not badge_output.is_absolute():
         badge_output = project_root / badge_output
     badge_output.parent.mkdir(parents=True, exist_ok=True)
     badge_output.write_text(
-        render_badge("ocpp 2.0.1", f"{round(overall_percentage, 1)}%", coverage_color(overall_percentage)) + "\n",
+        render_badge(
+            "ocpp 2.0.1",
+            f"{round(overall_percentage, 1)}%",
+            coverage_color(overall_percentage),
+        )
+        + "\n",
         encoding="utf-8",
     )
     if overall_percentage < 100 and stderr:
-        stderr.write("OCPP 2.0.1 coverage is incomplete; consider adding more handlers.\n")
+        stderr.write(
+            "OCPP 2.0.1 coverage is incomplete; consider adding more handlers.\n"
+        )
         stderr.write(
             f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.\n"
         )
     if stubbed_actions and stderr:
-        stderr.write("OCPP 2.0.1 decorated handlers still contain NotImplementedError stubs.\n")
+        stderr.write(
+            "OCPP 2.0.1 decorated handlers still contain NotImplementedError stubs.\n"
+        )
     if stdout:
         stdout.write("Command completed without failure.")

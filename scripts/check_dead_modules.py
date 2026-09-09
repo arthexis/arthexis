@@ -6,7 +6,6 @@ import pathlib
 import sys
 import tokenize
 
-
 MINIMAL_PLACEHOLDER_PARTS = {
     "beat_migrations",
     "fixtures",
@@ -93,7 +92,9 @@ def _iter_input_paths(argv: list[str], repo_root: pathlib.Path) -> list[pathlib.
     return sorted(set(paths))
 
 
-def _collect_dead_modules(paths: list[pathlib.Path], repo_root: pathlib.Path) -> list[pathlib.Path]:
+def _collect_dead_modules(
+    paths: list[pathlib.Path], repo_root: pathlib.Path
+) -> list[pathlib.Path]:
     dead_modules: list[pathlib.Path] = []
 
     for path in paths:

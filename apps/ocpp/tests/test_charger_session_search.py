@@ -42,7 +42,9 @@ def test_charger_session_search_quick_range_filters_and_summary(client):
     assert client.login(username=user.username, password="secret")
 
     response = client.get(
-        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        reverse(
+            "ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]
+        ),
         {"range": "last7"},
     )
 
@@ -80,7 +82,9 @@ def test_charger_session_search_date_filter_still_supported(client):
     assert client.login(username=user.username, password="secret")
 
     response = client.get(
-        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        reverse(
+            "ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]
+        ),
         {"date": timezone.localtime(target).date().isoformat()},
     )
 
@@ -117,7 +121,9 @@ def test_charger_session_search_today_uses_local_day_boundaries(client, monkeypa
     assert client.login(username=user.username, password="secret")
 
     response = client.get(
-        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        reverse(
+            "ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]
+        ),
         {"range": "today"},
     )
 
@@ -139,7 +145,9 @@ def test_charger_session_search_invalid_range_without_date_is_safe(client):
     assert client.login(username=user.username, password="secret")
 
     response = client.get(
-        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        reverse(
+            "ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]
+        ),
         {"range": "not-a-range"},
     )
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import UTC, timezone
 from pathlib import Path
 
 from django.core.management.base import CommandError
@@ -31,7 +31,10 @@ def run_replay_extract(*, extract: str) -> ReplayResult:
         raise CommandError("Unsupported extract format.")
 
     imported, skipped, imported_transactions = import_transactions_deduped(
-        {"chargers": data.get("chargers", []), "transactions": data.get("transactions", [])}
+        {
+            "chargers": data.get("chargers", []),
+            "transactions": data.get("transactions", []),
+        }
     )
 
     session_log_written = False
@@ -58,11 +61,13 @@ def _session_log_path(transaction) -> Path:
     """Resolve the session-log output path for a transaction."""
     start_time = transaction.start_time
     if start_time.tzinfo is None:
-        start_time = start_time.replace(tzinfo=timezone.utc)
-    date = start_time.astimezone(timezone.utc).strftime("%Y%m%d")
+        start_time = start_time.replace(tzinfo=UTC)
+    date = start_time.astimezone(UTC).strftime("%Y%m%d")
     if not transaction.charger:
         folder = store.session_folder(store.AGGREGATE_SLUG)
     else:
-        key = store.identity_key(transaction.charger.charger_id, transaction.connector_id)
+        key = store.identity_key(
+            transaction.charger.charger_id, transaction.connector_id
+        )
         folder = store.session_folder(key)
     return folder / f"{date}_{transaction.pk}.json"

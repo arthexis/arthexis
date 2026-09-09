@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from datetime import timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
@@ -1540,7 +1540,7 @@ async def test_notify_monitoring_report_records_analytics():
     assert record["is_transaction"] is False
     assert record["evse_id"] == 4
     assert record["connector_id"] == "2"
-    assert record["generated_at"] == datetime(2024, 2, 2, 10, 0, tzinfo=dt_timezone.utc)
+    assert record["generated_at"] == datetime(2024, 2, 2, 10, 0, tzinfo=UTC)
 
 
 @pytest.mark.anyio

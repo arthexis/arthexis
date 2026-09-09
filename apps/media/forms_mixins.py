@@ -21,7 +21,9 @@ class MediaUploadAdminFormMixin:
             if media_field_name not in self.fields:
                 continue
             bucket = self.get_media_bucket(binding["bucket_provider"])
-            self.fields[media_field_name].queryset = MediaFile.objects.filter(bucket=bucket)
+            self.fields[media_field_name].queryset = MediaFile.objects.filter(
+                bucket=bucket
+            )
 
     def get_media_bucket(self, bucket_provider: Callable[[], Any]) -> Any:
         cache = getattr(self, "_media_bucket_cache", None)
@@ -32,7 +34,9 @@ class MediaUploadAdminFormMixin:
             cache[bucket_provider] = bucket_provider()
         return cache[bucket_provider]
 
-    def validate_bucket_upload(self, upload: Any, *, bucket_provider: Callable[[], Any]) -> Any:
+    def validate_bucket_upload(
+        self, upload: Any, *, bucket_provider: Callable[[], Any]
+    ) -> Any:
         if upload:
             bucket = self.get_media_bucket(bucket_provider)
             if not bucket.allows_filename(upload.name):
@@ -44,7 +48,9 @@ class MediaUploadAdminFormMixin:
     def clean_upload_field(self, upload_field_name: str) -> Any:
         upload = self.cleaned_data.get(upload_field_name)
         binding = self.media_upload_bindings[upload_field_name]
-        upload = self.validate_bucket_upload(upload, bucket_provider=binding["bucket_provider"])
+        upload = self.validate_bucket_upload(
+            upload, bucket_provider=binding["bucket_provider"]
+        )
         validator = binding.get("extra_validator")
         if upload and validator:
             validator(upload)

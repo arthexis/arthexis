@@ -17,7 +17,9 @@ from apps.users.models import User
 
 
 @pytest.mark.django_db
-def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, admin_user, monkeypatch):
+def test_setup_collector_view_saves_collector_and_runs_preview(
+    admin_client, admin_user, monkeypatch
+):
     """The setup wizard updates collector data and renders test results."""
 
     inbox = EmailInbox.objects.create(

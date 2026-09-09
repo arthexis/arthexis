@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from io import BytesIO
 import re
+from io import BytesIO
 from typing import Any
 from zipfile import BadZipFile, ZipFile
-
 
 _NORMALIZE_RE = re.compile(r"[^0-9a-z]+")
 
@@ -44,7 +43,11 @@ def extract_set_text(payload: bytes) -> str:
     try:
         with ZipFile(BytesIO(payload)) as archive:
             set_name = next(
-                (name for name in archive.namelist() if name == "set" or name.endswith("/set")),
+                (
+                    name
+                    for name in archive.namelist()
+                    if name == "set" or name.endswith("/set")
+                ),
                 None,
             )
             if not set_name:
@@ -137,7 +140,9 @@ def extract_set_metadata(parsed: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "game": _lookup_scalar(parsed, "game"),
-        "style": _lookup_scalar(parsed, "style") if not isinstance(style_value, dict) else "",
+        "style": _lookup_scalar(parsed, "style")
+        if not isinstance(style_value, dict)
+        else "",
         "set_info": set_info,
         "style_settings": style_settings,
     }
@@ -152,7 +157,9 @@ def extract_set_name(parsed: dict[str, Any], *, default: str = "") -> str:
 def extract_set_code(parsed: dict[str, Any]) -> str:
     set_info = _lookup(parsed, "set info", "set_info", "setinfo")
     info = set_info if isinstance(set_info, dict) else {}
-    return _lookup_scalar(info, "set code", "set_code", "code", "short name", "short_name")
+    return _lookup_scalar(
+        info, "set code", "set_code", "code", "short name", "short_name"
+    )
 
 
 def extract_set_language(parsed: dict[str, Any]) -> str:

@@ -38,6 +38,7 @@ class StatusResetNoDatabaseTests(SimpleTestCase):
 
 class StatusResetTests(TransactionTestCase):
     reset_sequences = True
+
     def test_clear_stale_cached_statuses_resets_expected_fields(self):
         now = timezone.now()
         stale_non_placeholder = Charger.objects.create(
@@ -88,6 +89,7 @@ class StatusResetTests(TransactionTestCase):
         assert fresh.last_status_vendor_info == "vendor"
         assert fresh.last_status_timestamp == now
         assert fresh.last_error_code == "SomeError"
+
     def test_session_lock_cleanup_runs_for_expired_lock(self):
         now = timezone.now()
         lock_dir = Path(mkdtemp())
@@ -109,8 +111,12 @@ class StatusResetTests(TransactionTestCase):
         original_lock = status_resets.store.SESSION_LOCK
         try:
             with patch.object(status_resets.store, "SESSION_LOCK", lock_path):
-                with patch.object(status_resets.store, "stop_session_lock") as stop_lock:
-                    status_resets.clear_stale_cached_statuses(max_age=timedelta(minutes=5))
+                with patch.object(
+                    status_resets.store, "stop_session_lock"
+                ) as stop_lock:
+                    status_resets.clear_stale_cached_statuses(
+                        max_age=timedelta(minutes=5)
+                    )
                     stop_lock.assert_called_once()
         finally:
             status_resets.store.SESSION_LOCK = original_lock

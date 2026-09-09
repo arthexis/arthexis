@@ -2,16 +2,20 @@ from __future__ import annotations
 
 from io import StringIO
 
-from django.core.management import call_command
 import pytest
+from django.core.management import call_command
 
 import apps.printers.management.commands.printers as printers_command
 
 
 @pytest.mark.django_db
 def test_printers_devices_lists_discovered_paths(monkeypatch) -> None:
-    monkeypatch.setattr(printers_command, "resolve_phomemo_m220_usb_path", lambda path="": "USB-A")
-    monkeypatch.setattr(printers_command, "iter_phomemo_m220_usb_paths", lambda: ["USB-A", "USB-B"])
+    monkeypatch.setattr(
+        printers_command, "resolve_phomemo_m220_usb_path", lambda path="": "USB-A"
+    )
+    monkeypatch.setattr(
+        printers_command, "iter_phomemo_m220_usb_paths", lambda: ["USB-A", "USB-B"]
+    )
     out = StringIO()
 
     call_command(printers_command.Command(), "devices", stdout=out)
@@ -25,7 +29,15 @@ def test_printers_devices_lists_discovered_paths(monkeypatch) -> None:
 def test_printers_print_label_dry_run() -> None:
     out = StringIO()
 
-    call_command(printers_command.Command(), "print-label", "--text", "hello", "--printer", "none", stdout=out)
+    call_command(
+        printers_command.Command(),
+        "print-label",
+        "--text",
+        "hello",
+        "--printer",
+        "none",
+        stdout=out,
+    )
 
     output = out.getvalue()
     assert "PRINTER=phomemo-m220" not in output

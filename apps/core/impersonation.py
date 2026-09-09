@@ -37,4 +37,3 @@ def clear_impersonator_user_id(session) -> None:
     """Remove impersonation tracking data from the active session."""
 
     session.pop(IMPERSONATOR_SESSION_KEY, None)
-

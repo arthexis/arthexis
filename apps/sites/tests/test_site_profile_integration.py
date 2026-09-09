@@ -8,6 +8,7 @@ from config.middleware import SiteHttpsRedirectMiddleware
 
 pytestmark = [pytest.mark.django_db]
 
+
 def test_site_form_persists_profile_fields_when_saved_with_commit_false():
     site, _created = Site.objects.update_or_create(
         domain="profile-form.example.test",
@@ -39,4 +40,3 @@ def test_site_form_persists_profile_fields_when_saved_with_commit_false():
     assert profile.managed is True
     assert profile.require_https is True
     assert profile.enable_public_chat is True
-

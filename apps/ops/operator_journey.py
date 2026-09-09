@@ -55,7 +55,9 @@ def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
     return None
 
 
-def complete_step_for_user(*, user: AbstractBaseUser, step: OperatorJourneyStep) -> bool:
+def complete_step_for_user(
+    *, user: AbstractBaseUser, step: OperatorJourneyStep
+) -> bool:
     """Mark one step complete only when it is the user's next required step."""
 
     next_step = next_step_for_user(user=user)
@@ -136,7 +138,9 @@ def _active_security_groups_for_user(user: AbstractBaseUser):
     return user.groups.all()
 
 
-def _step_is_already_satisfied(*, user: AbstractBaseUser, step: OperatorJourneyStep) -> bool:
+def _step_is_already_satisfied(
+    *, user: AbstractBaseUser, step: OperatorJourneyStep
+) -> bool:
     """Return whether ``step`` was already completed at node level."""
 
     if step.slug in ONE_TIME_STEP_SLUGS and step.completions.exists():

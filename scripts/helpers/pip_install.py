@@ -5,19 +5,19 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from typing import Iterable, Set
-
+from collections.abc import Iterable
+from typing import Set
 
 ALLOWED_BUILD_FAILURES = {"spidev", "RPi.GPIO"}
 
 
-def _extract_failed_builds(line: str) -> Set[str]:
+def _extract_failed_builds(line: str) -> set[str]:
     """Extract failed package names from a single pip output line.
 
     :param line: Raw pip output line.
     :return: Package names that the line reports as failed.
     """
-    failures: Set[str] = set()
+    failures: set[str] = set()
     marker = "Failed to build "
     if marker in line:
         failures.update(line.split(marker, 1)[1].split())
@@ -53,12 +53,16 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
     :raises AssertionError: If the child process does not expose stdout.
     """
     process = subprocess.Popen(
-        list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        list(cmd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
     )
     assert process.stdout is not None
 
     printed_dot = False
-    failed_builds: Set[str] = set()
+    failed_builds: set[str] = set()
     non_allowed_failure = False
     missing_compiler = False
     try:

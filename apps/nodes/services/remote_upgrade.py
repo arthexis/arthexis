@@ -24,7 +24,9 @@ REMOTE_UPGRADE_FEATURE_SLUG = "remote-upgrade-requests"
 REMOTE_UPGRADE_ENV = "ARTHEXIS_REMOTE_UPGRADE_REQUESTS"
 REMOTE_UPGRADE_ALLOWED_CHANNELS_ENV = "ARTHEXIS_REMOTE_UPGRADE_ALLOWED_CHANNELS"
 REMOTE_UPGRADE_ALLOWED_UPSTREAMS_ENV = "ARTHEXIS_REMOTE_UPGRADE_ALLOWED_UPSTREAMS"
-REMOTE_UPGRADE_ALLOWED_UPSTREAM_ROLES_ENV = "ARTHEXIS_REMOTE_UPGRADE_ALLOWED_UPSTREAM_ROLES"
+REMOTE_UPGRADE_ALLOWED_UPSTREAM_ROLES_ENV = (
+    "ARTHEXIS_REMOTE_UPGRADE_ALLOWED_UPSTREAM_ROLES"
+)
 REMOTE_UPGRADE_DEFAULT_ALLOWED_CHANNELS = ("stable", "regular")
 REMOTE_UPGRADE_DEFAULT_ROLE_NAMES = {"satellite"}
 
@@ -63,7 +65,9 @@ def remote_upgrade_acceptance_enabled(local_node: Node | None = None) -> bool:
     env_enabled = _env_flag(REMOTE_UPGRADE_ENV)
     if env_enabled is not None:
         return env_enabled
-    return bool(REMOTE_UPGRADE_DEFAULT_ROLE_NAMES.intersection(_local_role_keys(local_node)))
+    return bool(
+        REMOTE_UPGRADE_DEFAULT_ROLE_NAMES.intersection(_local_role_keys(local_node))
+    )
 
 
 def allowed_remote_upgrade_channels() -> set[str]:
@@ -84,7 +88,9 @@ def normalize_remote_upgrade_channel(channel: str) -> str:
     channel_key = (channel or "").strip().lower()
     if channel_key not in UPGRADE_CHANNEL_CHOICES:
         available = ", ".join(sorted(UPGRADE_CHANNEL_CHOICES))
-        raise ValidationError(f"Unsupported upgrade channel '{channel}'. Available: {available}.")
+        raise ValidationError(
+            f"Unsupported upgrade channel '{channel}'. Available: {available}."
+        )
     normalized = normalize_upgrade_channel(channel_key)
     if not normalized:
         raise ValidationError(f"Unsupported upgrade channel '{channel}'.")
@@ -213,7 +219,9 @@ def create_remote_upgrade_request(
     """Create and send a signed remote upgrade request to a downstream node."""
 
     if target.current_relation != Node.Relation.DOWNSTREAM:
-        raise ValidationError("Remote upgrade requests can only target downstream nodes.")
+        raise ValidationError(
+            "Remote upgrade requests can only target downstream nodes."
+        )
 
     normalized_channel = normalize_remote_upgrade_channel(channel)
     local = Node.get_local()
@@ -244,7 +252,9 @@ def create_remote_upgrade_request(
     return request
 
 
-def receive_remote_upgrade_response(payload: dict[str, object], *, sender: Node) -> RemoteUpgradeRequest | None:
+def receive_remote_upgrade_response(
+    payload: dict[str, object], *, sender: Node
+) -> RemoteUpgradeRequest | None:
     """Apply a downstream response to the origin node's request record."""
 
     response_payload = payload.get("remote_upgrade_response")
@@ -317,7 +327,9 @@ def _remote_upgrade_rejection_reason(
     return None
 
 
-def receive_remote_upgrade_request(payload: dict[str, object], *, sender: Node) -> RemoteUpgradeRequest | None:
+def receive_remote_upgrade_request(
+    payload: dict[str, object], *, sender: Node
+) -> RemoteUpgradeRequest | None:
     """Receive, audit, and possibly accept a downstream upgrade request."""
 
     request_payload = payload.get("remote_upgrade_request")
@@ -343,7 +355,9 @@ def receive_remote_upgrade_request(payload: dict[str, object], *, sender: Node) 
             "channel": raw_channel[:20],
             "options": _dict_from_payload(request_payload.get("options")),
             "reason": str(request_payload.get("reason") or "")[:256],
-            "expires_at": NetMessage.normalize_expires_at(request_payload.get("expires_at")),
+            "expires_at": NetMessage.normalize_expires_at(
+                request_payload.get("expires_at")
+            ),
             "status": RemoteUpgradeRequest.Status.RECEIVED,
         }
         request, created = RemoteUpgradeRequest.objects.get_or_create(
@@ -369,7 +383,9 @@ def receive_remote_upgrade_request(payload: dict[str, object], *, sender: Node) 
         "channel": channel,
         "options": _dict_from_payload(request_payload.get("options")),
         "reason": str(request_payload.get("reason") or "")[:256],
-        "expires_at": NetMessage.normalize_expires_at(request_payload.get("expires_at")),
+        "expires_at": NetMessage.normalize_expires_at(
+            request_payload.get("expires_at")
+        ),
         "status": RemoteUpgradeRequest.Status.RECEIVED,
     }
     request, created = RemoteUpgradeRequest.objects.get_or_create(

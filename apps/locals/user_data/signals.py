@@ -15,9 +15,7 @@ def _on_login(sender, request, user, **kwargs):
     load_user_fixtures(user, include_shared=True)
     ensure_security_group_favorites(user)
 
-    if not (
-        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
-    ):
+    if not (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)):
         return
 
     # Login Net Messages were previously sent for staff authentication events.

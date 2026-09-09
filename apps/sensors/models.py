@@ -13,7 +13,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.base.models import Entity, EntityManager
 
 
-
 class PhysicalSensor(Entity):
     """Abstract base for physical sensors that parse readings from reports."""
 

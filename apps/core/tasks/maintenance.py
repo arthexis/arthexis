@@ -12,7 +12,6 @@ from apps.release.tasks.maintenance import (
     run_scheduled_release,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

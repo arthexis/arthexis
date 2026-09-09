@@ -5,11 +5,11 @@ from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import (
     password_validators_help_text_html,
     validate_password,
 )
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import IntegrityError, transaction
 from django.db.utils import OperationalError, ProgrammingError
@@ -18,9 +18,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
-from apps.ocpp import markdown as rendering
 from apps.energy.models import CustomerAccount
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
+from apps.ocpp import markdown as rendering
 from apps.ocpp.models import PublicConnectorPage, PublicScanEvent, Transaction
 from apps.ocpp.views.common import (
     _charger_state,
@@ -114,7 +114,7 @@ def _get_client_ip(request) -> str:
 
 def _hash_ip(value: str) -> str:
     secret = getattr(settings, "SECRET_KEY", "")
-    payload = f"{value}:{secret}".encode("utf-8")
+    payload = f"{value}:{secret}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 

@@ -23,7 +23,9 @@ def reset_cached_statuses(*, connection_alias: str = "default") -> int:
         with connection.cursor() as cursor:
             table_names = set(connection.introspection.table_names(cursor))
     except (OperationalError, ProgrammingError):
-        logger.debug("Skipping cached status reset; database unavailable", exc_info=True)
+        logger.debug(
+            "Skipping cached status reset; database unavailable", exc_info=True
+        )
         return 0
 
     if charger_model._meta.db_table not in table_names:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import textwrap
-from typing import Iterable, List
+from collections.abc import Iterable
+from typing import List
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -48,21 +49,23 @@ class Command(BaseCommand):
         table = self._render_table(headers, rows)
         self.stdout.write(table)
 
-    def _format_row(self, entry: ViewHistory) -> List[str]:
+    def _format_row(self, entry: ViewHistory) -> list[str]:
         path = textwrap.shorten(entry.path, width=60, placeholder="…")
         status = str(entry.status_code)
         timestamp = timezone.localtime(entry.visited_at).strftime("%Y-%m-%d %H:%M:%S")
         exception_name = entry.exception_name or "-"
         return [path, status, timestamp, exception_name]
 
-    def _render_table(self, headers: List[str], rows: Iterable[List[str]]) -> str:
+    def _render_table(self, headers: list[str], rows: Iterable[list[str]]) -> str:
         widths = [len(header) for header in headers]
         for row in rows:
             for index, value in enumerate(row):
                 widths[index] = max(widths[index], len(value))
 
-        def format_row(values: List[str]) -> str:
-            return " | ".join(value.ljust(widths[idx]) for idx, value in enumerate(values))
+        def format_row(values: list[str]) -> str:
+            return " | ".join(
+                value.ljust(widths[idx]) for idx, value in enumerate(values)
+            )
 
         separator = "-+-".join("-" * width for width in widths)
         lines = [format_row(headers), separator]

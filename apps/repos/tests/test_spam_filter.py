@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from decimal import Decimal
 import hashlib
 import hmac
 import json
+from decimal import Decimal
 
 import pytest
 from django.urls import reverse
@@ -59,11 +59,14 @@ def test_github_webhook_creates_spam_assessment(client, settings):
         },
     }
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
     response = client.post(
         url,
@@ -112,8 +115,12 @@ def test_github_webhook_auto_moderates_when_enabled(client, monkeypatch, setting
         del owner, repository, token, timeout
         calls.append(("close", issue_number))
 
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.add_issue_labels", fake_labels)
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token"
+    )
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.add_issue_labels", fake_labels
+    )
     monkeypatch.setattr("apps.repos.spam_filter.github_service.close_issue", fake_close)
 
     payload = {
@@ -127,11 +134,14 @@ def test_github_webhook_auto_moderates_when_enabled(client, monkeypatch, setting
         },
     }
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
     response = client.post(
         url,
         data=body,
@@ -176,8 +186,12 @@ def test_github_webhook_auto_moderation_closes_issue_when_labeling_fails(
         del owner, repository, token, timeout
         calls.append(("close", issue_number))
 
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.add_issue_labels", fake_labels)
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token"
+    )
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.add_issue_labels", fake_labels
+    )
     monkeypatch.setattr("apps.repos.spam_filter.github_service.close_issue", fake_close)
 
     payload = {
@@ -191,11 +205,14 @@ def test_github_webhook_auto_moderation_closes_issue_when_labeling_fails(
         },
     }
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
     response = client.post(
         url,
         data=body,
@@ -224,7 +241,9 @@ def test_github_webhook_skips_spam_assessment_without_valid_signature(
     url = reverse("repos:github-webhook")
 
     calls: list[str] = []
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token"
+    )
     monkeypatch.setattr(
         "apps.repos.spam_filter.github_service.add_issue_labels",
         lambda **kwargs: calls.append("labels"),
@@ -280,7 +299,9 @@ def test_github_webhook_skips_spam_assessment_for_installation_secret_mismatch(
     url = reverse("repos:github-webhook")
 
     calls: list[str] = []
-    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token"
+    )
     monkeypatch.setattr(
         "apps.repos.spam_filter.github_service.add_issue_labels",
         lambda **kwargs: calls.append("labels"),
@@ -302,11 +323,14 @@ def test_github_webhook_skips_spam_assessment_for_installation_secret_mismatch(
         },
     }
     body = json.dumps(payload).encode("utf-8")
-    signature = "sha256=" + hmac.new(
-        attacker_app.webhook_secret.encode("utf-8"),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            attacker_app.webhook_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
     response = client.post(
         url,
         data=body,

@@ -16,5 +16,8 @@ def coerce_option_list(value) -> list[str]:
     else:
         candidates = [value]
 
-    return [candidate.strip() for candidate in candidates if isinstance(candidate, str) and candidate.strip()]
-
+    return [
+        candidate.strip()
+        for candidate in candidates
+        if isinstance(candidate, str) and candidate.strip()
+    ]

@@ -50,9 +50,13 @@ class OdooSaleOrderBuilder:
         factor_values: dict[str, Decimal],
     ) -> list[tuple[int, int, dict[str, object]]]:
         lines: list[tuple[int, int, dict[str, object]]] = []
-        factors = OdooSaleFactor.objects.filter(
-            Q(templates__isnull=True) | Q(templates=template)
-        ).distinct().prefetch_related("product_rules")
+        factors = (
+            OdooSaleFactor.objects.filter(
+                Q(templates__isnull=True) | Q(templates=template)
+            )
+            .distinct()
+            .prefetch_related("product_rules")
+        )
         for factor in factors:
             value = Decimal(str(factor_values.get(factor.code, 0) or 0))
             if value <= 0:
@@ -128,14 +132,18 @@ class OdooSaleOrderBuilder:
             [[("email", "=", customer_email)]],
             limit=1,
         )
-        partner_id = int(partner_ids[0]) if partner_ids else self.profile.execute(
-            "res.partner",
-            "create",
-            {
-                "name": customer_name,
-                "email": customer_email,
-                "lang": language,
-            },
+        partner_id = (
+            int(partner_ids[0])
+            if partner_ids
+            else self.profile.execute(
+                "res.partner",
+                "create",
+                {
+                    "name": customer_name,
+                    "email": customer_email,
+                    "lang": language,
+                },
+            )
         )
         salesperson_uid = getattr(template.salesperson, "odoo_uid", None)
         order_values = {

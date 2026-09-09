@@ -37,14 +37,17 @@ class LegacyTransactionHandlersMixin:
         if timestamp_value is None:
             timestamp_value = timezone.now()
 
-        def _record_transaction_event(tx_obj: Transaction | None, extra: dict[str, object] | None = None) -> None:
+        def _record_transaction_event(
+            tx_obj: Transaction | None, extra: dict[str, object] | None = None
+        ) -> None:
             notification: dict[str, object] = {
                 "charger_id": getattr(self, "charger_id", None) or self.store_key,
                 "connector_id": store.connector_slug(connector_value),
                 "event_type": event_type,
                 "timestamp": timestamp_value,
                 "transaction_pk": getattr(tx_obj, "pk", None),
-                "ocpp_transaction_id": ocpp_tx_id or getattr(tx_obj, "ocpp_transaction_id", None),
+                "ocpp_transaction_id": ocpp_tx_id
+                or getattr(tx_obj, "ocpp_transaction_id", None),
             }
             if transaction_info:
                 if "meterStart" in transaction_info:
@@ -71,7 +74,9 @@ class LegacyTransactionHandlersMixin:
             tag = None
             tag_created = False
             if id_tag and not self._is_direct_ocpp_account(account, id_tag):
-                tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
+                tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
+                    id_tag
+                )
             decision = await self._evaluate_authorization_policy(
                 id_tag=id_tag,
                 account=account,
@@ -98,7 +103,9 @@ class LegacyTransactionHandlersMixin:
                 if ocpp_tx_id:
                     update_kwargs["transaction_id"] = ocpp_tx_id
                 for request_message_id, _ in requests_to_start:
-                    store.update_transaction_request(request_message_id, **update_kwargs)
+                    store.update_transaction_request(
+                        request_message_id, **update_kwargs
+                    )
                 if decision.log_unlinked_rfid and tag and account is None:
                     self._log_unlinked_rfid(
                         tag.rfid,
@@ -123,7 +130,9 @@ class LegacyTransactionHandlersMixin:
                 store.start_session_lock()
                 store.add_session_message(self.store_key, text_data)
                 await self._start_consumption_updates(tx_obj)
-                await self._process_meter_value_entries(payload.get("meterValue"), connector_value, tx_obj)
+                await self._process_meter_value_entries(
+                    payload.get("meterValue"), connector_value, tx_obj
+                )
                 _record_transaction_event(tx_obj)
                 await self._record_rfid_attempt(
                     rfid=id_tag or "",
@@ -176,7 +185,9 @@ class LegacyTransactionHandlersMixin:
                 tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
             if not tx_obj and ocpp_tx_id.isdigit():
                 tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(pk=int(ocpp_tx_id), charger=self.charger).first
+                    Transaction.objects.filter(
+                        pk=int(ocpp_tx_id), charger=self.charger
+                    ).first
                 )()
             if tx_obj is None:
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
@@ -200,11 +211,15 @@ class LegacyTransactionHandlersMixin:
             if vin_value:
                 tx_obj.vin = vin_value
             await database_sync_to_async(tx_obj.save)()
-            await self._process_meter_value_entries(payload.get("meterValue"), connector_value, tx_obj)
+            await self._process_meter_value_entries(
+                payload.get("meterValue"), connector_value, tx_obj
+            )
             _record_transaction_event(tx_obj)
             await self._update_consumption_message(tx_obj.pk)
             await self._cancel_consumption_message()
-            transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+            transaction_reference = (
+                ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+            )
             store.mark_transaction_requests(
                 charger_id=self.charger_id,
                 connector_id=connector_value,
@@ -231,7 +246,9 @@ class LegacyTransactionHandlersMixin:
                 tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
             if not tx_obj and ocpp_tx_id.isdigit():
                 tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(pk=int(ocpp_tx_id), charger=self.charger).first
+                    Transaction.objects.filter(
+                        pk=int(ocpp_tx_id), charger=self.charger
+                    ).first
                 )()
             if tx_obj is None:
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
@@ -245,11 +262,15 @@ class LegacyTransactionHandlersMixin:
                 store.add_session_message(self.store_key, text_data)
                 store.transactions[self.store_key] = tx_obj
             await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
-            await self._process_meter_value_entries(payload.get("meterValue"), connector_value, tx_obj)
+            await self._process_meter_value_entries(
+                payload.get("meterValue"), connector_value, tx_obj
+            )
             _record_transaction_event(tx_obj)
             return {}
 
-        safe_payload = {k: v for k, v in payload.items() if k not in ("idToken", "idTag")}
+        safe_payload = {
+            k: v for k, v in payload.items() if k not in ("idToken", "idTag")
+        }
         logger.warning(
             "Unhandled TransactionEvent eventType=%r for charger=%s connector=%s payload=%s",
             event_type,
@@ -267,7 +288,9 @@ class LegacyTransactionHandlersMixin:
         tag = None
         tag_created = False
         if id_tag and not self._is_direct_ocpp_account(account, id_tag):
-            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
+            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
+                id_tag
+            )
         decision = await self._evaluate_authorization_policy(
             id_tag=id_tag,
             account=account,

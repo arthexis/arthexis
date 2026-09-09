@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
+from apps.certs.models import CertbotCertificate, CertificateBase, SelfSignedCertificate
 from apps.dns.models import DNSProviderCredential
 from apps.nginx.config_utils import default_certificate_domain_from_settings, slugify
 from apps.nginx.models import SiteConfiguration

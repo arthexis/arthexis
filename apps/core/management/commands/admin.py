@@ -45,15 +45,23 @@ class Command(BaseCommand):
         set_parser.add_argument("--path", help="Admin URL path (example: control/).")
         set_parser.add_argument("--header", help="Admin site header text.")
         set_parser.add_argument("--title", help="Admin site title text.")
-        set_parser.add_argument("--index-title", dest="index_title", help="Admin index title text.")
+        set_parser.add_argument(
+            "--index-title", dest="index_title", help="Admin index title text."
+        )
 
         reset_parser = subparsers.add_parser(
             "reset",
             help="Remove selected admin-site settings from arthexis.env.",
         )
-        reset_parser.add_argument("--path", action="store_true", help="Remove ADMIN_URL_PATH.")
-        reset_parser.add_argument("--header", action="store_true", help="Remove ADMIN_SITE_HEADER.")
-        reset_parser.add_argument("--title", action="store_true", help="Remove ADMIN_SITE_TITLE.")
+        reset_parser.add_argument(
+            "--path", action="store_true", help="Remove ADMIN_URL_PATH."
+        )
+        reset_parser.add_argument(
+            "--header", action="store_true", help="Remove ADMIN_SITE_HEADER."
+        )
+        reset_parser.add_argument(
+            "--title", action="store_true", help="Remove ADMIN_SITE_TITLE."
+        )
         reset_parser.add_argument(
             "--index-title",
             dest="index_title",
@@ -130,7 +138,9 @@ class Command(BaseCommand):
             raise CommandError("Choose at least one setting to reset or pass --all.")
 
         self._persist_deletes(selected_keys)
-        self.stdout.write(self.style.SUCCESS("Admin settings removed from arthexis.env."))
+        self.stdout.write(
+            self.style.SUCCESS("Admin settings removed from arthexis.env.")
+        )
 
     def _persist_updates(self, updates: dict[str, str]) -> None:
         """Write updated keys to ``arthexis.env`` under a file lock."""
@@ -146,7 +156,9 @@ class Command(BaseCommand):
                     values[key] = value
                 write_env(path, values)
         except Timeout as exc:
-            raise CommandError("Could not acquire lock to modify arthexis.env.") from exc
+            raise CommandError(
+                "Could not acquire lock to modify arthexis.env."
+            ) from exc
 
     def _persist_deletes(self, keys: set[str]) -> None:
         """Remove keys from ``arthexis.env`` under a file lock."""
@@ -163,4 +175,6 @@ class Command(BaseCommand):
                     values.pop(key, None)
                 write_env(path, values)
         except Timeout as exc:
-            raise CommandError("Could not acquire lock to modify arthexis.env.") from exc
+            raise CommandError(
+                "Could not acquire lock to modify arthexis.env."
+            ) from exc

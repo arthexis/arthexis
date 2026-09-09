@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from contextvars import ContextVar, Token
 import logging
 import os
+from contextvars import ContextVar, Token
 from typing import Any
 from uuid import uuid4
 
@@ -37,7 +37,9 @@ def get_request_log_context() -> dict[str, str]:
     return _REQUEST_LOG_CONTEXT.get()
 
 
-def set_request_log_context(request: Any, *, node_id: str = "") -> Token[dict[str, str]]:
+def set_request_log_context(
+    request: Any, *, node_id: str = ""
+) -> Token[dict[str, str]]:
     """Bind request identifiers into contextvars so logging filters can enrich records."""
 
     context = {
@@ -109,7 +111,9 @@ def is_https_request(request) -> bool:
         if candidate == "https":
             return True
         if candidate:
-            _log_forwarded_proto_issue(request, "Unexpected X-Forwarded-Proto header", candidate)
+            _log_forwarded_proto_issue(
+                request, "Unexpected X-Forwarded-Proto header", candidate
+            )
     elif _has_proxy_headers(request):
         _log_forwarded_proto_issue(request, "Missing X-Forwarded-Proto header")
 
@@ -117,7 +121,10 @@ def is_https_request(request) -> bool:
     for forwarded_part in forwarded_header.split(","):
         for element in forwarded_part.split(";"):
             key, _, value = element.partition("=")
-            if key.strip().lower() == "proto" and value.strip().strip('"').lower() == "https":
+            if (
+                key.strip().lower() == "proto"
+                and value.strip().strip('"').lower() == "https"
+            ):
                 return True
 
     return False

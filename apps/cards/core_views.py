@@ -74,9 +74,7 @@ def rfid_batch(request):
             if disallowed:
                 return JsonResponse(
                     {
-                        "detail": (
-                            "Command fields are not accepted by this endpoint."
-                        ),
+                        "detail": ("Command fields are not accepted by this endpoint."),
                         "index": index,
                         "fields": disallowed,
                     },
@@ -90,9 +88,7 @@ def rfid_batch(request):
                 continue
             allowed = row.get("allowed", True)
             energy_accounts = (
-                row.get("customer_accounts")
-                or row.get("energy_accounts")
-                or []
+                row.get("customer_accounts") or row.get("energy_accounts") or []
             )
             account_names = row.get("customer_account_names") or row.get(
                 "energy_account_names"

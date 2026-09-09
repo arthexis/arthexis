@@ -13,7 +13,9 @@ async def data_transfer(ctx: HandlerContext) -> bool:
     Persistence updates: updates ``DataTransferMessage`` and related firmware request state.
     """
 
-    return await legacy.handle_data_transfer_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_data_transfer_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def update_firmware(ctx: HandlerContext) -> bool:
@@ -23,7 +25,9 @@ async def update_firmware(ctx: HandlerContext) -> bool:
     Persistence updates: marks ``CPFirmwareDeployment`` status and response payload.
     """
 
-    return await legacy.handle_update_firmware_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_update_firmware_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def publish_firmware(ctx: HandlerContext) -> bool:
@@ -33,7 +37,9 @@ async def publish_firmware(ctx: HandlerContext) -> bool:
     Persistence updates: marks ``CPFirmwareDeployment`` status and response payload.
     """
 
-    return await legacy.handle_publish_firmware_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_publish_firmware_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 async def unpublish_firmware(ctx: HandlerContext) -> bool:
@@ -43,7 +49,9 @@ async def unpublish_firmware(ctx: HandlerContext) -> bool:
     Persistence updates: log and pending call result.
     """
 
-    return await legacy.handle_unpublish_firmware_result(ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key)
+    return await legacy.handle_unpublish_firmware_result(
+        ctx.consumer, ctx.message_id, ctx.metadata, ctx.payload, ctx.log_key
+    )
 
 
 handle_data_transfer_result = legacy_adapter(data_transfer)

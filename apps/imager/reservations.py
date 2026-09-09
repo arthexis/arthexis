@@ -32,7 +32,9 @@ RESERVATION_JSON_PATH = "/usr/local/share/arthexis/reserved-node.json"
 REMOTE_NEXT_NUMBER_TIMEOUT_SECONDS = 5.0
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
-HOSTNAME_WITH_NUMBER_RE = re.compile(r"^(?P<prefix>[A-Za-z][A-Za-z0-9-]*?)-(?P<number>\d+)$")
+HOSTNAME_WITH_NUMBER_RE = re.compile(
+    r"^(?P<prefix>[A-Za-z][A-Za-z0-9-]*?)-(?P<number>\d+)$"
+)
 GWAY_RESERVATION_TOKEN_ENV_NAMES = (
     "IMAGER_GWAY_RESERVATION_TOKEN",
     "ARTHEXIS_GWAY_RESERVATION_TOKEN",
@@ -117,7 +119,9 @@ def env_bool(name: str, default: bool = False) -> bool:
     return default
 
 
-def resolve_optional_env_bool(value: object, env_name: str, *, default: bool = False) -> bool:
+def resolve_optional_env_bool(
+    value: object, env_name: str, *, default: bool = False
+) -> bool:
     """Resolve an optional CLI boolean with an environment-backed default."""
 
     if value is None:
@@ -365,7 +369,9 @@ def _interface_networks() -> list[ipaddress.IPv4Network]:
                 priority = 5
             networks.append((priority, interface.network))
     ordered: list[ipaddress.IPv4Network] = []
-    for _priority, network in sorted(networks, key=lambda item: (item[0], str(item[1]))):
+    for _priority, network in sorted(
+        networks, key=lambda item: (item[0], str(item[1]))
+    ):
         if network not in ordered:
             ordered.append(network)
     return ordered
@@ -461,7 +467,10 @@ def _candidate_number_address(
     if number <= 0:
         return None
     candidate = ipaddress.ip_address(int(network.network_address) + number)
-    if candidate in network and candidate not in {network.network_address, network.broadcast_address}:
+    if candidate in network and candidate not in {
+        network.network_address,
+        network.broadcast_address,
+    }:
         return candidate
     return None
 
@@ -511,7 +520,11 @@ def plan_image_reservation(
 ) -> ImageReservation:
     """Build a reservation plan without writing it to the database."""
 
-    prefix = _clean_hostname_prefix(hostname_prefix) if hostname_prefix else default_hostname_prefix()
+    prefix = (
+        _clean_hostname_prefix(hostname_prefix)
+        if hostname_prefix
+        else default_hostname_prefix()
+    )
     if number is not None and number <= 0:
         raise ValueError("Reservation number must be greater than zero.")
     remote_reservation = None
@@ -551,8 +564,12 @@ def plan_image_reservation(
         number=resolved_number,
         ipv4_address=ipv4_address,
         network_cidr=network_cidr,
-        parent_hostname=(getattr(parent, "hostname", "") or socket.gethostname() or "").strip(),
-        role_name=(role_name or _reserved_node_role_name(existing_reserved_node)).strip(),
+        parent_hostname=(
+            getattr(parent, "hostname", "") or socket.gethostname() or ""
+        ).strip(),
+        role_name=(
+            role_name or _reserved_node_role_name(existing_reserved_node)
+        ).strip(),
         downstream_registration_base_url=registration_base_url,
         claim_token=resolved_claim_token,
     )
@@ -604,7 +621,9 @@ def commit_image_reservation(reservation: ImageReservation) -> ImageReservationC
                     update_fields.append(field)
             if update_fields:
                 node.save(update_fields=update_fields)
-    return ImageReservationCommit(node_id=node.id, created=created, reservation=reservation)
+    return ImageReservationCommit(
+        node_id=node.id, created=created, reservation=reservation
+    )
 
 
 def render_reservation_env(reservation: ImageReservation) -> str:
@@ -710,12 +729,16 @@ def _url_host(host: str) -> str:
     return host
 
 
-def _fetch_node_info(host: str, ports: tuple[int, ...], timeout: float) -> dict[str, Any] | None:
+def _fetch_node_info(
+    host: str, ports: tuple[int, ...], timeout: float
+) -> dict[str, Any] | None:
     for port in ports:
         schemes = ("https",) if port == 443 else ("http", "https")
         for scheme in schemes:
             url = f"{scheme}://{_url_host(host)}:{port}/nodes/info/"
-            request = Request(url, headers={"User-Agent": "arthexis-reservation-watch/1.0"})
+            request = Request(
+                url, headers={"User-Agent": "arthexis-reservation-watch/1.0"}
+            )
             try:
                 with urlopen(request, timeout=timeout) as response:
                     if response.status != 200:
@@ -759,7 +782,10 @@ def observe_reserved_node(node: Node, info: dict[str, Any]) -> ReservationWatchR
     """Report a matching reservation candidate without trusting the peer."""
 
     mac_address = str(info.get("mac_address") or "").strip().lower()
-    if mac_address and Node.objects.filter(mac_address=mac_address).exclude(pk=node.pk).exists():
+    if (
+        mac_address
+        and Node.objects.filter(mac_address=mac_address).exclude(pk=node.pk).exists()
+    ):
         return ReservationWatchResult(
             node_id=node.id,
             hostname=node.hostname,
@@ -784,7 +810,9 @@ def watch_reserved_nodes_once(
 ) -> list[ReservationWatchResult]:
     """Probe reserved nodes and report peers that still need signed registration."""
 
-    selected_interfaces = interfaces if interfaces is not None else watch_interfaces_from_env()
+    selected_interfaces = (
+        interfaces if interfaces is not None else watch_interfaces_from_env()
+    )
     results: list[ReservationWatchResult] = []
     for node in Node.objects.filter(reserved=True).order_by("hostname", "id"):
         candidates = _node_candidate_hosts(node, selected_interfaces)

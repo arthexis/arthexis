@@ -11,7 +11,9 @@ class AvailabilityActionsMixin:
     """Delegate availability operations to the registered charger admin behavior."""
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
-        return super()._dispatch_change_availability(request, queryset, availability_type)
+        return super()._dispatch_change_availability(
+            request, queryset, availability_type
+        )
 
     @wraps(_RegisteredChargerAdmin.change_availability_operative)
     def change_availability_operative(self, request, queryset):

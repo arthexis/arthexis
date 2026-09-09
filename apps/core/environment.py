@@ -4,8 +4,7 @@ import os
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
@@ -28,7 +27,9 @@ def _split_prefix(setting_name: str) -> str:
     return setting_name.split("_", 1)[0]
 
 
-def _group_django_settings(settings_items: list[tuple[str, object]]) -> list[dict[str, object]]:
+def _group_django_settings(
+    settings_items: list[tuple[str, object]],
+) -> list[dict[str, object]]:
     """Group settings into sections when prefixes are repeated.
 
     A prefix becomes a named section when multiple settings share it.
@@ -38,9 +39,7 @@ def _group_django_settings(settings_items: list[tuple[str, object]]) -> list[dic
     for key, value in settings_items:
         grouped.setdefault(_split_prefix(key), []).append((key, value))
 
-    repeated_prefixes = {
-        prefix for prefix, items in grouped.items() if len(items) > 1
-    }
+    repeated_prefixes = {prefix for prefix, items in grouped.items() if len(items) > 1}
     sections: list[dict[str, object]] = []
     for prefix in sorted(repeated_prefixes):
         sections.append({"name": prefix, "settings": grouped[prefix]})
@@ -131,7 +130,6 @@ def _extract_user_values(request, env_vars: list[tuple[str, str]]) -> dict[str, 
     return submitted
 
 
-
 def _write_user_env_values(user, values: dict[str, str]) -> None:
     """Persist user-specific environment values to the personal ``.env`` file."""
     env_dir = _user_env_dir()
@@ -141,7 +139,7 @@ def _write_user_env_values(user, values: dict[str, str]) -> None:
     with env_path.open("w", encoding="utf-8") as env_file:
         for key in sorted(values):
             # Remove newlines and carriage returns to prevent injection
-            safe_value = values[key].replace('\n', '').replace('\r', '')
+            safe_value = values[key].replace("\n", "").replace("\r", "")
             env_file.write(f"{key}={safe_value}\n")
 
 

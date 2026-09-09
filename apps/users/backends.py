@@ -446,7 +446,9 @@ class LocalhostAdminBackend(ModelBackend):
                 return None
 
             remote_ip = self._get_remote_ip(request)
-            if remote_ip is None or not self._is_default_admin_remote_allowed(remote_ip):
+            if remote_ip is None or not self._is_default_admin_remote_allowed(
+                remote_ip
+            ):
                 raise PermissionDenied
 
             user = self._get_admin_user()
@@ -668,9 +670,7 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
             return False
         if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
             return False
-        return bool(
-            getattr(user, "allow_local_network_passwordless_login", False)
-        )
+        return bool(getattr(user, "allow_local_network_passwordless_login", False))
 
     def _is_remote_allowed(self, ip):
         if isinstance(ip, ipaddress.IPv6Address):

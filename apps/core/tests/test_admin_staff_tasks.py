@@ -28,7 +28,9 @@ class AdminStaffTasksTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch("apps.core.system.admin_views._systemctl_command", return_value=["systemctl"])
+    @patch(
+        "apps.core.system.admin_views._systemctl_command", return_value=["systemctl"]
+    )
     @patch("apps.core.system.admin_views.subprocess.run")
     def test_system_restart_endpoint_restarts_service_for_active_superuser(
         self, mocked_run: Mock, _mocked_command: Mock
@@ -40,12 +42,21 @@ class AdminStaffTasksTests(TestCase):
         lock_dir.mkdir(exist_ok=True)
         (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
 
-        response = self.client.post(reverse("admin:system-restart-server"), follow=False)
+        response = self.client.post(
+            reverse("admin:system-restart-server"), follow=False
+        )
 
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(any("restart" in " ".join(call.args[0]) for call in mocked_run.call_args_list))
+        self.assertTrue(
+            any(
+                "restart" in " ".join(call.args[0])
+                for call in mocked_run.call_args_list
+            )
+        )
 
-    def test_reports_runner_rejects_superuser_only_report_selection_for_staff_user(self):
+    def test_reports_runner_rejects_superuser_only_report_selection_for_staff_user(
+        self,
+    ):
         """Reports runner should reject direct submission for restricted report routes."""
 
         user_model = get_user_model()
@@ -65,7 +76,9 @@ class AdminStaffTasksTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         messages = list(response.context["messages"])
-        self.assertTrue(any("do not have access" in str(message) for message in messages))
+        self.assertTrue(
+            any("do not have access" in str(message) for message in messages)
+        )
         route_names = {route["name"] for route in response.context["report_routes"]}
         self.assertNotIn("system-upgrade-report", route_names)
 
@@ -84,12 +97,16 @@ class AdminStaffTasksTests(TestCase):
         )
         self.client.force_login(staff_user)
 
-        response = self.client.post(reverse("admin:system-upgrade-run-check"), {"channel": "stable"})
+        response = self.client.post(
+            reverse("admin:system-upgrade-run-check"), {"channel": "stable"}
+        )
 
         self.assertEqual(response.status_code, 403)
         mocked_trigger_upgrade_check.assert_not_called()
 
-    def test_staff_without_upgrade_privilege_cannot_access_upgrade_report_directly(self):
+    def test_staff_without_upgrade_privilege_cannot_access_upgrade_report_directly(
+        self,
+    ):
         """Staff users without upgrade privileges should receive 403 on report view."""
 
         user_model = get_user_model()
@@ -122,7 +139,9 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     @patch("apps.core.system.admin_views._trigger_upgrade_check", return_value=True)
-    def test_staff_with_upgrade_privilege_can_trigger_upgrade_check(self, _mocked_trigger: Mock):
+    def test_staff_with_upgrade_privilege_can_trigger_upgrade_check(
+        self, _mocked_trigger: Mock
+    ):
         """Staff users with explicit upgrade privilege should be able to trigger checks."""
 
         user_model = get_user_model()
@@ -137,10 +156,14 @@ class AdminStaffTasksTests(TestCase):
         self.client.force_login(staff_user)
 
         reports_response = self.client.get(reverse("admin:system-reports"))
-        route_names = {route["name"] for route in reports_response.context["report_routes"]}
+        route_names = {
+            route["name"] for route in reports_response.context["report_routes"]
+        }
         self.assertIn("system-upgrade-report", route_names)
 
-        response = self.client.post(reverse("admin:system-upgrade-run-check"), {"channel": "stable"})
+        response = self.client.post(
+            reverse("admin:system-upgrade-run-check"), {"channel": "stable"}
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("admin:system-upgrade-report"))

@@ -182,7 +182,10 @@ async def test_authorization_policy_open_explicit_mode_accepts_and_auto_enrolls(
     assert tag.discovered_via_ocpp is True
 
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.payload["authorization_reason"] == "open_policy_insecure_compatibility_mode"
+    assert (
+        attempt.payload["authorization_reason"]
+        == "open_policy_insecure_compatibility_mode"
+    )
 
 
 @pytest.mark.anyio
@@ -253,24 +256,45 @@ async def test_authorization_policy_open_accepts_blocked_account(
 
     assert result["idTagInfo"]["status"] == "Accepted"
     attempt = await database_sync_to_async(RFIDAttempt.objects.latest)("attempted_at")
-    assert attempt.payload["authorization_reason"] == "open_policy_insecure_compatibility_mode"
+    assert (
+        attempt.payload["authorization_reason"]
+        == "open_policy_insecure_compatibility_mode"
+    )
 
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_authorization_policy_strict_rejects_unknown_when_fallback_disabled(feature_cache_setup, consumer_factory):
-    await database_sync_to_async(Feature.objects.update_or_create)(slug="rfid-fallback-account", defaults={"display": "RFID Fallback Account", "is_enabled": False})
-    consumer = await consumer_factory(charger_id="CP-POLICY-STRICT-DISABLED", policy=Charger.AuthorizationPolicy.STRICT)
-    result = await consumer._handle_authorize_action({"idTag": "strict-disabled"}, "msg-auth-policy-strict-disabled", "", "")
+async def test_authorization_policy_strict_rejects_unknown_when_fallback_disabled(
+    feature_cache_setup, consumer_factory
+):
+    await database_sync_to_async(Feature.objects.update_or_create)(
+        slug="rfid-fallback-account",
+        defaults={"display": "RFID Fallback Account", "is_enabled": False},
+    )
+    consumer = await consumer_factory(
+        charger_id="CP-POLICY-STRICT-DISABLED",
+        policy=Charger.AuthorizationPolicy.STRICT,
+    )
+    result = await consumer._handle_authorize_action(
+        {"idTag": "strict-disabled"}, "msg-auth-policy-strict-disabled", "", ""
+    )
     assert result["idTagInfo"]["status"] == "Invalid"
 
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_authorization_policy_strict_rejects_blocked_tag_with_fallback(feature_cache_setup, consumer_factory):
-    consumer = await consumer_factory(charger_id="CP-POLICY-STRICT-BLOCKED", policy=Charger.AuthorizationPolicy.STRICT)
-    await database_sync_to_async(RFID.objects.create)(rfid="STRICT-BLOCKED", allowed=False, released=False)
-    result = await consumer._handle_authorize_action({"idTag": "STRICT-BLOCKED"}, "msg-auth-policy-strict-blocked", "", "")
+async def test_authorization_policy_strict_rejects_blocked_tag_with_fallback(
+    feature_cache_setup, consumer_factory
+):
+    consumer = await consumer_factory(
+        charger_id="CP-POLICY-STRICT-BLOCKED", policy=Charger.AuthorizationPolicy.STRICT
+    )
+    await database_sync_to_async(RFID.objects.create)(
+        rfid="STRICT-BLOCKED", allowed=False, released=False
+    )
+    result = await consumer._handle_authorize_action(
+        {"idTag": "STRICT-BLOCKED"}, "msg-auth-policy-strict-blocked", "", ""
+    )
     assert result["idTagInfo"]["status"] == "Invalid"
 
 
@@ -296,7 +320,9 @@ async def test_strict_fallback_binds_debt_account_for_transaction_flows(
     )
 
     if flow == "start_transaction":
-        await database_sync_to_async(RFID.objects.create)(rfid="START-FALLBACK", allowed=True, released=True)
+        await database_sync_to_async(RFID.objects.create)(
+            rfid="START-FALLBACK", allowed=True, released=True
+        )
         result = await consumer._handle_start_transaction_action(
             {
                 "idTag": "start-fallback",
@@ -315,7 +341,9 @@ async def test_strict_fallback_binds_debt_account_for_transaction_flows(
         )
         tag_rfid = "START-FALLBACK"
     else:
-        await database_sync_to_async(RFID.objects.create)(rfid="EVENT-FALLBACK", allowed=True, released=True)
+        await database_sync_to_async(RFID.objects.create)(
+            rfid="EVENT-FALLBACK", allowed=True, released=True
+        )
         result = await consumer._handle_transaction_event_action(
             {
                 "eventType": "Started",

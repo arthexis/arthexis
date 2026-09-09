@@ -19,7 +19,11 @@ class ConnectionHandler:
     def __init__(self, consumer: "CSMSConsumer") -> None:
         self.consumer = consumer
 
-    async def allow_charge_point_connection(self, existing_charger: Charger | None) -> bool:
+    async def allow_charge_point_connection(
+        self, existing_charger: Charger | None
+    ) -> bool:
         """Evaluate local feature flags and charger existence for admission."""
 
-        return await self.consumer._allow_charge_point_connection_legacy(existing_charger)
+        return await self.consumer._allow_charge_point_connection_legacy(
+            existing_charger
+        )

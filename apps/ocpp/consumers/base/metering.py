@@ -12,7 +12,11 @@ from apps.ocpp.payload_types import HandlerPayload, HandlerResponse
 
 class MeteringConsumer(Protocol):
     async def _handle_meter_values_legacy(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse: ...
 
 
@@ -23,7 +27,11 @@ class MeteringHandler:
         self.consumer = consumer
 
     async def handle_meter_values(
-        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+        self,
+        payload: HandlerPayload,
+        msg_id: str,
+        raw: str | None,
+        text_data: str | None,
     ) -> HandlerResponse:
         """Process ``MeterValues`` calls and persist normalized meter samples."""
 

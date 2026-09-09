@@ -42,7 +42,9 @@ def parse_decimal_literal(value: str) -> Decimal | None:
         return None
 
 
-def parse_legacy_condition(expression: str) -> tuple[StructuredCondition | None, str | None]:
+def parse_legacy_condition(
+    expression: str,
+) -> tuple[StructuredCondition | None, str | None]:
     """Parse supported legacy condition expressions into structured values."""
 
     text = (expression or "").strip()

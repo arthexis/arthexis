@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class CPFirmware(Entity):
     """Persisted firmware packages associated with charge points."""
 
@@ -46,12 +47,8 @@ class CPFirmware(Entity):
     payload_size = models.PositiveIntegerField(_("Payload size"), default=0)
     checksum = models.CharField(_("Checksum"), max_length=128, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    download_vendor_id = models.CharField(
-        _("Vendor ID"), max_length=255, blank=True
-    )
-    download_message_id = models.CharField(
-        _("Message ID"), max_length=64, blank=True
-    )
+    download_vendor_id = models.CharField(_("Vendor ID"), max_length=255, blank=True)
+    download_message_id = models.CharField(_("Message ID"), max_length=64, blank=True)
     downloaded_at = models.DateTimeField(_("Downloaded at"), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

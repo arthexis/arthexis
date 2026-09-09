@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import *
 
+
 class ChargingProfileDispatch(Entity):
     """Track where a charging profile has been dispatched."""
 
@@ -36,4 +37,6 @@ class ChargingProfileDispatch(Entity):
         ]
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.profile} -> {self.charger}" if self.charger else str(self.profile)
+        return (
+            f"{self.profile} -> {self.charger}" if self.charger else str(self.profile)
+        )

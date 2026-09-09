@@ -5,6 +5,7 @@ from channels.db import database_sync_to_async
 from .base import *
 from .meter_value import MeterValue
 
+
 class Transaction(Entity):
     """Charging session data stored for each charger."""
 
@@ -32,7 +33,10 @@ class Transaction(Entity):
         "Charger", on_delete=models.CASCADE, related_name="transactions", null=True
     )
     account = models.ForeignKey(
-        CustomerAccount, on_delete=models.PROTECT, related_name="transactions", null=True
+        CustomerAccount,
+        on_delete=models.PROTECT,
+        related_name="transactions",
+        null=True,
     )
     rfid = models.CharField(
         max_length=20,
@@ -223,9 +227,11 @@ class Transaction(Entity):
                 first_energy = readings_qs.values_list("energy", flat=True).first()
                 start_val = _coerce(first_energy)
             if end_val is None:
-                last_energy = readings_qs.order_by("-timestamp").values_list(
-                    "energy", flat=True
-                ).first()
+                last_energy = (
+                    readings_qs.order_by("-timestamp")
+                    .values_list("energy", flat=True)
+                    .first()
+                )
                 end_val = _coerce(last_energy)
 
         if start_val is None or end_val is None:
@@ -234,8 +240,12 @@ class Transaction(Entity):
         total = end_val - start_val
         return max(total, 0.0)
 
+
 def annotate_transaction_energy_bounds(
-    queryset, *, start_field: str = "meter_energy_start", end_field: str = "meter_energy_end"
+    queryset,
+    *,
+    start_field: str = "meter_energy_start",
+    end_field: str = "meter_energy_end",
 ):
     """Annotate transactions with their earliest and latest energy readings."""
 

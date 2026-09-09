@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -226,9 +226,7 @@ def send(
             last_error = exc
             logger.exception("Email send failed using outbox %s", candidate.pk)
             if transaction:
-                transaction.status = getattr(
-                    transaction, "STATUS_FAILED", "failed"
-                )
+                transaction.status = getattr(transaction, "STATUS_FAILED", "failed")
                 transaction.error = str(exc)
                 transaction.processed_at = timezone.now()
                 transaction.save(update_fields=["status", "error", "processed_at"])
@@ -243,9 +241,7 @@ def send(
                 message_id = ""
             if hasattr(transaction, "message_id"):
                 transaction.message_id = message_id
-                transaction.save(
-                    update_fields=["status", "processed_at", "message_id"]
-                )
+                transaction.save(update_fields=["status", "processed_at", "message_id"])
             else:
                 transaction.save(update_fields=["status", "processed_at"])
         try:
@@ -263,7 +259,9 @@ def can_send_email() -> bool:
     """Return ``True`` when at least one outbound email path is configured."""
 
     try:
-        from apps.emails.models import EmailOutbox  # imported lazily to avoid circular deps
+        from apps.emails.models import (
+            EmailOutbox,  # imported lazily to avoid circular deps
+        )
     except Exception:  # pragma: no cover - app not ready
         return False
 

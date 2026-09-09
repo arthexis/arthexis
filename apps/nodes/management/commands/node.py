@@ -920,8 +920,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(
                 self.style.WARNING(
-                    "Skipped nodes missing deduplication keys: "
-                    f"{skipped_descriptions}"
+                    f"Skipped nodes missing deduplication keys: {skipped_descriptions}"
                 )
             )
 

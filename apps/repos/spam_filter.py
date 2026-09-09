@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from django.conf import settings
@@ -57,12 +57,16 @@ def issue_spam_filter_enabled() -> bool:
 def get_spam_policy() -> SpamPolicy:
     labels = tuple(
         str(label).strip()
-        for label in getattr(settings, "GITHUB_ISSUE_SPAM_AUTO_LABELS", ("spam-suspected",))
+        for label in getattr(
+            settings, "GITHUB_ISSUE_SPAM_AUTO_LABELS", ("spam-suspected",)
+        )
         if str(label).strip()
     )
     keywords = tuple(
         str(keyword).lower().strip()
-        for keyword in getattr(settings, "GITHUB_ISSUE_SPAM_KEYWORDS", DEFAULT_SPAM_KEYWORDS)
+        for keyword in getattr(
+            settings, "GITHUB_ISSUE_SPAM_KEYWORDS", DEFAULT_SPAM_KEYWORDS
+        )
         if str(keyword).strip()
     )
 
@@ -71,14 +75,18 @@ def get_spam_policy() -> SpamPolicy:
 
     return SpamPolicy(
         auto_label=labels,
-        auto_moderate_enabled=bool(getattr(settings, "GITHUB_ISSUE_SPAM_AUTO_MODERATE", False)),
+        auto_moderate_enabled=bool(
+            getattr(settings, "GITHUB_ISSUE_SPAM_AUTO_MODERATE", False)
+        ),
         max_links=max_links,
         score_threshold=threshold,
         suspicious_keywords=keywords,
     )
 
 
-def evaluate_issue_payload(*, title: str, body: str, author: str, policy: SpamPolicy) -> SpamEvaluation:
+def evaluate_issue_payload(
+    *, title: str, body: str, author: str, policy: SpamPolicy
+) -> SpamEvaluation:
     normalized_title = (title or "").strip().lower()
     normalized_body = (body or "").strip().lower()
     normalized_author = (author or "").strip().lower()
@@ -92,7 +100,9 @@ def evaluate_issue_payload(*, title: str, body: str, author: str, policy: SpamPo
         reasons.append(f"link_count>{policy.max_links}")
         score += Decimal("0.40")
 
-    keyword_matches = [keyword for keyword in policy.suspicious_keywords if keyword in text]
+    keyword_matches = [
+        keyword for keyword in policy.suspicious_keywords if keyword in text
+    ]
     if keyword_matches:
         reasons.append("keyword:" + ",".join(sorted(set(keyword_matches))))
         score += Decimal("0.35")
@@ -137,7 +147,9 @@ def _should_evaluate(*, event_type: str, action: str, issue_number: int | None) 
     return action in {"opened", "edited", "reopened"}
 
 
-def _moderate_issue(*, repository: GitHubRepository, issue_number: int, policy: SpamPolicy) -> None:
+def _moderate_issue(
+    *, repository: GitHubRepository, issue_number: int, policy: SpamPolicy
+) -> None:
     if not policy.auto_moderate_enabled:
         return
 
@@ -185,7 +197,9 @@ def _moderate_issue(*, repository: GitHubRepository, issue_number: int, policy: 
         )
 
 
-def assess_github_issue_event(event: GitHubEvent) -> RepositoryIssueSpamAssessment | None:
+def assess_github_issue_event(
+    event: GitHubEvent,
+) -> RepositoryIssueSpamAssessment | None:
     if not issue_spam_filter_enabled():
         return None
 
@@ -201,7 +215,9 @@ def assess_github_issue_event(event: GitHubEvent) -> RepositoryIssueSpamAssessme
 
     repository = event.repository
     if repository is None and event.owner and event.name:
-        repository = GitHubRepository.objects.filter(owner=event.owner, name=event.name).first()
+        repository = GitHubRepository.objects.filter(
+            owner=event.owner, name=event.name
+        ).first()
     if repository is None or issue_number is None:
         return None
 

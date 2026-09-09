@@ -5,7 +5,9 @@ from apps.repos.views import dashboard, webhooks
 app_name = "repos"
 
 urlpatterns = [
-    path("work/", dashboard.repository_work_dashboard, name="repository-work-dashboard"),
+    path(
+        "work/", dashboard.repository_work_dashboard, name="repository-work-dashboard"
+    ),
     path(
         "work/assignments/snapshot/",
         dashboard.repository_work_assignment_snapshot,

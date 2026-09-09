@@ -3,9 +3,11 @@ from __future__ import annotations
 from .base import *
 from .configuration_key import ConfigurationKey
 
+
 class ChargerConfigurationManager(EntityManager):
     def get_queryset(self):
         return super().get_queryset().prefetch_related("configuration_entries")
+
 
 class ChargerConfiguration(Entity):
     """Persisted configuration package returned by a charge point."""
@@ -60,7 +62,9 @@ class ChargerConfiguration(Entity):
     def configuration_keys(self) -> list[dict[str, object]]:
         return [entry.as_dict() for entry in self.configuration_entries.all()]
 
-    def replace_configuration_keys(self, entries: list[dict[str, object]] | None) -> None:
+    def replace_configuration_keys(
+        self, entries: list[dict[str, object]] | None
+    ) -> None:
         ConfigurationKey.objects.filter(configuration=self).delete()
         if not entries:
             if hasattr(self, "_prefetched_objects_cache"):
@@ -97,8 +101,9 @@ class ChargerConfiguration(Entity):
         if hasattr(self, "_prefetched_objects_cache"):
             if created_keys:
                 refreshed = list(
-                    ConfigurationKey.objects.filter(configuration=self)
-                    .order_by("position", "id")
+                    ConfigurationKey.objects.filter(configuration=self).order_by(
+                        "position", "id"
+                    )
                 )
                 self._prefetched_objects_cache["configuration_entries"] = refreshed
             else:

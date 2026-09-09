@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from django.db import models
 from django.utils import timezone
@@ -14,6 +14,7 @@ class DNSProviderCredential(Profile):
     """Credentials for interacting with external DNS providers."""
 
     owner_required = True
+
     class Provider(models.TextChoices):
         GODADDY = "godaddy", "GoDaddy"
 
@@ -91,7 +92,7 @@ class DNSProviderCredential(Profile):
     def get_default_domain(self) -> str:
         return (self.resolve_sigils("default_domain") or "").strip()
 
-    def publish_dns_records(self, records: Iterable["GoDaddyDNSRecord"]):
+    def publish_dns_records(self, records: Iterable[GoDaddyDNSRecord]):
         from apps.dns import godaddy as dns_utils
 
         return dns_utils.deploy_records(self, records)
@@ -311,7 +312,9 @@ class DNSRecord(Entity):
             return f"{name}.{domain}".rstrip(".")
         return name.rstrip(".")
 
-    def mark_deployed(self, credentials: DNSProviderCredential | None = None, timestamp=None) -> None:
+    def mark_deployed(
+        self, credentials: DNSProviderCredential | None = None, timestamp=None
+    ) -> None:
         if timestamp is None:
             timestamp = timezone.now()
         update_fields = ["last_synced_at", "last_error"]
@@ -322,7 +325,9 @@ class DNSRecord(Entity):
             update_fields.append("credentials")
         self.save(update_fields=update_fields)
 
-    def mark_error(self, message: str, credentials: DNSProviderCredential | None = None) -> None:
+    def mark_error(
+        self, message: str, credentials: DNSProviderCredential | None = None
+    ) -> None:
         update_fields = ["last_error"]
         self.last_error = message
         if credentials and self.credentials_id != getattr(credentials, "pk", None):

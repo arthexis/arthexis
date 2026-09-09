@@ -15,7 +15,9 @@ COMPLIANCE_LOG_RETENTION_DAYS = 90
 class ArchiveTimedRotatingFileHandler(TimedRotatingFileHandler):
     """Timed rotating file handler that archives rotated logs."""
 
-    def __init__(self, *args: object, archive_dir: Path | None = None, **kwargs: object) -> None:
+    def __init__(
+        self, *args: object, archive_dir: Path | None = None, **kwargs: object
+    ) -> None:
         super().__init__(*args, **kwargs)
         base_dir = Path(self.baseFilename).parent
         self._archive_dir = archive_dir or base_dir / "archive"

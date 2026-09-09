@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from django.test import RequestFactory
 import pytest
+from django.test import RequestFactory
 
 from apps.users import passkeys
+
 
 def test_expected_origins_uses_validated_request_host_only():
     """Expected origins should not trust unvalidated forwarding/origin headers."""

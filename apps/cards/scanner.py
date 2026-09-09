@@ -18,7 +18,6 @@ from .rfid_service import (
 )
 from .utils import convert_endianness_value, normalize_endianness
 
-
 RECENT_SCAN_WINDOW_SECONDS = float(
     os.environ.get("RFID_SCAN_RECENT_WINDOW_SECONDS", "10")
 )
@@ -174,7 +173,9 @@ def _read_ingest_offset_state(offset_path: Path) -> tuple[int | None, int]:
     return normalized_inode, normalized_offset
 
 
-def _write_ingest_offset_state(offset_path: Path, inode: int | None, offset: int) -> None:
+def _write_ingest_offset_state(
+    offset_path: Path, inode: int | None, offset: int
+) -> None:
     """Persist the inode and byte offset for the next scan-log ingest run."""
 
     payload = {"inode": inode, "offset": max(0, int(offset))}
@@ -196,7 +197,11 @@ def ingest_service_scans() -> int:
         stat = os.fstat(scan_log.fileno())
         current_inode = getattr(stat, "st_ino", None)
         file_size = stat.st_size
-        if last_inode is not None and current_inode is not None and last_inode != current_inode:
+        if (
+            last_inode is not None
+            and current_inode is not None
+            and last_inode != current_inode
+        ):
             last_offset = 0
         if last_offset < 0 or last_offset > file_size:
             last_offset = 0
@@ -246,7 +251,9 @@ def scan_sources(
             return build_attempt_response(attempt, endianness=endianness)
         return result
 
-    result = request_service("scan", payload={"timeout": timeout_value}, timeout=timeout_value + 0.2)
+    result = request_service(
+        "scan", payload={"timeout": timeout_value}, timeout=timeout_value + 0.2
+    )
     if result is None:
         return {"error": "scanner service unavailable", "service_mode": "service"}
     if not result:

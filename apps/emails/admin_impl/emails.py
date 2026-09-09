@@ -303,7 +303,9 @@ class EmailInboxAdmin(
 
         selected_ids = request.POST.getlist("_selected_action")
         if len(selected_ids) > 1:
-            self.message_user(request, _("Select exactly one inbox to start setup."), messages.ERROR)
+            self.message_user(
+                request, _("Select exactly one inbox to start setup."), messages.ERROR
+            )
             return redirect(reverse("admin:emails_emailinbox_changelist"))
 
         inbox = None
@@ -313,7 +315,9 @@ class EmailInboxAdmin(
             inbox = queryset.first()
 
         if inbox is None:
-            self.message_user(request, _("Select one inbox to start setup."), messages.ERROR)
+            self.message_user(
+                request, _("Select one inbox to start setup."), messages.ERROR
+            )
             return redirect(reverse("admin:emails_emailinbox_changelist"))
         return redirect(self._setup_collector_url(inbox))
 
@@ -344,11 +348,15 @@ class EmailInboxAdmin(
             raise PermissionDenied
 
         can_change = self.has_change_permission(request, inbox)
-        collector = inbox.collectors.order_by("id").first() or EmailCollector(inbox=inbox)
+        collector = inbox.collectors.order_by("id").first() or EmailCollector(
+            inbox=inbox
+        )
         results = []
         if request.method == "POST":
             form = EmailCollectorSetupForm(request.POST, instance=collector)
-            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(
+                pk=inbox.pk
+            )
             if form.is_valid():
                 configured_collector = form.save(commit=False)
                 configured_collector.inbox = inbox
@@ -358,9 +366,17 @@ class EmailInboxAdmin(
                     try:
                         results = configured_collector.search_messages(limit=5)
                         if results:
-                            self.message_user(request, _("Collector test found matching emails."), messages.SUCCESS)
+                            self.message_user(
+                                request,
+                                _("Collector test found matching emails."),
+                                messages.SUCCESS,
+                            )
                         else:
-                            self.message_user(request, _("Collector test found no matching emails."), messages.WARNING)
+                            self.message_user(
+                                request,
+                                _("Collector test found no matching emails."),
+                                messages.WARNING,
+                            )
                     except ValidationError as exc:
                         self.message_user(request, str(exc), messages.ERROR)
                     except Exception as exc:  # pragma: no cover - admin feedback
@@ -368,7 +384,9 @@ class EmailInboxAdmin(
                 collector = configured_collector
         else:
             form = EmailCollectorSetupForm(instance=collector)
-            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+            form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(
+                pk=inbox.pk
+            )
             if not can_change:
                 for field in form.fields.values():
                     field.disabled = True
@@ -387,7 +405,9 @@ class EmailInboxAdmin(
             "can_change": can_change,
             "change_url": reverse("admin:emails_emailinbox_change", args=[inbox.pk]),
         }
-        return TemplateResponse(request, "admin/core/emailinbox/setup_collector.html", context)
+        return TemplateResponse(
+            request, "admin/core/emailinbox/setup_collector.html", context
+        )
 
     def test_inbox(self, request, object_id):
         inbox = self.get_object(request, object_id)
@@ -419,7 +439,16 @@ class EmailInboxAdmin(
         ("Credentials", {"fields": ("username", "password")}),
         (
             "Configuration",
-            {"fields": ("host", "port", "protocol", "use_ssl", "is_enabled", "priority")},
+            {
+                "fields": (
+                    "host",
+                    "port",
+                    "protocol",
+                    "use_ssl",
+                    "is_enabled",
+                    "priority",
+                )
+            },
         ),
     )
 
@@ -470,9 +499,15 @@ class EmailInboxAdmin(
                 results = []
                 for inbox in queryset:
                     messages = inbox.search_messages(
-                        subject=form.cleaned_data["subject"].replace("\r", "").replace("\n", ""),
-                        from_address=form.cleaned_data["from_address"].replace("\r", "").replace("\n", ""),
-                        body=form.cleaned_data["body"].replace("\r", "").replace("\n", ""),
+                        subject=form.cleaned_data["subject"]
+                        .replace("\r", "")
+                        .replace("\n", ""),
+                        from_address=form.cleaned_data["from_address"]
+                        .replace("\r", "")
+                        .replace("\n", ""),
+                        body=form.cleaned_data["body"]
+                        .replace("\r", "")
+                        .replace("\n", ""),
                         use_regular_expressions=False,
                     )
                     results.append({"inbox": inbox, "messages": messages})

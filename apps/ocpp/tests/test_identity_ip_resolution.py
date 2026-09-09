@@ -49,10 +49,10 @@ def test_resolve_client_ip_forwarded_header_parsing_variants():
     """Forwarded header for= values should handle quoting and IPv6 bracket/port forms."""
 
     cases = [
-        ('for=198.51.100.40;proto=https', '198.51.100.40'),
-        ('for="198.51.100.41:8443";proto=https', '198.51.100.41'),
-        ('for="[2001:db8::44]:8443";proto=https', '2001:db8::44'),
-        ('for=unknown, for=192.168.1.10, for=198.51.100.42', '198.51.100.42'),
+        ("for=198.51.100.40;proto=https", "198.51.100.40"),
+        ('for="198.51.100.41:8443";proto=https', "198.51.100.41"),
+        ('for="[2001:db8::44]:8443";proto=https', "2001:db8::44"),
+        ("for=unknown, for=192.168.1.10, for=198.51.100.42", "198.51.100.42"),
     ]
 
     for forwarded_value, expected in cases:

@@ -8,7 +8,10 @@ from pathlib import Path
 import django
 from django.conf import settings
 
-from tests.plugins.sqlite_paths import configure_ephemeral_sqlite_paths, ensure_clean_test_databases
+from tests.plugins.sqlite_paths import (
+    configure_ephemeral_sqlite_paths,
+    ensure_clean_test_databases,
+)
 
 PYTEST_DISABLE_MIGRATIONS_ENV_VAR = "PYTEST_DISABLE_MIGRATIONS"
 
@@ -35,7 +38,9 @@ def apply_bootstrap(base_dir: Path) -> None:
 
     settings.STORAGES = {
         **settings.STORAGES,
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
     }
 
     if os.environ.get(PYTEST_DISABLE_MIGRATIONS_ENV_VAR, "0") == "1":

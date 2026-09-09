@@ -59,7 +59,9 @@ class Landing(Entity):
     def save(self, *args, **kwargs):
         existing = None
         if not self.pk:
-            existing = type(self).objects.filter(module=self.module, path=self.path).first()
+            existing = (
+                type(self).objects.filter(module=self.module, path=self.path).first()
+            )
         if existing:
             self.pk = existing.pk
         super().save(*args, **kwargs)

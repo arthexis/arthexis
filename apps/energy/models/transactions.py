@@ -91,8 +91,8 @@ class EnergyTransaction(Entity):
         return f"{self.delta_kw} kW ({self.direction}) on {self.created_on:%Y-%m-%d}"
 
 
-def generate_missing_reports(schedule, reference=None) -> list["ClientReport"]:
-    generated: list["ClientReport"] = []
+def generate_missing_reports(schedule, reference=None) -> list[ClientReport]:
+    generated: list[ClientReport] = []
     for start, end in schedule.iter_pending_periods(reference=reference):
         report = schedule.run(start=start, end=end)
         if report:
