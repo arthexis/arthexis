@@ -244,6 +244,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       ISSUE_MARKER: '<!-- install-health-failure -->'
       ISSUE_TITLE: 'Install Health Check failing on main'
+      ISSUE_ASSIGNEE: 'arthexis'
     steps:
       - name: Create or update failure issue
         shell: bash
@@ -285,11 +286,13 @@ jobs:
             gh issue create \
               --repo "${GITHUB_REPOSITORY}" \
               --title "${ISSUE_TITLE}" \
+              --assignee "${ISSUE_ASSIGNEE}" \
               --body "${body}"
           else
             gh issue edit "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
               --title "${ISSUE_TITLE}" \
+              --add-assignee "${ISSUE_ASSIGNEE}" \
               --body "${body}"
             gh issue comment "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
