@@ -198,6 +198,11 @@ def collectstatic(*, layout: InstallationLayout | None = None) -> None:
     run_manage("collectstatic", "--noinput", layout=layout)
 
 
+def ensure_local_node(*, layout: InstallationLayout | None = None) -> None:
+    """Ensure the current host is registered as the local Arthexis node."""
+    run_manage("ensure_local_node", layout=layout)
+
+
 def prepare(
     *,
     layout: InstallationLayout | None = None,
@@ -215,6 +220,7 @@ def prepare(
         raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
     if run_migrations:
         migrate(layout=current)
+    ensure_local_node(layout=current)
     if run_collectstatic:
         collectstatic(layout=current)
     return current

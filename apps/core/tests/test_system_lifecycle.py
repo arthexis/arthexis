@@ -48,6 +48,41 @@ def test_collectstatic_runs_noninteractive_manage_command(monkeypatch) -> None:
     assert calls == [("collectstatic", ("--noinput",), selected)]
 
 
+def test_ensure_local_node_runs_management_command(monkeypatch) -> None:
+    calls: list[tuple[str, tuple[str, ...], lifecycle.InstallationLayout | None]] = []
+
+    def run_manage(
+        command: str,
+        *arguments: str,
+        layout: lifecycle.InstallationLayout | None = None,
+    ) -> None:
+        calls.append((command, arguments, layout))
+
+    monkeypatch.setattr(lifecycle, "run_manage", run_manage)
+
+    selected = _layout()
+    lifecycle.ensure_local_node(layout=selected)
+
+    assert calls == [("ensure_local_node", (), selected)]
+
+
+def test_prepare_ensures_local_node_after_migrations(monkeypatch, tmp_path) -> None:
+    calls: list[str] = []
+    selected = lifecycle.InstallationLayout(root=tmp_path, checkout=tmp_path / "app")
+    selected.checkout.mkdir()
+
+    monkeypatch.setattr(lifecycle, "migrate", lambda **kwargs: calls.append("migrate"))
+    monkeypatch.setattr(
+        lifecycle, "ensure_local_node", lambda **kwargs: calls.append("ensure_local_node")
+    )
+    monkeypatch.setattr(
+        lifecycle, "collectstatic", lambda **kwargs: calls.append("collectstatic")
+    )
+
+    assert lifecycle.prepare(layout=selected) is selected
+    assert calls == ["migrate", "ensure_local_node", "collectstatic"]
+
+
 def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> None:
     calls: list[lifecycle.InstallationLayout | None] = []
 
