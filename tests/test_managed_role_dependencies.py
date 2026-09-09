@@ -11,7 +11,7 @@ CELERY_RUNTIME_DEPENDENCIES = {
 }
 
 
-def test_managed_roles_select_celery_extra() -> None:
+def test_managed_roles_select_migration_compatible_celery_extra() -> None:
     manifest = tomllib.loads((ROOT / "gway.toml").read_text(encoding="utf-8"))
     extras = manifest["install"]["extras"]
 
@@ -21,12 +21,12 @@ def test_managed_roles_select_celery_extra() -> None:
     assert extras["values"] == {
         "Control": ["celery"],
         "Satellite": ["celery"],
-        "Terminal": [],
+        "Terminal": ["celery"],
         "Watchtower": ["celery"],
     }
 
 
-def test_terminal_runtime_omits_celery_dependencies() -> None:
+def test_celery_runtime_dependencies_live_in_managed_extra() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     runtime = set(pyproject["project"]["dependencies"])
     celery_extra = set(pyproject["project"]["optional-dependencies"]["celery"])
@@ -35,15 +35,10 @@ def test_terminal_runtime_omits_celery_dependencies() -> None:
     assert CELERY_RUNTIME_DEPENDENCIES <= celery_extra
 
 
-def test_terminal_settings_omit_reports_with_celery_runtime() -> None:
-    settings_source = (ROOT / "config" / "settings" / "__init__.py").read_text(
-        encoding="utf-8"
-    )
-    energy_models_source = (
-        ROOT / "apps" / "energy" / "models" / "__init__.py"
+def test_energy_migrations_require_django_celery_beat() -> None:
+    migration_source = (
+        ROOT / "apps" / "energy" / "migrations" / "0004_initial.py"
     ).read_text(encoding="utf-8")
 
-    assert '"apps.reports"' in settings_source
-    assert "if not CELERY_RUNTIME_ENABLED:" in settings_source
-    assert 'getattr(settings, "CELERY_RUNTIME_ENABLED", True)' in energy_models_source
-    assert "ClientReportSchedule" in energy_models_source
+    assert "('django_celery_beat', '0020_googlecalendarprofile')" in migration_source
+    assert "to='django_celery_beat.periodictask'" in migration_source
