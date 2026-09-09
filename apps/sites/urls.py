@@ -1,12 +1,16 @@
 from django.apps import apps as django_apps
+from django.conf import settings
 from django.urls import path
 from django.views.generic import RedirectView
 
 from .views import landing, management
 
 OCPP_APP_INSTALLED = django_apps.is_installed("apps.ocpp")
+REPORTING_RUNTIME_ENABLED = OCPP_APP_INSTALLED and getattr(
+    settings, "CELERY_RUNTIME_ENABLED", True
+)
 
-if OCPP_APP_INSTALLED:
+if REPORTING_RUNTIME_ENABLED:
     from .views import analytics
 
 app_name = "pages"
@@ -20,7 +24,7 @@ analytics_urlpatterns = (
             name="client-report-download",
         ),
     ]
-    if OCPP_APP_INSTALLED
+    if REPORTING_RUNTIME_ENABLED
     else []
 )
 
