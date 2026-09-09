@@ -39,6 +39,11 @@ def test_terminal_settings_omit_reports_with_celery_runtime() -> None:
     settings_source = (ROOT / "config" / "settings" / "__init__.py").read_text(
         encoding="utf-8"
     )
+    energy_models_source = (
+        ROOT / "apps" / "energy" / "models" / "__init__.py"
+    ).read_text(encoding="utf-8")
 
     assert '"apps.reports"' in settings_source
     assert "if not CELERY_RUNTIME_ENABLED:" in settings_source
+    assert 'getattr(settings, "CELERY_RUNTIME_ENABLED", True)' in energy_models_source
+    assert "ClientReportSchedule" in energy_models_source
