@@ -26,13 +26,13 @@ def test_managed_roles_select_migration_compatible_celery_extra() -> None:
     }
 
 
-def test_celery_runtime_dependencies_live_in_managed_extra() -> None:
+def test_celery_runtime_dependencies_are_mandatory() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     runtime = set(pyproject["project"]["dependencies"])
-    celery_extra = set(pyproject["project"]["optional-dependencies"]["celery"])
+    optional_dependencies = pyproject["project"].get("optional-dependencies", {})
 
-    assert CELERY_RUNTIME_DEPENDENCIES.isdisjoint(runtime)
-    assert CELERY_RUNTIME_DEPENDENCIES <= celery_extra
+    assert CELERY_RUNTIME_DEPENDENCIES <= runtime
+    assert "celery" not in optional_dependencies
 
 
 def test_energy_migrations_require_django_celery_beat() -> None:
