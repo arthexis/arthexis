@@ -33,3 +33,12 @@ def test_terminal_runtime_omits_celery_dependencies() -> None:
 
     assert CELERY_RUNTIME_DEPENDENCIES.isdisjoint(runtime)
     assert CELERY_RUNTIME_DEPENDENCIES <= celery_extra
+
+
+def test_terminal_settings_omit_reports_with_celery_runtime() -> None:
+    settings_source = (ROOT / "config" / "settings" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"apps.reports"' in settings_source
+    assert "if not CELERY_RUNTIME_ENABLED:" in settings_source
