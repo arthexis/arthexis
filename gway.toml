@@ -14,8 +14,9 @@ root = "/opt/arthexis"
 checkout = "app"
 environment = ".venv"
 
-# Terminal is the lightweight default. The other canonical roles require the
-# Celery runtime stack and therefore install the project's `celery` extra.
+# Role selection is persisted generically by GWAY. All roles currently require
+# the Celery/Beat Python package set because the historical Django migration
+# graph references django-celery-beat; only non-Terminal roles run Celery services.
 [install.extras]
 argument = "--role"
 default = "Terminal"
@@ -24,7 +25,7 @@ state = ".locks/role.lck"
 [install.extras.values]
 Control = ["celery"]
 Satellite = ["celery"]
-Terminal = []
+Terminal = ["celery"]
 Watchtower = ["celery"]
 
 [lifecycle]
