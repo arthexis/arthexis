@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 
 
+REDIS_BROKER_SCHEMES = ("redis://", "rediss://", "unix://")
+
+
 def _resolve_node_role(node_role: str | None) -> str:
     """Resolve node role, falling back to role lock file when unspecified."""
 
@@ -39,3 +42,10 @@ def resolve_celery_broker_url(*, node_role: str | None = None) -> str:
         return "redis://localhost:6379/0"
 
     return "memory://localhost/"
+
+
+def resolve_redis_broker_fallback(*, node_role: str | None = None) -> str:
+    """Return the Celery broker only when it is usable as a Redis endpoint."""
+
+    broker_url = resolve_celery_broker_url(node_role=node_role)
+    return broker_url if broker_url.startswith(REDIS_BROKER_SCHEMES) else ""
