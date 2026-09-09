@@ -112,7 +112,12 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
 def _run_env_refresh(base_dir: Path) -> None:
     """Execute ``env-refresh`` in *base_dir* using the local interpreter."""
 
-    command = [sys.executable, str(base_dir / "env-refresh.py"), "--latest", "database"]
+    command = [
+        sys.executable,
+        str(base_dir / "scripts" / "maintenance" / "env_refresh.py"),
+        "--latest",
+        "database",
+    ]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     try:
