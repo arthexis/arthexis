@@ -79,7 +79,9 @@ run_timed "Required pytest tests" python -m pytest \
   -q
 
 # Build the artifact users receive; editable-install checks alone can miss packaging errors.
-wheel_dir="$(mktemp -d)"
+wheel_tmp_root="${RUNNER_TEMP:-$REPO_ROOT/.tmp}"
+mkdir -p "$wheel_tmp_root"
+wheel_dir="$(mktemp -d "$wheel_tmp_root/arthexis-wheel.XXXXXX")"
 trap 'rm -rf "$wheel_dir"' EXIT
 run_timed "Wheel build" python -m pip wheel --no-deps --wheel-dir "$wheel_dir" .
 run_timed "Wheel metadata check" python -m twine check "$wheel_dir"/*.whl
