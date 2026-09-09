@@ -6,9 +6,9 @@ import shutil
 import socket
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 from urllib.parse import urlparse
 
 from config.roles import SUPPORTED_ROLES, normalize_role
@@ -271,7 +271,9 @@ def prepare(
     """
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():
-        raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
+        raise FileNotFoundError(
+            f"installation checkout does not exist: {current.checkout}"
+        )
 
     state_root = _prepare_runtime_state(current)
     try:
@@ -299,12 +301,16 @@ def _prepare_for_role(
     return prepare(layout=current)
 
 
-def install(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
+def install(
+    *arguments: str, layout: InstallationLayout | None = None
+) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
     return _prepare_for_role(arguments, layout=layout)
 
 
-def upgrade(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
+def upgrade(
+    *arguments: str, layout: InstallationLayout | None = None
+) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
     return _prepare_for_role(arguments, layout=layout)
 

@@ -4,7 +4,6 @@ from pathlib import Path
 
 from apps.core.system import lifecycle
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
