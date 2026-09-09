@@ -12,6 +12,9 @@ ROLE_ALIASES: dict[str, str] = {
 }
 
 SUPPORTED_ROLES: tuple[str, ...] = ("Control", "Satellite", "Terminal", "Watchtower")
+SHARED_CHANNEL_LAYER_ROLES: frozenset[str] = frozenset(
+    {"Control", "Satellite", "Watchtower"}
+)
 
 
 def normalize_role(role_name: Any) -> str:
@@ -26,6 +29,12 @@ def normalize_role(role_name: Any) -> str:
         return ROLE_ALIASES[lowered]
 
     return normalized.title()
+
+
+def role_requires_shared_channel_layer(role_name: Any) -> bool:
+    """Return whether a node role needs cross-process channel coordination."""
+
+    return normalize_role(role_name) in SHARED_CHANNEL_LAYER_ROLES
 
 
 def validate_role_settings(values: Mapping[str, Any], *, strict: bool | None = None) -> None:

@@ -22,6 +22,7 @@ class ChannelLayerDecision:
     redis_url: str
     redis_source: str
     fallback_reason: str
+    shared_backend_required: bool
 
 
 def _mask_redis_url(value: str) -> str:
@@ -54,6 +55,7 @@ def resolve_channel_layers(
     *,
     channel_redis_url: str,
     ocpp_state_redis_url: str,
+    shared_backend_required: bool = False,
 ) -> tuple[dict[str, dict[str, object]], ChannelLayerDecision]:
     """Resolve channel-layer backend configuration and emit structured logs."""
 
@@ -89,6 +91,7 @@ def resolve_channel_layers(
             redis_url=selected_url,
             redis_source=selected_source,
             fallback_reason=fallback_reason,
+            shared_backend_required=shared_backend_required,
         )
         logger.info(
             "channel_layer.initialized",
@@ -98,6 +101,7 @@ def resolve_channel_layers(
                 "redis_source": decision.redis_source,
                 "redis_url": _mask_redis_url(decision.redis_url),
                 "fallback_reason": decision.fallback_reason,
+                "shared_backend_required": decision.shared_backend_required,
             },
         )
         return (
@@ -115,14 +119,16 @@ def resolve_channel_layers(
         redis_url="",
         redis_source="",
         fallback_reason=fallback_reason or "missing_redis_url",
+        shared_backend_required=shared_backend_required,
     )
-    logger.warning(
+    log = logger.warning if shared_backend_required else logger.info
+    log(
         "channel_layer.fallback_inmemory",
         extra={
             "event": "channel_layer.fallback_inmemory",
             "backend": decision.backend,
             "fallback_reason": decision.fallback_reason,
+            "shared_backend_required": decision.shared_backend_required,
         },
     )
     return ({"default": {"BACKEND": decision.backend}}, decision)
-

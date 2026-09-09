@@ -4,6 +4,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.core.system import identity
+from config.channel_layer import ChannelLayerDecision
 
 
 def test_node_role_uses_canonical_role(settings):
@@ -54,6 +55,7 @@ def test_status_is_good_when_role_database_and_migrations_are_healthy(monkeypatc
             return []
 
     monkeypatch.setattr(identity, "node_role", lambda: "Control")
+    monkeypatch.setattr(identity, "_channel_layer_is_healthy", lambda _role: True)
     monkeypatch.setattr(identity, "connection", Connection())
     monkeypatch.setattr(identity, "MigrationExecutor", lambda _connection: Executor())
 
@@ -64,6 +66,32 @@ def test_status_fails_for_unknown_role(monkeypatch):
     monkeypatch.setattr(identity, "node_role", lambda: "Unknown")
 
     assert identity.status() == "FAIL"
+
+
+def test_terminal_allows_inmemory_channel_layer(settings):
+    settings.CHANNEL_LAYER_DECISION = ChannelLayerDecision(
+        backend="channels.layers.InMemoryChannelLayer",
+        redis_url="",
+        redis_source="",
+        fallback_reason="missing_redis_url",
+        shared_backend_required=False,
+    )
+
+    assert identity._channel_layer_is_healthy("Terminal") is True
+
+
+def test_shared_roles_require_external_channel_layer(settings):
+    settings.CHANNEL_LAYER_DECISION = ChannelLayerDecision(
+        backend="channels.layers.InMemoryChannelLayer",
+        redis_url="",
+        redis_source="",
+        fallback_reason="missing_redis_url",
+        shared_backend_required=True,
+    )
+
+    assert identity._channel_layer_is_healthy("Control") is False
+    assert identity._channel_layer_is_healthy("Satellite") is False
+    assert identity._channel_layer_is_healthy("Watchtower") is False
 
 
 def test_public_commands_expose_identity(monkeypatch):
