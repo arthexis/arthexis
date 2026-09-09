@@ -107,10 +107,10 @@ def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> N
 
 
 def test_run_python_uses_interpreter_that_invoked_lifecycle(monkeypatch) -> None:
-    calls: list[tuple[list[str], Path, bool, bool]] = []
+    calls: list[tuple[list[str], Path, bool, bool, dict[str, str]]] = []
 
-    def run(arguments, *, cwd, check, text):
-        calls.append((arguments, cwd, check, text))
+    def run(arguments, *, cwd, check, text, env):
+        calls.append((arguments, cwd, check, text, env))
         return object()
 
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
@@ -119,14 +119,13 @@ def test_run_python_uses_interpreter_that_invoked_lifecycle(monkeypatch) -> None
     selected = _layout()
     lifecycle.run_python(["manage.py", "check"], layout=selected)
 
-    assert calls == [
-        (
-            ["/managed/.venv/bin/python", "manage.py", "check"],
-            Path("/managed/app"),
-            True,
-            True,
-        )
-    ]
+    assert calls[0][:4] == (
+        ["/managed/.venv/bin/python", "manage.py", "check"],
+        Path("/managed/app"),
+        True,
+        True,
+    )
+    assert calls[0][4]["ARTHEXIS_MODE"] == "installed"
 
 
 def test_lifecycle_does_not_own_environment_or_package_installation() -> None:
