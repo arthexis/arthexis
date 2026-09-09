@@ -32,7 +32,9 @@ class Command(BaseCommand):
 
         self.stdout.write("Debug:")
         self.stdout.write(f"  resolved role: {role}")
-        self.stdout.write(f"  settings.NODE_ROLE: {getattr(settings, 'NODE_ROLE', '<unset>')}")
+        self.stdout.write(
+            f"  settings.NODE_ROLE: {getattr(settings, 'NODE_ROLE', '<unset>')}"
+        )
         self.stdout.write(f"  NODE_ROLE: {os.environ.get('NODE_ROLE', '<unset>')}")
         self.stdout.write(
             f"  GWAY_SERVICE_PROFILE: {os.environ.get('GWAY_SERVICE_PROFILE', '<unset>')}"
