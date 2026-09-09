@@ -121,6 +121,10 @@ def _run_env_refresh(base_dir: Path) -> None:
         "database",
     ]
     env = os.environ.copy()
+    pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        f"{base_dir}{os.pathsep}{pythonpath}" if pythonpath else str(base_dir)
+    )
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     try:
         subprocess.run(command, cwd=base_dir, check=True, env=env)
