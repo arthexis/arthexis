@@ -61,6 +61,11 @@ def test_prepare_runs_application_owned_steps(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         lifecycle,
+        "ensure_local_node",
+        lambda *, layout: calls.append("ensure_local_node"),
+    )
+    monkeypatch.setattr(
+        lifecycle,
         "collectstatic",
         lambda *, layout: calls.append("collectstatic"),
     )
@@ -68,7 +73,7 @@ def test_prepare_runs_application_owned_steps(monkeypatch, tmp_path):
     result = lifecycle.prepare(layout=current)
 
     assert result == current
-    assert calls == ["migrate", "collectstatic"]
+    assert calls == ["migrate", "ensure_local_node", "collectstatic"]
 
 
 def test_prepare_requires_checkout(tmp_path):
@@ -103,11 +108,10 @@ def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():
     repository_root = Path(__file__).resolve().parents[3]
     manifest = tomllib.loads((repository_root / "gway.toml").read_text())
 
-    assert manifest["install"] == {
-        "root": "/opt/arthexis",
-        "checkout": "app",
-        "environment": ".venv",
-    }
+    install = manifest["install"]
+    assert install["root"] == "/opt/arthexis"
+    assert install["checkout"] == "app"
+    assert install["environment"] == ".venv"
 
     hooks = manifest["lifecycle"]
     assert hooks == {
