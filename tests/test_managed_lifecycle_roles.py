@@ -37,7 +37,9 @@ def test_role_argument_is_persisted_before_prepare(
     assert not (checkout / ".locks" / "role.lck").exists()
 
 
-def test_upgrade_without_role_preserves_existing_role(monkeypatch, tmp_path: Path) -> None:
+def test_upgrade_without_role_preserves_existing_role(
+    monkeypatch, tmp_path: Path
+) -> None:
     checkout = tmp_path / "app"
     checkout.mkdir()
     role_lock = tmp_path / ".locks" / "role.lck"
