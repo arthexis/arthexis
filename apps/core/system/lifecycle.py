@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+from config.roles import SUPPORTED_ROLES, normalize_role
 
 DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
@@ -33,6 +36,32 @@ def layout(root: str | Path | None = None) -> InstallationLayout:
 
 def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
     return selected or layout()
+
+
+def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> str | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--role")
+    namespace, unknown = parser.parse_known_args(arguments)
+    if unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+    if namespace.role is None:
+        return None
+    role = normalize_role(namespace.role)
+    if role not in SUPPORTED_ROLES:
+        parser.error(
+            f"invalid --role {namespace.role!r}; choose from {', '.join(SUPPORTED_ROLES)}"
+        )
+    return role
+
+
+def _role_lock(current: InstallationLayout) -> Path:
+    return current.checkout / ".locks" / "role.lck"
+
+
+def _persist_role(role: str, current: InstallationLayout) -> None:
+    role_lock = _role_lock(current)
+    role_lock.parent.mkdir(parents=True, exist_ok=True)
+    role_lock.write_text(f"{role}\n", encoding="utf-8")
 
 
 def run_python(
@@ -96,14 +125,26 @@ def prepare(
     return current
 
 
-def install(*, layout: InstallationLayout | None = None) -> InstallationLayout:
+def _prepare_for_role(
+    arguments: tuple[str, ...],
+    *,
+    layout: InstallationLayout | None = None,
+) -> InstallationLayout:
+    current = _resolve_layout(layout)
+    role = _parse_lifecycle_arguments(arguments)
+    if role is not None:
+        _persist_role(role, current)
+    return prepare(layout=current)
+
+
+def install(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
-    return prepare(layout=layout)
+    return _prepare_for_role(arguments, layout=layout)
 
 
-def upgrade(*, layout: InstallationLayout | None = None) -> InstallationLayout:
+def upgrade(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
-    return prepare(layout=layout)
+    return _prepare_for_role(arguments, layout=layout)
 
 
 def current_python() -> str:
