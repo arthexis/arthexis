@@ -1,11 +1,15 @@
 from django.apps import apps as django_apps
+from django.conf import settings
 from django.http import Http404
 
 from apps.nodes.models import Node
 
 OCPP_APP_INSTALLED = django_apps.is_installed("apps.ocpp")
+REPORTING_RUNTIME_ENABLED = bool(
+    OCPP_APP_INSTALLED and getattr(settings, "CELERY_RUNTIME_ENABLED", True)
+)
 
-if OCPP_APP_INSTALLED:
+if REPORTING_RUNTIME_ENABLED:
     from .analytics import ClientReportForm, client_report, client_report_download
 else:
     ClientReportForm = None
