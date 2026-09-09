@@ -73,7 +73,9 @@ def test_prepare_ensures_local_node_after_migrations(monkeypatch, tmp_path) -> N
 
     monkeypatch.setattr(lifecycle, "migrate", lambda **kwargs: calls.append("migrate"))
     monkeypatch.setattr(
-        lifecycle, "ensure_local_node", lambda **kwargs: calls.append("ensure_local_node")
+        lifecycle,
+        "ensure_local_node",
+        lambda **kwargs: calls.append("ensure_local_node"),
     )
     monkeypatch.setattr(
         lifecycle, "collectstatic", lambda **kwargs: calls.append("collectstatic")
@@ -114,7 +116,9 @@ def test_run_python_uses_interpreter_that_invoked_lifecycle(monkeypatch) -> None
         return object()
 
     monkeypatch.setattr(lifecycle.subprocess, "run", run)
-    monkeypatch.setattr(lifecycle, "current_python", lambda: "/managed/.venv/bin/python")
+    monkeypatch.setattr(
+        lifecycle, "current_python", lambda: "/managed/.venv/bin/python"
+    )
 
     selected = _layout()
     lifecycle.run_python(["manage.py", "check"], layout=selected)
