@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+
 import json
 import logging
 import os
@@ -36,6 +37,7 @@ def _resolve_interrupt_main() -> Callable[[], None]:
         return _thread.interrupt_main  # type: ignore[attr-defined]
 
     if hasattr(signal, "SIGINT"):
+
         def _send_sigint() -> None:
             os.kill(os.getpid(), signal.SIGINT)
 
@@ -130,8 +132,7 @@ def _run_env_refresh(base_dir: Path) -> None:
         )
         print(f"Failed command: {command_str}", file=sys.stderr)
         print(
-            "Re-run manually for full details: "
-            f"{command_str} --reconcile",
+            f"Re-run manually for full details: {command_str} --reconcile",
             file=sys.stderr,
         )
         raise SystemExit(exc.returncode) from exc
@@ -309,7 +310,9 @@ class RunserverSession:
             time.sleep(self.poll_interval)
 
 
-def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
+def _ensure_runserver_default_bind(
+    args: list[str], *, default_port: int = 8888
+) -> None:
     """Ensure runserver defaults to loopback-only bind addresses.
 
     Args:
@@ -386,9 +389,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
     args = list(argv or sys.argv[1:])
-    celery_enabled = (base_dir / ".locks/celery.lck").exists() and not _is_terminal_node(
-        base_dir
-    )
+    celery_enabled = (
+        base_dir / ".locks/celery.lck"
+    ).exists() and not _is_terminal_node(base_dir)
     celery_forced = False
     if "--celery" in args:
         celery_enabled = True

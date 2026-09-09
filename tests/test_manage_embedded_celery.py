@@ -9,7 +9,6 @@ import pytest
 import manage
 from tests.gate_markers import gate
 
-
 pytestmark = [gate.upgrade, pytest.mark.django_db]
 
 
@@ -134,7 +133,6 @@ def test_main_allows_embedded_celery_for_non_terminal_role(
     assert len(popen_calls) == 2
 
 
-
 def test_main_skips_embedded_celery_when_node_role_env_is_terminal(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -236,7 +234,9 @@ def test_main_does_not_check_service_mode_outside_runserver(
     manage.main(["check"])
 
 
-def test_run_env_refresh_runs_latest_database_refresh(monkeypatch, tmp_path: Path) -> None:
+def test_run_env_refresh_runs_latest_database_refresh(
+    monkeypatch, tmp_path: Path
+) -> None:
     captured: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
