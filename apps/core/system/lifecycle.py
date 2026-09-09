@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import argparse
 import os
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlparse
+
+from config.roles import SUPPORTED_ROLES, normalize_role
 
 DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
+LOCAL_REDIS_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,124 @@ def layout(root: str | Path | None = None) -> InstallationLayout:
 
 def _resolve_layout(selected: InstallationLayout | None) -> InstallationLayout:
     return selected or layout()
+
+
+def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> str | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--role")
+    namespace, unknown = parser.parse_known_args(arguments)
+    if unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+    if namespace.role is None:
+        return None
+    role = normalize_role(namespace.role)
+    if role not in SUPPORTED_ROLES:
+        parser.error(
+            f"invalid --role {namespace.role!r}; choose from {', '.join(SUPPORTED_ROLES)}"
+        )
+    return role
+
+
+def _role_lock(current: InstallationLayout) -> Path:
+    return current.checkout / ".locks" / "role.lck"
+
+
+def _persist_role(role: str, current: InstallationLayout) -> None:
+    role_lock = _role_lock(current)
+    role_lock.parent.mkdir(parents=True, exist_ok=True)
+    role_lock.write_text(f"{role}\n", encoding="utf-8")
+
+
+def _current_role(current: InstallationLayout) -> str:
+    try:
+        value = _role_lock(current).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return "Terminal"
+    return normalize_role(value or "Terminal")
+
+
+def _local_redis_endpoint(role: str) -> tuple[str, int] | None:
+    if normalize_role(role) == "Terminal":
+        return None
+
+    broker_url = (
+        os.environ.get("CELERY_BROKER_URL", "").strip()
+        or os.environ.get("BROKER_URL", "").strip()
+        or "redis://localhost:6379/0"
+    )
+    parsed = urlparse(broker_url)
+    if parsed.scheme not in {"redis", "rediss"}:
+        return None
+    host = parsed.hostname or "localhost"
+    if host not in LOCAL_REDIS_HOSTS:
+        return None
+    return host, parsed.port or 6379
+
+
+def _redis_is_available(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
+def _os_id() -> str:
+    try:
+        lines = Path("/etc/os-release").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return ""
+    values = dict(
+        line.split("=", maxsplit=1)
+        for line in lines
+        if "=" in line and not line.startswith("#")
+    )
+    return values.get("ID", "").strip().strip('"').lower()
+
+
+def _redis_install_commands() -> tuple[str, ...]:
+    os_id = _os_id()
+    if os_id in {"debian", "ubuntu", "raspbian"}:
+        return (
+            "sudo apt-get update",
+            "sudo apt-get install -y redis-server",
+            "sudo systemctl enable --now redis-server",
+        )
+    if os_id in {"fedora", "rhel", "centos", "rocky", "almalinux"}:
+        return (
+            "sudo dnf install -y redis",
+            "sudo systemctl enable --now redis",
+        )
+    if os_id == "arch":
+        return (
+            "sudo pacman -S redis",
+            "sudo systemctl enable --now redis",
+        )
+    return (
+        "Install Redis with your operating system package manager.",
+        "Start and enable the Redis service.",
+    )
+
+
+def _warn_if_local_redis_missing(role: str) -> None:
+    endpoint = _local_redis_endpoint(role)
+    if endpoint is None:
+        return
+    host, port = endpoint
+    if _redis_is_available(host, port):
+        return
+
+    print(
+        f"Arthexis role {role} requires Redis for Celery/Channels, but "
+        f"{host}:{port} is unavailable.",
+        file=sys.stderr,
+    )
+    print("Install and start Redis:", file=sys.stderr)
+    for command in _redis_install_commands():
+        print(f"  {command}", file=sys.stderr)
+    print("Verify with:", file=sys.stderr)
+    print("  redis-cli ping", file=sys.stderr)
+    print("Then rerun the Arthexis install or upgrade.", file=sys.stderr)
 
 
 def run_python(
@@ -96,14 +220,28 @@ def prepare(
     return current
 
 
-def install(*, layout: InstallationLayout | None = None) -> InstallationLayout:
+def _prepare_for_role(
+    arguments: tuple[str, ...],
+    *,
+    layout: InstallationLayout | None = None,
+) -> InstallationLayout:
+    current = _resolve_layout(layout)
+    role = _parse_lifecycle_arguments(arguments)
+    if role is not None:
+        _persist_role(role, current)
+    effective_role = role or _current_role(current)
+    _warn_if_local_redis_missing(effective_role)
+    return prepare(layout=current)
+
+
+def install(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
-    return prepare(layout=layout)
+    return _prepare_for_role(arguments, layout=layout)
 
 
-def upgrade(*, layout: InstallationLayout | None = None) -> InstallationLayout:
+def upgrade(*arguments: str, layout: InstallationLayout | None = None) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
-    return prepare(layout=layout)
+    return _prepare_for_role(arguments, layout=layout)
 
 
 def current_python() -> str:

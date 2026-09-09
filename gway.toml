@@ -14,6 +14,20 @@ root = "/opt/arthexis"
 checkout = "app"
 environment = ".venv"
 
+# Role selection is persisted generically by GWAY. All roles currently require
+# the Celery/Beat Python package set because the historical Django migration
+# graph references django-celery-beat; only non-Terminal roles run Celery services.
+[install.extras]
+argument = "--role"
+default = "Terminal"
+state = ".locks/role.lck"
+
+[install.extras.values]
+Control = ["celery"]
+Satellite = ["celery"]
+Terminal = ["celery"]
+Watchtower = ["celery"]
+
 [lifecycle]
 install = "apps.core.system.lifecycle:install"
 upgrade = "apps.core.system.lifecycle:upgrade"
