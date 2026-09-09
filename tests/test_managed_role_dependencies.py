@@ -1,7 +1,6 @@
 import tomllib
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 CELERY_RUNTIME_DEPENDENCIES = {
     "celery==5.5.3",
