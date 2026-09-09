@@ -24,7 +24,7 @@ def _configure_manage_main(monkeypatch, tmp_path: Path) -> None:
 def _env_refresh_command(tmp_path: Path) -> list[str]:
     return [
         manage.sys.executable,
-        str(tmp_path / "env-refresh.py"),
+        str(tmp_path / "scripts" / "maintenance" / "env_refresh.py"),
         "--latest",
         "database",
     ]
@@ -135,7 +135,6 @@ def test_main_allows_embedded_celery_for_non_terminal_role(
 
 
 
-
 def test_main_skips_embedded_celery_when_node_role_env_is_terminal(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -184,6 +183,7 @@ def test_is_terminal_node_defaults_to_terminal_on_role_lock_decode_error(
     monkeypatch.setattr(Path, "read_text", raise_decode_error)
 
     assert manage._is_terminal_node(tmp_path)
+
 
 def test_main_preserves_environment_debug_for_runserver(
     monkeypatch, tmp_path: Path
