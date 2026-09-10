@@ -64,7 +64,8 @@ jobs:
     # main ruleset until its branch is updated. Pushes/manual runs are unaffected.
     if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && github.event.pull_request.mergeable_state != 'behind')
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    # Preserve the workflow-policy contract; the sanity script still targets <5 minutes.
+    # Preserve the workflow-policy contract; the full sanity path is retained
+    # for release branches and manual dispatch, while PRs use the lightweight mode.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
@@ -81,9 +82,14 @@ jobs:
 
       - name: Run Linux sanity checks
         run: |
-          ./scripts/ci/linux-sanity.sh
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            ./scripts/ci/linux-sanity.sh --pr
+          else
+            ./scripts/ci/linux-sanity.sh
+          fi
 
       - name: Validate GWAY Django adapter
+        if: github.event_name != 'pull_request'
         env:
           XDG_CONFIG_HOME: ${{ runner.temp }}/gway-config
           XDG_DATA_HOME: ${{ runner.temp }}/gway-data
