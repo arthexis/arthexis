@@ -60,7 +60,10 @@ def test_upgradeability_is_hosted_and_requires_upgrade_to_apply_migrations() -> 
     assert "runs-on: ubuntu-latest" in upgradeability
     assert "self-hosted" not in upgradeability
     assert "python manage.py migrate --plan --database default" in upgradeability
-    assert upgradeability.count("python manage.py migrate --noinput --database default") == 1
+    assert (
+        upgradeability.count("python manage.py migrate --noinput --database default")
+        == 1
+    )
     assert "python manage.py check" in upgradeability
     assert "python scripts/check_editable_install_import.py" in upgradeability
     assert "python scripts/check_import_resolution.py" in upgradeability
