@@ -37,12 +37,12 @@ def _iter_static_files():
 
         django.setup()
     except Exception as exc:  # pragma: no cover - setup failures bubble up
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
 
     try:
         from django.contrib.staticfiles.finders import get_finders
     except Exception as exc:  # pragma: no cover - import errors
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
 
     files = []
     for finder in get_finders():
@@ -55,8 +55,7 @@ def _iter_static_files():
             files.append((str(location), str(relative_path), storage))
 
     files.sort(key=lambda item: (item[0], item[1]))
-    for item in files:
-        yield item
+    yield from files
 
 
 def _stat_details(storage, relative_path: str) -> tuple[str | None, int | None]:

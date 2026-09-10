@@ -100,7 +100,7 @@ class EmailInbox(CoreProfile):
                 conn.quit()
             return True
         except Exception as exc:
-            raise ValidationError(str(exc))
+            raise ValidationError(str(exc)) from exc
 
     def is_ready(self) -> bool:
         try:
@@ -130,7 +130,7 @@ class EmailInbox(CoreProfile):
             try:
                 return re.compile(pattern, re.IGNORECASE)
             except re.error as exc:
-                raise ValidationError(str(exc))
+                raise ValidationError(str(exc)) from exc
 
         subject_regex = sender_regex = body_regex = None
         if use_regular_expressions:

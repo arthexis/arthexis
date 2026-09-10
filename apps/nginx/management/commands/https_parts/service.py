@@ -319,7 +319,7 @@ class HttpsProvisioningService:
                         "Cannot set the configured SITE_ID as the default site because "
                         f"domain '{domain}' already belongs to Site {fallback_site.pk}. "
                         "Resolve the duplicate site records, then run HTTPS setup again."
-                    )
+                    ) from None
         else:
             site, created = Site.objects.get_or_create(
                 domain=domain, defaults={"name": domain}
@@ -360,7 +360,7 @@ class HttpsProvisioningService:
                             f"Configured SITE_ID ({site.pk}) could not be updated to domain "
                             f"'{domain}' because that domain already belongs to Site {fallback_site.pk}. "
                             "Resolve the duplicate site records, then run HTTPS setup again."
-                        )
+                        ) from None
                     fallback_updates: list[str] = []
                     if fallback_site.name != domain:
                         fallback_site.name = domain

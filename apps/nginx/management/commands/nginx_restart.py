@@ -14,7 +14,7 @@ class Command(BaseCommand):
         try:
             result = config.validate_only()
         except NginxUnavailableError as exc:  # pragma: no cover - requires system nginx
-            raise CommandError(str(exc))
+            raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(result.message))
         if not result.validated:

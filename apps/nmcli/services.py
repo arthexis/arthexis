@@ -196,7 +196,7 @@ def _parse_station_dump(output: str) -> list[dict[str, object]]:
             continue
         if ":" not in line:
             continue
-        key, value = [part.strip() for part in line.split(":", 1)]
+        key, value = (part.strip() for part in line.split(":", 1))
         if key == "signal":
             try:
                 current["signal_dbm"] = int(value.split()[0])

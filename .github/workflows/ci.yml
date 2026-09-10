@@ -1,25 +1,9 @@
-name: Linux CI
+name: Python CI
 
 permissions:
   contents: read
 
-env:
-  PYTHONDONTWRITEBYTECODE: '1'
-  NODE_OPTIONS: '--no-deprecation'
-  ARTHEXIS_DB_BACKEND: sqlite
-  OCPP_STATE_REDIS_URL: redis://localhost:6379
-  REDIS_HOST: 127.0.0.1
-  REDIS_PORT: '6379'
-  ARTHEXIS_SKIP_SANITY_APT: '1'
-
-concurrency:
-  group: linux-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
-  # Keep the PR trigger effectively unfiltered so the required Linux sanity
-  # check is reported for every non-draft pull request. Drafts are skipped at
-  # the job level and ready_for_review retriggers the required gate.
   pull_request:
     types:
       - opened
@@ -28,107 +12,21 @@ on:
       - ready_for_review
     paths:
       - '**'
-  # Main pushes are covered by Install Health Check. Keep release branches here
-  # because they can receive changes independently of the normal PR-to-main flow.
-  push:
-    branches:
-      - 'release/**'
-    paths:
-      - '**/*.py'
-      - '**/*.json'
-      - '**/*.toml'
-      - '**/*.txt'
-      - '.python-version'
-      - '.github/workflows/ci.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'docs/development/ci.md'
-      - 'requirements*.txt'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'manage.py'
-      - 'configure.sh'
-      - 'env-refresh.sh'
-      - 'install.sh'
-      - 'start.sh'
-      - 'stop.sh'
-      - 'upgrade.sh'
   workflow_dispatch:
 
 jobs:
-  sanity:
-    name: Linux sanity
-    # Draft PRs cannot merge and are retriggered by ready_for_review, so avoid
-    # allocating the self-hosted runner until review is requested. A PR that
-    # GitHub already classifies as behind likewise cannot satisfy the strict
-    # main ruleset until its branch is updated. Pushes/manual runs are unaffected.
+  python:
     if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && github.event.pull_request.mergeable_state != 'behind')
-    runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    # Preserve the workflow-policy contract; the sanity script still targets <5 minutes.
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          clean: true
-
-      - name: Clean workspace
-        run: |
-          git clean -ffdx
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
-
-      - name: Run Linux sanity checks
-        run: |
-          ./scripts/ci/linux-sanity.sh
-
-      - name: Validate GWAY Django adapter
-        env:
-          XDG_CONFIG_HOME: ${{ runner.temp }}/gway-config
-          XDG_DATA_HOME: ${{ runner.temp }}/gway-data
-        run: |
-          set -euo pipefail
-          source .venv/bin/activate
-          python -m pip install --disable-pip-version-check \
-            "git+https://github.com/arthexis/gway.git@main"
-          gway register .
-          gway arthexis --help
-          gway arthexis check
-          gway arthexis migrate --plan
-
-      - name: Run core boundary regression tests (manual)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          set -euo pipefail
-          source .venv/bin/activate
-
-          # Keep boundary files process-isolated. Several checks intentionally
-          # exercise Django startup/module compatibility state, so one file must
-          # not leave global registries or imported compatibility modules behind
-          # for the next file.
-          boundary_tests=(
-            apps/core/tests/test_architecture_boundary.py
-            apps/core/tests/test_foundation_boundaries.py
-            apps/core/tests/test_domain_ui_boundaries.py
-            apps/app/tests/test_registry_ownership.py
-            apps/emails/tests/test_model_ownership.py
-            apps/emails/tests/test_admin_ownership.py
-            apps/release/tests/test_upgrade_ownership.py
-            apps/release/tests/test_upgrade_permission_ownership.py
-            apps/release/tests/test_admin_view_ownership.py
-            apps/analytics/tests/test_model_ownership.py
-            apps/ops/tests/test_admin_notice_ownership.py
-            apps/ops/tests/test_universal_installation.py
-            apps/sites/tests/test_invite_lead_ownership.py
-          )
-
-          for test_file in "${boundary_tests[@]}"; do
-            python -m pytest "$test_file" -q
-          done
-
-          # The normal pytest bootstrap disables migrations for speed. This
-          # regression explicitly needs Django's real migration graph, so start
-          # a fresh process with migrations enabled from bootstrap onward.
-          PYTEST_DISABLE_MIGRATIONS=0 \
-            python -m pytest apps/core/tests/test_boundary_migrations.py -q
+    permissions:
+      actions: write
+      contents: write
+    uses: arthexis/ci-base/.github/workflows/python-ci.yml@v1
+    with:
+      python-version: '3.13'
+      test-python-versions: '["3.13"]'
+      install-command: python -m pip install -e '.[ci,qa]'
+      test-command: python -m compileall -q apps arthexis config tests manage.py
+      lint-paths: apps arthexis config tests manage.py
+      install-smoke-command: |
+        python -c "import arthexis"
+        python -c "import django; print(django.get_version())"

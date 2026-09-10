@@ -432,4 +432,4 @@ if __name__ == "__main__":
         raise SystemExit(main(sys.argv))
     except Exception as exc:  # pragma: no cover - CLI error path
         print(str(exc), file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc

@@ -202,7 +202,7 @@ class LogViewAdminMixin:
         if obj is None:
             info = self.model._meta.app_label, self.model._meta.model_name
             changelist_url = reverse(
-                "admin:%s_%s_changelist" % info,
+                "admin:{}_{}_changelist".format(*info),
                 current_app=self.admin_site.name,
             )
             self.message_user(request, "Log is not available.", messages.ERROR)
@@ -228,7 +228,7 @@ class LogViewAdminMixin:
             )
             info = self.model._meta.app_label, self.model._meta.model_name
             changelist_url = reverse(
-                "admin:%s_%s_changelist" % info,
+                "admin:{}_{}_changelist".format(*info),
                 current_app=self.admin_site.name,
             )
             return redirect(changelist_url)

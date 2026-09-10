@@ -64,9 +64,7 @@ class ChargingSchedule(Entity):
 
         for index, period in enumerate(raw_periods, start=1):
             if not isinstance(period, dict):
-                errors.append(
-                    _("Period %(index)s must be a mapping." % {"index": index})
-                )
+                errors.append(_(f"Period {index} must be a mapping."))
                 continue
 
             start_period = period.get("start_period", period.get("startPeriod"))
@@ -77,21 +75,13 @@ class ChargingSchedule(Entity):
             try:
                 start_int = int(start_period)
             except (TypeError, ValueError):
-                errors.append(
-                    _(
-                        "Period %(index)s is missing a valid start_period."
-                        % {"index": index}
-                    )
-                )
+                errors.append(_(f"Period {index} is missing a valid start_period."))
                 continue
 
             decimal_limit = self._coerce_decimal(limit_value)
             if decimal_limit is None or decimal_limit <= 0:
                 errors.append(
-                    _(
-                        "Period %(index)s is missing a positive charging limit."
-                        % {"index": index}
-                    )
+                    _(f"Period {index} is missing a positive charging limit.")
                 )
                 continue
 
@@ -107,19 +97,11 @@ class ChargingSchedule(Entity):
                         entry["number_phases"] = phases_int
                     else:
                         errors.append(
-                            _(
-                                "Period %(index)s number_phases must be 1 or 3."
-                                % {"index": index}
-                            )
+                            _(f"Period {index} number_phases must be 1 or 3.")
                         )
                         continue
             except (TypeError, ValueError):
-                errors.append(
-                    _(
-                        "Period %(index)s has an invalid number_phases value."
-                        % {"index": index}
-                    )
-                )
+                errors.append(_(f"Period {index} has an invalid number_phases value."))
                 continue
 
             try:
@@ -127,12 +109,7 @@ class ChargingSchedule(Entity):
                     phase_int = int(phase_to_use)
                     entry["phase_to_use"] = phase_int
             except (TypeError, ValueError):
-                errors.append(
-                    _(
-                        "Period %(index)s has an invalid phase_to_use value."
-                        % {"index": index}
-                    )
-                )
+                errors.append(_(f"Period {index} has an invalid phase_to_use value."))
                 continue
 
             normalized.append(entry)

@@ -15,7 +15,7 @@ objects when the database cannot be reached.
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional
 
 from django import template
 from django.contrib.sites.models import Site
@@ -28,7 +28,7 @@ from utils import sites as site_utils
 register = template.Library()
 
 
-SiteLike = Union[Site, RequestSite]
+SiteLike = Site | RequestSite
 
 
 def _resolve_site(request: HttpRequest | None) -> SiteLike | None:
