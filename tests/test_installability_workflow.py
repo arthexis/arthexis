@@ -24,6 +24,15 @@ def test_installability_runs_after_shared_python_ci() -> None:
     assert "needs: python" in text
 
 
+def test_installability_exposes_read_only_migration_verification() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "name: Verify Django migrations" in text
+    assert "python scripts/check_migration_conflicts.py" in text
+    assert "python manage.py migrations check" in text
+    assert "python manage.py migrate\n" not in text
+
+
 def test_pr_installability_does_not_follow_gway_main() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
