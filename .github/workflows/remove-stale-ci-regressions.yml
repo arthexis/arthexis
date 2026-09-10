@@ -50,6 +50,7 @@ jobs:
 
           path.write_text(text, encoding='utf-8')
           PY
+          python -m ruff format apps/core/tests/reports/release_publish_regressions.py
           git diff --check
           python -m ruff check apps/core/tests/reports/release_publish_regressions.py
           python -m ruff format --check apps/core/tests/reports/release_publish_regressions.py
