@@ -39,30 +39,22 @@ jobs:
             python_version: '3.13'
             python_cache_version: python3.13
             db_backend: sqlite
-            test_shard: rest
+            test_shard: extra
             pytest_args: --ignore=apps/ocpp/tests
             full_pytest: true
-          - os_flavor: debian
-            container_image: debian:13-slim
+          - os_flavor: ubuntu22
+            container_image: ubuntu:22.04
+            python_version: '3.13'
+            python_cache_version: python3.13
+            db_backend: sqlite
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
+          - os_flavor: ubuntu22
+            container_image: ubuntu:22.04
             python_version: '3.13'
             python_cache_version: python3.13
             db_backend: postgres
-            test_shard: smoke
-            pytest_args: ""
-            full_pytest: false
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            python_version: '3.13'
-            python_cache_version: python3.13
-            db_backend: sqlite
-            test_shard: smoke
-            pytest_args: ""
-            full_pytest: false
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            python_version: '3.11'
-            python_cache_version: python3.11
-            db_backend: sqlite
             test_shard: smoke
             pytest_args: ""
             full_pytest: false
@@ -144,7 +136,7 @@ jobs:
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Run staged mypy checks
-        if: ${{ matrix.os_flavor == 'debian' && matrix.python_version == '3.13' && matrix.db_backend == 'sqlite' && matrix.test_shard == 'rest' }}
+        if: ${{ matrix.os_flavor == 'debian' && matrix.python_version == '3.13' && matrix.db_backend == 'sqlite' && matrix.test_shard == 'extra' }}
         env:
           PIP_DEFAULT_TIMEOUT: "60"
           PIP_RETRIES: "5"
