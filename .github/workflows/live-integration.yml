@@ -39,7 +39,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           command -v gway
-          gway version
+          gway --version
           sudo -n true
 
       - name: Exercise managed live integration
@@ -63,7 +63,7 @@ jobs:
               git -C "$checkout" status --short
             fi
             echo '=== GWAY ==='
-            gway version
+            gway --version
             gway arthexis version
             gway arthexis node-role
             gway arthexis status
