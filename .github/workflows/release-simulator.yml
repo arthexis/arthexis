@@ -30,6 +30,8 @@ jobs:
       release_threads_json: ${{ steps.evaluate.outputs.release_threads_json }}
       future_release_issues_json: ${{ steps.evaluate.outputs.future_release_issues_json }}
       upgrade_replay_summary: ${{ steps.evaluate.outputs.upgrade_replay_summary }}
+      support_matrix_summary: ${{ steps.evaluate.outputs.support_matrix_summary }}
+      live_integration_summary: ${{ steps.evaluate.outputs.live_integration_summary }}
     steps:
       - name: Evaluate release blockers from install/upgrade pipeline state
         id: evaluate
@@ -58,6 +60,8 @@ jobs:
             let closedReleasePullRequests = [];
             let openPullRequests = [];
             let upgradeReplaySummary = '- Status: `not evaluated`. Release readiness did not inspect the current default-branch head.';
+            let supportMatrixSummary = '- Status: `not evaluated`.';
+            let liveIntegrationSummary = '- Status: `not evaluated`.';
 
             function formatFileList(paths) {
               if (!paths.length) {
@@ -269,8 +273,8 @@ jobs:
               return (
                 runPath === replayWorkflowPath ||
                 runPath.endsWith(`/${replayWorkflowPath}`) ||
-                runName === 'Release Upgrade Replay' ||
-                runName.startsWith('Release Upgrade Replay (')
+                runName === 'Upgrade Health' ||
+                runName.startsWith('Upgrade Health (')
               );
             }
 
@@ -288,7 +292,7 @@ jobs:
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
               if (!replayRuns.length) {
                 return {
-                  blockingMessage: `Release Upgrade Replay has not run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
+                  blockingMessage: `Upgrade Health has not run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
                   summary: [
                     `- Status: \`missing\` for current ${defaultBranch} commit \`${defaultBranchSha}\`.`,
                     `- Required base: \`${latestReleaseTag}\`.`,
@@ -301,7 +305,7 @@ jobs:
               for (const run of replayRuns) {
                 if (run.status !== 'completed') {
                   return {
-                    blockingMessage: `Release Upgrade Replay for current ${defaultBranch} commit ${defaultBranchSha} is ${run.status}: ${run.html_url}`,
+                    blockingMessage: `Upgrade Health for current ${defaultBranch} commit ${defaultBranchSha} is ${run.status}: ${run.html_url}`,
                     summary: [
                       `- Status: \`${run.status || 'unknown'}\`.`,
                       `- Workflow run: ${run.html_url}`,
@@ -313,7 +317,7 @@ jobs:
 
                 if (run.conclusion !== 'success') {
                   return {
-                    blockingMessage: `Latest Release Upgrade Replay for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag} completed with ${run.conclusion || 'unknown'}: ${run.html_url}`,
+                    blockingMessage: `Latest Upgrade Health for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag} completed with ${run.conclusion || 'unknown'}: ${run.html_url}`,
                     summary: [
                       `- Status: \`${run.conclusion || 'unknown'}\`.`,
                       `- Latest workflow run: ${run.html_url}`,
@@ -335,7 +339,7 @@ jobs:
                   });
                 } catch (error) {
                   return {
-                    blockingMessage: `Unable to inspect Release Upgrade Replay artifacts for ${defaultBranchSha}: ${error.message}`,
+                    blockingMessage: `Unable to inspect Upgrade Health artifacts for ${defaultBranchSha}: ${error.message}`,
                     summary: [
                       '- Status: `artifact-check-failed`.',
                       `- Workflow run: ${run.html_url}`,
@@ -366,7 +370,7 @@ jobs:
                 : 'unknown';
               const completedUrl = latestCompletedRun?.html_url || replayRuns[0].html_url;
               return {
-                blockingMessage: `Release Upgrade Replay has no successful run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
+                blockingMessage: `Upgrade Health has no successful run for current ${defaultBranch} commit ${defaultBranchSha} from ${latestReleaseTag}.`,
                 summary: [
                   `- Status: \`${completedState}\`.`,
                   `- Latest workflow run: ${completedUrl}`,
@@ -653,40 +657,53 @@ jobs:
                 blockers.push(upgradeReplayEvidence.blockingMessage);
               }
 
-              const installHealthRunsForHead = ciRuns
-                .filter((run) => run.name === 'Install Health Check' && run.head_sha === defaultBranchSha)
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-              const latestInstallHealthRun = installHealthRunsForHead[0];
-
-              if (!latestInstallHealthRun) {
-                blockers.push(`Install Health Check has not run for current ${defaultBranch} commit ${defaultBranchSha}.`);
-              } else if (latestInstallHealthRun.status !== 'completed') {
-                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} is ${latestInstallHealthRun.status}: ${latestInstallHealthRun.html_url}`);
-              } else if (latestInstallHealthRun.conclusion !== 'success') {
-                blockers.push(`Install Health Check for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestInstallHealthRun.conclusion}: ${latestInstallHealthRun.html_url}`);
+              function workflowHealthEvidence(workflowName) {
+                const runsForHead = ciRuns
+                  .filter((run) => run.name === workflowName && run.head_sha === defaultBranchSha)
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                const latestRun = runsForHead[0];
+                if (!latestRun) {
+                  return {
+                    blockingMessage: `${workflowName} has not run for current ${defaultBranch} commit ${defaultBranchSha}.`,
+                    summary: [
+                      '- Status: `missing`.',
+                      `- Candidate commit: \`${defaultBranchSha}\`.`,
+                    ].join('\n'),
+                  };
+                }
+                const state = latestRun.status === 'completed'
+                  ? (latestRun.conclusion || 'unknown')
+                  : (latestRun.status || 'unknown');
+                const summary = [
+                  `- Status: \`${state}\`.`,
+                  `- Workflow run: ${latestRun.html_url}`,
+                  `- Candidate commit: \`${defaultBranchSha}\`.`,
+                ].join('\n');
+                if (latestRun.status !== 'completed') {
+                  return {
+                    blockingMessage: `${workflowName} for current ${defaultBranch} commit ${defaultBranchSha} is ${latestRun.status}: ${latestRun.html_url}`,
+                    summary,
+                  };
+                }
+                if (latestRun.conclusion !== 'success') {
+                  return {
+                    blockingMessage: `${workflowName} for current ${defaultBranch} commit ${defaultBranchSha} completed with ${latestRun.conclusion || 'unknown'}: ${latestRun.html_url}`,
+                    summary,
+                  };
+                }
+                return { blockingMessage: '', summary };
               }
 
-              const latestCiRun = ciRuns
-                .filter((run) => run.name === 'Upgrade Gate')
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              const supportMatrixEvidence = workflowHealthEvidence('Support Matrix');
+              supportMatrixSummary = supportMatrixEvidence.summary;
+              if (supportMatrixEvidence.blockingMessage) {
+                blockers.push(supportMatrixEvidence.blockingMessage);
+              }
 
-              if (latestCiRun && latestCiRun.conclusion === 'failure') {
-                let upgradeFailed = false;
-                try {
-                  const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    run_id: latestCiRun.id,
-                    per_page: 100,
-                  });
-                  upgradeFailed = jobsData.jobs.some((job) => (job.name || '').toLowerCase().includes('upgrade') && job.conclusion === 'failure');
-                } catch (error) {
-                  core.warning(`Unable to inspect CI jobs for run ${latestCiRun.id}: ${error.message}`);
-                }
-
-                if (upgradeFailed) {
-                  blockers.push(`Latest CI upgrade gate failed: ${latestCiRun.html_url}`);
-                }
+              const liveIntegrationEvidence = workflowHealthEvidence('Live Integration');
+              liveIntegrationSummary = liveIntegrationEvidence.summary;
+              if (liveIntegrationEvidence.blockingMessage) {
+                blockers.push(liveIntegrationEvidence.blockingMessage);
               }
 
             } else {
@@ -704,6 +721,8 @@ jobs:
             core.setOutput('release_threads_json', JSON.stringify(closedReleasePullRequests));
             core.setOutput('future_release_issues_json', JSON.stringify(futureReleaseDeferredIssues));
             core.setOutput('upgrade_replay_summary', upgradeReplaySummary);
+            core.setOutput('support_matrix_summary', supportMatrixSummary);
+            core.setOutput('live_integration_summary', liveIntegrationSummary);
 
   simulate_release:
     if: ${{ needs.evaluate.outputs.should_run == 'true' }}
@@ -960,6 +979,8 @@ jobs:
           DEFAULT_BRANCH_VERSION: ${{ needs.evaluate.outputs.default_branch_version }}
           FUTURE_RELEASE_ISSUES_JSON: ${{ needs.evaluate.outputs.future_release_issues_json }}
           UPGRADE_REPLAY_SUMMARY: ${{ needs.evaluate.outputs.upgrade_replay_summary }}
+          SUPPORT_MATRIX_SUMMARY: ${{ needs.evaluate.outputs.support_matrix_summary }}
+          LIVE_INTEGRATION_SUMMARY: ${{ needs.evaluate.outputs.live_integration_summary }}
         with:
           script: |
             const title = 'Release Readiness Report';
@@ -982,6 +1003,15 @@ jobs:
             const upgradeReplaySummary = process.env.UPGRADE_REPLAY_SUMMARY || [
               '- Status: unavailable.',
               '- Blocking: yes. Release readiness requires a successful latest-release-to-candidate replay for this commit.'
+            ].join('\n');
+
+            const supportMatrixSummary = process.env.SUPPORT_MATRIX_SUMMARY || [
+              '- Status: unavailable.',
+              '- Blocking: yes. Release readiness requires Support Matrix evidence for this commit.'
+            ].join('\n');
+            const liveIntegrationSummary = process.env.LIVE_INTEGRATION_SUMMARY || [
+              '- Status: unavailable.',
+              '- Blocking: yes. Release readiness requires Live Integration evidence for this commit.'
             ].join('\n');
 
             const availableIssueLabels = async (labelNames) => {
@@ -1108,6 +1138,8 @@ jobs:
                 simulatedOk,
                 simulationSummary,
                 upgradeReplaySummary,
+                supportMatrixSummary,
+                liveIntegrationSummary,
                 changesSinceRelease,
                 futureReleaseIssues,
               }))
@@ -1137,7 +1169,13 @@ jobs:
               canSimulate ? '## Release simulation' : '## Release simulation',
               canSimulate ? simulationSummary : '- Skipped because release readiness blockers are currently open.',
               '',
-              '## Release upgrade replay',
+              '## Support Matrix',
+              supportMatrixSummary,
+              '',
+              '## Live Integration',
+              liveIntegrationSummary,
+              '',
+              '## Upgrade Health',
               upgradeReplaySummary,
               '',
               changesSinceRelease.heading,
