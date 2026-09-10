@@ -120,7 +120,9 @@ def update_simulator() -> None:
               '- Blocking: yes. Release readiness requires a successful latest-release-to-candidate replay for this commit.'
             ].join('\\n');
 """
-    replacement_fallback = fallback + """
+    replacement_fallback = (
+        fallback
+        + """
             const supportMatrixSummary = process.env.SUPPORT_MATRIX_SUMMARY || [
               '- Status: unavailable.',
               '- Blocking: yes. Release readiness requires Support Matrix evidence for this commit.'
@@ -130,6 +132,7 @@ def update_simulator() -> None:
               '- Blocking: yes. Release readiness requires Live Integration evidence for this commit.'
             ].join('\\n');
 """
+    )
     text = replace_once(text, fallback, replacement_fallback, label="report fallbacks")
 
     text = replace_once(
@@ -163,9 +166,11 @@ def update_simulator() -> None:
 def update_regressions() -> None:
     text = REGRESSIONS.read_text(encoding="utf-8")
 
-    start = text.index("def test_install_health_workflow_is_manual_only_not_scheduled() -> None:\n")
+    start = text.index(
+        "def test_install_health_workflow_is_manual_only_not_scheduled() -> None:\n"
+    )
     end = text.index("\n\n@pytest.mark.parametrize(\n", start)
-    support_test = '''def test_support_matrix_tracks_supported_main_environments() -> None:
+    support_test = """def test_support_matrix_tracks_supported_main_environments() -> None:
     workflow = _workflow_data("install-health.yml")
     on_section = _workflow_on(workflow)
 
@@ -242,18 +247,22 @@ def update_regressions() -> None:
     )
     assert "notify_failure" in workflow["jobs"]
     assert "notify_recovery" in workflow["jobs"]
-'''
+"""
     text = text[:start] + support_test + text[end:]
 
     text = text.replace(
         '        ("install-health.yml", "install"),\n',
-        '',
+        "",
         1,
     )
 
-    start = text.index("def test_pr_ci_uses_hosted_install_and_upgrade_gates() -> None:\n")
-    end = text.index("\n\ndef test_linux_sanity_refreshes_cached_virtualenv_before_checks()", start)
-    pr_test = '''def test_pr_ci_uses_hosted_clean_install_gate() -> None:
+    start = text.index(
+        "def test_pr_ci_uses_hosted_install_and_upgrade_gates() -> None:\n"
+    )
+    end = text.index(
+        "\n\ndef test_linux_sanity_refreshes_cached_virtualenv_before_checks()", start
+    )
+    pr_test = """def test_pr_ci_uses_hosted_clean_install_gate() -> None:
     workflow = _workflow_data("ci.yml")
     on_section = _workflow_on(workflow)
 
@@ -276,26 +285,43 @@ def update_regressions() -> None:
     assert clean_install["runs-on"] == "ubuntu-latest"
     assert "self-hosted" not in str(workflow["jobs"])
     assert "upgradeability" not in workflow["jobs"]
-'''
+"""
     text = text[:start] + pr_test + text[end:]
 
-    text = text.replace('installability = workflow["jobs"]["installability"]', 'clean_install = workflow["jobs"]["clean-install"]')
-    text = text.replace('for step in installability["steps"]', 'for step in clean_install["steps"]')
-    text = text.replace('Release Upgrade Replay', 'Upgrade Health')
-    text = text.replace('Resolve replay refs', 'Resolve upgrade refs')
-    text = text.replace('Run release upgrade regression tests', 'Run upgrade regression tests')
-    text = text.replace('Write replay result marker', 'Write Upgrade Health result marker')
-    text = text.replace('Upload replay artifacts', 'Upload Upgrade Health artifacts')
-    text = text.replace("requiredWorkflowNames = ['Install Health Check']", "requiredWorkflowNames = ['Support Matrix', 'Live Integration']")
-    text = text.replace('release_upgrade_replay_active', 'upgrade_health_active')
-    text = text.replace('release_upgrade_replay_artifact_exists', 'upgrade_health_artifact_exists')
+    text = text.replace(
+        'installability = workflow["jobs"]["installability"]',
+        'clean_install = workflow["jobs"]["clean-install"]',
+    )
+    text = text.replace(
+        'for step in installability["steps"]', 'for step in clean_install["steps"]'
+    )
+    text = text.replace("Release Upgrade Replay", "Upgrade Health")
+    text = text.replace("Resolve replay refs", "Resolve upgrade refs")
+    text = text.replace(
+        "Run release upgrade regression tests", "Run upgrade regression tests"
+    )
+    text = text.replace(
+        "Write replay result marker", "Write Upgrade Health result marker"
+    )
+    text = text.replace("Upload replay artifacts", "Upload Upgrade Health artifacts")
+    text = text.replace(
+        "requiredWorkflowNames = ['Install Health Check']",
+        "requiredWorkflowNames = ['Support Matrix', 'Live Integration']",
+    )
+    text = text.replace("release_upgrade_replay_active", "upgrade_health_active")
+    text = text.replace(
+        "release_upgrade_replay_artifact_exists", "upgrade_health_artifact_exists"
+    )
 
     REGRESSIONS.write_text(text, encoding="utf-8")
 
 
 def update_trigger_policy() -> None:
     text = TRIGGERS.read_text(encoding="utf-8")
-    text = text.replace("test_pr_ci_and_install_health_split_pr_and_main_ownership", "test_pr_ci_and_support_matrix_split_pr_and_main_ownership")
+    text = text.replace(
+        "test_pr_ci_and_install_health_split_pr_and_main_ownership",
+        "test_pr_ci_and_support_matrix_split_pr_and_main_ownership",
+    )
     text = text.replace("install_health_on", "support_matrix_on")
     TRIGGERS.write_text(text, encoding="utf-8")
 

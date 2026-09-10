@@ -1340,7 +1340,10 @@ def test_release_upgrade_replay_dispatch_auto_runs_once_per_main_sha() -> None:
         "${{ github.event.inputs.candidate_ref || '' }}"
     )
     assert "const replayWorkflowId = 'release-upgrade-replay.yml'" in dispatch_script
-    assert "requiredWorkflowNames = ['Support Matrix', 'Live Integration']" in dispatch_script
+    assert (
+        "requiredWorkflowNames = ['Support Matrix', 'Live Integration']"
+        in dispatch_script
+    )
     assert "function matchesCodeqlPath(path)" in dispatch_script
     assert "path === '.github/workflows/codeql.yml'" in dispatch_script
     assert "path.startsWith('.github/codeql/')" in dispatch_script
