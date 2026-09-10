@@ -1,4 +1,4 @@
-name: Release Upgrade Replay Dispatch
+name: Upgrade Health Dispatch
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         type: string
 
 concurrency:
-  group: release-upgrade-replay-dispatch-${{ github.sha }}
+  group: upgrade-health-dispatch-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   dispatch:
-    name: Dispatch missing replay for current main
+    name: Dispatch missing Upgrade Health for current main
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
@@ -32,7 +32,7 @@ jobs:
       expected_artifact: ${{ steps.dispatch.outputs.expected_artifact }}
       skip_reason: ${{ steps.dispatch.outputs.skip_reason }}
     steps:
-      - name: Dispatch missing release upgrade replay
+      - name: Dispatch missing Upgrade Health
         id: dispatch
         uses: actions/github-script@v9
         env:
@@ -44,7 +44,7 @@ jobs:
             const repo = context.repo.repo;
             const defaultBranch = context.payload.repository?.default_branch || 'main';
             const replayWorkflowId = 'release-upgrade-replay.yml';
-            const requiredWorkflowNames = ['Install Health Check'];
+            const requiredWorkflowNames = ['Support Matrix', 'Live Integration'];
 
             function matchesCodeqlPath(path) {
               return (
@@ -238,7 +238,7 @@ jobs:
 
             const activeReplay = matchingReplayRuns.find((run) => run.status !== 'completed');
             if (activeReplay) {
-              setSkip(`release_upgrade_replay_active:${activeReplay.html_url}`);
+              setSkip(`upgrade_health_active:${activeReplay.html_url}`);
               return;
             }
 
@@ -253,14 +253,14 @@ jobs:
                 artifact.name === expectedArtifactName && !artifact.expired
               ));
               if (markerArtifact) {
-                setSkip(`release_upgrade_replay_artifact_exists:${run.html_url}`);
+                setSkip(`upgrade_health_artifact_exists:${run.html_url}`);
                 return;
               }
             }
 
             if (matchingReplayRuns.some((run) => run.status === 'completed')) {
               core.info(
-                'Completed replay runs exist for this candidate, but none produced the expected current-base artifact.',
+                'Completed Upgrade Health runs exist for this candidate, but none produced the expected current-base artifact.',
               );
             }
 
@@ -283,4 +283,4 @@ jobs:
 
             core.setOutput('dispatched', 'true');
             core.setOutput('skip_reason', '');
-            core.info(`Dispatched ${replayWorkflowId} for ${candidateSha} from ${baseRef}.`);
+            core.info(`Dispatched Upgrade Health for ${candidateSha} from ${baseRef}.`);
