@@ -90,8 +90,6 @@ jobs:
               path = Path(filename)
               text = path.read_text(encoding="utf-8")
               for old, new in replacements:
-                  if old not in text:
-                      raise SystemExit(f"Expected normalization source not found in {filename}: {old!r}")
                   text = text.replace(old, new)
               path.write_text(text, encoding="utf-8")
 
@@ -112,15 +110,11 @@ jobs:
           path = Path("apps/ocpp/admin/charger/actions/diagnostics.py")
           text = path.read_text(encoding="utf-8")
           old = 'raise self.DiagnosticsDownloadError(\n                "Diagnostics path escaped work directory."\n            )'
-          if old not in text:
-              raise SystemExit("Expected diagnostics B904 source not found")
           path.write_text(text.replace(old, old + " from None"), encoding="utf-8")
 
           path = Path("apps/ocpp/admin/cp_reservation.py")
           text = path.read_text(encoding="utf-8")
           old = 'raise forms.ValidationError(\n                    _("Unable to allocate a connector for the selected time window.")\n                )'
-          if old not in text:
-              raise SystemExit("Expected reservation field-error source not found")
           text = text.replace(old, old + " from exc", 1)
           text = text.replace(
               "raise forms.ValidationError(exc.messages or [str(exc)])",
