@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from select import select
-from typing import Tuple
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
