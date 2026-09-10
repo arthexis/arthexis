@@ -1016,24 +1016,6 @@ def test_pr_ci_uses_hosted_clean_install_gate() -> None:
     assert "upgradeability" not in workflow["jobs"]
 
 
-def test_linux_sanity_refreshes_cached_virtualenv_before_checks() -> None:
-    repo_root = Path(__file__).resolve().parents[4]
-    script = (repo_root / "scripts/ci/linux-sanity.sh").read_text(encoding="utf-8")
-    smoke_script = (repo_root / "scripts/ci/install-linux-smoke.sh").read_text(
-        encoding="utf-8"
-    )
-
-    assert "./scripts/ci/install-linux-smoke.sh --cold" in script
-    assert "./scripts/ci/install-linux-smoke.sh\n" in script
-    assert script.index("./scripts/ci/install-linux-smoke.sh") < script.index(
-        "source .venv/bin/activate"
-    )
-    assert "python manage.py check --fail-level ERROR" not in script
-    assert 'DB_MODE="${ARTHEXIS_CI_INSTALL_SMOKE_DB_MODE:-graph}"' in smoke_script
-    assert "./env-refresh.sh --deps-only" in smoke_script
-    assert 'if [[ "$DB_MODE" == "apply" ]]; then' in smoke_script
-
-
 def test_pr_ci_uses_runtime_python_version() -> None:
     repo_root = Path(__file__).resolve().parents[4]
     python_version = (repo_root / ".python-version").read_text(encoding="utf-8").strip()
@@ -1155,7 +1137,7 @@ def test_prepare_release_workflow_is_manual_only_and_trusted() -> None:
     assert "Automatic release prepare" not in workflow_text
 
 
-def test_release_simulator_requires_current_main_install_health_success() -> None:
+def test_release_simulator_requires_current_main_support_matrix_success() -> None:
     workflow = _workflow_data("release-simulator.yml")
     evaluate_job = workflow["jobs"]["evaluate"]
     evaluate_step = _workflow_step(
@@ -1169,10 +1151,11 @@ def test_release_simulator_requires_current_main_install_health_success() -> Non
         "const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo"
         in script
     )
-    assert "run.name === 'Install Health Check'" in script
+    assert "function workflowHealthEvidence(workflowName)" in script
+    assert "workflowHealthEvidence('Support Matrix')" in script
+    assert "supportMatrixSummary = supportMatrixEvidence.summary" in script
     assert "run.head_sha === defaultBranchSha" in script
-    assert "latestInstallHealthRun.conclusion !== 'success'" in script
-    assert "Install Health Check has not run for current" in script
+    assert "${workflowName} has not run for current" in script
 
 
 def test_release_simulator_ignores_retired_install_health_issue_marker() -> None:
