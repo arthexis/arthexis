@@ -24,6 +24,12 @@ class InstallationLayout:
     checkout: Path
 
 
+@dataclass(frozen=True)
+class LifecycleOptions:
+    role: str | None = None
+    site: str | None = None
+
+
 def layout(root: str | Path | None = None) -> InstallationLayout:
     """Return the application-visible layout for a GWAY-managed installation."""
     selected_root = Path(
@@ -75,7 +81,6 @@ def _prepare_runtime_state(current: InstallationLayout) -> Path:
 
 def _restore_runtime_ownership(state_root: Path) -> None:
     """Return managed mutable state to the user that invoked sudo."""
-
     geteuid = getattr(os, "geteuid", None)
     if geteuid is None or geteuid() != 0:
         return
@@ -94,20 +99,23 @@ def _restore_runtime_ownership(state_root: Path) -> None:
             os.chown(directory_path / filename, uid, gid)
 
 
-def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> str | None:
+def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> LifecycleOptions:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--role")
+    parser.add_argument("--site")
     namespace, unknown = parser.parse_known_args(arguments)
     if unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
-    if namespace.role is None:
-        return None
-    role = normalize_role(namespace.role)
-    if role not in SUPPORTED_ROLES:
-        parser.error(
-            f"invalid --role {namespace.role!r}; choose from {', '.join(SUPPORTED_ROLES)}"
-        )
-    return role
+
+    role = None
+    if namespace.role is not None:
+        role = normalize_role(namespace.role)
+        if role not in SUPPORTED_ROLES:
+            parser.error(
+                f"invalid --role {namespace.role!r}; choose from {', '.join(SUPPORTED_ROLES)}"
+            )
+
+    return LifecycleOptions(role=role, site=namespace.site)
 
 
 def _role_lock(current: InstallationLayout) -> Path:
@@ -252,6 +260,11 @@ def collectstatic(*, layout: InstallationLayout | None = None) -> None:
     run_manage("collectstatic", "--noinput", layout=layout)
 
 
+def configure_site(domain: str, *, layout: InstallationLayout | None = None) -> None:
+    """Configure the canonical site without recursively refreshing the local node."""
+    run_manage("site", domain, "--no-refresh-node", layout=layout)
+
+
 def ensure_local_node(*, layout: InstallationLayout | None = None) -> None:
     """Ensure the current host is registered as the local Arthexis node."""
     run_manage("ensure_local_node", layout=layout)
@@ -260,15 +273,11 @@ def ensure_local_node(*, layout: InstallationLayout | None = None) -> None:
 def prepare(
     *,
     layout: InstallationLayout | None = None,
+    site: str | None = None,
     run_migrations: bool = True,
     run_collectstatic: bool = True,
 ) -> InstallationLayout:
-    """Prepare application state for a GWAY-managed installation checkout.
-
-    GWAY owns checkout/update, environment preparation, package installation,
-    lifecycle invocation, and service mechanics. Arthexis owns application
-    preparation performed by this hook.
-    """
+    """Prepare application state for a GWAY-managed installation checkout."""
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():
         raise FileNotFoundError(
@@ -279,6 +288,8 @@ def prepare(
     try:
         if run_migrations:
             migrate(layout=current)
+        if site is not None:
+            configure_site(site, layout=current)
         ensure_local_node(layout=current)
         if run_collectstatic:
             collectstatic(layout=current)
@@ -287,32 +298,32 @@ def prepare(
     return current
 
 
-def _prepare_for_role(
+def _prepare_for_options(
     arguments: tuple[str, ...],
     *,
     layout: InstallationLayout | None = None,
 ) -> InstallationLayout:
     current = _resolve_layout(layout)
-    role = _parse_lifecycle_arguments(arguments)
-    if role is not None:
-        _persist_role(role, current)
-    effective_role = role or _current_role(current)
+    options = _parse_lifecycle_arguments(arguments)
+    if options.role is not None:
+        _persist_role(options.role, current)
+    effective_role = options.role or _current_role(current)
     _warn_if_local_redis_missing(effective_role)
-    return prepare(layout=current)
+    return prepare(layout=current, site=options.site)
 
 
 def install(
     *arguments: str, layout: InstallationLayout | None = None
 ) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
-    return _prepare_for_role(arguments, layout=layout)
+    return _prepare_for_options(arguments, layout=layout)
 
 
 def upgrade(
     *arguments: str, layout: InstallationLayout | None = None
 ) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
-    return _prepare_for_role(arguments, layout=layout)
+    return _prepare_for_options(arguments, layout=layout)
 
 
 def current_python() -> str:
