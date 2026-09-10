@@ -1,6 +1,6 @@
-name: Release Upgrade Replay
+name: Upgrade Health
 
-run-name: Release Upgrade Replay (${{ inputs.base_ref || 'latest release' }} → ${{ inputs.candidate_ref || github.sha }})
+run-name: Upgrade Health (${{ inputs.base_ref || 'latest release' }} → ${{ inputs.candidate_ref || github.sha }})
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         type: string
 
 concurrency:
-  group: release-upgrade-replay-${{ github.ref }}
+  group: upgrade-health-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -30,7 +30,7 @@ env:
 
 jobs:
   replay:
-    name: Latest release to candidate replay
+    name: Upgrade Health
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
@@ -59,7 +59,7 @@ jobs:
         run: |
           ./scripts/ci/start-native-redis.sh
 
-      - name: Resolve replay refs
+      - name: Resolve upgrade refs
         id: refs
         env:
           BASE_REF_INPUT: ${{ inputs.base_ref }}
@@ -74,17 +74,17 @@ jobs:
             base_ref="$(gh release view --json tagName --jq '.tagName')"
           fi
           if [ -z "$base_ref" ]; then
-            echo 'Release upgrade replay requires a published release tag or a manual base_ref release tag override.' >&2
+            echo 'Upgrade Health requires a published release tag or a manual base_ref release tag override.' >&2
             exit 1
           fi
           if [[ "$base_ref" == refs/tags/* ]]; then
-            echo 'Release upgrade replay base_ref must be a published release tag name, not a full ref.' >&2
+            echo 'Upgrade Health base_ref must be a published release tag name, not a full ref.' >&2
             exit 1
           fi
 
           published_base_tag="$(gh release view "$base_ref" --json tagName --jq '.tagName')"
           if [ "$published_base_tag" != "$base_ref" ]; then
-            echo "Release upgrade replay base_ref must exactly match a published release tag: $base_ref" >&2
+            echo "Upgrade Health base_ref must exactly match a published release tag: $base_ref" >&2
             exit 1
           fi
           git fetch --force origin "+refs/tags/${published_base_tag}:refs/tags/${published_base_tag}"
@@ -252,14 +252,14 @@ jobs:
             echo 'PYTEST_XDIST_ARGS=' >> "${GITHUB_ENV}"
           fi
 
-      - name: Run release upgrade regression tests
+      - name: Run upgrade regression tests
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" -m "${UPGRADE_GATE_MARKER}" --maxfail=1 --disable-warnings -q --timeout=180 | tee replay-artifacts/pytest-gate-upgrade.log
 
-      - name: Write replay result marker
+      - name: Write Upgrade Health result marker
         if: always()
         run: |
           set -Eeuo pipefail
@@ -275,7 +275,7 @@ jobs:
             "candidate_sha": "${{ steps.refs.outputs.candidate_sha }}",
             "database_backend": "${{ env.ARTHEXIS_DB_BACKEND }}",
             "validation_scope": "sqlite latest-release-to-candidate replay with native Redis",
-            "postgresql_scope": "staged split: PostgreSQL migration coverage remains in install-health shards, not this replay job",
+            "postgresql_scope": "PostgreSQL deployment coverage belongs to Support Matrix, not Upgrade Health",
             "gway_control_scope": "GWAY-like Control validation is evidence-only and must not perform physical hardware mutation in CI",
             "migration_benchmark_artifact": "migration-benchmark.json",
             "workflow_run_id": "${{ github.run_id }}",
@@ -283,21 +283,21 @@ jobs:
           }
           JSON
           cat > replay-artifacts/replay-summary.md <<EOF
-          ## Release upgrade replay
+          ## Upgrade Health
 
           - Base ref: \`${{ steps.refs.outputs.base_ref }}\`
           - Base SHA: \`${{ steps.refs.outputs.base_sha }}\`
           - Candidate ref: \`${{ steps.refs.outputs.candidate_ref }}\`
           - Candidate SHA: \`${{ steps.refs.outputs.candidate_sha }}\`
           - Database backend: \`${{ env.ARTHEXIS_DB_BACKEND }}\`
-          - Replay scope: SQLite latest-release-to-candidate upgrade with native Redis.
-          - PostgreSQL scope: staged split; PostgreSQL migration coverage remains in install-health shards.
+          - Upgrade scope: SQLite latest-release-to-candidate upgrade with native Redis.
+          - PostgreSQL scope: deployment coverage belongs to Support Matrix.
           - GWAY Control scope: evidence-only; CI must not perform physical hardware mutation.
           - Migration benchmark: see \`migration-benchmark.json\` when available.
           - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EOF
 
-      - name: Upload replay artifacts
+      - name: Upload Upgrade Health artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
