@@ -1,4 +1,4 @@
-name: Install Health Check
+name: Support Matrix
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
@@ -7,7 +7,7 @@ env:
   PYTEST_MAXFAIL: '10'
 
 concurrency:
-  group: install-health-check-${{ github.ref }}
+  group: support-matrix-${{ github.ref }}
   cancel-in-progress: true
 
 on:
@@ -18,7 +18,7 @@ on:
 
 jobs:
   install:
-    name: install (${{ matrix.os_flavor }}, py${{ matrix.python_version }}, ${{ matrix.db_backend }}, ${{ matrix.test_shard }})
+    name: ${{ matrix.os_flavor }} / py${{ matrix.python_version }} / ${{ matrix.db_backend }} / ${{ matrix.test_shard }}
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.container_image }}
@@ -42,14 +42,6 @@ jobs:
             test_shard: extra
             pytest_args: --ignore=apps/ocpp/tests
             full_pytest: true
-          - os_flavor: ubuntu22
-            container_image: ubuntu:22.04
-            python_version: '3.13'
-            python_cache_version: python3.13
-            db_backend: sqlite
-            test_shard: smoke
-            pytest_args: ""
-            full_pytest: false
           - os_flavor: ubuntu22
             container_image: ubuntu:22.04
             python_version: '3.13'
@@ -200,7 +192,7 @@ jobs:
           else
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
-      - name: Run install pytest shard
+      - name: Run support matrix pytest shard
         if: ${{ matrix.full_pytest }}
         run: |
           set -Eeuo pipefail
@@ -217,14 +209,14 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: install-health-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.test_shard }}
+          name: support-matrix-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.test_shard }}
           path: |
             pytest.log
             pytest-junit.xml
           if-no-files-found: warn
 
   notify_failure:
-    name: Open install health failure issue
+    name: Open support matrix failure issue
     needs: install
     if: ${{ always() && needs.install.result == 'failure' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
@@ -234,8 +226,8 @@ jobs:
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
-      ISSUE_MARKER: '<!-- install-health-failure -->'
-      ISSUE_TITLE: 'Install Health Check failing on main'
+      ISSUE_MARKER: '<!-- support-matrix-failure -->'
+      ISSUE_TITLE: 'Support Matrix failing on main'
       ISSUE_ASSIGNEE: 'arthexis'
     steps:
       - name: Create or update failure issue
@@ -245,7 +237,7 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           issue_number="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
-              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- install-health-failure -->"))) | .number' \
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- support-matrix-failure -->"))) | .number' \
               | sed -n '1p'
           )"
           if ! failed_jobs="$(
@@ -261,7 +253,7 @@ jobs:
           fi
           body="$(cat <<EOF
           ${ISSUE_MARKER}
-          Install Health Check is failing on main.
+          Support Matrix is failing on main.
 
           ### Latest failure
           - Commit: [\`${GITHUB_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})
@@ -271,7 +263,7 @@ jobs:
           ### Failed jobs
           ${failed_jobs}
 
-          This issue is managed automatically. Its body is replaced with the latest failure details on each failed Install Health run, while comments retain failure history. A successful Install Health run closes it.
+          This issue is managed automatically. Its body is replaced with the latest failure details on each failed Support Matrix run, while comments retain failure history. A successful Support Matrix run closes it.
           EOF
           )"
           if [[ -z "${issue_number}" ]]; then
@@ -288,11 +280,11 @@ jobs:
               --body "${body}"
             gh issue comment "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --body "Install Health failed again for ${GITHUB_SHA}: ${run_url}. The issue body now reflects the latest failed jobs and steps."
+              --body "Support Matrix failed again for ${GITHUB_SHA}: ${run_url}. The issue body now reflects the latest failed jobs and steps."
           fi
 
   notify_recovery:
-    name: Close recovered install health issue
+    name: Close recovered support matrix issue
     needs: install
     if: ${{ always() && needs.install.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
@@ -309,16 +301,16 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           issue_numbers="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
-              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- install-health-failure -->"))) | .number'
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- support-matrix-failure -->"))) | .number'
           )"
           if [[ -z "${issue_numbers}" ]]; then
-            echo "No open Install Health failure issue found."
+            echo "No open Support Matrix failure issue found."
             exit 0
           fi
           while IFS= read -r issue_number; do
             [[ -n "${issue_number}" ]] || continue
             gh issue comment "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --body "Install Health recovered for ${GITHUB_SHA}: ${run_url}"
+              --body "Support Matrix recovered for ${GITHUB_SHA}: ${run_url}"
             gh issue close "${issue_number}" --repo "${GITHUB_REPOSITORY}"
           done <<< "${issue_numbers}"
