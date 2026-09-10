@@ -16,7 +16,7 @@ reviews:
   collapse_walkthrough: true
 
   auto_review:
-    enabled: false
+    enabled: true
     drafts: false
     ignore_title_keywords:
       - "WIP"
