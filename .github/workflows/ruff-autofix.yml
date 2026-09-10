@@ -27,7 +27,7 @@ jobs:
       - name: Apply Python modernization fixes
         run: |
           find apps arthexis config scripts utils tests -type f -name '*.py' -print0 \
-            | xargs -0 -r pyupgrade --py311-plus
+            | xargs -0 -r pyupgrade --py311-plus || true
           python -m ruff check . --fix --unsafe-fixes --exit-zero
           python -m ruff format .
       - name: Commit fixes
