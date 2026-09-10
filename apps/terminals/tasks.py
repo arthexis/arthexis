@@ -224,7 +224,7 @@ def _command_script(
             lines.append(
                 f"Set-Location -LiteralPath {_powershell_quote(str(working_directory))}"
             )
-        executable, *args = [str(part) for part in command]
+        executable, *args = (str(part) for part in command)
         joined_args = " ".join(_powershell_quote(arg) for arg in args)
         suffix = f" {joined_args}" if joined_args else ""
         lines.append(f"& {_powershell_quote(executable)}{suffix}")

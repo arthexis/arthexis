@@ -366,7 +366,7 @@ def _repository_from_slug(
     cleaned = str(slug or "").strip()
     if "/" not in cleaned:
         return None
-    owner, name = [segment.strip() for segment in cleaned.split("/", 1)]
+    owner, name = (segment.strip() for segment in cleaned.split("/", 1))
     if not owner or not name:
         return None
     if not create:
@@ -523,9 +523,9 @@ def _assignment_node_fit(
         }
         | (work_tokens & capability_tokens)
     )
-    profile_hardware = (
-        set(str(item) for item in profile.get("hardware") or []) & CONTROL_FIT_HARDWARE
-    )
+    profile_hardware = {
+        str(item) for item in profile.get("hardware") or []
+    } & CONTROL_FIT_HARDWARE
     matched_hardware = sorted(
         tag for tag in profile_hardware if _token_matches(tag, capability_tokens)
     )

@@ -706,7 +706,7 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Release identifier '{spec}' is invalid. Use the format PACKAGE:VERSION."
             )
-        package_name, version = [part.strip() for part in spec.split(":", 1)]
+        package_name, version = (part.strip() for part in spec.split(":", 1))
         if not package_name or not version:
             raise CommandError(
                 f"Release identifier '{spec}' is invalid. Use the format PACKAGE:VERSION."
