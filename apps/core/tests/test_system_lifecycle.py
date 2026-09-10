@@ -86,16 +86,17 @@ def test_prepare_ensures_local_node_after_migrations(monkeypatch, tmp_path) -> N
 
 
 def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> None:
-    calls: list[lifecycle.InstallationLayout | None] = []
+    calls: list[tuple[lifecycle.InstallationLayout | None, str | None]] = []
 
     def prepare(
         *,
         layout: lifecycle.InstallationLayout | None = None,
+        site: str | None = None,
         run_migrations: bool = True,
         run_collectstatic: bool = True,
     ) -> lifecycle.InstallationLayout:
         del run_migrations, run_collectstatic
-        calls.append(layout)
+        calls.append((layout, site))
         assert layout is not None
         return layout
 
@@ -105,7 +106,7 @@ def test_install_and_upgrade_are_application_preparation_hooks(monkeypatch) -> N
 
     assert lifecycle.install(layout=selected) is selected
     assert lifecycle.upgrade(layout=selected) is selected
-    assert calls == [selected, selected]
+    assert calls == [(selected, None), (selected, None)]
 
 
 def test_run_python_uses_interpreter_that_invoked_lifecycle(monkeypatch) -> None:
