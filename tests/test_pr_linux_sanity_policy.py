@@ -16,7 +16,7 @@ def test_pull_requests_use_lightweight_linux_sanity_mode() -> None:
 def test_pr_mode_does_not_run_full_install_ci_or_package_checks() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     pr_block = script.split('if [[ "$MODE" == "--pr" ]]; then', 1)[1].split(
-        "elif [[ -n \"$MODE\" ]]", 1
+        'elif [[ -n "$MODE" ]]', 1
     )[0]
 
     assert "install-linux-smoke.sh" not in pr_block
