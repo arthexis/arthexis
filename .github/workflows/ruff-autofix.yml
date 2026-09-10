@@ -22,10 +22,12 @@ jobs:
         with:
           python-version: '3.14'
           cache: pip
-      - name: Install Ruff
-        run: python -m pip install --upgrade pip ruff
-      - name: Apply Ruff fixes for normalization
+      - name: Install normalization tools
+        run: python -m pip install --upgrade pip ruff pyupgrade
+      - name: Apply Python modernization fixes
         run: |
+          find apps arthexis config scripts utils tests -type f -name '*.py' -print0 \
+            | xargs -0 -r pyupgrade --py311-plus
           python -m ruff check . --fix --unsafe-fixes --exit-zero
           python -m ruff format .
       - name: Commit fixes
@@ -33,11 +35,11 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           if git diff --quiet; then
-            echo "No Ruff changes to commit."
+            echo "No normalization changes to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
-          git commit -m "style: apply Ruff normalization fixes"
+          git commit -m "style: apply Python normalization fixes"
           git push origin "HEAD:$HEAD_REF"
