@@ -151,6 +151,12 @@ jobs:
           set -Eeuo pipefail
           ./upgrade.sh --local --no-restart
 
+      - name: Install QA dependencies for validation
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+
       - name: Verify upgraded candidate state
         run: |
           set -Eeuo pipefail
