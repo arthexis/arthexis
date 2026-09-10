@@ -5,6 +5,39 @@ on:
 
 jobs:
   autofix:
+    name: Ruff autofix
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    uses: arthexis/ci-base/.github/workflows/ruff-autofix.yml@v1
+    steps:
+      - name: Check out pull request head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install Ruff
+        run: python -m pip install --upgrade pip ruff
+      - name: Apply Ruff fixes for normalization
+        run: |
+          python -m ruff check . --fix --unsafe-fixes --exit-zero
+          python -m ruff format .
+      - name: Commit fixes
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet; then
+            echo "No Ruff changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "style: apply Ruff normalization fixes"
+          git push origin "HEAD:$HEAD_REF"
