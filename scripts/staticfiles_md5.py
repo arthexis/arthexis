@@ -55,8 +55,7 @@ def _iter_static_files():
             files.append((str(location), str(relative_path), storage))
 
     files.sort(key=lambda item: (item[0], item[1]))
-    for item in files:
-        yield item
+    yield from files
 
 
 def _stat_details(storage, relative_path: str) -> tuple[str | None, int | None]:

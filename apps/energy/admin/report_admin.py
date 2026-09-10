@@ -24,8 +24,7 @@ class ClientReportRecurrencyFilter(admin.SimpleListFilter):
     parameter_name = "recurrency"
 
     def lookups(self, request, model_admin):
-        for value, label in ClientReportSchedule.PERIODICITY_CHOICES:
-            yield (value, label)
+        yield from ClientReportSchedule.PERIODICITY_CHOICES
 
     def queryset(self, request, queryset):
         value = self.value()

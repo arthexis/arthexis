@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TypeAlias
 
 from utils.app_manifests import (
@@ -67,7 +67,7 @@ class ResolvedAppSet:
     fallback_reason: str | None = None
 
 
-class RoleProfile(str, Enum):
+class RoleProfile(StrEnum):
     """Supported node role application profiles."""
 
     WATCHTOWER = "watchtower"
