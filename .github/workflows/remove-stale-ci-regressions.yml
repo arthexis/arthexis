@@ -61,3 +61,5 @@ jobs:
           git add apps/core/tests/reports/release_publish_regressions.py
           git commit -m "test: remove stale validation process assertions"
           git push origin HEAD:ci/trim-install-health-matrix
+
+# Trigger this helper after creation so the push event sees the workflow.
