@@ -1,0 +1,86 @@
+name: Live Integration
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: arthexis-live-integration
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Live Integration
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 30
+    steps:
+      - name: Resolve exact main revision
+        id: revision
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected_sha="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "$expected_sha"
+          echo "sha=$expected_sha" >> "$GITHUB_OUTPUT"
+          echo "ARTHEXIS_EXPECTED_SHA=$expected_sha" >> "$GITHUB_ENV"
+          echo "Testing main revision $expected_sha"
+
+      - name: Checkout exact main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+          clean: true
+          persist-credentials: false
+
+      - name: Verify runner prerequisites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          command -v gway
+          gway version
+          sudo -n true
+
+      - name: Exercise managed live integration
+        shell: bash
+        run: bash scripts/ci/live-integration.sh
+
+      - name: Capture live integration diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          diagnostics="${RUNNER_TEMP}/arthexis-live-integration-${ARTHEXIS_EXPECTED_SHA}.txt"
+          {
+            echo '=== expected revision ==='
+            echo "${ARTHEXIS_EXPECTED_SHA}"
+            echo '=== managed checkout ==='
+            gway path arthexis
+            checkout="$(gway path arthexis 2>/dev/null || true)"
+            if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
+              git -C "$checkout" rev-parse HEAD
+              git -C "$checkout" status --short
+            fi
+            echo '=== GWAY ==='
+            gway version
+            gway arthexis version
+            gway arthexis node-role
+            gway arthexis status
+            gway arthexis good
+            echo '=== systemd ==='
+            systemctl --no-pager --full status 'gway-arthexis-*'
+            systemctl --failed --no-pager
+            echo '=== recent Arthexis journal ==='
+            journalctl --no-pager --since '-10 minutes' -u 'gway-arthexis-*'
+          } 2>&1 | tee "$diagnostics"
+          echo "LIVE_INTEGRATION_DIAGNOSTICS=$diagnostics" >> "$GITHUB_ENV"
+
+      - name: Upload live integration diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: live-integration-${{ steps.revision.outputs.sha }}
+          path: ${{ env.LIVE_INTEGRATION_DIAGNOSTICS }}
+          if-no-files-found: warn
