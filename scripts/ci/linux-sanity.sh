@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MODE="${1:-}"
 
 cd "$REPO_ROOT"
 
@@ -23,6 +24,16 @@ run_timed() {
   printf 'TIMING: %s: %ds\n' "$label" "$((SECONDS - started))"
   return "$status"
 }
+
+if [[ "$MODE" == "--pr" ]]; then
+  run_timed "Pyproject dependency ordering" python scripts/sort_pyproject_deps.py --check
+  run_timed "Generated requirements" python scripts/generate_requirements.py --check
+  run_timed "Python syntax" python -m compileall -q apps arthexis config tests manage.py
+  exit 0
+elif [[ -n "$MODE" ]]; then
+  echo "Unknown option: $MODE" >&2
+  exit 2
+fi
 
 if [[ "${ARTHEXIS_SKIP_SANITY_APT:-0}" != "1" ]] && command -v apt-get >/dev/null 2>&1; then
   sudo_cmd=()
