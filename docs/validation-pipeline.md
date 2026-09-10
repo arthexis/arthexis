@@ -6,7 +6,7 @@ Arthexis separates merge safety from deployment support and release safety. The 
 
 **Clean Install** is the PR installation gate. It proves that the candidate can be installed from a clean checkout with its required runtime dependencies and migrations in a lightweight GitHub-hosted environment. A PR is not required to prove upgrade compatibility from a previously published Arthexis release.
 
-Routine Python quality and security checks remain separate PR checks. The PR path should stay fast enough to provide useful development feedback.
+The `main` ruleset requires exactly four pre-merge checks: **Clean Install**, `python / Package`, `python / Python compatibility`, and `python / Quality`. These are the merge-safety contract. Support Matrix, Live Integration, and Upgrade Health are deliberately not required PR checks; they validate supported deployments and release safety after the fast PR path has completed.
 
 ## Main branch
 
@@ -14,6 +14,7 @@ Routine Python quality and security checks remain separate PR checks. The PR pat
 
 - Debian 13 / Python 3.13 / SQLite: full `ocpp` shard.
 - Debian 13 / Python 3.13 / SQLite: full `extra` shard (everything outside `apps/ocpp/tests`).
+- Ubuntu 22.04 / Python 3.13 / SQLite: installation and smoke validation.
 - Ubuntu 22.04 / Python 3.13 / PostgreSQL: installation and smoke validation.
 
 The Debian container approximates the Raspberry Pi OS Debian userland; it does not establish ARM compatibility by itself.
