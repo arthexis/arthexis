@@ -8,7 +8,7 @@ from apps.core.system.identity import node_role
 
 
 class Command(BaseCommand):
-    help = "Show the canonical Arthexis node role"
+    help = "Show the canonical Arthexis role"
 
     def add_arguments(self, parser):
         parser.add_argument(
