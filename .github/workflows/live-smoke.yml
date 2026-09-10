@@ -1,0 +1,145 @@
+name: Live Smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Install Health Check
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: arthexis-live-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Live smoke
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 20
+    env:
+      ARTHEXIS_EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Checkout validated revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.ARTHEXIS_EXPECTED_SHA }}
+          clean: true
+          persist-credentials: false
+
+      - name: Run live smoke
+        shell: bash
+        run: bash scripts/ci/live-smoke.sh
+
+      - name: Capture live diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          diagnostics="${RUNNER_TEMP}/arthexis-live-smoke-diagnostics.txt"
+          {
+            echo '=== expected revision ==='
+            echo "${ARTHEXIS_EXPECTED_SHA}"
+            echo '=== deployed revision ==='
+            git -C /opt/arthexis/app rev-parse HEAD
+            echo '=== GWAY ==='
+            gway version
+            gway path arthexis
+            gway arthexis version
+            gway arthexis node-role
+            gway arthexis status
+            gway arthexis good
+            echo '=== systemd status ==='
+            systemctl --no-pager --full status 'gway-arthexis-*'
+            echo '=== failed units ==='
+            systemctl --failed --no-pager
+            echo '=== recent GWAY Arthexis logs ==='
+            journalctl --no-pager --since '-10 minutes' -u 'gway-arthexis-*'
+          } 2>&1 | tee "$diagnostics"
+          echo "LIVE_SMOKE_DIAGNOSTICS=$diagnostics" >> "$GITHUB_ENV"
+
+      - name: Upload live diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: live-smoke-diagnostics-${{ env.ARTHEXIS_EXPECTED_SHA }}
+          path: ${{ env.LIVE_SMOKE_DIAGNOSTICS }}
+          if-no-files-found: warn
+
+  notify_failure:
+    name: Open live smoke failure issue
+    needs: smoke
+    if: ${{ always() && needs.smoke.result == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_MARKER: '<!-- live-smoke-failure -->'
+      ISSUE_TITLE: 'Live Smoke failing on main'
+    steps:
+      - name: Create or update failure issue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          expected_sha="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+          issue_number="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- live-smoke-failure -->"))) | .number' \
+              | sed -n '1p'
+          )"
+          body="$(cat <<EOF
+          ${ISSUE_MARKER}
+          Live Smoke failed after Install Health accepted the main revision.
+
+          - Validated commit: [\`${expected_sha}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${expected_sha})
+          - Run: [${GITHUB_RUN_ID}](${run_url})
+          - Runner class: \`arthexis-ci\`
+
+          Inspect the workflow artifact for deployed revision, GWAY status, service state, health output, and recent journal entries.
+          EOF
+          )"
+          if [[ -z "$issue_number" ]]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --assignee arthexis --body "$body"
+          else
+            gh issue edit "$issue_number" --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --add-assignee arthexis --body "$body"
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body "Live Smoke failed again for ${expected_sha}: ${run_url}"
+          fi
+
+  notify_recovery:
+    name: Close recovered live smoke issue
+    needs: smoke
+    if: ${{ always() && needs.smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Close recovered failure issue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue_numbers="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100" \
+              --jq '.[] | select(.pull_request == null and ((.body // "") | contains("<!-- live-smoke-failure -->"))) | .number'
+          )"
+          while IFS= read -r issue_number; do
+            [[ -n "$issue_number" ]] || continue
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body "Live Smoke recovered: ${run_url}"
+            gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY"
+          done <<< "$issue_numbers"
