@@ -918,7 +918,15 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
         for entry in matrix_entries
     ] == [
         ("debian", "debian:13-slim", "3.13", "sqlite", "ocpp", "apps/ocpp/tests", True),
-        ("debian", "debian:13-slim", "3.13", "sqlite", "extra", "--ignore=apps/ocpp/tests", True),
+        (
+            "debian",
+            "debian:13-slim",
+            "3.13",
+            "sqlite",
+            "extra",
+            "--ignore=apps/ocpp/tests",
+            True,
+        ),
         ("ubuntu22", "ubuntu:22.04", "3.13", "sqlite", "smoke", "", False),
         ("ubuntu22", "ubuntu:22.04", "3.13", "postgres", "smoke", "", False),
     ]
