@@ -38,3 +38,32 @@ def test_pr_installability_does_not_follow_gway_main() -> None:
 
     assert "github.com/arthexis/gway.git@main" not in text
     assert "gway register" not in text
+
+
+def test_upgradeability_replays_main_state_through_real_upgrade() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "name: Upgradeability" in text
+    assert "needs: installability" in text
+    assert "BASE_SHA: ${{ github.event.pull_request.base.sha }}" in text
+    assert "CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}" in text
+    assert "name: Build existing main database state" in text
+    assert "python manage.py migrate --noinput --database default" in text
+    assert "name: Run real upgrade path" in text
+    assert "./upgrade.sh --local --no-restart" in text
+
+
+def test_upgradeability_is_hosted_and_requires_upgrade_to_apply_migrations() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    upgradeability = text.split("  upgradeability:\n", 1)[1]
+
+    assert "runs-on: ubuntu-latest" in upgradeability
+    assert "self-hosted" not in upgradeability
+    assert "python manage.py migrate --plan --database default" in upgradeability
+    assert (
+        upgradeability.count("python manage.py migrate --noinput --database default")
+        == 1
+    )
+    assert "python manage.py check" in upgradeability
+    assert "python scripts/check_editable_install_import.py" in upgradeability
+    assert "python scripts/check_import_resolution.py" in upgradeability

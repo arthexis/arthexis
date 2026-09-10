@@ -80,3 +80,95 @@ jobs:
         run: |
           source .venv/bin/activate
           python -m pip check
+
+  upgradeability:
+    name: Upgradeability
+    needs: installability
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      NODE_OPTIONS: '--no-deprecation'
+      ARTHEXIS_DB_BACKEND: sqlite
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+    steps:
+      - name: Check out candidate with history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install native runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl git python3-venv \
+            libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
+            libpangocairo-1.0-0 shared-mime-info
+
+      - name: Start native Redis
+        run: ./scripts/ci/start-native-redis.sh
+
+      - name: Resolve base and candidate revisions
+        id: revisions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --force origin "$BASE_SHA" "$CANDIDATE_SHA"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Build existing main database state
+        run: |
+          set -Eeuo pipefail
+          git checkout --force "${{ steps.revisions.outputs.base_sha }}"
+          git clean -ffdX
+          ./install.sh --no-start
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+
+      - name: Switch working tree to candidate
+        run: |
+          set -Eeuo pipefail
+          git checkout --force "${{ steps.revisions.outputs.candidate_sha }}"
+          chmod +x install.sh env-refresh.sh upgrade.sh || true
+
+      - name: Run real upgrade path
+        run: |
+          set -Eeuo pipefail
+          ./upgrade.sh --local --no-restart
+
+      - name: Install QA dependencies for validation
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+
+      - name: Verify upgraded candidate state
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          if python manage.py migrate --plan --database default | grep -Eq '^\s*\[[ X]\]|^\s*RunPython|^\s*RunSQL'; then
+            echo 'Upgrade left unapplied Django migration operations.' >&2
+            python manage.py migrate --plan --database default
+            exit 1
+          fi
+          python manage.py check
+          python scripts/check_editable_install_import.py
+          python scripts/check_import_resolution.py
+          python -m pip check
