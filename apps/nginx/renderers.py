@@ -213,7 +213,7 @@ def generate_site_entries_content(
     except FileNotFoundError:
         sites = []
     except json.JSONDecodeError as exc:  # pragma: no cover - invalid staging file
-        raise ValueError(f"Invalid JSON in {config_path}: {exc}")
+        raise ValueError(f"Invalid JSON in {config_path}: {exc}") from exc
 
     seen_domains: set[str] = set()
     mode = mode.lower()

@@ -86,7 +86,7 @@ class DiagnosticsActionsMixin:
         except ValueError:
             raise self.DiagnosticsDownloadError(
                 "Diagnostics path escaped work directory."
-            )
+            ) from None
         return destination, asset_url
 
     def _prepare_diagnostics_payload(self, request, charger, *, expires_at):

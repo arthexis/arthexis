@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 
 def add_headers(headers: dict[str, str], path: str, url: str) -> None:
     """Allow cross-origin access to bundled front-end dependencies.

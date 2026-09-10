@@ -7,7 +7,6 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Tuple
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError

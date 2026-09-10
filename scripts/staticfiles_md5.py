@@ -37,12 +37,12 @@ def _iter_static_files():
 
         django.setup()
     except Exception as exc:  # pragma: no cover - setup failures bubble up
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
 
     try:
         from django.contrib.staticfiles.finders import get_finders
     except Exception as exc:  # pragma: no cover - import errors
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
 
     files = []
     for finder in get_finders():

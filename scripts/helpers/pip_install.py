@@ -6,7 +6,6 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Iterable
-from typing import Set
 
 ALLOWED_BUILD_FAILURES = {"spidev", "RPi.GPIO"}
 

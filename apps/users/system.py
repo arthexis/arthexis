@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import Literal, Tuple, overload
+from typing import Literal, overload
 
 from django.conf import settings
 from django.contrib.auth import get_user_model

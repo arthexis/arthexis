@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from threading import local
-from typing import Dict, Optional, Type
+from typing import Optional
 
 from django.db import models
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence, Set
 from types import ModuleType
-from typing import AbstractSet, Protocol, TypeAlias
+from typing import Protocol, TypeAlias
 
 ProtocolHandler: TypeAlias = Callable[..., object]
 ProtocolCallRegistration: TypeAlias = tuple[str, str, str]
@@ -18,7 +18,7 @@ class SupportsProtocolCalls(Protocol):
     """Protocol for callables annotated by ``@protocol_call`` metadata."""
 
     __protocol_calls__: (
-        AbstractSet[ProtocolCallRegistration] | Sequence[ProtocolCallRegistration]
+        Set[ProtocolCallRegistration] | Sequence[ProtocolCallRegistration]
     )
 
 

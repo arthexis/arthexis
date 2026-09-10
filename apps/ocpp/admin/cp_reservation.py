@@ -28,8 +28,8 @@ class CPReservationForm(forms.ModelForm):
                         self.add_error(field, error)
                 raise forms.ValidationError(
                     _("Unable to allocate a connector for the selected time window.")
-                )
-            raise forms.ValidationError(exc.messages or [str(exc)])
+                ) from exc
+            raise forms.ValidationError(exc.messages or [str(exc)]) from exc
         if not instance.id_tag_value:
             message = _("Select an RFID or provide an idTag for the reservation.")
             self.add_error("id_tag", message)
@@ -127,7 +127,9 @@ class CPReservationAdmin(EntityModelAdmin):
                 try:
                     obj.send_reservation_request()
                 except ValidationError as exc:
-                    raise ValidationError(exc.message_dict or exc.messages or str(exc))
+                    raise ValidationError(
+                        exc.message_dict or exc.messages or str(exc)
+                    ) from exc
                 else:
                     self.message_user(
                         request,

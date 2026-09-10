@@ -29,7 +29,9 @@ def unlink_sqlite_db(path: Path) -> None:
     try:
         path.relative_to(base_dir)
     except ValueError:
-        raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
+        raise RuntimeError(
+            f"Refusing to delete database outside {base_dir}: {path}"
+        ) from None
     if not re.fullmatch(r"(?:test_)?db(?:_[0-9a-f]{6})?\.sqlite3", path.name):
         raise RuntimeError(f"Refusing to delete unexpected database file: {path.name}")
     related_suffixes = ("", "-wal", "-shm", "-journal")

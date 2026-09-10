@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import Iterable
-from typing import List
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
