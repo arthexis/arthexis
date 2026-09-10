@@ -888,22 +888,24 @@ def test_publish_workflow_leaves_abandoned_release_pr_cleanup_to_readiness() -> 
     assert "close-superseded-release-prs" not in _publish_workflow_jobs()
 
 
-def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
+def test_support_matrix_tracks_supported_main_environments() -> None:
     workflow = _workflow_data("install-health.yml")
     on_section = _workflow_on(workflow)
 
+    assert workflow["name"] == "Support Matrix"
     assert "pull_request" not in on_section
-    assert "push" not in on_section
+    assert on_section["push"]["branches"] == ["main"]
     assert "schedule" not in on_section
     assert "workflow_dispatch" in on_section
 
     install_job = workflow["jobs"]["install"]
-    assert install_job["if"] == "${{ github.event_name == 'workflow_dispatch' }}"
-    assert "container" not in install_job
+    assert install_job["runs-on"] == "ubuntu-latest"
+    assert install_job["container"]["image"] == "${{ matrix.container_image }}"
     assert "services" not in install_job
     assert install_job["env"]["OCPP_STATE_REDIS_URL"] == "redis://localhost:6379"
     assert install_job["env"]["REDIS_HOST"] == "127.0.0.1"
     assert install_job["env"]["POSTGRES_HOST"] == "127.0.0.1"
+
     matrix_entries = install_job["strategy"]["matrix"]["include"]
     assert [
         (
@@ -927,13 +929,12 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
             "--ignore=apps/ocpp/tests",
             True,
         ),
-        ("ubuntu22", "ubuntu:22.04", "3.13", "sqlite", "smoke", "", False),
         ("ubuntu22", "ubuntu:22.04", "3.13", "postgres", "smoke", "", False),
     ]
 
-    assert (
-        install_job["name"]
-        == "install (${{ matrix.os_flavor }}, py${{ matrix.python_version }}, ${{ matrix.db_backend }}, ${{ matrix.test_shard }})"
+    assert install_job["name"] == (
+        "${{ matrix.os_flavor }} / py${{ matrix.python_version }} / "
+        "${{ matrix.db_backend }} / ${{ matrix.test_shard }}"
     )
     install_checkout_step = next(
         step
@@ -943,9 +944,8 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
     assert install_checkout_step["uses"].count("@") == 1
     assert "@v" not in install_checkout_step["uses"]
     assert install_checkout_step["with"]["persist-credentials"] is False
-    assert (
-        _workflow_step(install_job, "Start native Redis")["run"].strip()
-        == "./scripts/ci/start-native-redis.sh"
+    assert _workflow_step(install_job, "Start native Redis")["run"].strip() == (
+        "./scripts/ci/start-native-redis.sh"
     )
     start_postgres_step = _workflow_step(install_job, "Start native PostgreSQL")
     assert start_postgres_step["if"] == "${{ matrix.db_backend == 'postgres' }}"
@@ -953,33 +953,23 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
 
     detect_xdist_step = _workflow_step(install_job, "Detect pytest xdist arguments")
     assert detect_xdist_step["if"] == "${{ matrix.full_pytest }}"
-
-    run_pytest_step = _workflow_step(install_job, "Run install pytest shard")
-    run_pytest_script = run_pytest_step["run"]
+    run_pytest_step = _workflow_step(install_job, "Run support matrix pytest shard")
     assert run_pytest_step["if"] == "${{ matrix.full_pytest }}"
-    assert 'read -r -a target_args <<< "${{ matrix.pytest_args }}"' in run_pytest_script
-    assert (
-        'python -m pytest "${target_args[@]}" "${xdist_args[@]}"' in run_pytest_script
-    )
-    assert "--durations=25" in run_pytest_script
+    assert "--durations=25" in run_pytest_step["run"]
 
     upload_step = _workflow_step(install_job, "Upload pytest log")
-    upload_name = upload_step["with"]["name"]
     assert upload_step["if"] == "${{ always() && matrix.full_pytest }}"
-    assert (
-        upload_name == "install-health-pytest-results-${{ matrix.os_flavor }}-"
+    assert upload_step["with"]["name"] == (
+        "support-matrix-pytest-results-${{ matrix.os_flavor }}-"
         "${{ matrix.db_backend }}-${{ matrix.test_shard }}"
     )
-
-    assert "pr_affected_linux_install" not in workflow["jobs"]
-    assert "notify_failure" not in workflow["jobs"]
-    assert "notify_recovery" not in workflow["jobs"]
+    assert "notify_failure" in workflow["jobs"]
+    assert "notify_recovery" in workflow["jobs"]
 
 
 @pytest.mark.parametrize(
     ("workflow_filename", "job_name"),
     [
-        ("install-health.yml", "install"),
         ("publish.yml", "test"),
         ("release-upgrade-replay.yml", "replay"),
     ],
@@ -1001,11 +991,12 @@ def test_host_redis_workflows_use_native_service(
     )
 
 
-def test_pr_ci_uses_hosted_install_and_upgrade_gates() -> None:
+def test_pr_ci_uses_hosted_clean_install_gate() -> None:
     workflow = _workflow_data("ci.yml")
     on_section = _workflow_on(workflow)
 
-    assert list(workflow["jobs"]) == ["python", "installability", "upgradeability"]
+    assert workflow["name"] == "PR Validation"
+    assert list(workflow["jobs"]) == ["python", "clean-install"]
     assert on_section["pull_request"]["types"] == [
         "opened",
         "synchronize",
@@ -1016,17 +1007,13 @@ def test_pr_ci_uses_hosted_install_and_upgrade_gates() -> None:
     assert "workflow_dispatch" in on_section
 
     python_job = workflow["jobs"]["python"]
-    installability = workflow["jobs"]["installability"]
-    upgradeability = workflow["jobs"]["upgradeability"]
-
+    clean_install = workflow["jobs"]["clean-install"]
     assert python_job["uses"] == "arthexis/ci-base/.github/workflows/python-ci.yml@v1"
-    assert installability["needs"] == "python"
-    assert installability["name"] == "Installability"
-    assert installability["runs-on"] == "ubuntu-latest"
-    assert upgradeability["needs"] == "installability"
-    assert upgradeability["name"] == "Upgradeability"
-    assert upgradeability["runs-on"] == "ubuntu-latest"
+    assert clean_install["needs"] == "python"
+    assert clean_install["name"] == "Clean Install"
+    assert clean_install["runs-on"] == "ubuntu-latest"
     assert "self-hosted" not in str(workflow["jobs"])
+    assert "upgradeability" not in workflow["jobs"]
 
 
 def test_linux_sanity_refreshes_cached_virtualenv_before_checks() -> None:
@@ -1052,10 +1039,10 @@ def test_pr_ci_uses_runtime_python_version() -> None:
     python_version = (repo_root / ".python-version").read_text(encoding="utf-8").strip()
     workflow = _workflow_data("ci.yml")
     python_job = workflow["jobs"]["python"]
-    installability = workflow["jobs"]["installability"]
+    clean_install = workflow["jobs"]["clean-install"]
     setup_python_steps = [
         step
-        for step in installability["steps"]
+        for step in clean_install["steps"]
         if str(step.get("uses", "")).startswith("actions/setup-python@")
     ]
 
@@ -1235,7 +1222,7 @@ def test_release_upgrade_replay_workflow_replays_latest_release_to_candidate() -
         == "./scripts/ci/start-native-redis.sh"
     )
 
-    resolve_step = _workflow_step(replay_job, "Resolve replay refs")
+    resolve_step = _workflow_step(replay_job, "Resolve upgrade refs")
     resolve_run = resolve_step["run"]
     assert resolve_step["env"]["BASE_REF_INPUT"] == "${{ inputs.base_ref }}"
     assert resolve_step["env"]["CANDIDATE_REF_INPUT"] == "${{ inputs.candidate_ref }}"
@@ -1304,10 +1291,10 @@ def test_release_upgrade_replay_workflow_replays_latest_release_to_candidate() -
     assert '"status": "failed"' in benchmark_run
     assert (
         '-m "${UPGRADE_GATE_MARKER}"'
-        in _workflow_step(replay_job, "Run release upgrade regression tests")["run"]
+        in _workflow_step(replay_job, "Run upgrade regression tests")["run"]
     )
 
-    marker_run = _workflow_step(replay_job, "Write replay result marker")["run"]
+    marker_run = _workflow_step(replay_job, "Write Upgrade Health result marker")["run"]
     assert '"database_backend": "${{ env.ARTHEXIS_DB_BACKEND }}"' in marker_run
     assert "sqlite latest-release-to-candidate replay with native Redis" in marker_run
     assert (
@@ -1317,7 +1304,7 @@ def test_release_upgrade_replay_workflow_replays_latest_release_to_candidate() -
     assert "migration_benchmark_artifact" in marker_run
     assert "replay-summary.md" in marker_run
 
-    upload_step = _workflow_step(replay_job, "Upload replay artifacts")
+    upload_step = _workflow_step(replay_job, "Upload Upgrade Health artifacts")
     assert upload_step["if"] == "always()"
     assert upload_step["uses"] == "actions/upload-artifact@v7"
     assert upload_step["with"]["name"] == "${{ steps.refs.outputs.artifact_name }}"
@@ -1353,7 +1340,7 @@ def test_release_upgrade_replay_dispatch_auto_runs_once_per_main_sha() -> None:
         "${{ github.event.inputs.candidate_ref || '' }}"
     )
     assert "const replayWorkflowId = 'release-upgrade-replay.yml'" in dispatch_script
-    assert "requiredWorkflowNames = ['Install Health Check']" in dispatch_script
+    assert "requiredWorkflowNames = ['Support Matrix', 'Live Integration']" in dispatch_script
     assert "function matchesCodeqlPath(path)" in dispatch_script
     assert "path === '.github/workflows/codeql.yml'" in dispatch_script
     assert "path.startsWith('.github/codeql/')" in dispatch_script
@@ -1375,8 +1362,8 @@ def test_release_upgrade_replay_dispatch_auto_runs_once_per_main_sha() -> None:
         "release-upgrade-replay-result-${candidateSha}-${safeArtifactRef(baseRef)}"
         in dispatch_script
     )
-    assert "release_upgrade_replay_active" in dispatch_script
-    assert "release_upgrade_replay_artifact_exists" in dispatch_script
+    assert "upgrade_health_active" in dispatch_script
+    assert "upgrade_health_artifact_exists" in dispatch_script
     assert "release_upgrade_replay_already_attempted" not in dispatch_script
     assert (
         "Completed replay runs exist for this candidate, but none produced "
@@ -1413,8 +1400,8 @@ def test_release_simulator_requires_successful_release_upgrade_replay() -> None:
     assert "String(run.path || '').split('@')[0]" in evaluate_script
     assert "runPath === replayWorkflowPath" in evaluate_script
     assert "runPath.endsWith(`/${replayWorkflowPath}`)" in evaluate_script
-    assert "runName === 'Release Upgrade Replay'" in evaluate_script
-    assert "runName.startsWith('Release Upgrade Replay (')" in evaluate_script
+    assert "runName === 'Upgrade Health'" in evaluate_script
+    assert "runName.startsWith('Upgrade Health (')" in evaluate_script
     assert (
         ".filter((run) => isReleaseUpgradeReplayRun(run) && "
         "run.head_sha === defaultBranchSha)" in evaluate_script
@@ -1425,9 +1412,9 @@ def test_release_simulator_requires_successful_release_upgrade_replay() -> None:
         "release-upgrade-replay-result-${defaultBranchSha}-"
         "${safeArtifactRef(latestReleaseTag)}" in evaluate_script
     )
-    assert "Release Upgrade Replay has not run for current" in evaluate_script
-    assert "Latest Release Upgrade Replay for current" in evaluate_script
-    assert "Release Upgrade Replay has no successful run" in evaluate_script
+    assert "Upgrade Health has not run for current" in evaluate_script
+    assert "Latest Upgrade Health for current" in evaluate_script
+    assert "Upgrade Health has no successful run" in evaluate_script
     assert "core.setOutput('upgrade_replay_summary'" in evaluate_script
 
     assert report_step["env"]["UPGRADE_REPLAY_SUMMARY"] == (
