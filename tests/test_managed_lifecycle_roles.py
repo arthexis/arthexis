@@ -62,7 +62,9 @@ def test_site_is_configured_after_migrate_before_node_registration(
     selected = lifecycle.InstallationLayout(root=tmp_path, checkout=checkout)
     observed: list[str] = []
 
-    monkeypatch.setattr(lifecycle, "migrate", lambda **kwargs: observed.append("migrate"))
+    monkeypatch.setattr(
+        lifecycle, "migrate", lambda **kwargs: observed.append("migrate")
+    )
     monkeypatch.setattr(
         lifecycle,
         "configure_site",

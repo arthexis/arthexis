@@ -280,7 +280,9 @@ def prepare(
     """Prepare application state for a GWAY-managed installation checkout."""
     current = _resolve_layout(layout)
     if not current.checkout.is_dir():
-        raise FileNotFoundError(f"installation checkout does not exist: {current.checkout}")
+        raise FileNotFoundError(
+            f"installation checkout does not exist: {current.checkout}"
+        )
 
     state_root = _prepare_runtime_state(current)
     try:

@@ -71,7 +71,9 @@ class Command(BaseCommand):
             site.save(update_fields=sorted(set(changed_fields)))
             Site.objects.clear_cache()
             if not options["no_refresh_node"]:
-                call_command("ensure_local_node", stdout=self.stdout, stderr=self.stderr)
+                call_command(
+                    "ensure_local_node", stdout=self.stdout, stderr=self.stderr
+                )
 
         self.stdout.write(f"id: {site.pk}")
         self.stdout.write(f"domain: {site.domain}")
