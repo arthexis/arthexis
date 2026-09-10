@@ -19,10 +19,13 @@ def test_live_integration_targets_exact_current_main_revision() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
 
-    assert "git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main" in workflow
+    assert (
+        "git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main"
+        in workflow
+    )
     assert "ARTHEXIS_EXPECTED_SHA" in workflow
     assert '[[ "$current_main_sha" != "$expected_sha" ]]' in script
-    assert "git -C \"$checkout\" rev-parse HEAD" in script
+    assert 'git -C "$checkout" rev-parse HEAD' in script
     assert '[[ "$deployed_sha" != "$expected_sha" ]]' in script
 
 
@@ -32,7 +35,13 @@ def test_live_integration_exercises_gway_managed_lifecycle_and_health() -> None:
     assert "sudo -n gway upgrade arthexis" in script
     assert "sudo -n gway install arthexis" in script
     assert '[[ "$checkout" != "/opt/arthexis/app" ]]' in script
-    assert "sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service install arthexis" in script
-    assert "sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service start arthexis" in script
+    assert (
+        "sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service install arthexis"
+        in script
+    )
+    assert (
+        "sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service start arthexis"
+        in script
+    )
     assert "gway service status arthexis" in script
     assert "gway arthexis good" in script
