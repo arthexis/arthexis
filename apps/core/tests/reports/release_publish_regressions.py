@@ -908,6 +908,7 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
     assert [
         (
             entry["os_flavor"],
+            entry["container_image"],
             entry["python_version"],
             entry["db_backend"],
             entry["test_shard"],
@@ -916,11 +917,10 @@ def test_install_health_workflow_is_manual_only_not_scheduled() -> None:
         )
         for entry in matrix_entries
     ] == [
-        ("ubuntu", "3.12", "sqlite", "smoke", "", False),
-        ("ubuntu", "3.12", "postgres", "smoke", "", False),
-        ("ubuntu", "3.11", "sqlite", "ocpp", "apps/ocpp/tests", True),
-        ("ubuntu", "3.11", "sqlite", "rest", "--ignore=apps/ocpp/tests", True),
-        ("ubuntu", "3.11", "postgres", "smoke", "", False),
+        ("debian", "debian:13-slim", "3.13", "sqlite", "ocpp", "apps/ocpp/tests", True),
+        ("debian", "debian:13-slim", "3.13", "sqlite", "extra", "--ignore=apps/ocpp/tests", True),
+        ("ubuntu22", "ubuntu:22.04", "3.13", "sqlite", "smoke", "", False),
+        ("ubuntu22", "ubuntu:22.04", "3.13", "postgres", "smoke", "", False),
     ]
 
     assert (
