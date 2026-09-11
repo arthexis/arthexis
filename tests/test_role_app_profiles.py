@@ -59,7 +59,6 @@ EXPECTED_PROFILE_APP_DEPENDENCIES = {
     "apps.celery": ("apps.celery.beat_app.CeleryBeatConfig",),
     "apps.clocks": ("apps.discovery",),
     "apps.core": ("apps.discovery",),
-    "apps.dns": ("apps.nmcli",),
     "apps.energy": ("apps.cards", "apps.maps"),
     "apps.maps": ("apps.energy",),
     "apps.modules": ("apps.groups", "apps.media", "apps.nodes"),
