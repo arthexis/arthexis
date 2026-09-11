@@ -8,18 +8,15 @@ from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import CertbotCertificate, CertificateBase, SelfSignedCertificate
-from apps.dns.models import DNSProviderCredential
+from apps.certs.models import CertificateBase, SelfSignedCertificate
 from apps.nginx.config_utils import default_certificate_domain_from_settings, slugify
 from apps.nginx.models import SiteConfiguration
 
 
 class CertificateGenerationMixin:
-    """Admin helpers for creating and provisioning HTTPS certificates."""
+    """Admin helpers for creating application-owned HTTPS certificates."""
 
     CERTIFICATE_TYPE_SELF_SIGNED = "self-signed"
-    CERTIFICATE_TYPE_CERTBOT = "certbot"
-    CERTIFICATE_TYPE_GODADDY = "godaddy"
 
     def generate_certificates_view(self, request):  # pragma: no cover - admin plumbing
         if not self.has_change_permission(request):
@@ -107,38 +104,6 @@ class CertificateGenerationMixin:
 
     def _certificate_parameters(self, certificate_type: str, domain: str) -> dict:
         slug = slugify(domain)
-
-        if certificate_type in {
-            self.CERTIFICATE_TYPE_CERTBOT,
-            self.CERTIFICATE_TYPE_GODADDY,
-        }:
-            challenge_type = (
-                CertbotCertificate.ChallengeType.GODADDY
-                if certificate_type == self.CERTIFICATE_TYPE_GODADDY
-                else CertbotCertificate.ChallengeType.NGINX
-            )
-            dns_credential = None
-            if challenge_type == CertbotCertificate.ChallengeType.GODADDY:
-                dns_credential = (
-                    DNSProviderCredential.objects.filter(
-                        provider=DNSProviderCredential.Provider.GODADDY,
-                        is_enabled=True,
-                    )
-                    .order_by("pk")
-                    .first()
-                )
-            return {
-                "model": CertbotCertificate,
-                "name_suffix": f"{slug}-certbot",
-                "defaults": {
-                    "domain": domain,
-                    "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
-                    "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-                    "challenge_type": challenge_type,
-                    "dns_credential": dns_credential,
-                },
-            }
-
         base_path = (
             Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
         )
@@ -188,15 +153,9 @@ class CertificateGenerationMixin:
         return default_certificate_domain_from_settings(settings)
 
     def _certificate_type_choices(self) -> tuple[tuple[str, str], ...]:
-        return (
-            (self.CERTIFICATE_TYPE_SELF_SIGNED, _("Self-signed")),
-            (self.CERTIFICATE_TYPE_CERTBOT, _("Certbot")),
-            (self.CERTIFICATE_TYPE_GODADDY, _("GoDaddy DNS")),
-        )
+        return ((self.CERTIFICATE_TYPE_SELF_SIGNED, _("Self-signed")),)
 
     def _normalize_certificate_type(self, value: str | None) -> str:
-        if value in {self.CERTIFICATE_TYPE_CERTBOT, self.CERTIFICATE_TYPE_GODADDY}:
-            return value
         return self.CERTIFICATE_TYPE_SELF_SIGNED
 
     def _certificate_type_label(self, value: str) -> str:
