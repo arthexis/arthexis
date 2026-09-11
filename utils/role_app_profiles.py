@@ -138,7 +138,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
     RoleProfile.WATCHTOWER: (
         "apps.actions",
         "apps.certs",
-        "apps.dns",
         "apps.emails",
         "apps.nginx",
         "apps.ops",
