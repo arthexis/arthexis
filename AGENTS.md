@@ -116,6 +116,38 @@ Whenever imports or `__all__` lists appear unordered:
 
 * Arrange them **alphabetically**.
 
+## Python Style
+
+`pyproject.toml` is the canonical Ruff configuration for this repository. Do not duplicate or override Ruff rule selection in workflows, scripts, or agent instructions.
+
+Current expectations are:
+
+* Python target: 3.11.
+* Maximum line length: 88.
+* Ruff primary selections: `E9` and `F823`.
+* Ruff extended selections: `I`, `UP`, and `B904`.
+* Migration and beat-migration modules are excluded by the project Ruff configuration.
+* Test modules under `apps/*/tests/*.py` ignore `B904` as configured in `pyproject.toml`.
+* Imports must satisfy Ruff's `I` rules; prefer Ruff's result over manual import-order guesses.
+* Prefer modern syntax covered by Ruff's `UP` rules.
+* New or edited Python must pass both Ruff lint and Ruff format before the change is considered complete.
+
+Use the repository configuration explicitly when checking the same scope as CI:
+
+```bash
+python -m ruff check --config pyproject.toml apps arthexis config tests manage.py
+python -m ruff format --check --config pyproject.toml apps arthexis config tests manage.py
+```
+
+When fixing style locally, prefer Ruff itself rather than manually approximating its output:
+
+```bash
+python -m ruff check --fix --config pyproject.toml apps arthexis config tests manage.py
+python -m ruff format --config pyproject.toml apps arthexis config tests manage.py
+```
+
+Code quality is the first CI gate. Package, Python compatibility, and clean-install work should remain skipped when the Ruff gate fails; fix style before investigating those downstream checks.
+
 ---
 
 ## Documentation
