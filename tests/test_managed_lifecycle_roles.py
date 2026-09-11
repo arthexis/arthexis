@@ -96,7 +96,9 @@ def test_site_is_configured_after_lifecycle_tasks(monkeypatch, tmp_path: Path) -
     ]
 
 
-def test_bare_site_uses_default_site_and_canonical_name(monkeypatch, tmp_path: Path) -> None:
+def test_bare_site_uses_default_site_and_canonical_name(
+    monkeypatch, tmp_path: Path
+) -> None:
     checkout = tmp_path / "app"
     checkout.mkdir()
     selected = lifecycle.InstallationLayout(root=tmp_path, checkout=checkout)
