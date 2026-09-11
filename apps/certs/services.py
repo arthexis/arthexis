@@ -66,7 +66,9 @@ def generate_self_signed_certificate(
     config_path: Path | None = None
     config_contents = _build_self_signed_config(domain, subject_alt_names or [])
     if config_contents:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp_file:
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8"
+        ) as temp_file:
             temp_file.write(config_contents)
             config_path = Path(temp_file.name)
 
@@ -264,12 +266,21 @@ def verify_certificate(
                     sudo,
                 )
             )
-            if domain and domain not in subject_output and f"DNS:{domain}" not in san_output:
+            if (
+                domain
+                and domain not in subject_output
+                and f"DNS:{domain}" not in san_output
+            ):
                 add_issue(f"Certificate does not include domain {domain}.")
         except RuntimeError as exc:
             add_issue(f"Unable to read certificate subject information: {exc}.")
 
-    if certificate_path and certificate_key_path and cert_exists is True and key_exists is True:
+    if (
+        certificate_path
+        and certificate_key_path
+        and cert_exists is True
+        and key_exists is True
+    ):
         try:
             cert_modulus = _run_command(
                 _with_sudo(
