@@ -28,18 +28,31 @@ def _normalize_domain(value: str) -> str:
     return host.rstrip(".").lower()
 
 
-def _forward_to_gway(site: Site) -> bool:
+def _gway_site_exists(gway: str) -> bool:
+    result = subprocess.run(
+        [gway, "web", "site", WEB_SITE_NAME],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _forward_to_gway(site: Site, *site_arguments: str) -> bool:
     """Publish the Django Site as portable web intent when GWAY is available."""
     gway = shutil.which("gway")
     if gway is None:
         return False
 
+    action = "--update" if _gway_site_exists(gway) else "--create"
     subprocess.run(
         [
             gway,
             "web",
             "site",
             WEB_SITE_NAME,
+            action,
             "--domain",
             site.domain,
             "--host",
@@ -48,6 +61,7 @@ def _forward_to_gway(site: Site) -> bool:
             str(WEB_PORT),
             "--health-path",
             WEB_HEALTH_PATH,
+            *site_arguments,
         ],
         check=True,
         text=True,
@@ -72,6 +86,11 @@ class Command(BaseCommand):
             "--no-refresh-node",
             action="store_true",
             help="Do not refresh local node registration after changing the site",
+        )
+        parser.add_argument(
+            "site_arguments",
+            nargs="*",
+            help="Additional arguments after '--' are forwarded unchanged to 'gway web site'",
         )
 
     def handle(self, *args, **options):
@@ -109,7 +128,7 @@ class Command(BaseCommand):
                     "ensure_local_node", stdout=self.stdout, stderr=self.stderr
                 )
 
-        _forward_to_gway(site)
+        _forward_to_gway(site, *options["site_arguments"])
 
         self.stdout.write(f"id: {site.pk}")
         self.stdout.write(f"domain: {site.domain}")
