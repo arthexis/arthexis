@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Certificate(models.Model):
-    """Abstract base class for certificates."""
+    """Abstract base class for certificates managed or referenced by Arthexis."""
 
     name = models.CharField(max_length=128, unique=True)
     domain = models.CharField(max_length=253)
@@ -42,6 +42,13 @@ class Certificate(models.Model):
 
 
 class CertificateBase(Certificate):
+    """Certificate inventory shared by OCPP and other application features.
+
+    Public-web ACME/Certbot lifecycle belongs to gway-web. Arthexis keeps this
+    model for certificate inventory, verification, and application-owned
+    certificates such as self-signed OCPP material.
+    """
+
     expiration_date = models.DateTimeField(null=True, blank=True)
     auto_renew = models.BooleanField(default=True)
 
@@ -50,34 +57,11 @@ class CertificateBase(Certificate):
         verbose_name_plural = _("Certificates")
         ordering = ("name",)
 
-    def provision(
-        self,
-        *,
-        sudo: str = "sudo",
-        dns_use_sandbox: bool | None = None,
-        force_renewal: bool = False,
-    ) -> str:
-        """Generate or request this certificate based on its type.
-
-        Args:
-            sudo: Privilege escalation prefix used for certificate tooling.
-            dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
-            force_renewal: Force certificate re-issuance even when certbot would reuse
-                an existing valid certificate.
-        """
-
+    def provision(self, *, sudo: str = "sudo") -> str:
+        """Provision an application-owned certificate subtype."""
         certificate = self._specific_certificate
-
-        if isinstance(certificate, CertbotCertificate):
-            request_kwargs = {"sudo": sudo}
-            if dns_use_sandbox is not None:
-                request_kwargs["dns_use_sandbox"] = dns_use_sandbox
-            if force_renewal:
-                request_kwargs["force_renewal"] = force_renewal
-            return certificate.request(**request_kwargs)
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
-
         raise TypeError(f"Unsupported certificate type: {type(self).__name__}")
 
     def update_expiration_date(self, *, sudo: str = "sudo") -> datetime | None:
@@ -109,8 +93,8 @@ class CertificateBase(Certificate):
         return self.expiration_date <= current_time
 
     def renew(self, *, sudo: str = "sudo") -> str:
-        """Renew the certificate and refresh its expiration date."""
-        message = self._specific_certificate.provision(sudo=sudo)
+        """Renew an application-owned certificate and refresh its expiration."""
+        message = self.provision(sudo=sudo)
         try:
             self.update_expiration_date(sudo=sudo)
         except RuntimeError:
@@ -140,122 +124,22 @@ class CertificateBase(Certificate):
         *,
         sudo: str = "sudo",
     ) -> services.CertificateVerificationResult:
-        """Backward-compatible alias for certificate path verification.
-
-        Args:
-            sudo: Privilege escalation prefix used for certificate tooling.
-
-        Returns:
-            The same verification result returned by :meth:`verify`.
-        """
-
+        """Backward-compatible alias for certificate path verification."""
         return self.verify(sudo=sudo)
 
     @property
     def _specific_certificate(self) -> CertificateBase:
-        if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):
+        if isinstance(self, SelfSignedCertificate):
             return self
-        for attr in ("certbotcertificate", "selfsignedcertificate"):
-            try:
-                return getattr(self, attr)
-            except (AttributeError, ObjectDoesNotExist):
-                continue
-        return self
-
-
-class CertbotCertificate(CertificateBase):
-    """Certificate obtained via certbot with selectable ACME validation methods."""
-
-    class ChallengeType(models.TextChoices):
-        """Supported ACME challenge workflows for certbot certificates."""
-
-        NGINX = "nginx", "Nginx (HTTP-01)"
-        GODADDY = "godaddy", "GoDaddy (DNS-01)"
-
-    email = models.EmailField(blank=True)
-    last_requested_at = models.DateTimeField(null=True, blank=True)
-    challenge_type = models.CharField(
-        max_length=20,
-        choices=ChallengeType.choices,
-        default=ChallengeType.NGINX,
-    )
-    dns_credential = models.ForeignKey(
-        "dns.DNSProviderCredential",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="certbot_certificates",
-    )
-    dns_propagation_seconds = models.PositiveIntegerField(default=300)
-
-    class Meta:
-        verbose_name = _("Certbot certificate")
-        verbose_name_plural = _("Certbot certificates")
-
-    def request(
-        self,
-        *,
-        sudo: str = "sudo",
-        dns_use_sandbox: bool | None = None,
-        force_renewal: bool = False,
-    ) -> str:
-        """Trigger certbot for this certificate.
-
-        Args:
-            sudo: Privilege escalation prefix used for certificate tooling.
-            dns_use_sandbox: Optional per-run override for DNS API sandbox mode.
-            force_renewal: Force certbot to renew even if the current certificate
-                is still considered valid.
-        """
-
-        if not self.certificate_path:
-            self.certificate_path = f"/etc/letsencrypt/live/{self.domain}/fullchain.pem"
-        if not self.certificate_key_path:
-            self.certificate_key_path = (
-                f"/etc/letsencrypt/live/{self.domain}/privkey.pem"
-            )
-
-        message = services.request_certbot_certificate(
-            domain=self.domain,
-            email=self.email or None,
-            certificate_path=self.certificate_file,
-            certificate_key_path=self.certificate_key_file,
-            challenge_type=self.challenge_type,
-            dns_credential=self.dns_credential,
-            dns_propagation_seconds=self.dns_propagation_seconds,
-            dns_use_sandbox=dns_use_sandbox,
-            force_renewal=force_renewal,
-            sudo=sudo,
-        )
-        resolved_paths = services.extract_live_certificate_paths_from_certbot_output(
-            message
-        )
-        if resolved_paths:
-            self.certificate_path = resolved_paths[0].as_posix()
-            self.certificate_key_path = resolved_paths[1].as_posix()
         try:
-            self.expiration_date = services.get_certificate_expiration(
-                certificate_path=self.certificate_file,
-                sudo=sudo,
-            )
-        except RuntimeError:
-            self.expiration_date = None
-        self.last_requested_at = timezone.now()
-        self.last_message = message
-        self.save(
-            update_fields=[
-                "certificate_path",
-                "certificate_key_path",
-                "expiration_date",
-                "last_requested_at",
-                "last_message",
-                "updated_at",
-            ]
-        )
-        return message
+            return self.selfsignedcertificate
+        except (AttributeError, ObjectDoesNotExist):
+            return self
 
 
 class SelfSignedCertificate(CertificateBase):
+    """Application-owned self-signed certificate, useful for local/OCPP PKI."""
+
     valid_days = models.PositiveIntegerField(default=365)
     key_length = models.PositiveIntegerField(default=2048)
     last_generated_at = models.DateTimeField(null=True, blank=True)
@@ -271,7 +155,6 @@ class SelfSignedCertificate(CertificateBase):
         subject_alt_names: list[str] | None = None,
     ) -> str:
         """Generate a self-signed certificate for this domain."""
-
         message = services.generate_self_signed_certificate(
             domain=self.domain,
             certificate_path=self.certificate_file,
