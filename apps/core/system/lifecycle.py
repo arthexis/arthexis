@@ -15,6 +15,8 @@ from config.roles import SUPPORTED_ROLES, normalize_role
 
 DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
 DEFAULT_CHECKOUT_NAME = "app"
+DEFAULT_SITE_NAME = "arthexis"
+GWAY_WEB_PROJECT = "web"
 LOCAL_REDIS_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -102,7 +104,7 @@ def _restore_runtime_ownership(state_root: Path) -> None:
 def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> LifecycleOptions:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--role")
-    parser.add_argument("--site")
+    parser.add_argument("--site", nargs="?", const="")
     namespace, unknown = parser.parse_known_args(arguments)
     if unknown:
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
@@ -260,9 +262,33 @@ def collectstatic(*, layout: InstallationLayout | None = None) -> None:
     run_manage("collectstatic", "--noinput", layout=layout)
 
 
-def configure_site(domain: str, *, layout: InstallationLayout | None = None) -> None:
-    """Configure the canonical site without recursively refreshing the local node."""
-    run_manage("site", domain, "--no-refresh-node", layout=layout)
+def configure_site(
+    domain: str | None = None, *, layout: InstallationLayout | None = None
+) -> None:
+    """Configure the canonical site and let its command publish web intent."""
+    arguments: list[str] = []
+    if domain:
+        arguments.append(domain)
+    arguments.extend(("--name", DEFAULT_SITE_NAME, "--no-refresh-node"))
+    run_manage("site", *arguments, layout=layout)
+
+
+def _ensure_gway_web() -> bool:
+    """Install or upgrade gway-web when the GWAY command is available."""
+    gway = shutil.which("gway")
+    if gway is None:
+        return False
+
+    probe = subprocess.run(
+        [gway, "path", GWAY_WEB_PROJECT],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    action = "upgrade" if probe.returncode == 0 else "install"
+    subprocess.run([gway, action, GWAY_WEB_PROJECT], check=True, text=True)
+    return True
 
 
 def ensure_local_node(*, layout: InstallationLayout | None = None) -> None:
@@ -273,7 +299,6 @@ def ensure_local_node(*, layout: InstallationLayout | None = None) -> None:
 def prepare(
     *,
     layout: InstallationLayout | None = None,
-    site: str | None = None,
     run_migrations: bool = True,
     run_collectstatic: bool = True,
 ) -> InstallationLayout:
@@ -288,8 +313,6 @@ def prepare(
     try:
         if run_migrations:
             migrate(layout=current)
-        if site is not None:
-            configure_site(site, layout=current)
         ensure_local_node(layout=current)
         if run_collectstatic:
             collectstatic(layout=current)
@@ -309,7 +332,12 @@ def _prepare_for_options(
         _persist_role(options.role, current)
     effective_role = options.role or _current_role(current)
     _warn_if_local_redis_missing(effective_role)
-    return prepare(layout=current, site=options.site)
+
+    prepared = prepare(layout=current)
+    if options.site is not None:
+        _ensure_gway_web()
+        configure_site(options.site or None, layout=prepared)
+    return prepared
 
 
 def install(
