@@ -44,8 +44,8 @@ jobs:
             test_shard: extra
             pytest_args: --ignore=apps/ocpp/tests
             full_pytest: true
-          - os_flavor: ubuntu22
-            container_image: ubuntu:22.04
+          - os_flavor: ubuntu24
+            container_image: ubuntu:24.04
             python_version: '3.13'
             python_cache_version: python3.13
             db_backend: postgres
