@@ -1,5 +1,13 @@
 # shellcheck shell=bash
 
+# GitHub Actions container jobs mount the checkout with host-side ownership.
+# Trust only that checkout so installer Git probes do not trip Git's ownership guard.
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_WORKSPACE:-}" ] && command -v git >/dev/null 2>&1; then
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$GITHUB_WORKSPACE"; then
+    git config --global --add safe.directory "$GITHUB_WORKSPACE" >/dev/null 2>&1 || true
+  fi
+fi
+
 _arthexis_git_preconditions_met() {
   local repo_root="$1"
 
