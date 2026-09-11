@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import shlex
 from datetime import timedelta
 
 from django.utils import timezone
 
-from apps.certs.models import CertbotCertificate
 from apps.certs.services import CertificateVerificationResult
 
 
@@ -60,33 +58,8 @@ def _warn_if_certificate_expiring_soon(service, certificate, *, warn_days: int) 
     now = timezone.now()
     threshold = now + timedelta(days=warn_days)
     if expiration <= threshold:
-        is_certbot = isinstance(certificate, CertbotCertificate)
-        quoted_domain = shlex.quote(certificate.domain)
-
-        if expiration <= now:
-            status = "has expired"
-            remediation = (
-                "Run './command.sh https --renew' to reissue due certificates."
-            )
-
-            if is_certbot:
-                remediation += (
-                    " Use './command.sh https --enable --force-renewal "
-                    f"--certbot {quoted_domain}' (or '--godaddy {quoted_domain}') "
-                    "only when you need to force immediate reissuance."
-                )
-        else:
-            status = "expires soon"
-            if is_certbot:
-                remediation = (
-                    "Run './command.sh https --enable --force-renewal "
-                    f"--certbot {quoted_domain}' (or '--godaddy {quoted_domain}') to reissue immediately."
-                )
-            else:
-                remediation = (
-                    "Run './command.sh https --enable --local' to reissue immediately."
-                )
-
+        status = "has expired" if expiration <= now else "expires soon"
+        remediation = "Run './command.sh https --enable --local' to reissue immediately."
         service.stdout.write(
             service.style.WARNING(
                 f"Certificate for {certificate.domain} {status} at {expiration.isoformat()}. {remediation}"
