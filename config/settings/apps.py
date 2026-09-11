@@ -187,7 +187,6 @@ def _normalize_selected_app_entries(
 PROJECT_LOCAL_APPS = [
     "apps.actions",
     "apps.skills",
-    "apps.apis",
     "apps.app",
     "apps.base",
     "apps.cards",
