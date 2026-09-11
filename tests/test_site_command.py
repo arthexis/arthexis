@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from django.contrib.sites.models import Site
 from django.core.management import call_command
@@ -76,6 +78,7 @@ def test_site_forwards_enriched_site_to_gway(monkeypatch) -> None:
 
     def fake_run(arguments, **kwargs):
         calls.append((list(arguments), kwargs))
+        return SimpleNamespace(returncode=1 if len(calls) == 1 else 0)
 
     monkeypatch.setattr(
         "apps.core.management.commands.site.subprocess.run",
@@ -90,22 +93,28 @@ def test_site_forwards_enriched_site_to_gway(monkeypatch) -> None:
 
     call_command("site", no_refresh_node=True)
 
-    assert calls == [
-        (
-            [
-                "/usr/local/bin/gway",
-                "web",
-                "site",
-                "arthexis",
-                "--domain",
-                "charge.example.com",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8888",
-                "--health-path",
-                "/health/",
-            ],
-            {"check": True, "text": True},
-        )
+    assert calls[0][0] == [
+        "/usr/local/bin/gway",
+        "web",
+        "site",
+        "arthexis",
     ]
+    assert calls[0][1]["check"] is False
+    assert calls[1] == (
+        [
+            "/usr/local/bin/gway",
+            "web",
+            "site",
+            "arthexis",
+            "--create",
+            "--domain",
+            "charge.example.com",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8888",
+            "--health-path",
+            "/health/",
+        ],
+        {"check": True, "text": True},
+    )
