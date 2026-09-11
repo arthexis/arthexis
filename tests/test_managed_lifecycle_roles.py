@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,9 +55,7 @@ def test_upgrade_without_role_preserves_existing_role(
     assert role_lock.read_text() == "Satellite\n"
 
 
-def test_site_is_configured_after_migrate_before_node_registration(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_site_is_configured_after_lifecycle_tasks(monkeypatch, tmp_path: Path) -> None:
     checkout = tmp_path / "app"
     checkout.mkdir()
     selected = lifecycle.InstallationLayout(root=tmp_path, checkout=checkout)
@@ -64,11 +63,6 @@ def test_site_is_configured_after_migrate_before_node_registration(
 
     monkeypatch.setattr(
         lifecycle, "migrate", lambda **kwargs: observed.append("migrate")
-    )
-    monkeypatch.setattr(
-        lifecycle,
-        "configure_site",
-        lambda domain, **kwargs: observed.append(f"site:{domain}"),
     )
     monkeypatch.setattr(
         lifecycle,
@@ -80,10 +74,47 @@ def test_site_is_configured_after_migrate_before_node_registration(
         "collectstatic",
         lambda **kwargs: observed.append("static"),
     )
+    monkeypatch.setattr(
+        lifecycle,
+        "_ensure_gway_web",
+        lambda: observed.append("gway-web") or True,
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "configure_site",
+        lambda domain=None, **kwargs: observed.append(f"site:{domain}"),
+    )
 
     lifecycle.install("--site", "charge.example.com", layout=selected)
 
-    assert observed == ["migrate", "site:charge.example.com", "node", "static"]
+    assert observed == [
+        "migrate",
+        "node",
+        "static",
+        "gway-web",
+        "site:charge.example.com",
+    ]
+
+
+def test_bare_site_uses_default_site_and_canonical_name(
+    monkeypatch, tmp_path: Path
+) -> None:
+    checkout = tmp_path / "app"
+    checkout.mkdir()
+    selected = lifecycle.InstallationLayout(root=tmp_path, checkout=checkout)
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    monkeypatch.setattr(
+        lifecycle,
+        "run_manage",
+        lambda command, *arguments, **kwargs: calls.append((command, arguments)),
+    )
+
+    lifecycle.configure_site(layout=selected)
+
+    assert calls == [
+        ("site", ("--name", "arthexis", "--no-refresh-node")),
+    ]
 
 
 def test_role_and_site_can_be_supplied_together() -> None:
@@ -93,6 +124,53 @@ def test_role_and_site_can_be_supplied_together() -> None:
 
     assert options.role == "Watchtower"
     assert options.site == "charge.example.com"
+
+
+def test_site_flag_can_omit_domain() -> None:
+    options = lifecycle._parse_lifecycle_arguments(("--site",))
+
+    assert options.site == ""
+
+
+def test_gway_web_is_skipped_when_gway_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(lifecycle.shutil, "which", lambda command: None)
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("subprocess should not run without gway")
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", unexpected)
+
+    assert lifecycle._ensure_gway_web() is False
+
+
+@pytest.mark.parametrize(
+    ("path_returncode", "expected_action"),
+    [(0, "upgrade"), (1, "install")],
+)
+def test_gway_web_is_installed_or_upgraded(
+    monkeypatch, path_returncode: int, expected_action: str
+) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(
+        lifecycle.shutil,
+        "which",
+        lambda command: "/usr/local/bin/gway",
+    )
+
+    def fake_run(arguments, **kwargs):
+        calls.append((list(arguments), kwargs))
+        if arguments[1:3] == ["path", "web"]:
+            return SimpleNamespace(returncode=path_returncode)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
+
+    assert lifecycle._ensure_gway_web() is True
+    assert calls[0][0] == ["/usr/local/bin/gway", "path", "web"]
+    assert calls[1] == (
+        ["/usr/local/bin/gway", expected_action, "web"],
+        {"check": True, "text": True},
+    )
 
 
 def test_invalid_role_is_rejected() -> None:

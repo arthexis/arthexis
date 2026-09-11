@@ -1,9 +1,16 @@
+import shutil
+import subprocess
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+
+WEB_SITE_NAME = "arthexis"
+WEB_HOST = "127.0.0.1"
+WEB_PORT = 8888
+WEB_HEALTH_PATH = "/health/"
 
 
 def _normalize_domain(value: str) -> str:
@@ -19,6 +26,33 @@ def _normalize_domain(value: str) -> str:
     if not host:
         raise CommandError(f"invalid site domain: {value!r}")
     return host.rstrip(".").lower()
+
+
+def _forward_to_gway(site: Site) -> bool:
+    """Publish the Django Site as portable web intent when GWAY is available."""
+    gway = shutil.which("gway")
+    if gway is None:
+        return False
+
+    subprocess.run(
+        [
+            gway,
+            "web",
+            "site",
+            WEB_SITE_NAME,
+            "--domain",
+            site.domain,
+            "--host",
+            WEB_HOST,
+            "--port",
+            str(WEB_PORT),
+            "--health-path",
+            WEB_HEALTH_PATH,
+        ],
+        check=True,
+        text=True,
+    )
+    return True
 
 
 class Command(BaseCommand):
@@ -75,12 +109,14 @@ class Command(BaseCommand):
                     "ensure_local_node", stdout=self.stdout, stderr=self.stderr
                 )
 
+        _forward_to_gway(site)
+
         self.stdout.write(f"id: {site.pk}")
         self.stdout.write(f"domain: {site.domain}")
         self.stdout.write(f"name: {site.name}")
         self.stdout.write("web:")
-        self.stdout.write("  name: arthexis")
+        self.stdout.write(f"  name: {WEB_SITE_NAME}")
         self.stdout.write(f"  domain: {site.domain}")
-        self.stdout.write("  host: 127.0.0.1")
-        self.stdout.write("  port: 8000")
-        self.stdout.write("  health: /health/")
+        self.stdout.write(f"  host: {WEB_HOST}")
+        self.stdout.write(f"  port: {WEB_PORT}")
+        self.stdout.write(f"  health: {WEB_HEALTH_PATH}")
