@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "arthexis"
 dynamic = ["version"]
 description = "Energy & Power Infrastructure"
-requires-python = ">=3.11,<3.14"
-classifiers = [ "Programming Language :: Python :: 3", "Framework :: Django",]
+requires-python = ">=3.10,<3.14"
+classifiers = [ "Programming Language :: Python :: 3", "Programming Language :: Python :: 3.10", "Framework :: Django",]
 dependencies = [
   "anyio==4.14.2",
   "asgiref==3.12.1",
@@ -144,14 +144,14 @@ django_settings_module = "config.settings"
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py310"
 extend-exclude = [
   "*/migrations/*.py",
   "*/beat_migrations/*.py",
 ]
 
 [tool.black]
-target-version = ["py311"]
+target-version = ["py310"]
 force-exclude = '''
 (^|/)pyproject\.toml$
 '''
