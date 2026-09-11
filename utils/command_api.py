@@ -41,7 +41,6 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "features",
     "fixtures",
     "github",
-    "godaddy",
     "good",
     "groups",
     "health",
