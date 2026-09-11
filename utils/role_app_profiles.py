@@ -27,7 +27,6 @@ DIRECT_LOCK_REASON_PREFIXES = ("role-default:", "feature-pack:")
 DIRECT_LOCK_REASONS = frozenset({"explicit-include", "full-app-fallback:unknown-role"})
 RETIRED_RUNTIME_APP_SELECTORS = frozenset(
     {
-        "apps.apis",
         "apps.journals",
         "apps.logbook",
         "apps.special",
@@ -173,6 +172,7 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
 
 FEATURE_PACK_APP_SELECTORS: Mapping[FeaturePackName, tuple[AppSelector, ...]] = {
     "admin_actions": ("apps.actions",),
+    "api_service_tokens": ("apps.apis",),
     "audio_collection": (),
     "browser_automation": (),
     "charger_intake": (),

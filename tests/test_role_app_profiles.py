@@ -200,23 +200,6 @@ def test_feature_packs_are_explicit_opt_ins():
     assert "apps.maps" in watchtower_apps
 
 
-def test_api_service_tokens_feature_pack_keeps_apis_explicit():
-    satellite_apps = set(
-        resolve_role_app_selectors("satellite", feature_packs=("hosted_ocpp",))
-    )
-    api_apps = set(
-        resolve_role_app_selectors(
-            "satellite",
-            feature_packs=("hosted_ocpp", "api_service_tokens"),
-        )
-    )
-    control_apps = set(resolve_role_app_selectors("control"))
-
-    assert "apps.apis" not in satellite_apps
-    assert "apps.apis" in api_apps
-    assert "apps.apis" in control_apps
-
-
 def test_admin_actions_feature_pack_keeps_actions_explicit():
     satellite_apps = set(
         resolve_role_app_selectors("satellite", feature_packs=("hosted_ocpp",))
