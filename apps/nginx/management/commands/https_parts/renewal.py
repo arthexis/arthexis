@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import shlex
 from datetime import datetime
 from pathlib import Path
 
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from apps.certs.models import CertbotCertificate, CertificateBase
+from apps.certs.models import CertificateBase
 from apps.nginx.management.commands.https_parts.config_apply import _apply_config
 from apps.nginx.models import SiteConfiguration
 
@@ -25,11 +24,6 @@ def _format_expiration(value: datetime | None) -> str:
 def _certificate_source_label(certificate: CertificateBase) -> str:
     """Return a concise source label for a certificate record."""
 
-    certbot_record = getattr(certificate, "certbotcertificate", None)
-    if certbot_record is not None:
-        if certbot_record.challenge_type == CertbotCertificate.ChallengeType.GODADDY:
-            return "certbot (godaddy dns-01)"
-        return "certbot (http-01)"
     if getattr(certificate, "selfsignedcertificate", None) is not None:
         return "self-signed"
     return "certificate"
@@ -67,27 +61,24 @@ def _renew_due_certificates(
     require_godaddy: bool = False,
     require_local: bool = False,
 ) -> None:
-    """Renew certificates due for rotation after refreshing on-disk expiration metadata."""
+    """Renew application-owned certificates due for rotation."""
 
     now = timezone.now()
     candidate_certificates = CertificateBase.objects.all().select_related(
-        "certbotcertificate", "selfsignedcertificate"
+        "selfsignedcertificate"
     )
 
     if domain_filter:
         candidate_certificates = candidate_certificates.filter(domain=domain_filter)
 
     if require_godaddy:
-        candidate_certificates = candidate_certificates.filter(
-            certbotcertificate__challenge_type=CertbotCertificate.ChallengeType.GODADDY
-        )
+        candidate_certificates = candidate_certificates.none()
     elif require_local:
         candidate_certificates = candidate_certificates.filter(
             selfsignedcertificate__isnull=False
         )
 
     candidate_list = list(candidate_certificates)
-
     due_certificates: list[CertificateBase] = []
 
     for certificate in candidate_list:
@@ -126,11 +117,9 @@ def _renew_due_certificates(
                 service.stdout.write(
                     f"{certificate_label} for {domain_filter} {verb_label} not due for renewal."
                 )
-                quoted_domain = shlex.quote(domain_filter)
                 service.stdout.write(
-                    "To force immediate certbot reissuance, run: "
-                    f"./command.sh https --enable --force-renewal --certbot {quoted_domain} "
-                    f"(or --godaddy {quoted_domain})."
+                    "To reissue local application-owned certificate material immediately, "
+                    "run: ./command.sh https --enable --local."
                 )
             else:
                 service.stdout.write("No certificates were due for renewal.")
