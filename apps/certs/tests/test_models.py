@@ -71,6 +71,8 @@ def test_certificate_renew_regenerates_application_certificate(monkeypatch):
         expiration_date=timezone.now() - timezone.timedelta(minutes=1),
     )
     monkeypatch.setattr(certificate, "provision", lambda *, sudo="sudo": "renewed")
-    monkeypatch.setattr(certificate, "update_expiration_date", lambda *, sudo="sudo": None)
+    monkeypatch.setattr(
+        certificate, "update_expiration_date", lambda *, sudo="sudo": None
+    )
 
     assert certificate.renew(sudo="") == "renewed"
