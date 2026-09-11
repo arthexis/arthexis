@@ -24,19 +24,39 @@ if [[ "$(id -u)" != "0" ]]; then
   fi
 fi
 
+run_with_timeout() {
+  local seconds="$1"
+  local description="$2"
+  shift 2
+  echo "${description} (timeout: ${seconds}s)..."
+  timeout --foreground "${seconds}s" "$@"
+}
+
+apt_env=(env DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC)
+apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+
 if ! command -v redis-server >/dev/null 2>&1 || ! command -v redis-cli >/dev/null 2>&1; then
-  "${sudo_cmd[@]}" apt-get update
-  "${sudo_cmd[@]}" apt-get install -y --no-install-recommends redis-server
+  run_with_timeout 600 "Updating apt metadata for Redis" \
+    "${sudo_cmd[@]}" "${apt_env[@]}" apt-get "${apt_opts[@]}" update
+  run_with_timeout 600 "Installing Redis packages" \
+    "${sudo_cmd[@]}" "${apt_env[@]}" apt-get "${apt_opts[@]}" install -y --no-install-recommends redis-server
 fi
 
-if command -v systemctl >/dev/null 2>&1; then
-  "${sudo_cmd[@]}" systemctl start redis-server >/dev/null 2>&1 || true
+if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
+  if ! run_with_timeout 30 "Starting Redis with systemd" \
+    "${sudo_cmd[@]}" systemctl start redis-server; then
+    echo "systemctl could not start Redis; falling back." >&2
+  fi
 fi
 if ! redis-cli -h "${redis_host}" -p "${redis_port}" ping >/dev/null 2>&1 \
   && command -v service >/dev/null 2>&1; then
-  "${sudo_cmd[@]}" service redis-server start >/dev/null 2>&1 || true
+  if ! run_with_timeout 30 "Starting Redis with service" \
+    "${sudo_cmd[@]}" service redis-server start; then
+    echo "service could not start Redis; falling back to redis-server." >&2
+  fi
 fi
 if ! redis-cli -h "${redis_host}" -p "${redis_port}" ping >/dev/null 2>&1; then
+  echo "Starting Redis directly..."
   redis-server \
     --daemonize yes \
     --bind "${redis_host}" \
@@ -45,6 +65,7 @@ if ! redis-cli -h "${redis_host}" -p "${redis_port}" ping >/dev/null 2>&1; then
     --appendonly no
 fi
 
+echo "Waiting for Redis on ${redis_host}:${redis_port}..."
 for _attempt in {1..15}; do
   if redis-cli -h "${redis_host}" -p "${redis_port}" ping >/dev/null 2>&1; then
     echo "Redis ready on ${redis_host}:${redis_port}."

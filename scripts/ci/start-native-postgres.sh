@@ -25,10 +25,14 @@ run_with_timeout() {
   timeout --foreground "${seconds}s" "$@"
 }
 
+apt_env=(env DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC)
+apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+
 if ! command -v psql >/dev/null 2>&1 || ! command -v pg_isready >/dev/null 2>&1; then
-  run_with_timeout 180 "Updating apt metadata for PostgreSQL" "${sudo_cmd[@]}" apt-get update
-  run_with_timeout 180 "Installing PostgreSQL packages" \
-    "${sudo_cmd[@]}" apt-get install -y --no-install-recommends postgresql postgresql-client
+  run_with_timeout 600 "Updating apt metadata for PostgreSQL" \
+    "${sudo_cmd[@]}" "${apt_env[@]}" apt-get "${apt_opts[@]}" update
+  run_with_timeout 600 "Installing PostgreSQL packages" \
+    "${sudo_cmd[@]}" "${apt_env[@]}" apt-get "${apt_opts[@]}" install -y --no-install-recommends postgresql postgresql-client
 fi
 
 if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
@@ -85,7 +89,7 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'postgres_db')\gexec
 SQL
 
 echo "Verifying PostgreSQL connection (timeout: 30s)..."
-timeout --foreground 30s env PGPASSWORD="${postgres_password}" psql \
+timeout --foreground 30s env PGPASSWORD="${postgres_password}" PGCONNECT_TIMEOUT=10 psql \
   -h "${postgres_host}" \
   -p "${postgres_port}" \
   -U "${postgres_user}" \
