@@ -12,15 +12,12 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name="apps.certs.tasks.refresh_certificate_expirations")
 def refresh_certificate_expirations() -> dict[str, int]:
-    """Refresh certificate expirations and auto-renew due certificates."""
+    """Refresh certificate expirations and renew application-owned certificates."""
     now = timezone.now()
     updated = 0
     renewed = 0
 
-    certificates = CertificateBase.objects.select_related(
-        "certbotcertificate",
-        "selfsignedcertificate",
-    )
+    certificates = CertificateBase.objects.select_related("selfsignedcertificate")
 
     for certificate in certificates:
         previous_expiration = certificate.expiration_date
@@ -39,7 +36,7 @@ def refresh_certificate_expirations() -> dict[str, int]:
         if certificate.auto_renew and certificate.is_due_for_renewal(now=now):
             try:
                 certificate.renew()
-            except Exception:  # pragma: no cover - defensive logging
+            except Exception:
                 logger.exception(
                     "Failed to auto-renew certificate %s.",
                     certificate.pk,

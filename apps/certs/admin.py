@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import CertbotCertificate, SelfSignedCertificate
+from apps.certs.models import SelfSignedCertificate
 
 
 class CertificateProvisioningMixin:
@@ -36,9 +36,9 @@ class CertificateProvisioningMixin:
         now = timezone.now()
         renewed = 0
         for certificate in queryset:
-            if not certificate.auto_renew:
-                continue
-            if not certificate.is_due_for_renewal(now=now):
+            if not certificate.auto_renew or not certificate.is_due_for_renewal(
+                now=now
+            ):
                 continue
             try:
                 message = certificate.renew()
@@ -54,54 +54,6 @@ class CertificateProvisioningMixin:
             self.message_user(
                 request, _("No due certificates were renewed."), messages.INFO
             )
-
-
-@admin.register(CertbotCertificate)
-class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
-    list_display = (
-        "name",
-        "domain",
-        "email",
-        "certificate_path",
-        "expiration_date",
-        "auto_renew",
-        "last_requested_at",
-    )
-    search_fields = ("name", "domain", "email")
-    list_filter = ("challenge_type", "auto_renew")
-    readonly_fields = ("last_requested_at", "last_message")
-    fields = (
-        "name",
-        "domain",
-        "email",
-        "challenge_type",
-        "dns_credential",
-        "dns_propagation_seconds",
-        "certificate_path",
-        "certificate_key_path",
-        "expiration_date",
-        "auto_renew",
-        "last_requested_at",
-        "last_message",
-    )
-    actions: ClassVar[list[str]] = [
-        "generate_certificates",
-        "request_certbot",
-        "verify_certificates",
-        "renew_due_certificates",
-    ]
-
-    @admin.action(description=_("Request or renew with certbot"))
-    def request_certbot(self, request, queryset):
-        for certificate in queryset:
-            try:
-                message = certificate.request()
-            except Exception as exc:  # pragma: no cover - admin plumbing
-                self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
-            else:
-                self.message_user(
-                    request, f"{certificate}: {message}", messages.SUCCESS
-                )
 
 
 @admin.register(SelfSignedCertificate)

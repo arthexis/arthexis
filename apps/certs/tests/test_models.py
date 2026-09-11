@@ -2,87 +2,7 @@ import pytest
 from django.utils import timezone
 
 from apps.certs import services
-from apps.certs.models import CertbotCertificate, SelfSignedCertificate
-
-
-@pytest.mark.django_db
-def test_certbot_certificate_request_updates_state(monkeypatch):
-    certificate = CertbotCertificate.objects.create(
-        name="certbot",
-        domain="example.com",
-        certificate_path="",
-        certificate_key_path="",
-    )
-
-    now = timezone.now()
-    monkeypatch.setattr(timezone, "now", lambda: now)
-
-    captured = {}
-
-    def fake_request_certbot_certificate(**kwargs):
-        captured.update(kwargs)
-        return "requested"
-
-    monkeypatch.setattr(
-        services, "request_certbot_certificate", fake_request_certbot_certificate
-    )
-    expiration = now + timezone.timedelta(days=90)
-    monkeypatch.setattr(
-        services, "get_certificate_expiration", lambda **kwargs: expiration
-    )
-
-    message = certificate.request(sudo="")
-
-    certificate.refresh_from_db()
-    assert message == "requested"
-    assert certificate.last_requested_at == now
-    assert certificate.expiration_date == expiration
-    assert certificate.certificate_path.endswith("fullchain.pem")
-    assert certificate.certificate_key_path.endswith("privkey.pem")
-    assert captured["domain"] == "example.com"
-    assert captured["certificate_path"].name == "fullchain.pem"
-
-
-@pytest.mark.django_db
-def test_certbot_certificate_request_updates_lineage_paths_from_certbot_output(
-    monkeypatch,
-):
-    """Regression: certbot force-renewal lineage suffixes should update stored paths."""
-
-    certificate = CertbotCertificate.objects.create(
-        name="certbot-lineage",
-        domain="example.com",
-        certificate_path="",
-        certificate_key_path="",
-    )
-
-    now = timezone.now()
-    monkeypatch.setattr(timezone, "now", lambda: now)
-
-    output = "\n".join(
-        [
-            "Successfully received certificate.",
-            "Certificate is saved at: /etc/letsencrypt/live/example.com-0001/fullchain.pem",
-            "Key is saved at: /etc/letsencrypt/live/example.com-0001/privkey.pem",
-        ]
-    )
-
-    monkeypatch.setattr(services, "request_certbot_certificate", lambda **_: output)
-    expiration = now + timezone.timedelta(days=90)
-    monkeypatch.setattr(services, "get_certificate_expiration", lambda **_: expiration)
-
-    certificate.request(sudo="")
-
-    certificate.refresh_from_db()
-    assert (
-        certificate.certificate_path
-        == "/etc/letsencrypt/live/example.com-0001/fullchain.pem"
-    )
-    assert (
-        certificate.certificate_key_path
-        == "/etc/letsencrypt/live/example.com-0001/privkey.pem"
-    )
-    assert certificate.expiration_date == expiration
+from apps.certs.models import SelfSignedCertificate
 
 
 @pytest.mark.django_db
@@ -112,7 +32,9 @@ def test_self_signed_certificate_generate_updates_state(monkeypatch):
     )
     expiration = later + timezone.timedelta(days=30)
     monkeypatch.setattr(
-        services, "get_certificate_expiration", lambda **kwargs: expiration
+        services,
+        "get_certificate_expiration",
+        lambda **kwargs: expiration,
     )
 
     message = certificate.generate(sudo="")
@@ -127,26 +49,30 @@ def test_self_signed_certificate_generate_updates_state(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_certificate_provision_dispatches(monkeypatch):
-    certbot = CertbotCertificate.objects.create(
-        name="dispatch-certbot",
-        domain="dispatch.example.com",
-        certificate_path="",
-        certificate_key_path="",
-    )
-    self_signed = SelfSignedCertificate.objects.create(
+def test_certificate_provision_dispatches_to_self_signed(monkeypatch):
+    certificate = SelfSignedCertificate.objects.create(
         name="dispatch-self-signed",
         domain="dispatch-self.example.com",
         certificate_path="/tmp/dispatch/fullchain.pem",
         certificate_key_path="/tmp/dispatch/privkey.pem",
     )
+    monkeypatch.setattr(certificate, "generate", lambda *, sudo="sudo": "generated")
 
-    monkeypatch.setattr(
-        certbot,
-        "request",
-        lambda *, sudo="sudo", dns_use_sandbox=None, force_renewal=False: "requested",
+    assert certificate.provision(sudo="") == "generated"
+
+
+@pytest.mark.django_db
+def test_certificate_renew_regenerates_application_certificate(monkeypatch):
+    certificate = SelfSignedCertificate.objects.create(
+        name="renew-self-signed",
+        domain="renew.example.com",
+        certificate_path="/tmp/renew/fullchain.pem",
+        certificate_key_path="/tmp/renew/privkey.pem",
+        expiration_date=timezone.now() - timezone.timedelta(minutes=1),
     )
-    monkeypatch.setattr(self_signed, "generate", lambda *, sudo="sudo": "generated")
+    monkeypatch.setattr(certificate, "provision", lambda *, sudo="sudo": "renewed")
+    monkeypatch.setattr(
+        certificate, "update_expiration_date", lambda *, sudo="sudo": None
+    )
 
-    assert certbot.provision(sudo="") == "requested"
-    assert self_signed.provision(sudo="") == "generated"
+    assert certificate.renew(sudo="") == "renewed"
