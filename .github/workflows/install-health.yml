@@ -101,7 +101,11 @@ jobs:
           ./scripts/ci/start-native-postgres.sh
       - name: Select Python runtime
         run: |
-          python_bin='${{ steps.setup-python.outputs.python-path }}'
+          if [[ "${{ matrix.os_flavor }}" == "ubuntu22" ]]; then
+            python_bin="/usr/bin/python3.10"
+          else
+            python_bin='${{ steps.setup-python.outputs.python-path }}'
+          fi
           echo "ARTHEXIS_PYTHON_BIN=${python_bin}" >> "${GITHUB_ENV}"
           echo "$(dirname "${python_bin}")" >> "${GITHUB_PATH}"
           "${python_bin}" --version
