@@ -54,7 +54,8 @@ def test_generate_self_signed_certificate_without_sudo(monkeypatch, tmp_path):
     assert certificate_path.parent.is_dir()
     assert key_path.parent.is_dir()
     assert commands[0][0:3] == ["openssl", "req", "-x509"]
-    assert "charger.local" in commands[0]
+    subject_index = commands[0].index("-subj")
+    assert commands[0][subject_index + 1] == "/CN=charger.local"
 
 
 def test_verify_certificate_reports_missing_paths(tmp_path):
