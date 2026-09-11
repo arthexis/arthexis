@@ -1,1 +1,0 @@
-"""Managed service credential application."""
