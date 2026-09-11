@@ -30,6 +30,7 @@ class InstallationLayout:
 class LifecycleOptions:
     role: str | None = None
     site: str | None = None
+    site_arguments: tuple[str, ...] = ()
 
 
 def layout(root: str | Path | None = None) -> InstallationLayout:
@@ -106,8 +107,6 @@ def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> LifecycleOptions:
     parser.add_argument("--role")
     parser.add_argument("--site", nargs="?", const="")
     namespace, unknown = parser.parse_known_args(arguments)
-    if unknown:
-        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
 
     role = None
     if namespace.role is not None:
@@ -117,7 +116,14 @@ def _parse_lifecycle_arguments(arguments: tuple[str, ...]) -> LifecycleOptions:
                 f"invalid --role {namespace.role!r}; choose from {', '.join(SUPPORTED_ROLES)}"
             )
 
-    return LifecycleOptions(role=role, site=namespace.site)
+    if unknown and namespace.site is None:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+
+    return LifecycleOptions(
+        role=role,
+        site=namespace.site,
+        site_arguments=tuple(unknown),
+    )
 
 
 def _role_lock(current: InstallationLayout) -> Path:
@@ -263,13 +269,18 @@ def collectstatic(*, layout: InstallationLayout | None = None) -> None:
 
 
 def configure_site(
-    domain: str | None = None, *, layout: InstallationLayout | None = None
+    domain: str | None = None,
+    *site_arguments: str,
+    layout: InstallationLayout | None = None,
 ) -> None:
     """Configure the canonical site and let its command publish web intent."""
     arguments: list[str] = []
     if domain:
         arguments.append(domain)
     arguments.extend(("--name", DEFAULT_SITE_NAME, "--no-refresh-node"))
+    if site_arguments:
+        arguments.append("--")
+        arguments.extend(site_arguments)
     run_manage("site", *arguments, layout=layout)
 
 
@@ -336,7 +347,11 @@ def _prepare_for_options(
     prepared = prepare(layout=current)
     if options.site is not None:
         _ensure_gway_web()
-        configure_site(options.site or None, layout=prepared)
+        configure_site(
+            options.site or None,
+            *options.site_arguments,
+            layout=prepared,
+        )
     return prepared
 
 
