@@ -197,7 +197,6 @@ PROJECT_LOCAL_APPS = [
     "apps.counters",
     "apps.credentials",
     "apps.discovery",
-    "apps.dns",
     "apps.emails",
     "apps.energy",
     "apps.features",
