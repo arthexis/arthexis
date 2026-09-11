@@ -1,0 +1,31 @@
+name: Python Quality
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: python / Quality
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install CI tools
+        run: python -m pip install --upgrade pip ruff
+      - name: Install project
+        run: python -m pip install -e '.[ci,qa]'
+      - name: Ruff lint
+        run: python -m ruff check apps arthexis config tests manage.py
+      - name: Ruff format
+        run: python -m ruff format --check apps arthexis config tests manage.py
