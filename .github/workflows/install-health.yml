@@ -52,6 +52,14 @@ jobs:
             test_shard: smoke
             pytest_args: ""
             full_pytest: false
+          - os_flavor: ubuntu22
+            container_image: ubuntu:22.04
+            python_version: '3.10'
+            python_cache_version: python3.10
+            db_backend: postgres
+            test_shard: smoke
+            pytest_args: ""
+            full_pytest: false
     permissions:
       contents: read
     env:
