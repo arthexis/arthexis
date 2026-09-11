@@ -34,7 +34,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `features`
 - `fixtures`
 - `github`
-- `godaddy`
 - `good`
 - `groups`
 - `health`
