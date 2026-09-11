@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+.ci/quality.sh --fix
+
+if ! git diff --quiet -- . ':!*.lock'; then
+  echo "Ruff modified files. Review and stage the changes, then commit again." >&2
+  exit 1
+fi
