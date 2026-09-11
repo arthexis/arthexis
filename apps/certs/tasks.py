@@ -36,7 +36,7 @@ def refresh_certificate_expirations() -> dict[str, int]:
         if certificate.auto_renew and certificate.is_due_for_renewal(now=now):
             try:
                 certificate.renew()
-            except (RuntimeError, TypeError):
+            except Exception:
                 logger.exception(
                     "Failed to auto-renew certificate %s.",
                     certificate.pk,
