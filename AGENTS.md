@@ -185,9 +185,7 @@ Agents must run relevant tests after code changes.
 * Prefer validated repository entrypoints over ad-hoc interpreter calls. When `.venv` is missing, run the platform install entrypoint first (`./install.sh` on Linux/macOS, `install.bat` on Windows); the install scripts create `.venv`. Use `./env-refresh.sh --deps-only` or `env-refresh.bat` only after `.venv` already exists and dependencies need refreshing.
 * Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
 * Use the canonical app-test command for this repository: `.venv/bin/python manage.py test run -- <target>`.
-* Use direct `pytest` only where this repository already requires it:
-  * CI workflow internals under `.github/workflows/`.
-  * pytest-backed command/helper implementation code (for example `apps/tests/management/commands/test.py` and `utils/devtools/test_server.py`).
+* Use direct `pytest` only where this repository already requires it for pytest-backed command/helper implementation code (for example `apps/tests/management/commands/test.py` and `utils/devtools/test_server.py`).
 * Use `.venv/bin/python manage.py ...` for development and test workflows; use `./command.sh ...` only for operator-facing runtime actions when applicable.
 * If `.venv/bin/python` is unavailable, use the repository's validated wrapper or management entrypoint.
 * Avoid creating tests for **micro-behaviors** unless:
@@ -199,6 +197,10 @@ Agents must run relevant tests after code changes.
 
 * Each **feature should have a test**.
 * Prefer **quality over quantity** of tests.
+* Arthexis tests must verify **suite functionality and supported behavior**, not the repository's CI implementation.
+* Do **not** create or maintain Arthexis tests that assert GitHub Actions workflow files, CI workflow names, triggers, jobs, steps, matrices, runner choices, status-check topology, or other CI configuration contracts.
+* CI implementation and CI-policy contract tests belong in the shared `ci-base` repository rather than in Arthexis. Changes under `.github/workflows/` must not require matching Arthexis test assertions.
+* Synthetic workflow/configuration fixtures are acceptable when they are inputs to Arthexis application logic under test; the prohibition is on policing the repository's live CI configuration from the Arthexis test suite.
 * Do **not create tests solely to validate styling**.
 * When removing a feature, remove tests whose contract existed only for that feature.
 * Do **not replace removed-feature tests with tombstone tests** that assert the old API, file, command, setting, workflow, job, hook, dependency, model field, or other implementation artifact stays absent.
