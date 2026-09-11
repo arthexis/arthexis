@@ -1,119 +1,19 @@
-"""Certificate provisioning helpers for the HTTPS command."""
+"""Certificate inventory helpers for the HTTPS command.
+
+Public ACME/Certbot lifecycle belongs to gway-web. Arthexis keeps certificate
+inventory/path binding plus application-owned self-signed certificate support.
+"""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import CommandError
-from django.utils import timezone
 
-from apps.certs.models import CertbotCertificate, SelfSignedCertificate
-from apps.certs.services import (
-    CertbotChallengeError,
-    CertbotError,
-    ensure_certbot_available,
-)
+from apps.certs.models import CertificateBase, SelfSignedCertificate
 from apps.nginx.config_utils import slugify
-from apps.nginx.management.commands.https_parts.config_apply import (
-    _apply_config,
-    _get_or_create_config,
-)
-from apps.nginx.management.commands.https_parts.constants import (
-    CERTBOT_HTTP01_BOOTSTRAP_MESSAGE,
-    FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING,
-    FORCE_RENEWAL_STILL_EXPIRED_ERROR,
-    NGINX_CONFIGURE_REMEDIATION_TEMPLATE,
-)
 from apps.nginx.models import SiteConfiguration
-
-
-def _prepare_http01_challenge_site(service, domain: str, *, reload: bool) -> None:
-    """Ensure nginx can answer HTTP-01 challenges before certbot provisioning."""
-
-    service._ensure_managed_site(domain, require_https=False)
-    bootstrap_config = _get_or_create_config(domain, protocol="http")
-    _apply_config(service, bootstrap_config, reload=reload)
-
-
-def _restore_https_config_after_http01_bootstrap(
-    service,
-    config: SiteConfiguration,
-    *,
-    reload: bool,
-) -> None:
-    """Restore persisted/runtime site protocol to HTTPS after HTTP-01 bootstrap."""
-
-    SiteConfiguration.objects.filter(pk=config.pk).update(
-        protocol="https", enabled=True
-    )
-    config.refresh_from_db(fields=["protocol", "enabled"])
-    _apply_config(service, config, reload=reload)
-
-
-def _build_certbot_challenge_command_error(
-    *,
-    domain: str,
-    challenge_type: str,
-    reason: str,
-) -> str:
-    """Return actionable command output for certbot ACME challenge failures."""
-
-    hints = [
-        f"HTTPS enable did not complete for {domain}.",
-        reason,
-    ]
-    if challenge_type == CertbotCertificate.ChallengeType.NGINX:
-        hints.extend(
-            [
-                CERTBOT_HTTP01_BOOTSTRAP_MESSAGE,
-                NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0]),
-            ]
-        )
-    return "\n".join(hints)
-
-
-def _validate_force_renewal_result(service, certificate) -> None:
-    """Raise when force-renewal returns but the certificate is still expired."""
-
-    expiration = getattr(certificate, "expiration_date", None)
-    if expiration is None:
-        domain = getattr(certificate, "domain", "the requested domain")
-        service.stdout.write(
-            service.style.WARNING(
-                FORCE_RENEWAL_EXPIRATION_UNAVAILABLE_WARNING.format(domain=domain)
-            )
-        )
-        return
-
-    if expiration <= timezone.now():
-        raise CommandError(FORCE_RENEWAL_STILL_EXPIRED_ERROR)
-
-
-def _warn_if_certificate_paths_changed(
-    service,
-    certificate,
-    *,
-    previous_certificate_path: str,
-    previous_certificate_key_path: str,
-) -> None:
-    """Surface certbot lineage path changes so operators can verify consumers."""
-
-    if (
-        certificate.certificate_path == previous_certificate_path
-        and certificate.certificate_key_path == previous_certificate_key_path
-    ):
-        return
-
-    service.stdout.write(
-        service.style.WARNING(
-            "Certificate storage paths changed after certbot issuance: "
-            f"cert old={previous_certificate_path} new={certificate.certificate_path}; "
-            f"key old={previous_certificate_key_path} new={certificate.certificate_key_path}. "
-            "If external services reference old paths, reload or update them accordingly."
-        )
-    )
 
 
 def _get_or_create_certificate(
@@ -122,7 +22,7 @@ def _get_or_create_certificate(
     *,
     use_local: bool,
 ):
-    """Create or update certificate records used by HTTPS provisioning."""
+    """Create or update the certificate inventory record for an HTTPS site."""
 
     slug = slugify(domain)
     if use_local:
@@ -140,37 +40,23 @@ def _get_or_create_certificate(
         )
         return certificate
 
-    certificate, created = CertbotCertificate.objects.get_or_create(
-        name=f"{config.name or 'nginx-site'}-{slug}-certbot",
-        defaults={
-            "domain": domain,
-            "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
-            "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-            "challenge_type": CertbotCertificate.ChallengeType.NGINX,
-        },
+    defaults = {
+        "domain": domain,
+        "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+        "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+    }
+    certificate, created = CertificateBase.objects.get_or_create(
+        name=f"{config.name or 'nginx-site'}-{slug}-public",
+        defaults=defaults,
     )
-
     if not created:
         updated_fields: list[str] = []
-        if certificate.domain != domain:
-            certificate.domain = domain
-            updated_fields.append("domain")
-        if certificate.challenge_type != CertbotCertificate.ChallengeType.NGINX:
-            certificate.challenge_type = CertbotCertificate.ChallengeType.NGINX
-            updated_fields.append("challenge_type")
-        if not certificate.certificate_path:
-            certificate.certificate_path = (
-                f"/etc/letsencrypt/live/{domain}/fullchain.pem"
-            )
-            updated_fields.append("certificate_path")
-        if not certificate.certificate_key_path:
-            certificate.certificate_key_path = (
-                f"/etc/letsencrypt/live/{domain}/privkey.pem"
-            )
-            updated_fields.append("certificate_key_path")
+        for field, value in defaults.items():
+            if getattr(certificate, field) != value:
+                setattr(certificate, field, value)
+                updated_fields.append(field)
         if updated_fields:
             certificate.save(update_fields=[*updated_fields, "updated_at"])
-
     return certificate
 
 
@@ -185,8 +71,9 @@ def _provision_certificate(
     reload: bool,
     force_renewal: bool,
 ) -> None:
-    """Provision local or certbot certificates and handle recovery/warnings."""
+    """Generate local certificates; public issuance is delegated to gway-web."""
 
+    del service, domain, config, reload
     if use_local:
         certificate.generate(
             sudo=sudo,
@@ -194,42 +81,7 @@ def _provision_certificate(
         )
         return
 
-    try:
-        ensure_certbot_available(sudo=sudo)
-    except CertbotError as exc:
-        raise CommandError(str(exc)) from exc
-
-    http01_bootstrapped = False
     if force_renewal:
-        previous_certificate_path = certificate.certificate_path
-        previous_certificate_key_path = certificate.certificate_key_path
-
-    try:
-        http01_bootstrapped = True
-        _prepare_http01_challenge_site(service, domain, reload=reload)
-        certificate.provision(
-            sudo=sudo,
-            dns_use_sandbox=None,
-            force_renewal=force_renewal,
+        raise CommandError(
+            "Public certificate renewal is managed by gway-web; run the web cert/certbot flow there."
         )
-    except Exception as exc:  # noqa: BLE001
-        if http01_bootstrapped:
-            _restore_https_config_after_http01_bootstrap(service, config, reload=reload)
-        if isinstance(exc, CertbotChallengeError):
-            raise CommandError(
-                _build_certbot_challenge_command_error(
-                    domain=domain,
-                    challenge_type=certificate.challenge_type,
-                    reason=str(exc),
-                )
-            ) from exc
-        raise
-
-    if force_renewal:
-        _warn_if_certificate_paths_changed(
-            service,
-            certificate,
-            previous_certificate_path=previous_certificate_path,
-            previous_certificate_key_path=previous_certificate_key_path,
-        )
-        _validate_force_renewal_result(service, certificate)
