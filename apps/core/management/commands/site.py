@@ -90,7 +90,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "site_arguments",
             nargs="*",
-            help="Additional arguments forwarded unchanged to 'gway web site'",
+            help="Additional arguments after '--' are forwarded unchanged to 'gway web site'",
         )
 
     def handle(self, *args, **options):
