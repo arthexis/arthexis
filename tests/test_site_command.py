@@ -3,6 +3,14 @@ from django.contrib.sites.models import Site
 from django.core.management import call_command
 
 
+@pytest.fixture(autouse=True)
+def _disable_gway_forwarding(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "apps.core.management.commands.site.shutil.which",
+        lambda command: None,
+    )
+
+
 @pytest.mark.django_db
 def test_site_without_arguments_reports_current_configuration(capsys) -> None:
     site = Site.objects.get_current()
@@ -18,7 +26,7 @@ def test_site_without_arguments_reports_current_configuration(capsys) -> None:
     assert "name: Current" in output
     assert "web:" in output
     assert "host: 127.0.0.1" in output
-    assert "port: 8000" in output
+    assert "port: 8888" in output
 
 
 @pytest.mark.django_db
@@ -56,3 +64,48 @@ def test_site_can_skip_node_refresh_for_lifecycle_use(monkeypatch) -> None:
     call_command("site", "example.org", no_refresh_node=True)
 
     assert Site.objects.get_current().domain == "example.org"
+
+
+@pytest.mark.django_db
+def test_site_forwards_enriched_site_to_gway(monkeypatch) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(
+        "apps.core.management.commands.site.shutil.which",
+        lambda command: "/usr/local/bin/gway",
+    )
+
+    def fake_run(arguments, **kwargs):
+        calls.append((list(arguments), kwargs))
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.site.subprocess.run",
+        fake_run,
+    )
+
+    site = Site.objects.get_current()
+    site.domain = "charge.example.com"
+    site.name = "arthexis"
+    site.save()
+    Site.objects.clear_cache()
+
+    call_command("site", no_refresh_node=True)
+
+    assert calls == [
+        (
+            [
+                "/usr/local/bin/gway",
+                "web",
+                "site",
+                "arthexis",
+                "--domain",
+                "charge.example.com",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8888",
+                "--health-path",
+                "/health/",
+            ],
+            {"check": True, "text": True},
+        )
+    ]
