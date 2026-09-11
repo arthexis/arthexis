@@ -89,6 +89,7 @@ jobs:
           clean: true
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        if: ${{ matrix.os_flavor != 'ubuntu22' }}
         id: setup-python
         with:
           python-version: ${{ matrix.python_version }}
@@ -109,9 +110,6 @@ jobs:
           echo "ARTHEXIS_PYTHON_BIN=${python_bin}" >> "${GITHUB_ENV}"
           echo "$(dirname "${python_bin}")" >> "${GITHUB_PATH}"
           "${python_bin}" --version
-          if command -v python >/dev/null 2>&1; then
-            python --version
-          fi
           python3 --version
       - name: Cache pip
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
