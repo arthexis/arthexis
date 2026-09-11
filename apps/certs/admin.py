@@ -16,7 +16,9 @@ class CertificateProvisioningMixin:
             except Exception as exc:  # pragma: no cover - admin plumbing
                 self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
             else:
-                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+                self.message_user(
+                    request, f"{certificate}: {message}", messages.SUCCESS
+                )
 
     @admin.action(description=_("Verify Certificates"))
     def verify_certificates(self, request, queryset):
@@ -34,7 +36,9 @@ class CertificateProvisioningMixin:
         now = timezone.now()
         renewed = 0
         for certificate in queryset:
-            if not certificate.auto_renew or not certificate.is_due_for_renewal(now=now):
+            if not certificate.auto_renew or not certificate.is_due_for_renewal(
+                now=now
+            ):
                 continue
             try:
                 message = certificate.renew()
@@ -42,10 +46,14 @@ class CertificateProvisioningMixin:
                 self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
             else:
                 renewed += 1
-                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+                self.message_user(
+                    request, f"{certificate}: {message}", messages.SUCCESS
+                )
 
         if not renewed:
-            self.message_user(request, _("No due certificates were renewed."), messages.INFO)
+            self.message_user(
+                request, _("No due certificates were renewed."), messages.INFO
+            )
 
 
 @admin.register(SelfSignedCertificate)
@@ -76,4 +84,6 @@ class SelfSignedCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin)
             except Exception as exc:  # pragma: no cover - admin plumbing
                 self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
             else:
-                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+                self.message_user(
+                    request, f"{certificate}: {message}", messages.SUCCESS
+                )
