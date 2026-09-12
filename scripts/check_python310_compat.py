@@ -2,9 +2,8 @@
 """Fail fast on source constructs incompatible with the Python 3.10 floor.
 
 Every Python file is parsed by the interpreter running this script, so newer
-syntax fails immediately. APIs intentionally backfilled by ``utils`` (currently
-``datetime.UTC``) are not reported here; smaller compatibility cases stay
-source-clean so they do not depend on bootstrap import order.
+syntax fails immediately. APIs deliberately backfilled by ``utils`` are treated
+as part of the supported compatibility surface and verified separately in CI.
 """
 
 from __future__ import annotations
@@ -16,32 +15,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "build", "dist"}
 
+# These post-3.10 APIs are not provided by the compatibility bootstrap.
 UNSUPPORTED_FROM_IMPORTS = {
-    "enum": {"ReprEnum", "StrEnum"},
-    "typing": {
-        "LiteralString",
-        "Never",
-        "NotRequired",
-        "Required",
-        "Self",
-        "TypeVarTuple",
-        "Unpack",
-        "assert_never",
-        "assert_type",
-        "dataclass_transform",
-        "reveal_type",
-    },
-}
-
-# utils.role_app_profiles is the original StrEnum consumer and is deliberately
-# covered by the package bootstrap. New direct stdlib StrEnum imports are not.
-ALLOW_IMPORTS = {
-    ("utils/role_app_profiles.py", "enum", "StrEnum"),
+    "enum": {"ReprEnum"},
 }
 
 UNSUPPORTED_ATTRIBUTES = {
     ("enum", "ReprEnum"),
-    ("enum", "StrEnum"),
     ("asyncio", "TaskGroup"),
     ("asyncio", "timeout"),
 }
@@ -78,20 +58,13 @@ def check_file(path: Path) -> list[str]:
         )
         return problems
 
-    # The compatibility bootstrap necessarily references the APIs it provides.
-    if rel == "utils/__init__.py":
-        return problems
-
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module in UNSUPPORTED_FROM_IMPORTS:
             for alias in node.names:
-                name = alias.name
-                if name in UNSUPPORTED_FROM_IMPORTS[node.module]:
-                    if (rel, node.module, name) in ALLOW_IMPORTS:
-                        continue
+                if alias.name in UNSUPPORTED_FROM_IMPORTS[node.module]:
                     problems.append(
-                        f"{rel}:{node.lineno}: from {node.module} import {name} "
-                        "requires Python >3.10 or a compatibility import"
+                        f"{rel}:{node.lineno}: from {node.module} import {alias.name} "
+                        "requires Python >3.10"
                     )
         elif isinstance(node, ast.Attribute):
             base = dotted_name(node.value)
