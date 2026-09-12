@@ -31,7 +31,8 @@ django-mermaid==0.1.1
 django-object-actions==5.1.2
 django-otp==1.7.2
 django-parler==2.4
-django-stubs-ext==6.1.0
+django-stubs-ext==6.0.9; python_version < "3.11"
+django-stubs-ext==6.1.0; python_version >= "3.11"
 django-stubs==6.0.9
 django-timezone-field==7.2.2
 Django==5.2.17
@@ -77,6 +78,7 @@ sqlparse==0.6.0
 tablib==3.10.0
 tinycss2==1.5.1
 toml==0.10.2
+tomli==2.4.1; python_version < "3.11"
 twine==7.0.0
 Twisted==26.4.0
 txaio==25.9.2

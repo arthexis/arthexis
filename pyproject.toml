@@ -67,6 +67,7 @@ dependencies = [
   "tablib==3.10.0",
   "tinycss2==1.5.1",
   "toml==0.10.2",
+  "tomli==2.4.1; python_version < \"3.11\"",
   "Twisted==26.4.0",
   "txaio==25.9.2",
   "typing_extensions==4.16.0",
@@ -95,7 +96,8 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.5.1",
-  "django-stubs-ext==6.1.0",
+  "django-stubs-ext==6.0.9; python_version < \"3.11\"",
+  "django-stubs-ext==6.1.0; python_version >= \"3.11\"",
   "django-stubs==6.0.9",
   "import-linter==2.15",
   "ruff==0.16.6",
