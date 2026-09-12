@@ -14,12 +14,14 @@ import time
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from gettext import gettext as _
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+UTC = timezone.utc
 
 SCHEMA_VERSION = 1
 DEFAULT_MAX_LOG_FILES = 30
