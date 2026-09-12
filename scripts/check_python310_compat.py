@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fail fast on source constructs incompatible with the Python 3.10 floor.
 
-The check intentionally focuses on stdlib/type APIs that compile on newer Python
-but fail only when a module is imported under Python 3.10. Syntax compatibility
-is covered by parsing every Python file with the interpreter running this script.
+Every Python file is parsed by the interpreter running this script, so newer
+syntax fails immediately. APIs intentionally backfilled by ``utils`` (currently
+``datetime.UTC``) are not reported here; smaller compatibility cases stay
+source-clean so they do not depend on bootstrap import order.
 """
 
 from __future__ import annotations
@@ -15,10 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "build", "dist"}
 
-# Names added after Python 3.10 that should use compatible alternatives or
-# typing_extensions instead.
 UNSUPPORTED_FROM_IMPORTS = {
-    "datetime": {"UTC"},
     "enum": {"ReprEnum", "StrEnum"},
     "typing": {
         "LiteralString",
@@ -35,15 +33,13 @@ UNSUPPORTED_FROM_IMPORTS = {
     },
 }
 
-# Existing compatibility bootstrap deliberately patches enum.StrEnum before
-# utils.role_app_profiles is imported. Keep this single legacy exception until
-# that module is naturally touched; new direct imports remain blocked.
+# utils.role_app_profiles is the original StrEnum consumer and is deliberately
+# covered by the package bootstrap. New direct stdlib StrEnum imports are not.
 ALLOW_IMPORTS = {
     ("utils/role_app_profiles.py", "enum", "StrEnum"),
 }
 
 UNSUPPORTED_ATTRIBUTES = {
-    ("datetime", "UTC"),
     ("enum", "ReprEnum"),
     ("enum", "StrEnum"),
     ("asyncio", "TaskGroup"),
@@ -76,7 +72,14 @@ def check_file(path: Path) -> list[str]:
     try:
         tree = ast.parse(source, filename=rel)
     except SyntaxError as exc:
-        problems.append(f"{rel}:{exc.lineno or 0}: syntax is not valid on Python {sys.version_info.major}.{sys.version_info.minor}: {exc.msg}")
+        problems.append(
+            f"{rel}:{exc.lineno or 0}: syntax is not valid on Python "
+            f"{sys.version_info.major}.{sys.version_info.minor}: {exc.msg}"
+        )
+        return problems
+
+    # The compatibility bootstrap necessarily references the APIs it provides.
+    if rel == "utils/__init__.py":
         return problems
 
     for node in ast.walk(tree):
@@ -87,7 +90,8 @@ def check_file(path: Path) -> list[str]:
                     if (rel, node.module, name) in ALLOW_IMPORTS:
                         continue
                     problems.append(
-                        f"{rel}:{node.lineno}: from {node.module} import {name} requires Python >3.10"
+                        f"{rel}:{node.lineno}: from {node.module} import {name} "
+                        "requires Python >3.10 or a compatibility import"
                     )
         elif isinstance(node, ast.Attribute):
             base = dotted_name(node.value)
@@ -96,11 +100,12 @@ def check_file(path: Path) -> list[str]:
                     f"{rel}:{node.lineno}: {base}.{node.attr} requires Python >3.10"
                 )
 
-    # Direct tomllib imports are safe only when the file also contains an
-    # explicit tomli fallback. This simple guard catches accidental new uses
-    # without rejecting the compatibility wrappers already present.
+    # Raw tomllib remains disallowed: use an explicit tomli fallback so scripts
+    # and tests are safe even when imported before the application bootstrap.
     if ("import tomllib" in source or "from tomllib import" in source) and "tomli" not in source:
-        problems.append(f"{rel}: direct tomllib use requires a tomli fallback on Python 3.10")
+        problems.append(
+            f"{rel}: direct tomllib use requires a tomli fallback on Python 3.10"
+        )
 
     return problems
 
