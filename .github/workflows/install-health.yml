@@ -81,7 +81,7 @@ jobs:
           apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           timeout --foreground 600s apt-get "${apt_opts[@]}" update
           timeout --foreground 600s apt-get "${apt_opts[@]}" install -y --no-install-recommends \
-            ca-certificates curl git openssl sudo python3 python3-venv \
+            ca-certificates curl git openssl sudo python3 python3-tomli python3-venv \
             libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
             libpangocairo-1.0-0 shared-mime-info
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
