@@ -3,7 +3,10 @@
 
 Every Python file is parsed by the interpreter running this script, so newer
 syntax fails immediately. APIs deliberately backfilled by ``utils`` are treated
-as part of the supported compatibility surface and verified separately in CI.
+as part of the supported application compatibility surface and verified
+separately in CI. Standalone scripts are stricter: they can run before ``utils``
+is imported, so they must use Python 3.10-native APIs or explicit local
+fallbacks.
 """
 
 from __future__ import annotations
@@ -24,6 +27,32 @@ UNSUPPORTED_ATTRIBUTES = {
     ("enum", "ReprEnum"),
     ("asyncio", "TaskGroup"),
     ("asyncio", "timeout"),
+}
+
+# Application imports can use APIs supplied by the ``utils`` bootstrap. Files
+# under scripts/ are executable entrypoints and may run before that bootstrap,
+# so they must not depend on these monkey-patched stdlib/type names.
+STANDALONE_UNSUPPORTED_FROM_IMPORTS = {
+    "datetime": {"UTC"},
+    "enum": {"StrEnum"},
+    "typing": {
+        "LiteralString",
+        "Never",
+        "NotRequired",
+        "Required",
+        "Self",
+        "TypeVarTuple",
+        "Unpack",
+        "assert_never",
+        "assert_type",
+        "dataclass_transform",
+        "reveal_type",
+    },
+}
+
+STANDALONE_UNSUPPORTED_ATTRIBUTES = {
+    ("datetime", "UTC"),
+    ("enum", "StrEnum"),
 }
 
 
@@ -49,6 +78,7 @@ def check_file(path: Path) -> list[str]:
     rel = path.relative_to(ROOT).as_posix()
     source = path.read_text(encoding="utf-8")
     problems: list[str] = []
+    standalone = rel.startswith("scripts/")
     try:
         tree = ast.parse(source, filename=rel)
     except SyntaxError as exc:
@@ -59,18 +89,29 @@ def check_file(path: Path) -> list[str]:
         return problems
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in UNSUPPORTED_FROM_IMPORTS:
+        if isinstance(node, ast.ImportFrom):
+            unsupported = UNSUPPORTED_FROM_IMPORTS.get(node.module or "", set())
+            if standalone:
+                unsupported = unsupported | STANDALONE_UNSUPPORTED_FROM_IMPORTS.get(
+                    node.module or "", set()
+                )
             for alias in node.names:
-                if alias.name in UNSUPPORTED_FROM_IMPORTS[node.module]:
+                if alias.name in unsupported:
                     problems.append(
                         f"{rel}:{node.lineno}: from {node.module} import {alias.name} "
-                        "requires Python >3.10"
+                        "requires an explicit Python 3.10-safe alternative"
                     )
         elif isinstance(node, ast.Attribute):
             base = dotted_name(node.value)
-            if base and (base, node.attr) in UNSUPPORTED_ATTRIBUTES:
+            unsupported_attributes = UNSUPPORTED_ATTRIBUTES
+            if standalone:
+                unsupported_attributes = (
+                    UNSUPPORTED_ATTRIBUTES | STANDALONE_UNSUPPORTED_ATTRIBUTES
+                )
+            if base and (base, node.attr) in unsupported_attributes:
                 problems.append(
-                    f"{rel}:{node.lineno}: {base}.{node.attr} requires Python >3.10"
+                    f"{rel}:{node.lineno}: {base}.{node.attr} requires an explicit "
+                    "Python 3.10-safe alternative"
                 )
 
     # Raw tomllib remains disallowed: use an explicit tomli fallback so scripts
