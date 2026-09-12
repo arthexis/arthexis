@@ -96,7 +96,8 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.5.1",
-  "django-stubs-ext==6.1.0",
+  "django-stubs-ext==6.0.9; python_version < \"3.11\"",
+  "django-stubs-ext==6.1.0; python_version >= \"3.11\"",
   "django-stubs==6.0.9",
   "import-linter==2.15",
   "ruff==0.16.6",
