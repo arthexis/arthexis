@@ -1,6 +1,10 @@
 import subprocess
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 from apps.core.system import lifecycle
 
