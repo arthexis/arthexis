@@ -1,8 +1,12 @@
-import tomllib
 from importlib import import_module
 from pathlib import Path
 
 import pytest
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 from apps.core.system import lifecycle
 
