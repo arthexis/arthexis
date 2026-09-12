@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import enum
 
 
@@ -14,3 +15,6 @@ if not hasattr(enum, "StrEnum"):
             return str(self.value)
 
     enum.StrEnum = StrEnum  # type: ignore[attr-defined]
+
+if not hasattr(datetime, "UTC"):
+    datetime.UTC = datetime.timezone.utc  # type: ignore[attr-defined]
