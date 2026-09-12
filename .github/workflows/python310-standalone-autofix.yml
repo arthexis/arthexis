@@ -1,0 +1,80 @@
+name: Python 3.10 Standalone Autofix
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - compat/python310-standalone-scripts
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: true
+          ref: compat/python310-standalone-scripts
+      - name: Rewrite standalone datetime.UTC imports
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import ast
+          from pathlib import Path
+
+          root = Path("scripts")
+          changed = []
+          for path in sorted(root.glob("*.py")):
+              source = path.read_text(encoding="utf-8")
+              tree = ast.parse(source, filename=str(path))
+              utc_imports = [
+                  node
+                  for node in tree.body
+                  if isinstance(node, ast.ImportFrom)
+                  and node.module == "datetime"
+                  and any(alias.name == "UTC" for alias in node.names)
+              ]
+              if not utc_imports:
+                  continue
+              if len(utc_imports) != 1:
+                  raise SystemExit(f"{path}: expected one datetime UTC import")
+
+              node = utc_imports[0]
+              if node.lineno != node.end_lineno:
+                  raise SystemExit(f"{path}: multiline datetime import requires manual review")
+              lines = source.splitlines(keepends=True)
+              names = [alias.name for alias in node.names if alias.name != "UTC"]
+              if "timezone" not in names:
+                  names.append("timezone")
+              indent = lines[node.lineno - 1][: len(lines[node.lineno - 1]) - len(lines[node.lineno - 1].lstrip())]
+              lines[node.lineno - 1] = f"{indent}from datetime import {', '.join(names)}\n"
+
+              # Insert the compatibility alias after the contiguous top-level
+              # import block, keeping all call sites unchanged.
+              import_nodes = [
+                  item
+                  for item in tree.body
+                  if isinstance(item, (ast.Import, ast.ImportFrom))
+              ]
+              insert_after = max(item.end_lineno or item.lineno for item in import_nodes)
+              lines.insert(insert_after, "\nUTC = timezone.utc\n")
+              path.write_text("".join(lines), encoding="utf-8")
+              changed.append(str(path))
+
+          if not changed:
+              raise SystemExit("No standalone datetime.UTC imports found")
+          print("Rewrote:")
+          for path in changed:
+              print(f"- {path}")
+          PY
+      - name: Verify compatibility audit
+        run: python scripts/check_python310_compat.py
+      - name: Commit fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts
+          git commit -m 'compat: make standalone UTC imports Python 3.10 safe'
+          git push origin HEAD:compat/python310-standalone-scripts
