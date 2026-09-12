@@ -14,8 +14,10 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+UTC = timezone.utc
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_PORT = 8000
