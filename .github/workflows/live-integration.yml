@@ -42,6 +42,13 @@ jobs:
           gway --version
           sudo -n true
 
+      - name: Upgrade GWAY from main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n gway upgrade gway
+          gway --version
+
       - name: Exercise managed live integration
         shell: bash
         run: bash scripts/ci/live-integration.sh
@@ -61,6 +68,12 @@ jobs:
             if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
               git -C "$checkout" rev-parse HEAD
               git -C "$checkout" status --short
+            fi
+            echo '=== managed environment ==='
+            ls -ld /opt/arthexis /opt/arthexis/app /opt/arthexis/.venv 2>&1
+            if [[ -x /opt/arthexis/.venv/bin/python ]]; then
+              /opt/arthexis/.venv/bin/python --version
+              /opt/arthexis/.venv/bin/python -m pip show arthexis 2>&1
             fi
             echo '=== GWAY ==='
             gway --version

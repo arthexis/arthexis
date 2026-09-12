@@ -23,12 +23,21 @@ if [[ "$current_main_sha" != "$expected_sha" ]]; then
   exit 1
 fi
 
+phase="managed-install"
+trap 'status=$?; if [[ $status -ne 0 ]]; then echo "Live integration failed during phase: ${phase}" >&2; echo "gway=$(command -v gway)" >&2; gway --version >&2 || true; sudo -n ls -ld /opt/arthexis /opt/arthexis/app /opt/arthexis/.venv >&2 || true; fi; exit $status' EXIT
+
+echo "=== managed install/upgrade ==="
+echo "GWAY runtime: $(command -v gway)"
+gway --version
 if gway path arthexis >/dev/null 2>&1; then
+  echo "Existing managed Arthexis detected; exercising upgrade path"
   sudo -n gway upgrade arthexis
 else
+  echo "No managed Arthexis detected; exercising install path"
   sudo -n gway install arthexis
 fi
 
+phase="managed-layout"
 checkout="$(gway path arthexis)"
 if [[ "$checkout" != "/opt/arthexis/app" ]]; then
   echo "Unexpected managed checkout path: $checkout" >&2
@@ -45,12 +54,14 @@ if [[ ! -x /opt/arthexis/.venv/bin/python ]]; then
   exit 1
 fi
 
+phase="revision-check"
 deployed_sha="$(git -C "$checkout" rev-parse HEAD)"
 if [[ "$deployed_sha" != "$expected_sha" ]]; then
   echo "Managed deployment revision mismatch: expected $expected_sha, got $deployed_sha" >&2
   exit 1
 fi
 
+phase="managed-command"
 gway arthexis version
 profile="${GWAY_SERVICE_PROFILE:-}"
 if [[ -z "$profile" ]]; then
@@ -68,9 +79,14 @@ esac
 export GWAY_SERVICE_PROFILE="$profile"
 echo "Using GWAY service profile: $GWAY_SERVICE_PROFILE"
 
+phase="service-install"
 sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service install arthexis
+phase="service-start"
 sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service start arthexis
+phase="service-status"
 gway service status arthexis
 
+phase="application-health"
 gway arthexis status
 gway arthexis good
+phase="complete"
