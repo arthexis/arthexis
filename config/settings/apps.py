@@ -207,7 +207,6 @@ PROJECT_LOCAL_APPS = [
     "apps.energy",
     "apps.features",
     "apps.groups",
-    "apps.imager",
     "apps.locale",
     "apps.locals",
     "apps.maps",
