@@ -1,7 +1,8 @@
-"""Root route provider for app-owned URL mounts."""
+"""Retired Raspberry Pi Connect route provider.
 
-from django.urls import include, path
+The app remains installed temporarily so existing deployments can apply its
+terminal schema migration. Raspberry Pi Connect fleet management is no longer
+a runtime capability of Arthexis; do not add routes here.
+"""
 
-ROOT_URLPATTERNS = [
-    path("rpiconnect/", include("apps.rpiconnect.urls")),
-]
+ROOT_URLPATTERNS = []
