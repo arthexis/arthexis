@@ -8,13 +8,13 @@ from django.apps import apps
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from utils.role_app_profiles import resolve_role_app_selectors
+from config.settings.apps import _resolve_installed_app_entries
+from utils.role_app_profiles import RoleProfile, resolve_role_app_selectors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The Django app remains discoverable for one bridge release so deployed
-# databases can apply 0002_retire_imager. Role/profile declarations and their
-# central tests may still name the inert shell until physical deletion.
+# databases can apply 0002_retire_imager. It is no longer runtime-selectable.
 COMPATIBILITY_REFERENCE_FILES = {
     Path("apps/imager/apps.py"),
     Path("apps/imager/manifest.py"),
@@ -111,9 +111,20 @@ def test_no_unexpected_imager_runtime_references_remain() -> None:
     assert unexpected == []
 
 
-def test_role_selection_can_only_reach_migration_shell() -> None:
-    # Compatibility selectors remain for this bridge release, but selecting
-    # imager can no longer expose models, routes, builders, burners, or services.
-    selected = set(resolve_role_app_selectors("terminal"))
-    assert "apps.imager" in selected
-    assert list(apps.get_app_config("imager").get_models()) == []
+def test_no_role_selects_retired_imager() -> None:
+    for role in RoleProfile:
+        selected = set(resolve_role_app_selectors(role))
+        assert "apps.imager" not in selected
+
+
+def test_enabled_app_lock_cannot_reintroduce_retired_imager_appconfig() -> None:
+    selected = set(
+        _resolve_installed_app_entries(
+            node_role="Terminal",
+            profile_enabled=False,
+            enabled_app_lock_entries=("apps.imager.apps.ImagerConfig",),
+        )
+    )
+
+    assert "apps.imager" not in selected
+    assert "apps.imager.apps.ImagerConfig" not in selected

@@ -170,14 +170,20 @@ def _normalize_selected_app_entries(
             continue
 
         normalized_entry = alias_map.get(selected_entry)
+        if normalized_entry is None and selected_entry.startswith("apps."):
+            config_aliases = _static_app_config_aliases(selected_entry)
+            normalized_entry = next(
+                (alias_map[alias] for alias in config_aliases if alias in alias_map),
+                None,
+            )
+            if config_aliases and normalized_entry is None:
+                continue
         if normalized_entry is not None:
             if normalized_entry in RETIRED_RUNTIME_APP_SELECTORS:
                 continue
             normalized_entries.append(normalized_entry)
         elif "." in selected_entry:
-            if selected_entry.startswith("apps.") and not _static_app_config_aliases(
-                selected_entry
-            ):
+            if selected_entry.startswith("apps."):
                 continue
             normalized_entries.append(selected_entry)
 
