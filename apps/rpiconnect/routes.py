@@ -1,7 +1,8 @@
-"""Root route provider for app-owned URL mounts."""
+"""Retired Raspberry Pi Connect route provider.
 
-from django.urls import include, path
+The app remains installed temporarily so existing deployments can migrate its
+schema safely, but its runtime HTTP surface is intentionally disabled as part
+of #201. Do not add new routes here.
+"""
 
-ROOT_URLPATTERNS = [
-    path("rpiconnect/", include("apps.rpiconnect.urls")),
-]
+ROOT_URLPATTERNS = []
