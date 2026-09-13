@@ -1,7 +1,7 @@
-"""Root route provider for imager-owned URL mounts."""
+"""Retired Raspberry Pi imager route provider.
 
-from django.urls import include, path
+The app remains installed temporarily so existing deployments can apply its
+terminal schema migration. Arthexis no longer exposes image build/burn routes.
+"""
 
-ROOT_URLPATTERNS = [
-    path("imager/", include("apps.imager.urls")),
-]
+ROOT_URLPATTERNS = []
