@@ -13,8 +13,7 @@ nav:
       - Charger Cutover Runbook: operations/charger-cutover-runbook.md
       - Error Report Package: operations/error-report.md
       - Good Command: operations/good-command.md
-      - Imager SD-Card Recovery Workflow: operations/imager-sd-card-recovery.md
-      - Raspberry Pi Image Burn Runbook: operations/rpi-image-burn.md
+      - Host Provisioning Boundary: operations/host-provisioning.md
       - Operational Commands: operations/operational-commands.md
       - Reinstall + Data Import Runbook: operations/reinstall-data-import-runbook.md
   - Integrations:
