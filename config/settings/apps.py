@@ -218,7 +218,6 @@ PROJECT_LOCAL_APPS = [
     "apps.release",
     "apps.reports",
     "apps.repos",
-    "apps.rpiconnect",
     "apps.sensors",
     "apps.serialbridge",
     "apps.services",
