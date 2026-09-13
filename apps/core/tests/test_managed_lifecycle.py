@@ -95,6 +95,7 @@ def test_install_and_upgrade_are_semantic_prepare_hooks(monkeypatch, tmp_path):
         root=tmp_path,
         checkout=tmp_path / "app",
     )
+    current.checkout.mkdir()
     calls = []
 
     def fake_prepare(*, layout, **_kwargs):
