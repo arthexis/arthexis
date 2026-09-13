@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -18,6 +17,7 @@ def test_source_checkout_without_metadata_is_unmanaged(tmp_path):
     (checkout / ".git").mkdir()
     (checkout / ".venv").mkdir()
     (checkout / "db.sqlite3").write_text("dev", encoding="utf-8")
+    (checkout / "local-change.txt").write_text("dirty", encoding="utf-8")
 
     installation = classify_managed_installation(tmp_path)
 
@@ -77,10 +77,14 @@ def test_conflicting_metadata_is_invalid_and_not_overwritten(tmp_path):
 
     assert installation.mode is LifecycleMode.UNMANAGED
     assert installation.valid is False
-    assert "ownership metadata root does not match this installation" in installation.problems
+    assert (
+        "ownership metadata root does not match this installation"
+        in installation.problems
+    )
     with pytest.raises(OwnershipError):
         record_managed_installation(tmp_path)
-    assert json.loads(layout.metadata.read_text(encoding="utf-8"))["installation_id"] == "existing-id"
+    metadata = json.loads(layout.metadata.read_text(encoding="utf-8"))
+    assert metadata["installation_id"] == "existing-id"
 
 
 def test_invalid_metadata_is_not_managed(tmp_path):
