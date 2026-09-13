@@ -176,7 +176,7 @@ def test_resolved_profile_includes_platform_and_role_baseline():
     assert "apps.cards" in terminal_apps
     assert "apps.emails" in terminal_apps
     assert "apps.energy" in terminal_apps
-    assert "apps.imager" in terminal_apps
+    assert "apps.imager" not in terminal_apps
     assert "apps.maps" in terminal_apps
     assert "apps.repos" in terminal_apps
     assert "apps.skills" in terminal_apps
@@ -243,7 +243,7 @@ def test_explain_role_app_selectors_reports_selection_reasons():
     reasons = {item.selector: item.reasons for item in result.explanations}
 
     assert "all-node" in reasons["apps.core"]
-    assert "role-default:terminal" in reasons["apps.imager"]
+    assert "apps.imager" not in reasons
     assert "explicit-include" in reasons["apps.repos"]
     assert "dependency-closure:apps.repos" in reasons["apps.discovery"]
 
@@ -1155,7 +1155,7 @@ def test_terminal_role_profile_rejects_disabling_required_ocpp(tmp_path):
     assert "apps.ocpp cannot be disabled" in result.stdout + result.stderr
 
 
-def test_terminal_role_profile_loads_imager_management_command(tmp_path):
+def test_terminal_role_profile_does_not_load_retired_imager_management_command(tmp_path):
     env = os.environ.copy()
     env["ARTHEXIS_ROLE_APP_PROFILES"] = "true"
     env["ARTHEXIS_SQLITE_PATH"] = str(tmp_path / "terminal-imager.sqlite3")
@@ -1184,8 +1184,8 @@ def test_terminal_role_profile_loads_imager_management_command(tmp_path):
         check=False,
     )
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Build and safely write Raspberry Pi 4B image artifacts" in result.stdout
+    assert result.returncode != 0
+    assert "Unknown command" in result.stderr or "Unknown command" in result.stdout
 
 
 def test_satellite_role_profile_loads_migrations_management_command(tmp_path):
