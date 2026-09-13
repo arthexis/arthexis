@@ -21,7 +21,6 @@ AppSelector: TypeAlias = str
 FeaturePackName: TypeAlias = str
 
 DEPRECATED_FEATURE_PACKS = frozenset({"charger_cutovers", "local_summaries"})
-IMAGER_APP_SELECTOR: AppSelector = "apps.imager"
 FEATURE_PACK_ONLY_APP_SELECTORS: tuple[AppSelector, ...] = ()
 DIRECT_LOCK_REASON_PREFIXES = ("role-default:", "feature-pack:")
 DIRECT_LOCK_REASONS = frozenset({"explicit-include", "full-app-fallback:unknown-role"})
@@ -38,6 +37,7 @@ RETIRED_RUNTIME_APP_SELECTORS = frozenset(
         "apps.content",
         "apps.cutover",
         "apps.gallery",
+        "apps.imager",
         "apps.links",
         "apps.widgets",
         "apps.video",
@@ -148,7 +148,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
     RoleProfile.CONTROL: (
         "apps.cards",
         "apps.discovery",
-        IMAGER_APP_SELECTOR,
         "apps.nmcli",
         "apps.sensors",
         "apps.serialbridge",
@@ -162,7 +161,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
         "apps.serialbridge",
     ),
     RoleProfile.TERMINAL: (
-        IMAGER_APP_SELECTOR,
         "apps.repos",
         "apps.skills",
         "apps.terminals",
