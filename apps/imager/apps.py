@@ -1,11 +1,10 @@
-"""Application configuration for Raspberry Pi image tooling."""
-
 from django.apps import AppConfig
 
 
 class ImagerConfig(AppConfig):
-    """Register Raspberry Pi image artifact tooling."""
+    """Migration-only compatibility shell for the retired imager app."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.imager"
-    verbose_name = "Raspberry Pi Imager"
+    label = "imager"
+    verbose_name = "Imager (retired)"
