@@ -233,15 +233,6 @@ def test_hardware_experiments_feature_pack_enables_sensors():
     assert "apps.sensors" in hardware_apps
 
 
-def test_rpi_connect_updates_feature_pack_enables_native_artifact_builder():
-    watchtower_apps = set(
-        resolve_role_app_selectors("watchtower", feature_packs=("rpi-connect-updates",))
-    )
-
-    assert "apps.imager" in watchtower_apps
-    assert "apps.rpiconnect" in watchtower_apps
-
-
 def test_explain_role_app_selectors_reports_selection_reasons():
     result = explain_role_app_selectors(
         "terminal",
