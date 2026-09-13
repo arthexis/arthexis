@@ -8,6 +8,7 @@ from django.apps import apps
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from config.settings.apps import _resolve_installed_app_entries
 from utils.role_app_profiles import RoleProfile, resolve_role_app_selectors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -114,3 +115,16 @@ def test_no_role_selects_retired_imager() -> None:
     for role in RoleProfile:
         selected = set(resolve_role_app_selectors(role))
         assert "apps.imager" not in selected
+
+
+def test_enabled_app_lock_cannot_reintroduce_retired_imager_appconfig() -> None:
+    selected = set(
+        _resolve_installed_app_entries(
+            node_role="Terminal",
+            profile_enabled=False,
+            enabled_app_lock_entries=("apps.imager.apps.ImagerConfig",),
+        )
+    )
+
+    assert "apps.imager" not in selected
+    assert "apps.imager.apps.ImagerConfig" not in selected
