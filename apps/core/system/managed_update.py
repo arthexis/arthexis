@@ -3,10 +3,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from pathlib import Path
+from collections.abc import Callable
 
 from apps.core.system import lifecycle
-from apps.core.system.lifecycle_ownership import LifecycleMode, classify_managed_installation
+from apps.core.system.lifecycle_ownership import (
+    LifecycleMode,
+    classify_managed_installation,
+)
 
 
 class ManagedUpdateError(RuntimeError):
@@ -23,11 +26,9 @@ def _require_managed(current: lifecycle.InstallationLayout) -> None:
         raise ManagedUpdateError(f"managed ownership check failed: {detail}")
 
 
-def _run_phase(name: str, operation) -> None:
+def _run_phase(name: str, operation: Callable[[], None]) -> None:
     try:
         operation()
-    except ManagedUpdateError:
-        raise
     except Exception as exc:
         raise ManagedUpdateError(f"{name} phase failed: {exc}") from exc
 
@@ -39,7 +40,7 @@ def _service_profile(current: lifecycle.InstallationLayout) -> str:
 def _reconcile_services(current: lifecycle.InstallationLayout) -> None:
     gway = shutil.which("gway")
     if gway is None:
-        raise ManagedUpdateError("service reconciliation requires the GWAY executable")
+        raise RuntimeError("service reconciliation requires the GWAY executable")
 
     profile = _service_profile(current)
     env = os.environ.copy()
@@ -80,11 +81,8 @@ def upgrade(
     assert prepared is not None
     _run_phase("service reconciliation", lambda: _reconcile_services(prepared))
     _run_phase("health verification", lambda: _verify_health(prepared))
-    _run_phase("ownership confirmation", lambda: lifecycle._record_managed_ownership(prepared))
+    _run_phase(
+        "ownership confirmation",
+        lambda: lifecycle._record_managed_ownership(prepared),
+    )
     return prepared
-
-
-def persistent_paths(root: str | Path | None = None) -> tuple[Path, ...]:
-    """Expose persistent managed paths for update-preservation tests and tooling."""
-    current = lifecycle.layout(root)
-    return (current.root / "var" / "lib",)
