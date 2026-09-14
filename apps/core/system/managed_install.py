@@ -11,11 +11,14 @@ class AdoptionArgumentError(ValueError):
 
 
 def _adoption_arguments(arguments: tuple[str, ...]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
     parser.add_argument("--adopt", action="store_true")
     parser.add_argument("--from", dest="source")
     parser.add_argument("--dry-run", action="store_true")
-    namespace, unknown = parser.parse_known_args(arguments)
+    try:
+        namespace, unknown = parser.parse_known_args(arguments)
+    except argparse.ArgumentError as exc:
+        raise AdoptionArgumentError(str(exc)) from exc
     if unknown:
         raise AdoptionArgumentError(
             f"unsupported adoption preflight arguments: {' '.join(unknown)}"
