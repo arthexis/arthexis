@@ -8,7 +8,15 @@ from config.roles import SUPPORTED_ROLES, normalize_role
 
 def _git(source: Path, *arguments: str) -> str:
     result = subprocess.run(
-        ["git", "-C", str(source), *arguments],
+        [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "--no-optional-locks",
+            "-C",
+            str(source),
+            *arguments,
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -16,7 +24,9 @@ def _git(source: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
-def _git_inventory(source: Path, blockers: list[str]) -> tuple[str | None, str | None, bool | None]:
+def _git_inventory(
+    source: Path, blockers: list[str]
+) -> tuple[str | None, str | None, bool | None]:
     try:
         root = Path(_git(source, "rev-parse", "--show-toplevel")).resolve()
         if root != source:
@@ -105,14 +115,33 @@ def inspect_adoption(
 
     transfers: list[dict[str, object]] = []
     database = source_path / "db.sqlite3"
+    sqlite_sidecars = [
+        path
+        for path in (
+            source_path / "db.sqlite3-wal",
+            source_path / "db.sqlite3-shm",
+        )
+        if path.is_file()
+    ]
     if database.is_file():
+        if sqlite_sidecars:
+            database_classification = "requires-consistent-backup"
+            database_detail = (
+                "SQLite sidecar state is present; quiesce the source or use a consistent "
+                "SQLite backup before transferring the database."
+            )
+        else:
+            database_classification = "copyable"
+            database_detail = (
+                "Copy checkout-local SQLite state into managed persistent data."
+            )
         transfers.append(
             _transfer_item(
                 "database",
                 database,
                 target_data / "db.sqlite3",
-                "copyable",
-                "Copy checkout-local SQLite state into managed persistent data.",
+                database_classification,
+                database_detail,
             )
         )
     else:
@@ -200,6 +229,7 @@ def inspect_adoption(
         "role": role,
         "environment_files": env_files,
         "virtual_environments": virtual_environments,
+        "sqlite_sidecars": [str(path) for path in sqlite_sidecars],
         "transfers": transfers,
         "blockers": blockers,
         "notes": [
