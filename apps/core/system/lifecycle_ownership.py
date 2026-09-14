@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -89,6 +91,7 @@ class OwnershipError(RuntimeError):
 
 
 def _expected_metadata(layout: OwnershipLayout, installation_id: str) -> dict[str, object]:
+    """Build the canonical ownership metadata payload for one installation."""
     return {
         "schema_version": METADATA_SCHEMA_VERSION,
         "project": PROJECT_NAME,
@@ -96,6 +99,31 @@ def _expected_metadata(layout: OwnershipLayout, installation_id: str) -> dict[st
         "root": str(layout.root.resolve()),
         "checkout": str(layout.checkout.resolve()),
     }
+
+
+def _write_metadata_atomically(path: Path, payload: dict[str, object]) -> None:
+    """Replace ownership metadata only after a complete sibling-file write."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            json.dump(payload, temporary, indent=2, sort_keys=True)
+            temporary.write("\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def classify_managed_installation(
@@ -133,10 +161,8 @@ def classify_managed_installation(
         payload = {}
 
     version = payload.get("schema_version")
-    if version != METADATA_SCHEMA_VERSION:
-        problems.append(
-            f"unsupported ownership metadata version: {version!r}"
-        )
+    if type(version) is not int or version != METADATA_SCHEMA_VERSION:
+        problems.append(f"unsupported ownership metadata version: {version!r}")
 
     if payload.get("project") != PROJECT_NAME:
         problems.append("ownership metadata belongs to another project")
@@ -161,7 +187,7 @@ def classify_managed_installation(
             layout=current,
             valid=False,
             installation_id=installation_id,
-            metadata_version=version if isinstance(version, int) else None,
+            metadata_version=version if type(version) is int else None,
             problems=tuple(problems),
         )
 
@@ -198,15 +224,9 @@ def record_managed_installation(
         raise OwnershipError("; ".join(existing.problems))
 
     installation_id = existing.installation_id or str(uuid.uuid4())
-    current.metadata.parent.mkdir(parents=True, exist_ok=True)
-    current.metadata.write_text(
-        json.dumps(
-            _expected_metadata(current, installation_id),
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_metadata_atomically(
+        current.metadata,
+        _expected_metadata(current, installation_id),
     )
     return classify_managed_installation(
         current.root,
