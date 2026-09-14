@@ -90,22 +90,32 @@ def test_prepare_requires_checkout(tmp_path):
         lifecycle.prepare(layout=current)
 
 
-def test_install_and_upgrade_are_semantic_prepare_hooks(monkeypatch, tmp_path):
+def test_install_and_upgrade_record_ownership_after_prepare(monkeypatch, tmp_path):
     current = lifecycle.InstallationLayout(
         root=tmp_path,
         checkout=tmp_path / "app",
     )
+    current.checkout.mkdir()
     calls = []
 
     def fake_prepare(*, layout, **_kwargs):
-        calls.append(layout)
+        calls.append(("prepare", layout))
         return layout
 
+    def fake_record(root, *, checkout_name):
+        calls.append(("record", root, checkout_name))
+
     monkeypatch.setattr(lifecycle, "prepare", fake_prepare)
+    monkeypatch.setattr(lifecycle, "record_managed_installation", fake_record)
 
     assert lifecycle.install(layout=current) is current
     assert lifecycle.upgrade(layout=current) is current
-    assert calls == [current, current]
+    assert calls == [
+        ("prepare", current),
+        ("record", current.root, current.checkout.name),
+        ("prepare", current),
+        ("record", current.root, current.checkout.name),
+    ]
 
 
 def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():

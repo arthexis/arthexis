@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from apps.core.system.lifecycle_ownership import record_managed_installation
 from config.roles import SUPPORTED_ROLES, normalize_role
 
 DEFAULT_INSTALL_ROOT = Path("/opt/arthexis")
@@ -355,18 +356,29 @@ def _prepare_for_options(
     return prepared
 
 
+def _record_managed_ownership(current: InstallationLayout) -> None:
+    record_managed_installation(
+        current.root,
+        checkout_name=current.checkout.name,
+    )
+
+
 def install(
     *arguments: str, layout: InstallationLayout | None = None
 ) -> InstallationLayout:
     """Application preparation hook for a GWAY installation."""
-    return _prepare_for_options(arguments, layout=layout)
+    prepared = _prepare_for_options(arguments, layout=layout)
+    _record_managed_ownership(prepared)
+    return prepared
 
 
 def upgrade(
     *arguments: str, layout: InstallationLayout | None = None
 ) -> InstallationLayout:
     """Application preparation hook for a GWAY upgrade."""
-    return _prepare_for_options(arguments, layout=layout)
+    prepared = _prepare_for_options(arguments, layout=layout)
+    _record_managed_ownership(prepared)
+    return prepared
 
 
 def current_python() -> str:
