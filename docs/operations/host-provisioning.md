@@ -56,6 +56,14 @@ The managed ownership contract distinguishes disposable/replaceable resources su
 
 A developer checkout is never converted in place into the managed production checkout. GWAY constructs and owns the canonical managed checkout independently of any nearby developer source tree. The planned adoption path in issue #208 will construct the normal managed layout and transfer the instance state that should survive promotion while leaving the developer checkout intact.
 
+## Managed lifecycle status
+
+`gway arthexis status` reports lifecycle state rather than only the old compact application-health result. The report includes managed/unmanaged ownership, lifecycle state, installation identity, root/checkout/environment paths, persistent-data location, Arthexis version and Git revision, dirty managed-checkout state, node role, database location, pending migrations, expected GWAY service units, and application health.
+
+Use `gway arthexis status --json` when another tool needs the same information in a stable structured form. A valid managed installation reports `healthy` only when the managed Python environment exists, migrations are current, the services expected for the node role are active, and application health is `GOOD`. Missing ownership metadata or a conflicting marker is reported as invalid; missing runtime resources, pending migrations, inactive services, or failed application health produce a degraded managed state with actionable problem entries.
+
+An unmanaged developer checkout remains a valid `unmanaged` lifecycle state rather than being treated as a broken managed installation. The repository `status.sh` continues to belong to the local/developer lifecycle and is not replaced by GWAY.
+
 ## Generic lifecycle boundary
 
 GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade and project operations around the `arthexis` project.
