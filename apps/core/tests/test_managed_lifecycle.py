@@ -177,6 +177,7 @@ def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():
     assert hooks == {
         "install": "apps.core.system.lifecycle:install",
         "upgrade": "apps.core.system.managed_update:upgrade",
+        "uninstall": "apps.core.system.managed_uninstall:uninstall",
     }
 
     for target in hooks.values():
