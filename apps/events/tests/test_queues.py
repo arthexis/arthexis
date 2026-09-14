@@ -42,7 +42,10 @@ class QueueEventTests(SimpleTestCase):
         self.assertEqual(event["status"], "Accepted")
         self.assertIn("timestamp", event)
         self.assertNotIn("unused", event)
-        self.assertEqual(queue.put.call_args.kwargs, {"serializer": "json"})
+        self.assertEqual(
+            queue.put.call_args.kwargs,
+            {"serializer": "json", "expiration": 86400},
+        )
 
     @override_settings(CELERY_BROKER_URL="")
     @patch("apps.events.queues.Connection")
