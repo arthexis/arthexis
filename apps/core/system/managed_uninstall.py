@@ -62,8 +62,12 @@ def uninstall(
 
 
 def persistent_paths(root: str | Path | None = None) -> tuple[Path, ...]:
-    current = _resolve_layout(None) if root is None else InstallationLayout(
-        root=Path(root).expanduser(),
-        checkout=Path(root).expanduser() / "app",
-    )
+    if root is None:
+        current = _resolve_layout(None)
+    else:
+        selected_root = Path(root).expanduser()
+        current = InstallationLayout(
+            root=selected_root,
+            checkout=selected_root / "app",
+        )
     return (current.root / "var" / "lib",)
