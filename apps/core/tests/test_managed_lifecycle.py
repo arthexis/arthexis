@@ -90,6 +90,29 @@ def test_prepare_requires_checkout(tmp_path):
         lifecycle.prepare(layout=current)
 
 
+def test_prepare_runtime_state_is_idempotent_and_preserves_managed_database(tmp_path):
+    current = lifecycle.InstallationLayout(
+        root=tmp_path,
+        checkout=tmp_path / "app",
+    )
+    current.checkout.mkdir()
+    legacy_database = current.checkout / "db.sqlite3"
+    legacy_database.write_text("legacy", encoding="utf-8")
+
+    first_state = lifecycle._prepare_runtime_state(current)
+    managed_database = tmp_path / "var" / "lib" / "db.sqlite3"
+    assert managed_database.read_text(encoding="utf-8") == "legacy"
+
+    managed_database.write_text("persistent", encoding="utf-8")
+    legacy_database.write_text("changed-checkout", encoding="utf-8")
+    second_state = lifecycle._prepare_runtime_state(current)
+
+    assert second_state == first_state == tmp_path / "var"
+    assert managed_database.read_text(encoding="utf-8") == "persistent"
+    for directory in ("lib", "log", "cache", "run"):
+        assert (tmp_path / "var" / directory).is_dir()
+
+
 def test_install_and_upgrade_record_ownership_after_prepare(monkeypatch, tmp_path):
     current = lifecycle.InstallationLayout(
         root=tmp_path,
@@ -116,6 +139,29 @@ def test_install_and_upgrade_record_ownership_after_prepare(monkeypatch, tmp_pat
         ("prepare", current),
         ("record", current.root, current.checkout.name),
     ]
+
+
+def test_repeated_install_preserves_role_and_ownership_identity(monkeypatch, tmp_path):
+    current = lifecycle.InstallationLayout(
+        root=tmp_path,
+        checkout=tmp_path / "app",
+    )
+    current.checkout.mkdir()
+
+    monkeypatch.setattr(lifecycle, "prepare", lambda *, layout: layout)
+    monkeypatch.setattr(lifecycle, "_warn_if_local_redis_missing", lambda _role: None)
+
+    first = lifecycle.install("--role", "Terminal", layout=current)
+    metadata = tmp_path / ".gway" / "arthexis.json"
+    first_metadata = metadata.read_text(encoding="utf-8")
+
+    second = lifecycle.install(layout=current)
+    second_metadata = metadata.read_text(encoding="utf-8")
+
+    assert first is current
+    assert second is current
+    assert lifecycle._current_role(current) == "Terminal"
+    assert second_metadata == first_metadata
 
 
 def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():
