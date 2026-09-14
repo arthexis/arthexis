@@ -21,6 +21,8 @@ class QueueEventTests(SimpleTestCase):
             id_tag="04A1B2C3",
             status="Accepted",
             unused=None,
+            type="spoofed.type",
+            timestamp="spoofed-time",
         )
 
         self.assertTrue(published)
@@ -34,6 +36,7 @@ class QueueEventTests(SimpleTestCase):
         queue.put.assert_called_once()
         event = queue.put.call_args.args[0]
         self.assertEqual(event["type"], "ocpp.authorization")
+        self.assertNotEqual(event["timestamp"], "spoofed-time")
         self.assertEqual(event["charger_id"], "gway-001")
         self.assertEqual(event["id_tag"], "04A1B2C3")
         self.assertEqual(event["status"], "Accepted")
