@@ -173,4 +173,67 @@ PY
 
 phase="application-health"
 gway arthexis good
+
+# The uninstall gate deliberately retires the runtime and then reinstalls it so
+# the shared runner remains usable. The sentinel proves persistent instance data
+# survives removal of checkout/environment/services/ownership metadata.
+phase="managed-uninstall"
+uninstall_sentinel="/opt/arthexis/var/lib/.live-integration-uninstall-preserve"
+printf '%s\n' "$installation_id" | sudo -n tee "$uninstall_sentinel" >/dev/null
+sudo -n gway uninstall arthexis
+
+phase="managed-uninstall-verify"
+if gway path arthexis >/dev/null 2>&1; then
+  echo "Arthexis remained registered after managed uninstall" >&2
+  exit 1
+fi
+if [[ -e /opt/arthexis/app || -e /opt/arthexis/.venv ]]; then
+  echo "Managed checkout or environment remained after uninstall" >&2
+  exit 1
+fi
+if [[ -e /opt/arthexis/.gway/arthexis.json ]]; then
+  echo "Managed ownership metadata remained after uninstall" >&2
+  exit 1
+fi
+if [[ "$(sudo -n cat "$uninstall_sentinel")" != "$installation_id" ]]; then
+  echo "Persistent instance data did not survive managed uninstall" >&2
+  exit 1
+fi
+for unit in \
+  gway-arthexis-web-local.service \
+  gway-arthexis-web-edge.service \
+  gway-arthexis-worker.service \
+  gway-arthexis-beat.service; do
+  if [[ -e "/etc/systemd/system/$unit" ]]; then
+    echo "Managed service unit remained after uninstall: $unit" >&2
+    exit 1
+  fi
+done
+
+phase="managed-reinstall-after-uninstall"
+sudo -n --preserve-env=GWAY_SERVICE_PROFILE \
+  gway install arthexis --service --role "$GWAY_SERVICE_PROFILE"
+if [[ "$(sudo -n cat "$uninstall_sentinel")" != "$installation_id" ]]; then
+  echo "Reinstall replaced persistent instance data" >&2
+  exit 1
+fi
+sudo -n rm -f "$uninstall_sentinel"
+
+phase="post-uninstall-reinstall-health"
+reinstalled_status="$(gway arthexis status --json)"
+STATUS_JSON="$reinstalled_status" EXPECTED_SHA="$expected_sha" EXPECTED_VERSION="$expected_version" EXPECTED_PROFILE="$GWAY_SERVICE_PROFILE" \
+  python - <<'PY'
+import json
+import os
+
+report = json.loads(os.environ["STATUS_JSON"])
+assert report["mode"] == "managed", report
+assert report["state"] == "healthy", report
+assert report["revision"] == os.environ["EXPECTED_SHA"], report
+assert report["version"] == os.environ["EXPECTED_VERSION"], report
+assert report["role"] == os.environ["EXPECTED_PROFILE"], report
+assert report["pending_migrations"] is False, report
+assert report["application_health"] == "GOOD", report
+assert report["problems"] == [], report
+PY
 phase="complete"
