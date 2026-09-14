@@ -28,9 +28,13 @@ def publish_queue_event(
         return False
 
     event = {
+        **{
+            key: value
+            for key, value in fields.items()
+            if value is not None and key not in {"type", "timestamp"}
+        },
         "type": event_type,
         "timestamp": timezone.now().isoformat(),
-        **{key: value for key, value in fields.items() if value is not None},
     }
 
     try:
