@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -11,6 +12,7 @@ from kombu import Connection
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECT_TIMEOUT = 1
+DEFAULT_PUBLISH_TIMEOUT = 2
 
 
 def publish_queue_event(
@@ -32,7 +34,14 @@ def publish_queue_event(
     }
 
     try:
-        with Connection(broker_url, connect_timeout=DEFAULT_CONNECT_TIMEOUT) as connection:
+        with Connection(
+            broker_url,
+            connect_timeout=DEFAULT_CONNECT_TIMEOUT,
+            transport_options={
+                "socket_timeout": DEFAULT_CONNECT_TIMEOUT,
+                "socket_connect_timeout": DEFAULT_CONNECT_TIMEOUT,
+            },
+        ) as connection:
             connection.ensure_connection(
                 max_retries=0,
                 timeout=DEFAULT_CONNECT_TIMEOUT,
@@ -56,8 +65,16 @@ async def apublish_queue_event(
 ) -> bool:
     """Publish an event off the ASGI loop while keeping failures non-fatal."""
 
-    return await sync_to_async(publish_queue_event, thread_sensitive=False)(
+    publish = sync_to_async(publish_queue_event, thread_sensitive=False)(
         queue_name,
         event_type,
         **fields,
     )
+    try:
+        return await asyncio.wait_for(publish, timeout=DEFAULT_PUBLISH_TIMEOUT)
+    except TimeoutError:
+        logger.error(
+            "events.queue_publish_timeout",
+            extra={"event_type": event_type, "queue_name": queue_name},
+        )
+        return False
