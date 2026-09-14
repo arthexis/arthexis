@@ -39,11 +39,11 @@ export GWAY_SERVICE_PROFILE=Terminal
 sudo --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
 ```
 
-For another role, select the same role for both the Arthexis lifecycle arguments and the GWAY service profile. For example, a Control node can be bootstrapped with:
+For another role, select the same role for both the Arthexis lifecycle arguments and the GWAY service profile. GWAY passes install options it does not own through to the project's lifecycle hook. For example, a Control node can be bootstrapped with:
 
 ```bash
 export GWAY_SERVICE_PROFILE=Control
-sudo --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service -- --role Control
+sudo --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service --role Control
 ```
 
 The `--service` option makes GWAY install, enable, and start the services selected by the profile after application preparation. Repeating the same install is supported: GWAY reuses the canonical managed checkout/environment, Arthexis reruns idempotent application preparation, existing persistent data is retained, the managed installation identity is preserved, and the selected service topology is reconciled/restarted.
