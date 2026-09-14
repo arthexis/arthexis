@@ -94,6 +94,22 @@ If the Arthexis uninstall hook fails, GWAY leaves the checkout, environment, and
 
 This production uninstall path does not replace `uninstall.sh`; the repository script remains part of the developer/local ownership model.
 
+## Adoption preflight
+
+Adoption is an install policy rather than a standalone lifecycle command. An operator must name the unmanaged source checkout explicitly; GWAY does not search the filesystem for a candidate. Before any production mutation, inspect the proposed transition with:
+
+```bash
+gway install arthexis --adopt --from /path/to/developer/arthexis --dry-run
+```
+
+The preflight runs current trusted Arthexis lifecycle code from temporary GWAY resources and does not create `/opt/arthexis/app`, `/opt/arthexis/.venv`, ownership metadata, service units, or a GWAY registry entry. The source checkout is also read-only during inspection.
+
+Arthexis inventories the source Git revision, branch and dirty state, version, node role, checkout-local SQLite database, root environment-file names, developer virtual environment, and persistent `media`/`uploads` directories when present. Environment-file values are deliberately not read or printed. The plan classifies persistent files as copyable and virtual environments/services as regenerable, reports the canonical managed destinations, and lists blockers such as an invalid source checkout or conflicting managed target state.
+
+A dirty developer checkout is reported but is not itself a blocker: local source modifications remain in the developer checkout and are not copied into the managed production checkout. Adoption always uses the trusted managed checkout as the production code source.
+
+This lifecycle stage provides preflight only. `gway install arthexis --adopt --from ...` without `--dry-run` is deliberately refused until the subsequent adoption-execution stage implements the state transfer and final health verification.
+
 ## Generic lifecycle boundary
 
 GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade/uninstall and project operations around the `arthexis` project.

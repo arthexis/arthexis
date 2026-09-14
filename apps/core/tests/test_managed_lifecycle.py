@@ -175,7 +175,7 @@ def test_gway_manifest_declares_install_layout_and_importable_lifecycle_hooks():
 
     hooks = manifest["lifecycle"]
     assert hooks == {
-        "install": "apps.core.system.lifecycle:install",
+        "install": "apps.core.system.managed_install:install",
         "upgrade": "apps.core.system.managed_update:upgrade",
         "uninstall": "apps.core.system.managed_uninstall:uninstall",
     }
