@@ -7,7 +7,7 @@ from apps.ocpp.consumers.csms.actions.authorization import AuthorizationActionHa
 
 
 class AuthorizationEventTests(SimpleTestCase):
-    async def test_authorize_emits_full_result_and_original_request(self):
+    async def test_authorize_publishes_full_result_and_original_request(self):
         account = object()
         decision = SimpleNamespace(
             status="Accepted",
@@ -30,15 +30,16 @@ class AuthorizationEventTests(SimpleTestCase):
         raw = '[2,"msg-123","Authorize",{"idTag":"04A1B2C3"}]'
 
         with patch(
-            "apps.ocpp.consumers.csms.actions.authorization.aemit_event",
+            "apps.ocpp.consumers.csms.actions.authorization.apublish_queue_event",
             new_callable=AsyncMock,
-        ) as emit_event:
+        ) as publish_event:
             response = await AuthorizationActionHandler(consumer).handle(
                 payload, "msg-123", raw, raw
             )
 
         self.assertEqual(response, {"idTagInfo": {"status": "Accepted"}})
-        emit_event.assert_awaited_once_with(
+        publish_event.assert_awaited_once_with(
+            "ocpp.authorization",
             "ocpp.authorization",
             charger_id="gway-001",
             connector_id=1,
