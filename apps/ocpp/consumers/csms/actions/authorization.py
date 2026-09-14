@@ -6,7 +6,9 @@ from channels.db import database_sync_to_async
 
 from apps.cards.models import RFID as CoreRFID
 from apps.cards.models import RFIDAttempt
-from apps.events import aemit_event
+from apps.events import apublish_queue_event
+
+AUTHORIZATION_EVENT_QUEUE = "ocpp.authorization"
 
 
 class AuthorizationActionHandler:
@@ -58,7 +60,8 @@ class AuthorizationActionHandler:
             policy=decision.policy,
             reason=decision.reason,
         )
-        await aemit_event(
+        await apublish_queue_event(
+            AUTHORIZATION_EVENT_QUEUE,
             "ocpp.authorization",
             charger_id=getattr(self.consumer, "charger_id", None),
             connector_id=getattr(self.consumer, "connector_value", None),
