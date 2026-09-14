@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECT_TIMEOUT = 1
 DEFAULT_PUBLISH_TIMEOUT = 2
+DEFAULT_EVENT_EXPIRATION_SECONDS = 24 * 60 * 60
 
 
 def publish_queue_event(
@@ -51,7 +52,11 @@ def publish_queue_event(
                 timeout=DEFAULT_CONNECT_TIMEOUT,
             )
             with connection.SimpleQueue(queue_name) as queue:
-                queue.put(event, serializer="json")
+                queue.put(
+                    event,
+                    serializer="json",
+                    expiration=DEFAULT_EVENT_EXPIRATION_SECONDS,
+                )
     except Exception:
         logger.exception(
             "events.queue_publish_failed",
