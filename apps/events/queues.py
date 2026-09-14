@@ -33,6 +33,10 @@ def publish_queue_event(
 
     try:
         with Connection(broker_url, connect_timeout=DEFAULT_CONNECT_TIMEOUT) as connection:
+            connection.ensure_connection(
+                max_retries=0,
+                timeout=DEFAULT_CONNECT_TIMEOUT,
+            )
             with connection.SimpleQueue(queue_name) as queue:
                 queue.put(event, serializer="json")
     except Exception:
