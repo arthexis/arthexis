@@ -25,7 +25,9 @@ class QueueEventTests(SimpleTestCase):
 
         self.assertTrue(published)
         connection_class.assert_called_once_with(
-            "redis://localhost:6379/0", connect_timeout=1
+            "redis://localhost:6379/0",
+            connect_timeout=1,
+            transport_options={"socket_timeout": 1, "socket_connect_timeout": 1},
         )
         connection.ensure_connection.assert_called_once_with(max_retries=0, timeout=1)
         connection.SimpleQueue.assert_called_once_with("ocpp.authorization")
