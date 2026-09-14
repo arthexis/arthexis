@@ -100,7 +100,7 @@ ci = [
   "django-stubs-ext==6.1.0; python_version >= \"3.11\"",
   "django-stubs==6.0.9",
   "import-linter==2.15",
-  "ruff==0.16.6",
+  "ruff==0.16.7",
   "twine==7.0.0",
   "types-requests==2.33.0.20260712",
 ]
