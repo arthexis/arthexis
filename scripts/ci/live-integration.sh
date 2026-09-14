@@ -53,11 +53,15 @@ export GWAY_SERVICE_PROFILE="$profile"
 echo "Using GWAY service profile: $GWAY_SERVICE_PROFILE"
 
 # --service makes the production install operation own service installation,
-# enablement, and startup. The second invocation is the idempotency gate.
+# enablement, and startup. Passing the same role to the lifecycle hook keeps
+# application role and service topology in one explicit install transaction.
+# The second invocation is the idempotency gate.
 phase="managed-install-first"
-sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
+sudo -n --preserve-env=GWAY_SERVICE_PROFILE \
+  gway install arthexis --service --role "$GWAY_SERVICE_PROFILE"
 phase="managed-install-second"
-sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
+sudo -n --preserve-env=GWAY_SERVICE_PROFILE \
+  gway install arthexis --service --role "$GWAY_SERVICE_PROFILE"
 
 phase="managed-layout"
 checkout="$(gway path arthexis)"
