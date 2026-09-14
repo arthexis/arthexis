@@ -21,11 +21,14 @@ uninstall = "apps.core.system.managed_uninstall:uninstall"
 
 # Runtime topology is selected with GWAY_SERVICE_PROFILE using the canonical
 # Arthexis node roles. GWAY owns the resulting systemd units and uses the
-# managed project interpreter for every Python service.
+# managed project interpreter for every Python service. Django startup uses
+# .locks for cross-process application checks, so GWAY gives that exact path
+# to the resolved service account before starting managed services.
 [services.web-local]
 description = "Arthexis local web service"
 command = ["{python}", "manage.py", "runserver", "127.0.0.1:8888", "--noreload"]
 working_directory = "{project}"
+writable_paths = ["{project}/.locks"]
 profiles = ["Terminal", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
@@ -42,6 +45,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis charger-facing web service"
 command = ["{python}", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
 working_directory = "{project}"
+writable_paths = ["{project}/.locks"]
 profiles = ["Control", "Satellite"]
 restart = "on-failure"
 restart_sec = 5
@@ -58,6 +62,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis Celery worker"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "worker", "--loglevel=INFO"]
 working_directory = "{project}"
+writable_paths = ["{project}/.locks"]
 profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
@@ -74,6 +79,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis Celery beat scheduler"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "beat", "--loglevel=INFO"]
 working_directory = "{project}"
+writable_paths = ["{project}/.locks"]
 profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
