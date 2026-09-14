@@ -52,7 +52,7 @@ Host prerequisites remain an operating-system concern. Arthexis may detect a mis
 
 After successful application preparation, Arthexis records managed ownership metadata under the managed root. Lifecycle inspection requires that metadata to agree with the expected managed layout before treating the installation as managed. Missing, malformed, or conflicting metadata is not silently repaired or interpreted as permission to operate on an arbitrary checkout.
 
-The managed ownership contract distinguishes disposable/replaceable resources such as the managed checkout, Python environment, logs, cache, and runtime files from persistent instance data under `/opt/arthexis/var/lib`. Re-running install does not replace an existing managed database with a checkout-local database. Later managed uninstall work must preserve persistent instance data by default unless the operator explicitly requests destructive cleanup.
+The managed ownership contract distinguishes disposable/replaceable resources such as the managed checkout, Python environment, logs, cache, and runtime files from persistent instance data under `/opt/arthexis/var/lib`. Re-running install does not replace an existing managed database with a checkout-local database. A normal managed uninstall preserves `/opt/arthexis/var/lib` by default.
 
 A developer checkout is never converted in place into the managed production checkout. GWAY constructs and owns the canonical managed checkout independently of any nearby developer source tree. The planned adoption path in issue #208 will construct the normal managed layout and transfer the instance state that should survive promotion while leaving the developer checkout intact.
 
@@ -82,9 +82,21 @@ When the tracked revision is already current and the managed checkout is clean, 
 
 This production update path does not replace `upgrade.sh`. The repository script remains the supported upgrade mechanism for unmanaged developer/local checkouts and may continue to support developer-oriented branch, stash, target, and local-change workflows that do not belong in managed production ownership.
 
+## Managed uninstall
+
+`sudo gway uninstall arthexis` retires a GWAY-managed production installation according to the same ownership boundary used by install, status, and update.
+
+GWAY first stops and removes the manifest-defined system services while the managed checkout still exists. It then runs the Arthexis uninstall lifecycle hook from the managed Python environment. The hook requires valid managed ownership metadata, removes application-owned disposable state such as logs, cache, runtime files, and the ownership marker, and deliberately leaves `/opt/arthexis/var/lib` untouched. Only after that hook succeeds does GWAY remove the managed Python environment and checkout and unregister the project.
+
+The default uninstall therefore removes the production runtime but preserves instance data. There is intentionally no implicit purge mode in this lifecycle stage: passing a destructive data-removal argument to the Arthexis uninstall hook is rejected rather than interpreted as permission to delete the database or other persistent state. Persistent-data deletion, if ever added, must be a separate explicit destructive contract.
+
+If the Arthexis uninstall hook fails, GWAY leaves the checkout, environment, and registry entry in place so the failure can be diagnosed and the operation retried. A later uninstall request after successful removal is expected to report that the project is no longer registered rather than touching the preserved data directory.
+
+This production uninstall path does not replace `uninstall.sh`; the repository script remains part of the developer/local ownership model.
+
 ## Generic lifecycle boundary
 
-GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade and project operations around the `arthexis` project.
+GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade/uninstall and project operations around the `arthexis` project.
 
 The repository lifecycle scripts remain the supported local/developer workflow rather than compatibility wrappers around GWAY. See the [Install & Lifecycle Scripts Manual](../development/install-lifecycle-scripts-manual.md) for that workflow.
 
