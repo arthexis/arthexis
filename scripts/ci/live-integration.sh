@@ -26,16 +26,38 @@ fi
 phase="managed-install"
 trap 'status=$?; if [[ $status -ne 0 ]]; then echo "Live integration failed during phase: ${phase}" >&2; echo "gway=$(command -v gway)" >&2; gway --version >&2 || true; sudo -n ls -ld /opt/arthexis /opt/arthexis/app /opt/arthexis/.venv >&2 || true; fi; exit $status' EXIT
 
-echo "=== managed install/upgrade ==="
+echo "=== managed install ==="
 echo "GWAY runtime: $(command -v gway)"
 gway --version
+
+profile="${GWAY_SERVICE_PROFILE:-}"
 if gway path arthexis >/dev/null 2>&1; then
-  echo "Existing managed Arthexis detected; exercising upgrade path"
+  if [[ -z "$profile" ]]; then
+    profile="$(gway arthexis node-role | tail -n 1 | tr -d '\r' | xargs)"
+  fi
+  echo "Existing managed Arthexis detected; refreshing it to the expected revision first"
   sudo -n gway upgrade arthexis
-else
-  echo "No managed Arthexis detected; exercising install path"
-  sudo -n gway install arthexis
+elif [[ -z "$profile" ]]; then
+  profile="Terminal"
 fi
+
+case "$profile" in
+  Control|Satellite|Terminal|Watchtower) ;;
+  *)
+    echo "Unable to determine canonical Arthexis service profile: $profile" >&2
+    exit 1
+    ;;
+esac
+
+export GWAY_SERVICE_PROFILE="$profile"
+echo "Using GWAY service profile: $GWAY_SERVICE_PROFILE"
+
+# --service makes the production install operation own service installation,
+# enablement, and startup. The second invocation is the idempotency gate.
+phase="managed-install-first"
+sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
+phase="managed-install-second"
+sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
 
 phase="managed-layout"
 checkout="$(gway path arthexis)"
@@ -54,6 +76,11 @@ if [[ ! -x /opt/arthexis/.venv/bin/python ]]; then
   exit 1
 fi
 
+if [[ ! -f /opt/arthexis/.gway/arthexis.json ]]; then
+  echo "Managed Arthexis ownership metadata is missing" >&2
+  exit 1
+fi
+
 phase="revision-check"
 deployed_sha="$(git -C "$checkout" rev-parse HEAD)"
 if [[ "$deployed_sha" != "$expected_sha" ]]; then
@@ -63,26 +90,12 @@ fi
 
 phase="managed-command"
 gway arthexis version
-profile="${GWAY_SERVICE_PROFILE:-}"
-if [[ -z "$profile" ]]; then
-  profile="$(gway arthexis node-role | tail -n 1 | tr -d '\r' | xargs)"
+actual_profile="$(gway arthexis node-role | tail -n 1 | tr -d '\r' | xargs)"
+if [[ "$actual_profile" != "$GWAY_SERVICE_PROFILE" ]]; then
+  echo "Managed role/profile mismatch: expected $GWAY_SERVICE_PROFILE, got $actual_profile" >&2
+  exit 1
 fi
 
-case "$profile" in
-  Control|Satellite|Terminal|Watchtower) ;;
-  *)
-    echo "Unable to determine canonical Arthexis service profile: $profile" >&2
-    exit 1
-    ;;
-esac
-
-export GWAY_SERVICE_PROFILE="$profile"
-echo "Using GWAY service profile: $GWAY_SERVICE_PROFILE"
-
-phase="service-install"
-sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service install arthexis
-phase="service-start"
-sudo -n --preserve-env=GWAY_SERVICE_PROFILE gway service start arthexis
 phase="service-status"
 gway service status arthexis
 
