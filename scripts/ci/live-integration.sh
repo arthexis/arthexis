@@ -103,7 +103,29 @@ fi
 phase="service-status"
 gway service status arthexis
 
+phase="lifecycle-status"
+status_json="$(gway arthexis status --json)"
+printf '%s\n' "$status_json"
+STATUS_JSON="$status_json" EXPECTED_SHA="$expected_sha" EXPECTED_PROFILE="$GWAY_SERVICE_PROFILE" \
+  python - <<'PY'
+import json
+import os
+
+report = json.loads(os.environ["STATUS_JSON"])
+assert report["mode"] == "managed", report
+assert report["state"] == "healthy", report
+assert report["root"] == "/opt/arthexis", report
+assert report["checkout"] == "/opt/arthexis/app", report
+assert report["environment"] == "/opt/arthexis/.venv", report
+assert report["persistent_data"] == "/opt/arthexis/var/lib", report
+assert report["revision"] == os.environ["EXPECTED_SHA"], report
+assert report["role"] == os.environ["EXPECTED_PROFILE"], report
+assert report["dirty"] is False, report
+assert report["pending_migrations"] is False, report
+assert report["application_health"] == "GOOD", report
+assert report["problems"] == [], report
+PY
+
 phase="application-health"
-gway arthexis status
 gway arthexis good
 phase="complete"
