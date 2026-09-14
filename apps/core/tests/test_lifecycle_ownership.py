@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from apps.core.system import lifecycle_ownership
 from apps.core.system.lifecycle_ownership import (
     LifecycleMode,
     OwnershipError,
@@ -99,6 +100,52 @@ def test_invalid_metadata_is_not_managed(tmp_path):
     assert installation.mode is LifecycleMode.UNMANAGED
     assert installation.valid is False
     assert installation.problems[0].startswith("invalid ownership metadata:")
+
+
+def test_boolean_schema_version_is_rejected(tmp_path):
+    checkout = tmp_path / "app"
+    checkout.mkdir()
+    layout = OwnershipLayout.from_root(tmp_path)
+    layout.metadata.parent.mkdir(parents=True)
+    layout.metadata.write_text(
+        json.dumps(
+            {
+                "schema_version": True,
+                "project": "arthexis",
+                "installation_id": "existing-id",
+                "root": str(tmp_path.resolve()),
+                "checkout": str(checkout.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    installation = classify_managed_installation(tmp_path)
+
+    assert installation.mode is LifecycleMode.UNMANAGED
+    assert installation.valid is False
+    assert "unsupported ownership metadata version: True" in installation.problems
+    assert installation.metadata_version is None
+
+
+def test_failed_atomic_replace_preserves_existing_metadata(monkeypatch, tmp_path):
+    checkout = tmp_path / "app"
+    checkout.mkdir()
+    layout = OwnershipLayout.from_root(tmp_path)
+    original = record_managed_installation(tmp_path)
+    original_text = layout.metadata.read_text(encoding="utf-8")
+
+    def fail_replace(source, destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(lifecycle_ownership.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        record_managed_installation(tmp_path)
+
+    assert layout.metadata.read_text(encoding="utf-8") == original_text
+    assert classify_managed_installation(tmp_path).installation_id == original.installation_id
+    assert list(layout.metadata.parent.glob(f".{layout.metadata.name}.*.tmp")) == []
 
 
 def test_ownership_layout_distinguishes_disposable_and_persistent_resources(tmp_path):
