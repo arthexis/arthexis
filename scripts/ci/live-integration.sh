@@ -91,6 +91,7 @@ if [[ "$deployed_sha" != "$expected_sha" ]]; then
   echo "Managed deployment revision mismatch: expected $expected_sha, got $deployed_sha" >&2
   exit 1
 fi
+expected_version="$(tr -d '\r\n' < "$checkout/VERSION")"
 
 phase="managed-command"
 gway arthexis version
@@ -100,13 +101,55 @@ if [[ "$actual_profile" != "$GWAY_SERVICE_PROFILE" ]]; then
   exit 1
 fi
 
+phase="pre-upgrade-status"
+pre_upgrade_status="$(gway arthexis status --json)"
+installation_id="$(STATUS_JSON="$pre_upgrade_status" python - <<'PY'
+import json
+import os
+print(json.loads(os.environ["STATUS_JSON"])["installation_id"])
+PY
+)"
+if [[ -z "$installation_id" || "$installation_id" == "None" ]]; then
+  echo "Managed installation identity is missing before update" >&2
+  exit 1
+fi
+
+phase="dirty-upgrade-refusal"
+dirty_probe="$checkout/.live-integration-dirty-upgrade"
+printf 'managed checkout safety probe\n' | sudo -n tee "$dirty_probe" >/dev/null
+if sudo -n gway upgrade arthexis; then
+  echo "Managed upgrade unexpectedly accepted a dirty checkout" >&2
+  sudo -n rm -f "$dirty_probe"
+  exit 1
+fi
+if [[ ! -f "$dirty_probe" ]]; then
+  echo "Managed upgrade discarded dirty checkout state" >&2
+  exit 1
+fi
+sudo -n rm -f "$dirty_probe"
+
+phase="managed-upgrade-reload"
+sentinel="/opt/arthexis/var/lib/.live-integration-update-preserve"
+printf '%s\n' "$installation_id" | sudo -n tee "$sentinel" >/dev/null
+sudo -n gway upgrade arthexis --reload
+
+phase="managed-upgrade-noop"
+sudo -n gway upgrade arthexis
+
+phase="persistent-state-check"
+if [[ "$(sudo -n cat "$sentinel")" != "$installation_id" ]]; then
+  echo "Managed persistent state changed during update" >&2
+  exit 1
+fi
+sudo -n rm -f "$sentinel"
+
 phase="service-status"
 gway service status arthexis
 
 phase="lifecycle-status"
 status_json="$(gway arthexis status --json)"
 printf '%s\n' "$status_json"
-STATUS_JSON="$status_json" EXPECTED_SHA="$expected_sha" EXPECTED_PROFILE="$GWAY_SERVICE_PROFILE" \
+STATUS_JSON="$status_json" EXPECTED_SHA="$expected_sha" EXPECTED_VERSION="$expected_version" EXPECTED_PROFILE="$GWAY_SERVICE_PROFILE" EXPECTED_INSTALLATION_ID="$installation_id" \
   python - <<'PY'
 import json
 import os
@@ -114,11 +157,13 @@ import os
 report = json.loads(os.environ["STATUS_JSON"])
 assert report["mode"] == "managed", report
 assert report["state"] == "healthy", report
+assert report["installation_id"] == os.environ["EXPECTED_INSTALLATION_ID"], report
 assert report["root"] == "/opt/arthexis", report
 assert report["checkout"] == "/opt/arthexis/app", report
 assert report["environment"] == "/opt/arthexis/.venv", report
 assert report["persistent_data"] == "/opt/arthexis/var/lib", report
 assert report["revision"] == os.environ["EXPECTED_SHA"], report
+assert report["version"] == os.environ["EXPECTED_VERSION"], report
 assert report["role"] == os.environ["EXPECTED_PROFILE"], report
 assert report["dirty"] is False, report
 assert report["pending_migrations"] is False, report

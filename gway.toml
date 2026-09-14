@@ -16,7 +16,7 @@ environment = ".venv"
 
 [lifecycle]
 install = "apps.core.system.lifecycle:install"
-upgrade = "apps.core.system.lifecycle:upgrade"
+upgrade = "apps.core.system.managed_update:upgrade"
 
 # Runtime topology is selected with GWAY_SERVICE_PROFILE using the canonical
 # Arthexis node roles. GWAY owns the resulting systemd units and uses the

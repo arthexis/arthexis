@@ -64,6 +64,24 @@ Use `gway arthexis status --json` when another tool needs the same information i
 
 An unmanaged developer checkout remains a valid `unmanaged` lifecycle state rather than being treated as a broken managed installation. The repository `status.sh` continues to belong to the local/developer lifecycle and is not replaced by GWAY.
 
+## Managed updates
+
+`gway upgrade arthexis` is the production update entry point. GWAY owns the managed repository and Python-environment refresh, including its clean-checkout safety checks and rollback of those resources when the application lifecycle hook fails. Arthexis then completes the application-specific transaction in this order:
+
+1. require valid managed ownership metadata before mutating application state;
+2. preserve the existing node role and persistent data while running migrations, local-node reconciliation, and static-asset collection;
+3. reconcile the GWAY-managed service topology using the persisted Arthexis role as `GWAY_SERVICE_PROFILE`;
+4. run lifecycle status after the service restart and require the managed installation to remain healthy;
+5. confirm the managed ownership marker only after all preceding phases succeed.
+
+The update hook reports the failing phase (`application preparation`, `service reconciliation`, `health verification`, or `ownership confirmation`) so the outer GWAY command retains useful failure context. The managed database and other persistent instance state under `/opt/arthexis/var/lib` are not replaced by checkout contents during an update, and the installation identity remains stable.
+
+A normal managed upgrade does not silently discard local changes in `/opt/arthexis/app`. GWAY refuses a dirty managed checkout by default. Operators may deliberately use GWAY's `--force` or `--try-force` policies when they have decided how those managed-checkout modifications should be handled; forced-update history remains a GWAY concern rather than an Arthexis-specific implementation.
+
+When the tracked revision is already current and the managed checkout is clean, GWAY may skip the update. `gway upgrade arthexis --reload` deliberately reruns environment refresh and the managed application update transaction even when the revision has not changed, which is useful for recovery or verification.
+
+This production update path does not replace `upgrade.sh`. The repository script remains the supported upgrade mechanism for unmanaged developer/local checkouts and may continue to support developer-oriented branch, stash, target, and local-change workflows that do not belong in managed production ownership.
+
 ## Generic lifecycle boundary
 
 GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade and project operations around the `arthexis` project.
