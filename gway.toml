@@ -1,6 +1,6 @@
 [project]
 name = "arthexis"
-aliases = ["constellation", "ocpp"]
+aliases = ["constellation", "ocpp", "OCPP", "Energy"]
 
 [adapter]
 type = "django"
