@@ -32,15 +32,33 @@ The presence of an Arthexis checkout, virtual environment, database, lock files,
 
 A managed production installation uses the layout declared by `gway.toml`, currently rooted at `/opt/arthexis` with the managed checkout at `/opt/arthexis/app` and Python environment at `/opt/arthexis/.venv`.
 
+For a complete production bootstrap, install the manifest-defined service topology as part of the GWAY install operation. The service profile must match the Arthexis node role. A new installation defaults to the `Terminal` role, so its complete bootstrap is:
+
+```bash
+export GWAY_SERVICE_PROFILE=Terminal
+sudo --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service
+```
+
+For another role, select the same role for both the Arthexis lifecycle arguments and the GWAY service profile. For example, a Control node can be bootstrapped with:
+
+```bash
+export GWAY_SERVICE_PROFILE=Control
+sudo --preserve-env=GWAY_SERVICE_PROFILE gway install arthexis --service -- --role Control
+```
+
+The `--service` option makes GWAY install, enable, and start the services selected by the profile after application preparation. Repeating the same install is supported: GWAY reuses the canonical managed checkout/environment, Arthexis reruns idempotent application preparation, existing persistent data is retained, the managed installation identity is preserved, and the selected service topology is reconciled/restarted.
+
+Host prerequisites remain an operating-system concern. Arthexis may detect a missing prerequisite and report OS-appropriate installation guidance, but the application lifecycle does not silently turn itself into a host provisioner. In particular, roles using local Celery/Channels infrastructure report when their configured local Redis endpoint is unavailable.
+
 After successful application preparation, Arthexis records managed ownership metadata under the managed root. Lifecycle inspection requires that metadata to agree with the expected managed layout before treating the installation as managed. Missing, malformed, or conflicting metadata is not silently repaired or interpreted as permission to operate on an arbitrary checkout.
 
-The managed ownership contract distinguishes disposable/replaceable resources such as the managed checkout, Python environment, logs, cache, and runtime files from persistent instance data under `/opt/arthexis/var/lib`. Later managed uninstall work must preserve persistent instance data by default unless the operator explicitly requests destructive cleanup.
+The managed ownership contract distinguishes disposable/replaceable resources such as the managed checkout, Python environment, logs, cache, and runtime files from persistent instance data under `/opt/arthexis/var/lib`. Re-running install does not replace an existing managed database with a checkout-local database. Later managed uninstall work must preserve persistent instance data by default unless the operator explicitly requests destructive cleanup.
 
-A developer checkout is never converted in place into the managed production checkout. The planned adoption path in issue #208 will construct the normal managed layout and transfer the instance state that should survive promotion while leaving the developer checkout intact.
+A developer checkout is never converted in place into the managed production checkout. GWAY constructs and owns the canonical managed checkout independently of any nearby developer source tree. The planned adoption path in issue #208 will construct the normal managed layout and transfer the instance state that should survive promotion while leaving the developer checkout intact.
 
 ## Generic lifecycle boundary
 
-GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions already provide managed install/upgrade and project operations around the `arthexis` project.
+GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade and project operations around the `arthexis` project.
 
 The repository lifecycle scripts remain the supported local/developer workflow rather than compatibility wrappers around GWAY. See the [Install & Lifecycle Scripts Manual](../development/install-lifecycle-scripts-manual.md) for that workflow.
 
