@@ -82,7 +82,7 @@ tomli==2.4.1; python_version < "3.11"
 twine==7.0.0
 Twisted==26.4.0
 txaio==25.9.2
-types-requests==2.33.0.20260712
+types-requests==2.33.0.20260906
 typing_extensions==4.16.0
 urllib3>=2.6.3,<2.8.0
 weasyprint==69.0
