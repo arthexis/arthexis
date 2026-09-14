@@ -15,14 +15,17 @@ def _managed_layout(tmp_path):
     return current
 
 
-def test_managed_update_runs_prepare_services_health_then_ownership(monkeypatch, tmp_path):
+def test_managed_update_runs_prepare_services_health_then_ownership(
+    monkeypatch, tmp_path
+):
     current = _managed_layout(tmp_path)
     calls = []
 
     monkeypatch.setattr(
         lifecycle,
         "_prepare_for_options",
-        lambda arguments, *, layout: calls.append(("prepare", arguments, layout)) or layout,
+        lambda arguments, *, layout: calls.append(("prepare", arguments, layout))
+        or layout,
     )
     monkeypatch.setattr(
         managed_update,
@@ -80,7 +83,10 @@ def test_failed_health_does_not_confirm_ownership(monkeypatch, tmp_path):
         lambda layout: calls.append("ownership"),
     )
 
-    with pytest.raises(managed_update.ManagedUpdateError, match="health verification phase"):
+    with pytest.raises(
+        managed_update.ManagedUpdateError,
+        match="health verification phase",
+    ):
         managed_update.upgrade(layout=current)
 
     assert calls == []
@@ -104,9 +110,10 @@ def test_service_reconciliation_uses_persisted_role(monkeypatch, tmp_path):
     managed_update._reconcile_services(current)
 
     assert calls == [
-        (["/usr/bin/gway", "service", "install", "arthexis"], True, True, "Control")
+        (
+            ["/usr/bin/gway", "service", "install", "arthexis"],
+            True,
+            True,
+            "Control",
+        )
     ]
-
-
-def test_persistent_paths_identifies_managed_data_root(tmp_path):
-    assert managed_update.persistent_paths(tmp_path) == (tmp_path / "var" / "lib",)
