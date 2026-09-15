@@ -20,12 +20,12 @@ def publish_event(
     dedicated queue convention used by existing OCPP events.
     """
 
-    queue_name = (queue or event_type).strip()
-    if not queue_name:
-        raise ValueError("event queue cannot be empty")
     event_name = event_type.strip()
     if not event_name:
         raise ValueError("event type cannot be empty")
+    queue_name = event_name if queue is None else queue.strip()
+    if not queue_name:
+        raise ValueError("event queue cannot be empty")
     return publish_queue_event(queue_name, event_name, **dict(data or {}))
 
 
