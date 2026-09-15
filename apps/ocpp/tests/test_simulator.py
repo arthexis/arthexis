@@ -1,15 +1,26 @@
 import asyncio
 import json
+import os
+import stat
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from django.core.management import CommandError, call_command
 from websockets.exceptions import WebSocketException
 
+from apps.ocpp.management.commands.ocpp import Command
 from apps.ocpp.simulator.client import OCPP16Simulator, SimulatorConfig, SimulatorError
 from apps.ocpp.simulator.scenarios import AuthorizeScenario
-from apps.ocpp.simulator.worker import DEFAULT_MAX_INSTANCES, SimulatorWorker
+from apps.ocpp.simulator.worker import (
+    DEFAULT_MAX_INSTANCES,
+    SimulatorWorker,
+    _secure_socket_path,
+    error_path,
+    runtime_dir,
+    session_path,
+    socket_path,
+)
 
 
 def insecure_config(**kwargs):
@@ -147,6 +158,61 @@ def test_connect_normalizes_websocket_failures(monkeypatch):
     asyncio.run(exercise())
 
 
+def test_receive_failure_invalidates_connection_and_allows_reconnect(monkeypatch):
+    class BrokenConnection:
+        subprotocol = "ocpp1.6"
+
+        def __init__(self):
+            self.closed = False
+
+        async def recv(self):
+            raise WebSocketException("connection lost")
+
+        async def close(self):
+            self.closed = True
+
+    class HealthyConnection:
+        subprotocol = "ocpp1.6"
+
+        def __init__(self):
+            self.closed = False
+            self.block = asyncio.Event()
+
+        async def recv(self):
+            await self.block.wait()
+
+        async def close(self):
+            self.closed = True
+
+    async def exercise():
+        simulator = OCPP16Simulator(
+            insecure_config(url="ws://example.test", charger="GWAY001")
+        )
+        broken = BrokenConnection()
+        simulator._connection = broken
+        task = asyncio.create_task(simulator._receive_loop())
+        simulator._receive_task = task
+        await task
+
+        assert simulator._connection is None
+        assert simulator._receive_task is None
+        assert broken.closed is True
+
+        healthy = HealthyConnection()
+
+        async def reconnect(*args, **kwargs):
+            return healthy
+
+        monkeypatch.setattr("apps.ocpp.simulator.client.connect", reconnect)
+        await simulator.connect()
+        assert simulator._connection is healthy
+        assert simulator._receive_task is not None
+        await simulator.close()
+        assert healthy.closed is True
+
+    asyncio.run(exercise())
+
+
 def test_matching_call_error_is_correlated_to_pending_call():
     class ErrorConnection:
         subprotocol = "ocpp1.6"
@@ -213,6 +279,46 @@ def test_call_timeout_is_not_extended_by_unmatched_frames():
         assert elapsed < 0.12
 
     asyncio.run(exercise())
+
+
+def test_runtime_dir_and_control_socket_are_owner_only(tmp_path, monkeypatch):
+    root = tmp_path / "runtime"
+    root.mkdir(mode=0o777)
+    os.chmod(root, 0o777)
+    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(root))
+
+    secured_root = runtime_dir()
+    assert stat.S_IMODE(secured_root.stat().st_mode) == 0o700
+
+    sock = root / "test.sock"
+    sock.touch()
+    os.chmod(sock, 0o666)
+    _secure_socket_path(sock)
+    assert stat.S_IMODE(sock.stat().st_mode) == 0o600
+
+
+def test_distinct_charger_ids_have_distinct_runtime_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
+    assert session_path("CP/A") != session_path("CP?A")
+    assert socket_path("CP/A") != socket_path("CP?A")
+
+
+def test_startup_failure_terminates_worker_and_cleans_artifacts(tmp_path, monkeypatch):
+    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
+    charger = "GWAY001"
+    for path in (session_path(charger), socket_path(charger), error_path(charger)):
+        path.write_text("stale")
+
+    process = Mock()
+    process.poll.return_value = None
+    Command._stop_starting_worker(process, charger)
+
+    process.terminate.assert_called_once_with()
+    process.wait.assert_called_once_with(timeout=5)
+    process.kill.assert_not_called()
+    assert not session_path(charger).exists()
+    assert not socket_path(charger).exists()
+    assert not error_path(charger).exists()
 
 
 def test_default_instance_limit_is_two(monkeypatch):
