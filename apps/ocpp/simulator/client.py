@@ -83,7 +83,7 @@ class OCPP16Simulator:
 
     async def close(self) -> None:
         task, self._receive_task = self._receive_task, None
-        if task is not None:
+        if task is not None and task is not asyncio.current_task():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -124,9 +124,11 @@ class OCPP16Simulator:
             self._pending.pop(message_id, None)
 
     async def _receive_loop(self) -> None:
+        connection = self._connection
+        task = asyncio.current_task()
         try:
-            while self._connection is not None:
-                raw = await self._connection.recv()
+            while self._connection is connection and connection is not None:
+                raw = await connection.recv()
                 try:
                     message = json.loads(raw)
                 except (TypeError, json.JSONDecodeError):
@@ -153,6 +155,16 @@ class OCPP16Simulator:
             self._fail_pending(SimulatorError(f"connection receive failed: {exc}"))
         except Exception as exc:
             self._fail_pending(SimulatorError(f"connection receive failed: {exc}"))
+        finally:
+            # A completed receiver must never leave a connection looking usable.
+            # Guard identity so a newer reconnect cannot be cleared by an older task.
+            if self._connection is connection:
+                self._connection = None
+            if self._receive_task is task:
+                self._receive_task = None
+            if connection is not None:
+                with contextlib.suppress(WebSocketException, OSError):
+                    await connection.close()
 
     def _fail_pending(self, error: SimulatorError) -> None:
         for future in self._pending.values():
