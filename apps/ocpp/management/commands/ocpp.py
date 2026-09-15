@@ -1,190 +1,271 @@
-"""Unified OCPP management command with subcommands."""
-
-from __future__ import annotations
-
+import argparse
 import asyncio
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.ocpp.management.commands._ocpp_command_helpers import (
-    add_coverage_arguments,
-    add_trace_extract_arguments,
-    add_trace_replay_arguments,
-    add_transactions_export_arguments,
-    add_transactions_import_arguments,
+from apps.ocpp.services import transaction_export
+from apps.ocpp.simulator import SimulatorConfig, SimulatorError
+from apps.ocpp.simulator.worker import (
+    DEFAULT_IDLE_TIMEOUT,
+    active_sessions,
+    max_instances,
+    send_control,
+    session_path,
 )
-from apps.ocpp.management.commands._trace_extract_impl import run_trace_extract
-from apps.ocpp.management.coverage_ocpp16_impl import run_coverage_ocpp16
-from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
-from apps.ocpp.management.coverage_ocpp201_impl import run_coverage_ocpp201
-from apps.ocpp.management.export_transactions_impl import run_export_transactions
-from apps.ocpp.management.import_transactions_impl import run_import_transactions
-from apps.ocpp.management.ocpp_replay_impl import run_replay_extract
-from apps.ocpp.simulator import (
-    AuthorizeScenario,
-    OCPP16Simulator,
-    SimulatorConfig,
-    SimulatorError,
-)
+from apps.ocpp.trace import TraceError, extract_trace, replay_trace
 
 
 class Command(BaseCommand):
-    help = "Unified OCPP operational command surface."
+    help = "Unified OCPP tooling for coverage, transaction data, traces, and simulation."
 
-    def add_arguments(self, parser) -> None:
-        subparsers = parser.add_subparsers(dest="group", required=True)
+    def add_arguments(self, parser):
+        subparsers = parser.add_subparsers(dest="ocpp_command", required=True)
 
-        coverage_parser = subparsers.add_parser("coverage", help="Coverage reporting.")
-        add_coverage_arguments(coverage_parser)
-        coverage_parser.add_argument(
-            "--version",
-            required=True,
-            choices=("1.6J", "1.6", "2.0.1", "2.1"),
-            help="OCPP protocol version (1.6J preferred; 1.6 alias supported).",
+        coverage_parser = subparsers.add_parser(
+            "coverage", help="Show implemented OCPP action coverage."
         )
+        coverage_parser.add_argument("coverage_args", nargs=argparse.REMAINDER)
 
         transactions_parser = subparsers.add_parser(
-            "transactions", help="Import/export transaction data."
+            "transactions", help="Import or export transaction/session data."
         )
-        transactions_subparsers = transactions_parser.add_subparsers(
-            dest="transactions_action", required=True
+        transaction_subparsers = transactions_parser.add_subparsers(
+            dest="transaction_command", required=True
+        )
+        export_parser = transaction_subparsers.add_parser(
+            "export", help="Export transaction/session data as JSON."
+        )
+        export_parser.add_argument("--charger", dest="charger_id")
+        export_parser.add_argument("--output")
+        export_parser.add_argument("--indent", type=int, default=2)
+        export_parser.add_argument("--database", default="default")
+        export_parser.add_argument(
+            "--include-payment-logs", action="store_true", default=False
         )
 
-        transactions_import_parser = transactions_subparsers.add_parser(
-            "import", help="Import transactions."
+        import_parser = transaction_subparsers.add_parser(
+            "import", help="Import transaction/session data from JSON."
         )
-        add_transactions_import_arguments(transactions_import_parser)
-
-        transactions_export_parser = transactions_subparsers.add_parser(
-            "export", help="Export transactions."
-        )
-        add_transactions_export_arguments(transactions_export_parser)
+        import_parser.add_argument("input")
+        import_parser.add_argument("--database", default="default")
+        import_parser.add_argument("--dry-run", action="store_true", default=False)
 
         trace_parser = subparsers.add_parser(
-            "trace", help="Trace extract/replay tools."
+            "trace", help="Extract or replay OCPP trace data."
         )
         trace_subparsers = trace_parser.add_subparsers(
-            dest="trace_action", required=True
+            dest="trace_command", required=True
         )
-
         trace_extract_parser = trace_subparsers.add_parser(
-            "extract", help="Extract transaction trace."
+            "extract", help="Extract normalized OCPP trace data from logs."
         )
-        add_trace_extract_arguments(trace_extract_parser)
+        trace_extract_parser.add_argument("input")
+        trace_extract_parser.add_argument("--output")
+        trace_extract_parser.add_argument("--indent", type=int, default=2)
+        trace_extract_parser.add_argument("--charger")
 
         trace_replay_parser = trace_subparsers.add_parser(
-            "replay", help="Replay extracted trace."
+            "replay", help="Replay normalized OCPP trace data into local state."
         )
-        add_trace_replay_arguments(trace_replay_parser)
+        trace_replay_parser.add_argument("input")
+        trace_replay_parser.add_argument("--charger")
+        trace_replay_parser.add_argument("--database", default="default")
+        trace_replay_parser.add_argument("--dry-run", action="store_true", default=False)
+        trace_replay_parser.add_argument("--reset", action="store_true", default=False)
 
         simulator_parser = subparsers.add_parser(
-            "simulator", help="Run a model-independent OCPP charge-point simulator."
+            "simulator", help="Control persistent simulated OCPP charge points."
         )
         simulator_subparsers = simulator_parser.add_subparsers(
-            dest="simulator_action", required=True
+            dest="simulator_command", required=True
         )
-        authorize_parser = simulator_subparsers.add_parser(
-            "authorize", help="Boot a simulated OCPP 1.6J charger and authorize an idTag."
+        open_parser = simulator_subparsers.add_parser(
+            "open", help="Open a persistent simulated charger connection."
         )
-        authorize_parser.add_argument(
-            "--url", required=True, help="CSMS WebSocket base URL (for example ws://host:9000)."
+        open_parser.add_argument("--url", required=True)
+        open_parser.add_argument("--charger", required=True)
+        open_parser.add_argument("--vendor", default="ArtHexis")
+        open_parser.add_argument("--model", default="Gway Simulator")
+        open_parser.add_argument("--timeout", type=float, default=30.0)
+        open_parser.add_argument(
+            "--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT
         )
-        authorize_parser.add_argument("--charger", required=True, help="Simulated charger ID.")
-        authorize_parser.add_argument("--id-tag", required=True, help="RFID/OCPP idTag to send.")
-        authorize_parser.add_argument("--vendor", default="ArtHexis")
-        authorize_parser.add_argument("--model", default="Gway Simulator")
-        authorize_parser.add_argument("--timeout", type=float, default=30.0)
+        for name, help_text in (
+            ("authorize", "Authorize an RFID/idTag on an open simulator."),
+            ("status", "Show an open simulator's status."),
+            ("close", "Close an open simulator connection."),
+        ):
+            action_parser = simulator_subparsers.add_parser(name, help=help_text)
+            action_parser.add_argument("--charger", required=True)
+            if name == "authorize":
+                action_parser.add_argument("--id-tag", required=True)
+
+        worker_parser = simulator_subparsers.add_parser(
+            "_worker", help=argparse.SUPPRESS
+        )
+        worker_parser.add_argument("--config", required=True)
+        worker_parser.add_argument("--idle-timeout", type=float, required=True)
 
     def handle(self, *args, **options):
-        group = options.get("group")
-        if group == "coverage":
-            self._handle_coverage(options)
+        command = options["ocpp_command"]
+        if command == "coverage":
+            self._run_coverage(options)
             return
-        if group == "transactions":
-            self._handle_transactions(options)
+        if command == "transactions":
+            self._run_transactions(options)
             return
-        if group == "trace":
-            self._handle_trace(options)
+        if command == "trace":
+            self._run_trace(options)
             return
-        if group == "simulator":
-            self._handle_simulator(options)
+        if command == "simulator":
+            self._run_simulator(options)
             return
-        raise CommandError(
-            "A command group is required: coverage, transactions, trace, or simulator."
-        )
+        raise CommandError(f"Unknown OCPP command: {command}")
 
-    def _handle_coverage(self, options: dict) -> None:
-        version = options["version"]
-        kwargs = {
-            "badge_path": options.get("badge_path"),
-            "json_path": options.get("json_path"),
-            "stdout": self.stdout,
-            "stderr": self.stderr,
-        }
-        if version in {"1.6", "1.6J"}:
-            run_coverage_ocpp16(**kwargs)
-        elif version == "2.0.1":
-            run_coverage_ocpp201(**kwargs)
-        elif version == "2.1":
-            run_coverage_ocpp21(**kwargs)
-        else:
-            raise CommandError(f"Unsupported coverage version: {version}")
+    def _run_coverage(self, options):
+        from .ocpp_coverage import Command as CoverageCommand
 
-    def _handle_transactions(self, options: dict) -> None:
-        action = options.get("transactions_action")
-        if action == "import":
-            imported = run_import_transactions(input_path=options["input"])
-            self.stdout.write(self.style.SUCCESS(f"Imported {imported} transactions"))
-            return
-        if action == "export":
-            count = run_export_transactions(
-                output_path=options["output"],
-                start=options.get("start"),
-                end=options.get("end"),
-                chargers=options.get("chargers"),
-                all_chargers=options.get("all_chargers", False),
-            )
-            self.stdout.write(self.style.SUCCESS(f"Exported {count} transactions"))
-            return
-        raise CommandError("transactions requires one action: import or export.")
+        coverage = CoverageCommand()
+        coverage.stdout = self.stdout
+        coverage.stderr = self.stderr
+        coverage.handle(*options.get("coverage_args", []))
 
-    def _handle_trace(self, options: dict) -> None:
-        action = options.get("trace_action")
-        if action == "extract":
-            run_trace_extract(
-                stdout=self.stdout,
-                stderr=self.stderr,
-                style=self.style,
-                **{k: options.get(k) for k in ("all", "next", "txn", "out", "log")},
-            )
-            return
-        if action == "replay":
-            result = run_replay_extract(extract=options["extract"])
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Imported {result.imported} transaction(s), skipped {result.skipped} duplicate(s)."
+    def _run_transactions(self, options):
+        command = options["transaction_command"]
+        try:
+            if command == "export":
+                payload = transaction_export.export_transactions(
+                    charger_id=options.get("charger_id"),
+                    using=options["database"],
+                    include_payment_logs=options["include_payment_logs"],
                 )
-            )
-            if result.session_log_written:
-                self.stdout.write(self.style.SUCCESS("Session log restored."))
-            return
-        raise CommandError("trace requires one action: extract or replay.")
+                text = json.dumps(payload, indent=options["indent"], sort_keys=True)
+                output = options.get("output")
+                if output:
+                    Path(output).write_text(text + "\n", encoding="utf-8")
+                    self.stdout.write(output)
+                else:
+                    self.stdout.write(text)
+                return
 
-    def _handle_simulator(self, options: dict) -> None:
-        action = options.get("simulator_action")
-        if action != "authorize":
-            raise CommandError("simulator requires one action: authorize.")
+            if command == "import":
+                payload = json.loads(Path(options["input"]).read_text(encoding="utf-8"))
+                summary = transaction_export.import_transactions(
+                    payload,
+                    using=options["database"],
+                    dry_run=options["dry_run"],
+                )
+                self.stdout.write(json.dumps(summary, sort_keys=True))
+                return
+        except (OSError, ValueError, transaction_export.TransactionTransferError) as exc:
+            raise CommandError(str(exc)) from exc
+        raise CommandError(f"Unknown transaction command: {command}")
+
+    def _run_trace(self, options):
+        command = options["trace_command"]
+        try:
+            if command == "extract":
+                summary = extract_trace(
+                    options["input"],
+                    output_path=options.get("output"),
+                    charger=options.get("charger"),
+                    indent=options["indent"],
+                )
+            elif command == "replay":
+                summary = replay_trace(
+                    options["input"],
+                    charger=options.get("charger"),
+                    database=options["database"],
+                    dry_run=options["dry_run"],
+                    reset=options["reset"],
+                )
+            else:
+                raise CommandError(f"Unknown trace command: {command}")
+        except (OSError, ValueError, TraceError) as exc:
+            raise CommandError(str(exc)) from exc
+        self.stdout.write(json.dumps(summary, sort_keys=True))
+
+    def _run_simulator(self, options):
+        command = options["simulator_command"]
+        try:
+            if command == "_worker":
+                from apps.ocpp.simulator.worker import SimulatorWorker
+
+                data = json.loads(options["config"])
+                config = SimulatorConfig(**data)
+                asyncio.run(
+                    SimulatorWorker(config, idle_timeout=options["idle_timeout"]).run()
+                )
+                return
+            if command == "open":
+                self._open_simulator(options)
+                return
+            request = {"action": command}
+            if command == "authorize":
+                request["id_tag"] = options["id_tag"]
+            result = asyncio.run(send_control(options["charger"], request))
+            self.stdout.write(json.dumps(result, sort_keys=True))
+        except (OSError, ValueError, SimulatorError) as exc:
+            raise CommandError(str(exc)) from exc
+
+    def _open_simulator(self, options):
+        charger = options["charger"]
+        if session_path(charger).exists():
+            raise CommandError(f"simulator {charger!r} is already open")
+        sessions = active_sessions()
+        limit = max_instances()
+        if len(sessions) >= limit:
+            raise CommandError(
+                f"simulator limit reached ({limit}); set OCPP_SIMULATOR_MAX_INSTANCES to raise it"
+            )
         config = SimulatorConfig(
             url=options["url"],
-            charger=options["charger"],
+            charger=charger,
             vendor=options["vendor"],
             model=options["model"],
             timeout=options["timeout"],
         )
-        scenario = AuthorizeScenario(options["id_tag"])
-        try:
-            result = asyncio.run(scenario.run(OCPP16Simulator(config)))
-        except (SimulatorError, OSError, TimeoutError) as exc:
-            raise CommandError(str(exc)) from exc
-        self.stdout.write(json.dumps(result.to_dict(), sort_keys=True))
+        argv = [
+            sys.executable,
+            str(Path(sys.argv[0]).resolve()),
+            "ocpp",
+            "simulator",
+            "_worker",
+            "--config",
+            json.dumps(config.__dict__),
+            "--idle-timeout",
+            str(options["idle_timeout"]),
+        ]
+        subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+        deadline = asyncio.get_event_loop_policy().new_event_loop().time() + min(
+            options["timeout"], 5.0
+        )
+        import time
+
+        while not session_path(charger).exists():
+            if time.monotonic() >= deadline:
+                raise CommandError("simulator worker did not become ready")
+            time.sleep(0.05)
+        self.stdout.write(
+            json.dumps(
+                {
+                    "charger": charger,
+                    "open": True,
+                    "idle_timeout": options["idle_timeout"],
+                    "max_instances": limit,
+                },
+                sort_keys=True,
+            )
+        )
