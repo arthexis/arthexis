@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -81,7 +82,12 @@ class OCPP16Simulator:
         await self._connection.send(json.dumps([2, message_id, action, payload]))
 
         while True:
-            raw = await self._connection.recv()
+            try:
+                raw = await asyncio.wait_for(
+                    self._connection.recv(), timeout=self.config.timeout
+                )
+            except TimeoutError as exc:
+                raise SimulatorError(f"timed out waiting for {action} response") from exc
             try:
                 message = json.loads(raw)
             except (TypeError, json.JSONDecodeError) as exc:
