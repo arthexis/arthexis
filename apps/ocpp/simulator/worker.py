@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
+import hashlib
 import json
 import os
 import time
@@ -23,12 +25,21 @@ def runtime_dir() -> Path:
     root = Path(
         os.environ.get("OCPP_SIMULATOR_RUNTIME_DIR", ".arthexis/ocpp-simulators")
     )
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Apply the security boundary even when the directory already existed under
+    # a more permissive umask: local control requests are intentionally
+    # unauthenticated beyond filesystem ownership.
+    root.chmod(0o700)
     return root
 
 
 def _safe_name(charger: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in charger)
+    """Return a stable, filesystem-safe key without charger-name collisions."""
+
+    digest = base64.urlsafe_b64encode(
+        hashlib.sha256(charger.encode("utf-8")).digest()
+    ).decode("ascii")
+    return f"charger-{digest.rstrip('=')}"
 
 
 def session_path(charger: str) -> Path:
@@ -41,6 +52,22 @@ def socket_path(charger: str) -> Path:
 
 def error_path(charger: str) -> Path:
     return runtime_dir() / f"{_safe_name(charger)}.error"
+
+
+def open_lock_path() -> Path:
+    return runtime_dir() / ".open.lock"
+
+
+def cleanup_session_artifacts(charger: str) -> None:
+    """Remove startup/runtime artifacts for a simulator that is no longer alive."""
+
+    session_path(charger).unlink(missing_ok=True)
+    socket_path(charger).unlink(missing_ok=True)
+    error_path(charger).unlink(missing_ok=True)
+
+
+def _secure_socket_path(path: Path) -> None:
+    path.chmod(0o600)
 
 
 def max_instances() -> int:
@@ -70,6 +97,7 @@ def cleanup_stale_sessions() -> None:
         if pid < 1 or not _pid_alive(pid):
             path.unlink(missing_ok=True)
             path.with_suffix(".sock").unlink(missing_ok=True)
+            path.with_suffix(".error").unlink(missing_ok=True)
 
 
 def active_sessions() -> list[dict[str, Any]]:
@@ -142,7 +170,13 @@ class SimulatorWorker:
                 raise SimulatorError(
                     f"BootNotification was not accepted: {self._boot.status}"
                 )
-            server = await asyncio.start_unix_server(self._handle_client, path=str(sock))
+            server = await asyncio.start_unix_server(
+                self._handle_client,
+                path=str(sock),
+                start_serving=False,
+            )
+            _secure_socket_path(sock)
+            await server.start_serving()
             metadata = {
                 "charger": self.config.charger,
                 "url": self.config.url,
