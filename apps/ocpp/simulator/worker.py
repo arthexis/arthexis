@@ -152,6 +152,9 @@ class SimulatorWorker:
                 "boot": self._boot.status,
             }
             metadata_path.write_text(json.dumps(metadata))
+            # The operator's idle window begins once `open` can actually return,
+            # not while the WebSocket handshake and BootNotification are running.
+            self._last_control_activity = time.monotonic()
             idle_task = asyncio.create_task(self._idle_watch())
             heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             async with server:
