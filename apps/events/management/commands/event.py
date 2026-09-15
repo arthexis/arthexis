@@ -55,7 +55,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         data: dict[str, Any] = {}
-        if options["data"]:
+        if options["data"] is not None:
             try:
                 decoded = json.loads(options["data"])
             except json.JSONDecodeError as exc:
