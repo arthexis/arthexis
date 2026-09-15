@@ -13,6 +13,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from filelock import FileLock
 
 from apps.ocpp.management.commands._ocpp_command_helpers import (
     add_coverage_arguments,
@@ -32,8 +33,10 @@ from apps.ocpp.simulator import SimulatorConfig, SimulatorError
 from apps.ocpp.simulator.worker import (
     DEFAULT_IDLE_TIMEOUT,
     active_sessions,
+    cleanup_session_artifacts,
     error_path,
     max_instances,
+    open_lock_path,
     send_control,
 )
 
@@ -236,6 +239,12 @@ class Command(BaseCommand):
                 path.unlink(missing_ok=True)
 
     def _open_simulator(self, options: dict) -> None:
+        # Keep capacity/identity checks and startup under one cross-process lock.
+        # The ready session file becomes the durable reservation before release.
+        with FileLock(str(open_lock_path())):
+            self._open_simulator_locked(options)
+
+    def _open_simulator_locked(self, options: dict) -> None:
         sessions = active_sessions()
         charger = options["charger"]
         if any(session.get("charger") == charger for session in sessions):
@@ -287,11 +296,13 @@ class Command(BaseCommand):
         while not ready_path.exists():
             if failure_path.exists():
                 message = failure_path.read_text().strip() or "simulator worker failed"
-                failure_path.unlink(missing_ok=True)
+                self._stop_starting_worker(process, charger)
                 raise CommandError(message)
             if process.poll() is not None:
+                self._stop_starting_worker(process, charger)
                 raise CommandError("simulator worker exited before becoming ready")
             if time.monotonic() >= deadline:
+                self._stop_starting_worker(process, charger)
                 raise CommandError("simulator worker did not become ready before timeout")
             time.sleep(0.05)
         self.stdout.write(
@@ -305,3 +316,16 @@ class Command(BaseCommand):
                 sort_keys=True,
             )
         )
+
+    @staticmethod
+    def _stop_starting_worker(process: subprocess.Popen, charger: str) -> None:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        # Waiting before cleanup prevents a late worker write from recreating
+        # session metadata after `open` has already reported failure.
+        cleanup_session_artifacts(charger)
