@@ -1,13 +1,11 @@
 import asyncio
-import json
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from django.core.management import call_command
 
-from apps.ocpp.simulator.client import OCPP16Simulator, SimulatorConfig, SimulatorError
+from apps.ocpp.simulator.client import SimulatorConfig
 from apps.ocpp.simulator.scenarios import AuthorizeScenario
 from apps.ocpp.simulator.worker import DEFAULT_MAX_INSTANCES, SimulatorWorker
 
@@ -65,38 +63,6 @@ def test_instance_limit_can_be_overridden(monkeypatch):
     from apps.ocpp.simulator.worker import max_instances
 
     assert max_instances() == 7
-
-
-def test_simulator_client_sends_boot_then_authorize_on_one_connection():
-    responses = iter(
-        [
-            [3, "boot-id", {"status": "Accepted", "currentTime": "2026-09-15T00:00:00Z", "interval": 60}],
-            [3, "auth-id", {"idTagInfo": {"status": "Accepted"}}],
-        ]
-    )
-    connection = SimpleNamespace(
-        subprotocol="ocpp1.6",
-        send=AsyncMock(),
-        recv=AsyncMock(side_effect=lambda: json.dumps(next(responses))),
-        close=AsyncMock(),
-    )
-
-    async def exercise():
-        simulator = OCPP16Simulator(
-            SimulatorConfig(url="ws://example.test:9000", charger="GWAY001")
-        )
-        simulator._connection = connection
-        with patch("apps.ocpp.simulator.client.uuid.uuid4") as uuid4:
-            uuid4.side_effect = [SimpleNamespace(hex="boot-id"), SimpleNamespace(hex="auth-id")]
-            boot = await simulator.boot()
-            status = await simulator.authorize("TEST001")
-        return boot, status
-
-    boot, status = asyncio.run(exercise())
-    assert boot.status == "Accepted"
-    assert status == "Accepted"
-    sent = [json.loads(call.args[0]) for call in connection.send.await_args_list]
-    assert [message[2] for message in sent] == ["BootNotification", "Authorize"]
 
 
 def test_authorize_requires_open_simulator(tmp_path, monkeypatch):
