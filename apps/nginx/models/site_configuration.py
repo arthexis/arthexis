@@ -58,13 +58,6 @@ class SiteConfiguration(models.Model):
             validators.MaxValueValidator(65535),
         ],
     )
-    certificate = models.ForeignKey(
-        "certs.CertificateBase",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="nginx_configurations",
-    )
     external_websockets = models.BooleanField(
         default=True,
         help_text=_("Enable websocket proxy directives for external EVCS traffic."),
@@ -139,7 +132,6 @@ class SiteConfiguration(models.Model):
                 mode=self.mode,
                 port=self.port,
                 role=self.role,
-                certificate=self.certificate,
                 https_enabled=self.protocol == "https",
                 include_ipv6=self.include_ipv6,
                 external_websockets=self.external_websockets,
