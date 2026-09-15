@@ -1,8 +1,8 @@
 import pytest
 from django.utils import timezone
 
-from apps.certs import services
-from apps.certs.models import SelfSignedCertificate
+from apps.ocpp.pki import services
+from apps.ocpp.pki.models import SelfSignedCertificate
 
 
 @pytest.mark.django_db

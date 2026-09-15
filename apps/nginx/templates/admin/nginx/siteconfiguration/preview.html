@@ -24,7 +24,6 @@
       margin: 0.5rem 0 0;
     }
 
-    .nginx-preview-actions select,
     .nginx-preview-actions textarea,
     .nginx-preview-actions input[type="text"] {
       min-width: 20rem;
@@ -45,18 +44,6 @@
   <h1>{% trans "Preview nginx configurations" %}</h1>
 
   {% if config_previews %}
-    {% if missing_certificates %}
-      <ul class="messagelist">
-        <li class="warning">
-          {% blocktrans count missing=missing_certificates|length %}
-            {{ missing }} configuration requires a certificate before HTTPS can be applied.
-          {% plural %}
-            {{ missing }} configurations require certificates before HTTPS can be applied.
-          {% endblocktrans %}
-        </li>
-      </ul>
-    {% endif %}
-
     {% if can_apply %}
       <form method="post" class="submit-row nginx-preview-actions">
         {% csrf_token %}
@@ -80,21 +67,6 @@
         {% endif %}
         <input type="submit" name="update_subdomains" value="{% trans 'Update subdomains' %}" />
         <p class="help">{{ subdomain_form.managed_subdomains.help_text }}</p>
-      </form>
-
-      <form method="post" class="submit-row nginx-preview-actions" action="{{ generate_certificates_url }}">
-        {% csrf_token %}
-        <input type="hidden" name="ids" value="{{ ids_param }}" />
-        <div class="form-row">
-          <label for="certificate_type">{% trans "Certificate type" %}</label>
-          <select name="certificate_type" id="certificate_type">
-            {% for value, label in certificate_type_choices %}
-              <option value="{{ value }}"{% if value == default_certificate_type %} selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <input type="submit" value="{% trans 'Generate certificates' %}" />
-        <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS (Self-signed, Certbot HTTP-01, or GoDaddy DNS-01).' %}</p>
       </form>
     {% endif %}
 

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from apps.certs import services
+from apps.ocpp.pki import services
 
 
 def test_format_subject_alt_name_entries_deduplicates_dns_and_ip():

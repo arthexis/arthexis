@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.certs.models import CertificateBase
+from apps.ocpp.pki.models import CertificateBase
 
 
 class Command(BaseCommand):
-    help = "Verify certificates against filesystem state and validity."
+    help = "Verify OCPP certificates against filesystem state and validity."
 
     def add_arguments(self, parser) -> None:
         group = parser.add_mutually_exclusive_group(required=True)
