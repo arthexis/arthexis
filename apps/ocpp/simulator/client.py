@@ -86,7 +86,7 @@ class OCPP16Simulator:
                 raw = await asyncio.wait_for(
                     self._connection.recv(), timeout=self.config.timeout
                 )
-            except TimeoutError as exc:
+            except asyncio.TimeoutError as exc:
                 raise SimulatorError(f"timed out waiting for {action} response") from exc
             try:
                 message = json.loads(raw)
