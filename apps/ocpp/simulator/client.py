@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from websockets.asyncio.client import connect
 
 from apps.ocpp.consumers.constants import OCPP_VERSION_16
 from apps.ocpp.consumers.csms.protocol import (
+    OCPPCallEnvelope,
     OCPPCallErrorEnvelope,
     OCPPCallResultEnvelope,
     validate_message_envelope,
@@ -47,13 +49,8 @@ class OCPP16Simulator:
     def __init__(self, config: SimulatorConfig) -> None:
         self.config = config
         self._connection: Any | None = None
-
-    async def __aenter__(self) -> OCPP16Simulator:
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self.close()
+        self._receive_task: asyncio.Task | None = None
+        self._pending: dict[str, asyncio.Future] = {}
 
     async def connect(self) -> None:
         if self._connection is not None:
@@ -69,40 +66,71 @@ class OCPP16Simulator:
             raise SimulatorError(
                 f"CSMS did not negotiate OCPP 1.6J (received {negotiated!r})"
             )
+        self._receive_task = asyncio.create_task(self._receive_loop())
 
     async def close(self) -> None:
+        task, self._receive_task = self._receive_task, None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         connection, self._connection = self._connection, None
         if connection is not None:
             await connection.close()
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(SimulatorError("simulator connection closed"))
+        self._pending.clear()
 
     async def call(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         if self._connection is None:
             raise SimulatorError("simulator is not connected")
         message_id = uuid.uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        self._pending[message_id] = future
         await self._connection.send(json.dumps([2, message_id, action, payload]))
+        try:
+            return await asyncio.wait_for(future, timeout=self.config.timeout)
+        except TimeoutError as exc:
+            raise SimulatorError(f"timed out waiting for {action} response") from exc
+        finally:
+            self._pending.pop(message_id, None)
 
-        while True:
-            try:
-                raw = await asyncio.wait_for(
-                    self._connection.recv(), timeout=self.config.timeout
-                )
-            except asyncio.TimeoutError as exc:
-                raise SimulatorError(f"timed out waiting for {action} response") from exc
-            try:
-                message = json.loads(raw)
-            except (TypeError, json.JSONDecodeError) as exc:
-                raise SimulatorError("CSMS returned invalid JSON") from exc
-            envelope = validate_message_envelope(message)
-            if isinstance(envelope, OCPPCallResultEnvelope):
-                if envelope.message_id == message_id:
-                    return dict(envelope.payload)
-                continue
-            if isinstance(envelope, OCPPCallErrorEnvelope):
-                if envelope.message_id == message_id:
-                    raise SimulatorError(
-                        f"{action} failed: {envelope.error_code}: {envelope.description}"
-                    )
-                continue
+    async def _receive_loop(self) -> None:
+        try:
+            while self._connection is not None:
+                raw = await self._connection.recv()
+                try:
+                    message = json.loads(raw)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                envelope = validate_message_envelope(message)
+                if isinstance(envelope, (OCPPCallResultEnvelope, OCPPCallErrorEnvelope)):
+                    future = self._pending.get(envelope.message_id)
+                    if future is None or future.done():
+                        continue
+                    if isinstance(envelope, OCPPCallResultEnvelope):
+                        future.set_result(dict(envelope.payload))
+                    else:
+                        future.set_exception(
+                            SimulatorError(
+                                f"OCPP call failed: {envelope.error_code}: {envelope.description}"
+                            )
+                        )
+                    continue
+                if isinstance(envelope, OCPPCallEnvelope):
+                    await self._handle_csms_call(envelope)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(SimulatorError(f"connection receive failed: {exc}"))
+
+    async def _handle_csms_call(self, envelope: OCPPCallEnvelope) -> None:
+        """Keep the socket responsive; action-specific behavior comes later."""
+        if self._connection is not None:
+            await self._connection.send(json.dumps([3, envelope.message_id, {}]))
 
     async def boot(self) -> BootResult:
         response = await self.call(
