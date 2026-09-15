@@ -33,7 +33,7 @@ def test_worker_authorize_uses_same_simulator_connection():
     worker = SimulatorWorker(
         SimulatorConfig(url="ws://example.test", charger="GWAY001")
     )
-    worker._boot = SimpleNamespace(status="Accepted")
+    worker._boot = SimpleNamespace(status="Accepted", interval=60)
     worker._simulator.authorize = AsyncMock(return_value="Invalid")
     response = asyncio.run(
         worker._dispatch({"action": "authorize", "id_tag": "UNKNOWN001"})
@@ -49,6 +49,25 @@ def test_worker_close_marks_worker_for_shutdown():
     response = asyncio.run(worker._dispatch({"action": "close"}))
     assert response["closed"] is True
     assert worker._stop.is_set()
+
+
+def test_heartbeat_does_not_reset_control_activity():
+    async def exercise():
+        worker = SimulatorWorker(
+            SimulatorConfig(url="ws://example.test", charger="GWAY001")
+        )
+        worker._boot = SimpleNamespace(status="Accepted", interval=0.001)
+        worker._simulator.call = AsyncMock(return_value={"currentTime": "now"})
+        before = worker._last_control_activity
+        task = asyncio.create_task(worker._heartbeat_loop())
+        await asyncio.sleep(0.01)
+        worker._stop.set()
+        await task
+        return worker, before
+
+    worker, before = asyncio.run(exercise())
+    assert worker._simulator.call.await_count >= 1
+    assert worker._last_control_activity == before
 
 
 def test_default_instance_limit_is_two(monkeypatch):
