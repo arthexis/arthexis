@@ -8,9 +8,10 @@ import json
 import uuid
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import WebSocketException
 
 from apps.ocpp.consumers.constants import OCPP_VERSION_16
 from apps.ocpp.consumers.csms.protocol import (
@@ -36,10 +37,18 @@ class SimulatorConfig:
     vendor: str = "ArtHexis"
     model: str = "Gway Simulator"
     timeout: float = 30.0
+    allow_insecure_ws: bool = False
 
     @property
     def endpoint(self) -> str:
         base = self.url.rstrip("/")
+        scheme = urlsplit(base).scheme.lower()
+        if scheme not in {"ws", "wss"}:
+            raise SimulatorError("simulator URL must use ws:// or wss://")
+        if scheme == "ws" and not self.allow_insecure_ws:
+            raise SimulatorError(
+                "plaintext ws:// is disabled; pass --allow-insecure-ws for trusted local testing"
+            )
         return f"{base}/ocpp/{quote(self.charger, safe='')}"
 
 
@@ -55,12 +64,16 @@ class OCPP16Simulator:
     async def connect(self) -> None:
         if self._connection is not None:
             return
-        self._connection = await connect(
-            self.config.endpoint,
-            subprotocols=[str(OCPP_VERSION_16)],
-            open_timeout=self.config.timeout,
-        )
-        negotiated = getattr(self._connection, "subprotocol", None)
+        try:
+            connection = await connect(
+                self.config.endpoint,
+                subprotocols=[str(OCPP_VERSION_16)],
+                open_timeout=self.config.timeout,
+            )
+        except (WebSocketException, OSError, ValueError) as exc:
+            raise SimulatorError(f"failed to connect to CSMS: {exc}") from exc
+        self._connection = connection
+        negotiated = getattr(connection, "subprotocol", None)
         if negotiated not in {str(OCPP_VERSION_16), "ocpp1.6j"}:
             await self.close()
             raise SimulatorError(
@@ -76,7 +89,8 @@ class OCPP16Simulator:
                 await task
         connection, self._connection = self._connection, None
         if connection is not None:
-            await connection.close()
+            with contextlib.suppress(WebSocketException, OSError):
+                await connection.close()
         for future in self._pending.values():
             if not future.done():
                 future.set_exception(SimulatorError("simulator connection closed"))
@@ -85,14 +99,27 @@ class OCPP16Simulator:
     async def call(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         if self._connection is None:
             raise SimulatorError("simulator is not connected")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.config.timeout
         message_id = uuid.uuid4().hex
-        future = asyncio.get_running_loop().create_future()
+        future = loop.create_future()
         self._pending[message_id] = future
-        await self._connection.send(json.dumps([2, message_id, action, payload]))
         try:
-            return await asyncio.wait_for(future, timeout=self.config.timeout)
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError
+            await asyncio.wait_for(
+                self._connection.send(json.dumps([2, message_id, action, payload])),
+                timeout=remaining,
+            )
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError
+            return await asyncio.wait_for(future, timeout=remaining)
         except TimeoutError as exc:
             raise SimulatorError(f"timed out waiting for {action} response") from exc
+        except (WebSocketException, OSError) as exc:
+            raise SimulatorError(f"WebSocket failure during {action}: {exc}") from exc
         finally:
             self._pending.pop(message_id, None)
 
@@ -122,14 +149,21 @@ class OCPP16Simulator:
                     await self._handle_csms_call(envelope)
         except asyncio.CancelledError:
             raise
+        except (WebSocketException, OSError) as exc:
+            self._fail_pending(SimulatorError(f"connection receive failed: {exc}"))
         except Exception as exc:
-            for future in self._pending.values():
-                if not future.done():
-                    future.set_exception(SimulatorError(f"connection receive failed: {exc}"))
+            self._fail_pending(SimulatorError(f"connection receive failed: {exc}"))
+
+    def _fail_pending(self, error: SimulatorError) -> None:
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(error)
 
     async def _handle_csms_call(self, envelope: OCPPCallEnvelope) -> None:
         """Reject unsupported CSMS actions explicitly until they are simulated."""
-        if self._connection is not None:
+        if self._connection is None:
+            return
+        try:
             await self._connection.send(
                 json.dumps(
                     [
@@ -141,6 +175,8 @@ class OCPP16Simulator:
                     ]
                 )
             )
+        except (WebSocketException, OSError) as exc:
+            raise SimulatorError("failed to reply to CSMS call") from exc
 
     async def boot(self) -> BootResult:
         response = await self.call(
@@ -150,13 +186,21 @@ class OCPP16Simulator:
                 "chargePointModel": self.config.model,
             },
         )
+        status = response.get("status")
+        current_time = response.get("currentTime")
         interval = response.get("interval")
+        if not isinstance(status, str) or not status:
+            raise SimulatorError("BootNotification response requires string status")
+        if not isinstance(current_time, str) or not current_time:
+            raise SimulatorError("BootNotification response requires string currentTime")
+        if isinstance(interval, bool) or not isinstance(interval, int) or interval < 0:
+            raise SimulatorError(
+                "BootNotification response requires a non-negative integer interval"
+            )
         return BootResult(
-            status=str(response.get("status", "")),
-            current_time=(
-                str(response["currentTime"]) if response.get("currentTime") else None
-            ),
-            interval=int(interval) if interval is not None else None,
+            status=status,
+            current_time=current_time,
+            interval=interval,
         )
 
     async def authorize(self, id_tag: str) -> str:

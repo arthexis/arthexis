@@ -20,7 +20,9 @@ ENV_MAX_INSTANCES = "OCPP_SIMULATOR_MAX_INSTANCES"
 
 
 def runtime_dir() -> Path:
-    root = Path(os.environ.get("OCPP_SIMULATOR_RUNTIME_DIR", ".arthexis/ocpp-simulators"))
+    root = Path(
+        os.environ.get("OCPP_SIMULATOR_RUNTIME_DIR", ".arthexis/ocpp-simulators")
+    )
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -35,6 +37,10 @@ def session_path(charger: str) -> Path:
 
 def socket_path(charger: str) -> Path:
     return runtime_dir() / f"{_safe_name(charger)}.sock"
+
+
+def error_path(charger: str) -> Path:
+    return runtime_dir() / f"{_safe_name(charger)}.error"
 
 
 def max_instances() -> int:
@@ -82,12 +88,18 @@ def load_session(charger: str) -> dict[str, Any]:
     path = session_path(charger)
     if not path.exists():
         raise SimulatorError(f"simulator {charger!r} is not open")
-    return json.loads(path.read_text())
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SimulatorError(f"simulator {charger!r} has invalid session metadata") from exc
 
 
 async def send_control(charger: str, request: dict[str, Any]) -> dict[str, Any]:
     metadata = load_session(charger)
-    reader, writer = await asyncio.open_unix_connection(metadata["socket"])
+    try:
+        reader, writer = await asyncio.open_unix_connection(metadata["socket"])
+    except (OSError, KeyError) as exc:
+        raise SimulatorError(f"cannot contact simulator {charger!r}") from exc
     try:
         writer.write((json.dumps(request) + "\n").encode())
         await writer.drain()
@@ -109,6 +121,8 @@ class SimulatorWorker:
     idle_timeout: float = DEFAULT_IDLE_TIMEOUT
 
     def __post_init__(self) -> None:
+        if self.idle_timeout <= 0:
+            raise ValueError("idle_timeout must be greater than zero")
         self._last_control_activity = time.monotonic()
         self._stop = asyncio.Event()
         self._simulator = OCPP16Simulator(self.config)
@@ -118,38 +132,50 @@ class SimulatorWorker:
         sock = socket_path(self.config.charger)
         metadata_path = session_path(self.config.charger)
         sock.unlink(missing_ok=True)
+        server = None
+        idle_task = None
+        heartbeat_task = None
         await self._simulator.connect()
-        self._boot = await self._simulator.boot()
-        server = await asyncio.start_unix_server(self._handle_client, path=str(sock))
-        metadata = {
-            "charger": self.config.charger,
-            "url": self.config.url,
-            "pid": os.getpid(),
-            "socket": str(sock),
-            "idle_timeout": self.idle_timeout,
-            "boot": self._boot.status,
-        }
-        metadata_path.write_text(json.dumps(metadata))
-        idle_task = asyncio.create_task(self._idle_watch())
-        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         try:
+            self._boot = await self._simulator.boot()
+            if self._boot.status != "Accepted":
+                raise SimulatorError(
+                    f"BootNotification was not accepted: {self._boot.status}"
+                )
+            server = await asyncio.start_unix_server(self._handle_client, path=str(sock))
+            metadata = {
+                "charger": self.config.charger,
+                "url": self.config.url,
+                "pid": os.getpid(),
+                "socket": str(sock),
+                "idle_timeout": self.idle_timeout,
+                "boot": self._boot.status,
+            }
+            metadata_path.write_text(json.dumps(metadata))
+            idle_task = asyncio.create_task(self._idle_watch())
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             async with server:
                 await self._stop.wait()
         finally:
             for task in (idle_task, heartbeat_task):
-                task.cancel()
+                if task is not None:
+                    task.cancel()
             for task in (idle_task, heartbeat_task):
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-            server.close()
-            await server.wait_closed()
+                if task is not None:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+            if server is not None:
+                server.close()
+                await server.wait_closed()
             await self._simulator.close()
             sock.unlink(missing_ok=True)
             metadata_path.unlink(missing_ok=True)
 
     async def _idle_watch(self) -> None:
         while not self._stop.is_set():
-            remaining = self.idle_timeout - (time.monotonic() - self._last_control_activity)
+            remaining = self.idle_timeout - (
+                time.monotonic() - self._last_control_activity
+            )
             if remaining <= 0:
                 self._stop.set()
                 return
@@ -193,7 +219,7 @@ class SimulatorWorker:
             }
         if action == "authorize":
             id_tag = str(request.get("id_tag", ""))
-            if not id_tag:
+            if not id_tag.strip():
                 raise SimulatorError("id_tag is required")
             status = await self._simulator.authorize(id_tag)
             result = AuthorizationResult(
@@ -202,7 +228,7 @@ class SimulatorWorker:
                 id_tag=id_tag,
                 authorization=status,
             )
-            return {"ok": True, **result.as_dict()}
+            return {"ok": True, **result.to_dict()}
         if action == "close":
             self._stop.set()
             return {"ok": True, "charger": self.config.charger, "closed": True}

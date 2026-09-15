@@ -1,4 +1,4 @@
-"""Structured results returned by OCPP simulator scenarios."""
+"""Structured results returned by OCPP simulator operations."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any
 @dataclass(frozen=True)
 class BootResult:
     status: str
-    current_time: str | None = None
-    interval: int | None = None
+    current_time: str
+    interval: int
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -19,10 +19,13 @@ class BootResult:
 @dataclass(frozen=True)
 class AuthorizationResult:
     charger: str
+    boot: str
     id_tag: str
-    boot: BootResult
     authorization: str
 
     def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        return data
+        return asdict(self)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Compatibility alias used by local worker/control responses."""
+        return self.to_dict()
