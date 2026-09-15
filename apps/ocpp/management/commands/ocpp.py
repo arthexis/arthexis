@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.ocpp.management.commands._ocpp_command_helpers import (
@@ -18,6 +21,12 @@ from apps.ocpp.management.coverage_ocpp201_impl import run_coverage_ocpp201
 from apps.ocpp.management.export_transactions_impl import run_export_transactions
 from apps.ocpp.management.import_transactions_impl import run_import_transactions
 from apps.ocpp.management.ocpp_replay_impl import run_replay_extract
+from apps.ocpp.simulator import (
+    AuthorizeScenario,
+    OCPP16Simulator,
+    SimulatorConfig,
+    SimulatorError,
+)
 
 
 class Command(BaseCommand):
@@ -69,6 +78,24 @@ class Command(BaseCommand):
         )
         add_trace_replay_arguments(trace_replay_parser)
 
+        simulator_parser = subparsers.add_parser(
+            "simulator", help="Run a model-independent OCPP charge-point simulator."
+        )
+        simulator_subparsers = simulator_parser.add_subparsers(
+            dest="simulator_action", required=True
+        )
+        authorize_parser = simulator_subparsers.add_parser(
+            "authorize", help="Boot a simulated OCPP 1.6J charger and authorize an idTag."
+        )
+        authorize_parser.add_argument(
+            "--url", required=True, help="CSMS WebSocket base URL (for example ws://host:9000)."
+        )
+        authorize_parser.add_argument("--charger", required=True, help="Simulated charger ID.")
+        authorize_parser.add_argument("--id-tag", required=True, help="RFID/OCPP idTag to send.")
+        authorize_parser.add_argument("--vendor", default="ArtHexis")
+        authorize_parser.add_argument("--model", default="Gway Simulator")
+        authorize_parser.add_argument("--timeout", type=float, default=30.0)
+
     def handle(self, *args, **options):
         group = options.get("group")
         if group == "coverage":
@@ -80,8 +107,11 @@ class Command(BaseCommand):
         if group == "trace":
             self._handle_trace(options)
             return
+        if group == "simulator":
+            self._handle_simulator(options)
+            return
         raise CommandError(
-            "A command group is required: coverage, transactions, or trace."
+            "A command group is required: coverage, transactions, trace, or simulator."
         )
 
     def _handle_coverage(self, options: dict) -> None:
@@ -140,3 +170,21 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS("Session log restored."))
             return
         raise CommandError("trace requires one action: extract or replay.")
+
+    def _handle_simulator(self, options: dict) -> None:
+        action = options.get("simulator_action")
+        if action != "authorize":
+            raise CommandError("simulator requires one action: authorize.")
+        config = SimulatorConfig(
+            url=options["url"],
+            charger=options["charger"],
+            vendor=options["vendor"],
+            model=options["model"],
+            timeout=options["timeout"],
+        )
+        scenario = AuthorizeScenario(options["id_tag"])
+        try:
+            result = asyncio.run(scenario.run(OCPP16Simulator(config)))
+        except (SimulatorError, OSError, TimeoutError) as exc:
+            raise CommandError(str(exc)) from exc
+        self.stdout.write(json.dumps(result.to_dict(), sort_keys=True))
