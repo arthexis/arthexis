@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -249,11 +250,7 @@ class Command(BaseCommand):
             start_new_session=True,
             env=os.environ.copy(),
         )
-        deadline = asyncio.get_event_loop_policy().new_event_loop().time() + min(
-            options["timeout"], 5.0
-        )
-        import time
-
+        deadline = time.monotonic() + min(options["timeout"], 5.0)
         while not session_path(charger).exists():
             if time.monotonic() >= deadline:
                 raise CommandError("simulator worker did not become ready")
