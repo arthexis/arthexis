@@ -1,11 +1,12 @@
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from django.core.management import call_command
 
-from apps.ocpp.simulator.client import SimulatorConfig
+from apps.ocpp.simulator.client import OCPP16Simulator, SimulatorConfig
 from apps.ocpp.simulator.scenarios import AuthorizeScenario
 from apps.ocpp.simulator.worker import DEFAULT_MAX_INSTANCES, SimulatorWorker
 
@@ -68,6 +69,24 @@ def test_heartbeat_does_not_reset_control_activity():
     worker, before = asyncio.run(exercise())
     assert worker._simulator.call.await_count >= 1
     assert worker._last_control_activity == before
+
+
+def test_unsupported_csms_call_returns_call_error():
+    async def exercise():
+        simulator = OCPP16Simulator(
+            SimulatorConfig(url="ws://example.test", charger="GWAY001")
+        )
+        simulator._connection = SimpleNamespace(send=AsyncMock())
+        envelope = SimpleNamespace(
+            message_id="server-1", action="RemoteStartTransaction", payload={}
+        )
+        await simulator._handle_csms_call(envelope)
+        return simulator
+
+    simulator = asyncio.run(exercise())
+    message = json.loads(simulator._connection.send.await_args.args[0])
+    assert message[:3] == [4, "server-1", "NotSupported"]
+    assert "RemoteStartTransaction" in message[3]
 
 
 def test_default_instance_limit_is_two(monkeypatch):
