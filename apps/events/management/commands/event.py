@@ -26,32 +26,46 @@ def _value(value: str) -> Any:
         return value
 
 
+def _field(value: str) -> tuple[str, Any]:
+    key, separator, raw_value = value.partition("=")
+    key = key.strip().replace("-", "_")
+    if not separator or not key:
+        raise CommandError("--field must use NAME=VALUE")
+    return key, _value(raw_value)
+
+
 class Command(BaseCommand):
     help = "Publish a structured event through the Arthexis event provider."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("operation", choices=("publish", "pub"))
         parser.add_argument("event_type")
-        parser.add_argument("fields", nargs="*")
         parser.add_argument("--queue")
+        parser.add_argument(
+            "--field",
+            action="append",
+            default=[],
+            metavar="NAME=VALUE",
+            help="Event data field; may be repeated.",
+        )
+        parser.add_argument(
+            "--data",
+            help="JSON object containing event data.",
+        )
 
     def handle(self, *args, **options):
-        fields = list(options["fields"])
         data: dict[str, Any] = {}
-        index = 0
-        while index < len(fields):
-            token = fields[index]
-            if not token.startswith("--") or token == "--":
-                raise CommandError(f"invalid event field: {token}")
-            key = token[2:].replace("-", "_")
-            if not key:
-                raise CommandError("event field name cannot be empty")
-            index += 1
-            if index >= len(fields) or fields[index].startswith("--"):
-                data[key] = True
-                continue
-            data[key] = _value(fields[index])
-            index += 1
+        if options["data"]:
+            try:
+                decoded = json.loads(options["data"])
+            except json.JSONDecodeError as exc:
+                raise CommandError(f"invalid --data JSON: {exc.msg}") from exc
+            if not isinstance(decoded, dict):
+                raise CommandError("--data must be a JSON object")
+            data.update(decoded)
+        for item in options["field"]:
+            key, value = _field(item)
+            data[key] = value
 
         try:
             published = publish_event(
