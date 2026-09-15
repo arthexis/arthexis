@@ -47,8 +47,10 @@ def max_instances() -> int:
 def _pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except (ProcessLookupError, PermissionError):
+    except ProcessLookupError:
         return False
+    except PermissionError:
+        return True
     return True
 
 
@@ -129,13 +131,16 @@ class SimulatorWorker:
         }
         metadata_path.write_text(json.dumps(metadata))
         idle_task = asyncio.create_task(self._idle_watch())
+        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         try:
             async with server:
                 await self._stop.wait()
         finally:
-            idle_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await idle_task
+            for task in (idle_task, heartbeat_task):
+                task.cancel()
+            for task in (idle_task, heartbeat_task):
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             server.close()
             await server.wait_closed()
             await self._simulator.close()
@@ -149,6 +154,20 @@ class SimulatorWorker:
                 self._stop.set()
                 return
             await asyncio.sleep(min(remaining, 1.0))
+
+    async def _heartbeat_loop(self) -> None:
+        interval = getattr(self._boot, "interval", None)
+        if not interval or interval <= 0:
+            return
+        while not self._stop.is_set():
+            await asyncio.sleep(interval)
+            if self._stop.is_set():
+                return
+            try:
+                await self._simulator.call("Heartbeat", {})
+            except SimulatorError:
+                self._stop.set()
+                return
 
     async def _handle_client(self, reader, writer) -> None:
         try:
