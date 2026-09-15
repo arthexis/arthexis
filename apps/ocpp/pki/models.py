@@ -9,13 +9,13 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs import services
+from . import services
 
 logger = logging.getLogger(__name__)
 
 
 class Certificate(models.Model):
-    """Abstract base class for certificates managed or referenced by Arthexis."""
+    """Abstract base class for OCPP certificates managed or referenced by Arthexis."""
 
     name = models.CharField(max_length=128, unique=True)
     domain = models.CharField(max_length=253)
@@ -42,11 +42,11 @@ class Certificate(models.Model):
 
 
 class CertificateBase(Certificate):
-    """Certificate inventory shared by OCPP and other application features.
+    """Certificate inventory for OCPP charger identity and local trust.
 
     Public-web ACME/Certbot lifecycle belongs to gway-web. Arthexis keeps this
-    model for certificate inventory, verification, and application-owned
-    certificates such as self-signed OCPP material.
+    model only for OCPP-owned certificate inventory, verification, and local
+    certificate material such as self-signed charger certificates.
     """
 
     expiration_date = models.DateTimeField(null=True, blank=True)
@@ -58,7 +58,7 @@ class CertificateBase(Certificate):
         ordering = ("name",)
 
     def provision(self, *, sudo: str = "sudo") -> str:
-        """Provision an application-owned certificate subtype."""
+        """Provision an OCPP-owned certificate subtype."""
         certificate = self._specific_certificate
         if isinstance(certificate, SelfSignedCertificate):
             return certificate.generate(sudo=sudo)
@@ -93,7 +93,7 @@ class CertificateBase(Certificate):
         return self.expiration_date <= current_time
 
     def renew(self, *, sudo: str = "sudo") -> str:
-        """Renew an application-owned certificate and refresh its expiration."""
+        """Renew an OCPP-owned certificate and refresh its expiration."""
         message = self.provision(sudo=sudo)
         try:
             self.update_expiration_date(sudo=sudo)
@@ -138,7 +138,7 @@ class CertificateBase(Certificate):
 
 
 class SelfSignedCertificate(CertificateBase):
-    """Application-owned self-signed certificate, useful for local/OCPP PKI."""
+    """OCPP-owned self-signed certificate for charger/local PKI."""
 
     valid_days = models.PositiveIntegerField(default=365)
     key_length = models.PositiveIntegerField(default=2048)

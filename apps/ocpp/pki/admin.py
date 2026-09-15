@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import SelfSignedCertificate
+from .models import SelfSignedCertificate
 
 
 class CertificateProvisioningMixin:
