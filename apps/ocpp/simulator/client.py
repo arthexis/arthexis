@@ -128,9 +128,19 @@ class OCPP16Simulator:
                     future.set_exception(SimulatorError(f"connection receive failed: {exc}"))
 
     async def _handle_csms_call(self, envelope: OCPPCallEnvelope) -> None:
-        """Keep the socket responsive; action-specific behavior comes later."""
+        """Reject unsupported CSMS actions explicitly until they are simulated."""
         if self._connection is not None:
-            await self._connection.send(json.dumps([3, envelope.message_id, {}]))
+            await self._connection.send(
+                json.dumps(
+                    [
+                        4,
+                        envelope.message_id,
+                        "NotSupported",
+                        f"Simulator does not implement {envelope.action}",
+                        {},
+                    ]
+                )
+            )
 
     async def boot(self) -> BootResult:
         response = await self.call(
