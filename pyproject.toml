@@ -72,7 +72,7 @@ dependencies = [
   "txaio==25.9.2",
   "typing_extensions==4.16.0",
   "urllib3>=2.6.3,<2.8.0",
-  "weasyprint==69.0",
+  "weasyprint==70.0",
   "webauthn==3.0.0",
   "websocket-client==1.9.2",
   "websockets>=15,<17",
