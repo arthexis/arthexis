@@ -45,21 +45,51 @@ sudo -n gway upgrade gway --force
 sudo -n gway upgrade web --install
 sudo -n gway upgrade wire --install
 
-echo "=== verify installed dependency revisions ==="
+echo "=== runtime attestation context ==="
 gway_executable="$(command -v gway)"
-gway_target="$(sed -n 's/^exec "\([^"]*\/bin\/gway\)" "\\$@"$/\1/p' "$gway_executable")"
-if [[ -z "$gway_target" || ! -x "$gway_target" ]]; then
-  echo "Unable to determine managed GWay target from ${gway_executable}" >&2
-  exit 1
-fi
-gway_python="${gway_target%/gway}/python"
+gway_venv="${GWAY_VENV:-/opt/gway/venv}"
+gway_python="${gway_venv}/bin/python"
+gway_runtime="${gway_venv}/bin/gway"
+printf 'gway wrapper: %s\n' "$gway_executable"
+printf 'gway venv: %s\n' "$gway_venv"
+printf 'gway runtime: %s\n' "$gway_runtime"
+printf 'gway interpreter: %s\n' "$gway_python"
+printf '%s\n' '--- wrapper header ---'
+sed -n '1,12p' "$gway_executable" || true
+printf '%s\n' '--- managed runtime files ---'
+ls -ld "$gway_venv" "$gway_python" "$gway_runtime" 2>&1 || true
 if [[ ! -x "$gway_python" ]]; then
   echo "Managed GWay Python is not executable: ${gway_python}" >&2
   exit 1
 fi
-printf 'gway runtime: %s\n' "$gway_target"
-printf 'gway interpreter: %s\n' "$gway_python"
+if [[ ! -x "$gway_runtime" ]]; then
+  echo "Managed GWay runtime is not executable: ${gway_runtime}" >&2
+  exit 1
+fi
+sudo -n "$gway_python" --version
 
+printf '%s\n' '--- GWay package metadata ---'
+sudo -n "$gway_python" - <<'PY'
+import importlib.metadata
+import json
+
+try:
+    dist = importlib.metadata.distribution("gway")
+except importlib.metadata.PackageNotFoundError as exc:
+    raise SystemExit("managed GWay interpreter cannot find the gway distribution") from exc
+
+print(f"distribution path: {dist._path}")
+raw = dist.read_text("direct_url.json")
+print(f"direct_url.json present: {bool(raw)}")
+if raw:
+    data = json.loads(raw)
+    print(f"direct URL: {data.get('url', '<missing>')}")
+    vcs = data.get("vcs_info", {})
+    print(f"VCS: {vcs.get('vcs', '<missing>')}")
+    print(f"recorded commit: {vcs.get('commit_id', '<missing>')}")
+PY
+
+echo "=== verify installed dependency revisions ==="
 gway_actual="$(sudo -n "$gway_python" - <<'PY'
 import importlib.metadata
 import json
@@ -78,9 +108,15 @@ assert_sha gway "$gway_expected" "$gway_actual"
 
 web_path="$(sudo -n gway path web)"
 wire_path="$(sudo -n gway path wire)"
+printf 'web path: %s\n' "$web_path"
+printf 'wire path: %s\n' "$wire_path"
+printf '%s\n' '--- managed checkout status ---'
+sudo -n git -C "$web_path" status --short --branch || true
+sudo -n git -C "$wire_path" status --short --branch || true
 web_actual="$(sudo -n git -C "$web_path" rev-parse HEAD)"
 wire_actual="$(sudo -n git -C "$wire_path" rev-parse HEAD)"
 assert_sha web "$web_expected" "$web_actual"
 assert_sha wire "$wire_expected" "$wire_actual"
 
+echo "=== dependency attestation complete ==="
 gway --version
