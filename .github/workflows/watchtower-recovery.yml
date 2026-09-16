@@ -1,0 +1,123 @@
+name: Watchtower Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Recovery action to perform before diagnostics
+        required: true
+        default: diagnose
+        type: choice
+        options:
+          - diagnose
+          - redeploy
+
+concurrency:
+  group: watchtower-recovery
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    name: Watchtower Recovery
+    if: >-
+      github.actor == 'arthexis' &&
+      github.repository == 'arthexis/arthexis' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout trusted main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify trusted invocation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_ACTOR}" = "arthexis"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "${remote_main}"
+          test "${remote_main}" = "${GITHUB_SHA}"
+          sudo -n true
+
+      - name: Redeploy current main
+        if: inputs.mode == 'redeploy'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n gway upgrade gway --force
+          sudo -n gway upgrade web --install
+          sudo -n gway upgrade wire --install
+          sudo -n gway upgrade arthexis --install --service --role Watchtower
+
+      - name: Capture recovery diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          diagnostics="${RUNNER_TEMP}/watchtower-recovery-${GITHUB_SHA}.txt"
+          {
+            echo '=== invocation ==='
+            echo "mode=${{ inputs.mode }}"
+            echo "sha=${GITHUB_SHA}"
+            echo '=== GWay ==='
+            command -v gway
+            gway --version
+            echo '=== managed Arthexis ==='
+            gway path arthexis
+            checkout="$(gway path arthexis 2>/dev/null || true)"
+            if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
+              git -C "$checkout" rev-parse HEAD
+              git -C "$checkout" status --short
+            fi
+            gway arthexis version
+            gway arthexis node-role
+            gway arthexis status --json
+            gway arthexis good
+            echo '=== filesystem ==='
+            sudo -n ls -ld /opt/arthexis /opt/arthexis/app /opt/arthexis/.venv \
+              /opt/arthexis/var /opt/arthexis/var/lib /opt/arthexis/var/log \
+              /opt/arthexis/var/cache /opt/arthexis/var/run 2>&1
+            echo '=== local health ==='
+            curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
+            echo '=== services ==='
+            systemctl --no-pager --full status 'gway-arthexis-*'
+            systemctl --failed --no-pager
+            echo '=== recent Arthexis journal ==='
+            journalctl --no-pager --since '-15 minutes' -u 'gway-arthexis-*'
+            echo '=== port 8888 ==='
+            ss -ltnp | grep ':8888' || true
+            echo '=== nginx ==='
+            sudo -n nginx -t
+            sudo -n sed -n '1,220p' /etc/nginx/sites-enabled/gway-arthexis.com.conf 2>/dev/null || true
+            sudo -n tail -n 120 /var/log/nginx/error.log 2>/dev/null || true
+            echo '=== certificate ==='
+            sudo -n certbot certificates 2>/dev/null | sed -n '/Certificate Name: arthexis.com/,+8p'
+            echo '=== public certificate ==='
+            timeout 8 openssl s_client -connect arthexis.com:443 -servername arthexis.com </dev/null 2>/dev/null \
+              | openssl x509 -noout -subject -issuer -dates -ext subjectAltName 2>/dev/null || true
+            echo '=== public health ==='
+            curl --show-error --silent --max-time 10 --write-out '\nHTTP %{http_code}\n' https://arthexis.com/health/ || true
+          } 2>&1 | tee "$diagnostics"
+          echo "WATCHTOWER_RECOVERY_DIAGNOSTICS=$diagnostics" >> "$GITHUB_ENV"
+
+      - name: Upload recovery diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: watchtower-recovery-${{ github.sha }}
+          path: ${{ env.WATCHTOWER_RECOVERY_DIAGNOSTICS }}
+          if-no-files-found: warn
