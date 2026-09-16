@@ -82,7 +82,7 @@ def test_public_site_reachability_reports_transport_failure(
     assert issue.key == "public-site-unreachable"
     assert issue.severity == "important"
     assert issue.category == "availability"
-    assert "https://example.com" in issue.detail
+    assert issue.detail.startswith("GWAY Web advertises https://example.com,")
     assert "DNS lookup failed" in issue.detail
 
 
