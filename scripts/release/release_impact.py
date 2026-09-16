@@ -170,7 +170,7 @@ def _auto_findings(
         for app in sorted(before_apps - after_apps):
             findings.append(
                 ImpactFinding(
-                    level="major",
+                    level="minor",
                     rule_id="app_removed",
                     message=f"app removed: apps/{app}.",
                     path=f"apps/{app}",
@@ -180,10 +180,9 @@ def _auto_findings(
     for change in changes:
         if _is_app_manifest_add_or_delete(change):
             status_name = "added" if change.status == "A" else "deleted"
-            level = "minor" if change.status == "A" else "major"
             findings.append(
                 ImpactFinding(
-                    level=level,
+                    level="minor",
                     rule_id=f"app_manifest_{status_name}",
                     message=f"app manifest {status_name}: {change.path}.",
                     path=change.path,
