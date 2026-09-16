@@ -12,12 +12,17 @@ from django.core.management import call_command
 from django.utils.functional import LazyObject
 
 from apps.core.entity import Entity
+from utils.arthexis_paths import resolve_arthexis_paths
 
 logger = logging.getLogger(__name__)
 
 
+def _default_data_root() -> Path:
+    return resolve_arthexis_paths(project_root=settings.BASE_DIR).data_dir
+
+
 def _data_root(user=None) -> Path:
-    path = Path(getattr(user, "data_path", "") or Path(settings.BASE_DIR) / "data")
+    path = Path(getattr(user, "data_path", "") or _default_data_root())
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -181,9 +186,7 @@ def delete_user_fixture(instance, user=None) -> None:
     def _remove_for_user(candidate) -> None:
         if candidate is None:
             return
-        base_path = Path(
-            getattr(candidate, "data_path", "") or Path(settings.BASE_DIR) / "data"
-        )
+        base_path = Path(getattr(candidate, "data_path", "") or _default_data_root())
         username = _username_for(candidate)
         if not username:
             return
@@ -195,7 +198,7 @@ def delete_user_fixture(instance, user=None) -> None:
         _remove_for_user(target_user)
         return
 
-    root = Path(settings.BASE_DIR) / "data"
+    root = _default_data_root()
     if root.exists():
         (root / filename).unlink(missing_ok=True)
         for path in root.iterdir():
