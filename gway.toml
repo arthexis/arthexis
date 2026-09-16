@@ -7,6 +7,15 @@ type = "django"
 manage = "manage.py"
 settings = "config.settings"
 
+# GWAY applies this environment only when commands run from the managed checkout.
+# Source/development checkouts keep their normal local runtime paths.
+[adapter.managed_environment]
+ARTHEXIS_MODE = "installed"
+ARTHEXIS_DATA_DIR = "{root}/var/lib"
+ARTHEXIS_LOG_DIR = "{root}/var/log"
+ARTHEXIS_CACHE_DIR = "{root}/var/cache"
+ARTHEXIS_RUN_DIR = "{root}/var/run"
+
 # GWAY owns the managed checkout and Python environment described here.
 # Arthexis lifecycle hooks only perform application-specific preparation.
 [install]
