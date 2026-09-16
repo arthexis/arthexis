@@ -8,7 +8,9 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  actions: write
+  contents: write
+  pull-requests: write
 
 jobs:
   live:
@@ -32,6 +34,7 @@ jobs:
         with:
           ref: ${{ steps.revision.outputs.sha }}
           clean: true
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Verify runner prerequisites
@@ -97,3 +100,79 @@ jobs:
           name: live-integration-${{ steps.revision.outputs.sha }}
           path: ${{ env.LIVE_INTEGRATION_DIAGNOSTICS }}
           if-no-files-found: warn
+
+      - name: Create deployment version attestation PR
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          current_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          if [[ "$current_main" != "$ARTHEXIS_EXPECTED_SHA" ]]; then
+            echo "main moved during deployment: tested=$ARTHEXIS_EXPECTED_SHA current=$current_main" >&2
+            echo "Refusing to assign a version to an untested main revision." >&2
+            exit 1
+          fi
+
+          current_version="$(tr -d '[:space:]' < VERSION)"
+          test -n "$current_version"
+
+          parent_version=""
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            parent_version="$(git show HEAD^:VERSION 2>/dev/null | tr -d '[:space:]' || true)"
+          fi
+          if [[ -n "$parent_version" && "$parent_version" != "$current_version" ]]; then
+            echo "VERSION already advanced by the successfully deployed revision: $parent_version -> $current_version"
+            echo "Treating the explicit version change as this deployment's attestation."
+            exit 0
+          fi
+
+          existing_pr="$(gh pr list --state open --search 'in:title [deploy-version]' --json number,title --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            echo "Deployment-version attestation PR #$existing_pr is still open." >&2
+            echo "Resolve it before minting another deployment version so the sequence remains linear." >&2
+            exit 1
+          fi
+
+          next_version="$(python - "$current_version" <<'PY'
+          import re
+          import sys
+
+          value = sys.argv[1]
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+          if not match:
+              raise SystemExit(f"Unsupported VERSION format: {value!r}")
+          major, minor, patch = map(int, match.groups())
+          print(f"{major}.{minor}.{patch + 1}")
+          PY
+          )"
+
+          short_sha="${ARTHEXIS_EXPECTED_SHA:0:12}"
+          branch="automation/deploy-version-${next_version}-${short_sha}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '%s\n' "$next_version" > VERSION
+          git add VERSION
+          git commit -m "Attest deployed Arthexis ${next_version}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${branch}"
+
+          pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "[deploy-version] ${next_version}" \
+            --body "Successful Arthexis live deployment attestation.\n\n- Tested main SHA: \`${ARTHEXIS_EXPECTED_SHA}\`\n- Previous VERSION: \`${current_version}\`\n- Attested VERSION: \`${next_version}\`\n- Live Integration run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\nThis PR changes only \`VERSION\`. Its merge records the already-tested deployment and must not be treated as a new application deployment candidate.")"
+          echo "Created deployment version attestation: $pr_url"
+
+          # Pull requests created with GITHUB_TOKEN do not recursively trigger the
+          # usual pull_request workflows. Explicit workflow_dispatch calls attach
+          # the repository's required checks to the attestation branch instead.
+          for workflow in \
+            python-package.yml \
+            python-compatibility.yml \
+            python-quality.yml \
+            clean-install.yml; do
+            gh workflow run "$workflow" --ref "$branch"
+          done
