@@ -1,6 +1,7 @@
 [project]
 name = "arthexis"
 aliases = ["constellation", "ocpp", "energy"]
+service_profile_file = ".locks/role.lck"
 
 [adapter]
 type = "django"
@@ -28,11 +29,11 @@ install = "apps.core.system.managed_install:install"
 upgrade = "apps.core.system.managed_update:upgrade"
 uninstall = "apps.core.system.managed_uninstall:uninstall"
 
-# Runtime topology is selected with GWAY_SERVICE_PROFILE using the canonical
-# Arthexis node roles. GWAY owns the resulting systemd units and uses the
-# managed project interpreter for every Python service. Django startup uses
-# .locks for cross-process application checks, so GWAY gives that exact path
-# to the resolved service account before starting managed services.
+# Arthexis persists its canonical role in .locks/role.lck. GWAY uses that
+# project-owned value only as an internal service-profile selector, so callers
+# choose --role and do not need a separate --service-profile argument.
+# Terminal/Watchtower use a loopback web listener; Control/Satellite keep the
+# charger-facing listener. Worker/beat remain enabled for roles that need them.
 [services.web-local]
 description = "Arthexis local web service"
 command = ["{python}", "manage.py", "runserver", "127.0.0.1:8888", "--noreload"]
