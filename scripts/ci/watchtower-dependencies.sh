@@ -46,7 +46,15 @@ sudo -n gway upgrade web --install
 sudo -n gway upgrade wire --install
 
 echo "=== verify installed dependency revisions ==="
-gway_actual="$(sudo -n python3 - <<'PY'
+gway_executable="$(command -v gway)"
+gway_python="$(head -n 1 "$gway_executable" | sed -n 's/^#!//p')"
+if [[ -z "$gway_python" || ! -x "$gway_python" ]]; then
+  echo "Unable to determine the Python interpreter owning ${gway_executable}" >&2
+  exit 1
+fi
+printf 'gway interpreter: %s\n' "$gway_python"
+
+gway_actual="$(sudo -n "$gway_python" - <<'PY'
 import importlib.metadata
 import json
 
