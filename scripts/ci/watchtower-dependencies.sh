@@ -47,11 +47,17 @@ sudo -n gway upgrade wire --install
 
 echo "=== verify installed dependency revisions ==="
 gway_executable="$(command -v gway)"
-gway_python="$(head -n 1 "$gway_executable" | sed -n 's/^#!//p')"
-if [[ -z "$gway_python" || ! -x "$gway_python" ]]; then
-  echo "Unable to determine the Python interpreter owning ${gway_executable}" >&2
+gway_target="$(sed -n 's/^exec "\([^"]*\/bin\/gway\)" "\\$@"$/\1/p' "$gway_executable")"
+if [[ -z "$gway_target" || ! -x "$gway_target" ]]; then
+  echo "Unable to determine managed GWay target from ${gway_executable}" >&2
   exit 1
 fi
+gway_python="${gway_target%/gway}/python"
+if [[ ! -x "$gway_python" ]]; then
+  echo "Managed GWay Python is not executable: ${gway_python}" >&2
+  exit 1
+fi
+printf 'gway runtime: %s\n' "$gway_target"
 printf 'gway interpreter: %s\n' "$gway_python"
 
 gway_actual="$(sudo -n "$gway_python" - <<'PY'
