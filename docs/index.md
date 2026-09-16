@@ -28,6 +28,8 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Sigil Script Command](development/sigil-script-command.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [App Structure Policy](development/app-structure-policy.md)
+- [Versioning and Maturity Policy](development/versioning-maturity-policy.md)
+- [Major-Version Migration and Reconciliation](development/major-version-migration-and-reconciliation.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Constellation Network Model](integrations/constellation-network-model.md)

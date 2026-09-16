@@ -45,13 +45,23 @@ def test_policy_detects_new_app_as_minor() -> None:
     assert reasons == ["MINOR: app manifest added: apps/kindle/manifest.py."]
 
 
-def test_policy_detects_removed_app_as_major() -> None:
+def test_policy_detects_removed_app_as_minor() -> None:
     level, reasons = determine_required_bump(
         [FileChange(status="D", path="apps/kindle/manifest.py")]
     )
 
-    assert level == BumpLevel.MAJOR
-    assert reasons == ["MAJOR: app manifest deleted: apps/kindle/manifest.py."]
+    assert level == BumpLevel.MINOR
+    assert reasons == ["MINOR: app manifest deleted: apps/kindle/manifest.py."]
+
+
+def test_policy_detects_removed_app_set_as_minor() -> None:
+    report = build_release_impact_report(
+        [],
+        app_sets=({"kindle", "docs"}, {"docs"}),
+    )
+
+    assert report.required_bump == "minor"
+    assert report.reasons == ["MINOR: app removed: apps/kindle."]
 
 
 def test_policy_detects_ui_and_api_contracts_as_minor() -> None:
