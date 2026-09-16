@@ -2,11 +2,15 @@ from config.settings.apps import (
     PROJECT_LOCAL_APPS,
     _resolve_installed_app_entries,
 )
-from config.settings.nginx_retirement import apply_nginx_runtime_retirement
+from config.settings.nginx_retirement import (
+    MIGRATION_ONLY_APPS,
+    apply_nginx_runtime_retirement,
+)
 
 
 def test_nginx_is_not_a_project_local_runtime_app():
     assert "apps.nginx" not in PROJECT_LOCAL_APPS
+    assert MIGRATION_ONLY_APPS == ("apps.nginx",)
 
 
 def test_runtime_app_resolution_cannot_reintroduce_nginx():

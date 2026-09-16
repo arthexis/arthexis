@@ -6,7 +6,8 @@ import sys
 from collections.abc import MutableSequence, Sequence
 
 _MIGRATION_COMMANDS = frozenset({"migrate", "makemigrations", "showmigrations"})
-_MIGRATION_STATE_APPS = ("apps.certs", "apps.nginx")
+MIGRATION_ONLY_APPS = ("apps.nginx",)
+_MIGRATION_STATE_APPS = ("apps.certs", *MIGRATION_ONLY_APPS)
 _GLOBAL_OPTIONS_WITH_VALUES = {"--settings", "--pythonpath", "--verbosity", "-v"}
 
 

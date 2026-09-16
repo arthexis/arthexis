@@ -30,12 +30,7 @@ from ..filesystem import (
     _startup_report_reference_time,
 )
 from .formatting import _format_datetime, _format_timestamp, format_datetime
-from .network_probe import (
-    _build_nginx_report,
-    _detect_runserver_process,
-    _port_candidates,
-    _probe_ports,
-)
+from .network_probe import _detect_runserver_process, _port_candidates, _probe_ports
 from .services import (
     _build_services_report,
     _configured_service_units,
@@ -428,7 +423,6 @@ def _read_startup_report(
 
 # Legacy compatibility re-exports.
 # Prefer importing these from ``apps.core.system_ui``.
-build_nginx_report = _build_nginx_report
 build_services_report = _build_services_report
 build_system_fields = _build_system_fields
 format_timestamp = _format_timestamp
