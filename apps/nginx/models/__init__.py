@@ -1,6 +1,5 @@
-"""Nginx models exports."""
+"""Nginx models exports retained during app retirement."""
 
 from apps.nginx.models.site_configuration import SiteConfiguration
-from apps.nginx.parsers import parse_subdomain_prefixes
 
-__all__ = ["SiteConfiguration", "parse_subdomain_prefixes"]
+__all__ = ["SiteConfiguration"]
