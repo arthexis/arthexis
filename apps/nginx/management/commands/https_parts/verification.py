@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from apps.certs.services import CertificateVerificationResult
+from apps.ocpp.pki.services import CertificateVerificationResult
 
 
 def _verify_certificate(cert, *, sudo: str) -> list[str]:
