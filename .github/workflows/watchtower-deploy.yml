@@ -1,0 +1,236 @@
+name: Watchtower Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: watchtower-deploy
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: Watchtower Deploy
+    if: >-
+      github.actor == 'arthexis' &&
+      github.repository == 'arthexis/arthexis' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout trusted main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify trusted invocation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_ACTOR}" = "arthexis"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "${remote_main}"
+          test "${remote_main}" = "${GITHUB_SHA}"
+          sudo -n true
+          echo "ARTHEXIS_EXPECTED_SHA=${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Skip version-only rollover
+        id: candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          should_deploy=true
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
+            if [[ "${#changed[@]}" -eq 1 && "${changed[0]}" == "VERSION" ]]; then
+              should_deploy=false
+              echo "VERSION-only rollover; no Watchtower deployment required."
+            fi
+          fi
+          echo "should_deploy=${should_deploy}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upgrade GWay runtime
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n gway upgrade gway --force
+          sudo -n gway upgrade web --install
+          sudo -n gway upgrade wire --install
+          gway --version
+
+      - name: Exercise managed integration
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        env:
+          GWAY_SERVICE_PROFILE: Watchtower
+        run: bash scripts/ci/live-integration.sh
+
+      - name: Verify deployed Watchtower
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          checkout="$(gway path arthexis)"
+          test "${checkout}" = "/opt/arthexis/app"
+          deployed_sha="$(git -C "${checkout}" rev-parse HEAD)"
+          if [[ "${deployed_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "Managed Arthexis revision mismatch: expected ${GITHUB_SHA}, got ${deployed_sha}" >&2
+            exit 1
+          fi
+
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8888/health/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "${ready}" != "true" ]]; then
+            echo "Arthexis did not become healthy on 127.0.0.1:8888" >&2
+            exit 1
+          fi
+
+      - name: Expose Arthexis
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exposure="$(sudo -n gway --json wire server public expose \
+            --fqdn arthexis.com \
+            --upstream http://127.0.0.1:8888 \
+            --health-path /health/ \
+            --dns-provider godaddy \
+            --no-dns-rollback \
+            --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
+
+          test "$(gway web site arthexis --url)" = "https://arthexis.com"
+          curl --fail --show-error --silent --max-time 10 https://arthexis.com/health/
+          echo
+
+      - name: Capture Watchtower diagnostics
+        if: always() && steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set +e
+          diagnostics="${RUNNER_TEMP}/watchtower-deploy-${GITHUB_SHA}.txt"
+          {
+            echo '=== expected revision ==='
+            echo "${GITHUB_SHA}"
+            echo '=== managed Arthexis ==='
+            gway path arthexis
+            checkout="$(gway path arthexis 2>/dev/null || true)"
+            if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
+              git -C "$checkout" rev-parse HEAD
+              git -C "$checkout" status --short
+            fi
+            gway arthexis version
+            gway arthexis node-role
+            gway arthexis status --json
+            gway arthexis good
+            echo '=== local health ==='
+            curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
+            echo '=== systemd ==='
+            systemctl --no-pager --full status 'gway-arthexis-*'
+            systemctl --failed --no-pager
+            journalctl --no-pager --since '-10 minutes' -u 'gway-arthexis-*'
+            echo '=== port 8888 ==='
+            ss -ltnp | grep ':8888' || true
+            echo '=== nginx ==='
+            sudo -n nginx -t
+            sudo -n sed -n '1,220p' /etc/nginx/sites-enabled/gway-arthexis.com.conf 2>/dev/null || true
+            sudo -n tail -n 80 /var/log/nginx/error.log 2>/dev/null || true
+            echo '=== certificate ==='
+            sudo -n certbot certificates 2>/dev/null | sed -n '/Certificate Name: arthexis.com/,+8p'
+            echo '=== public health ==='
+            curl --show-error --silent --max-time 10 --write-out '\nHTTP %{http_code}\n' https://arthexis.com/health/ || true
+          } 2>&1 | tee "$diagnostics"
+          echo "WATCHTOWER_DIAGNOSTICS=$diagnostics" >> "$GITHUB_ENV"
+
+      - name: Upload Watchtower diagnostics
+        if: always() && steps.candidate.outputs.should_deploy == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: watchtower-deploy-${{ github.sha }}
+          path: ${{ env.WATCHTOWER_DIAGNOSTICS }}
+          if-no-files-found: warn
+
+      - name: Attest deployment and roll VERSION forward
+        if: success() && steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          current_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+            echo "main moved during deployment: tested=$GITHUB_SHA current=$current_main" >&2
+            echo "Refusing to attest an untested main revision." >&2
+            exit 1
+          fi
+
+          attested_version="$(tr -d '[:space:]' < VERSION)"
+          test -n "$attested_version"
+
+          existing_pr="$(gh pr list --state open --search 'in:title [version-rollover]' --json number,title --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            echo "Version-rollover PR #$existing_pr is still open." >&2
+            exit 1
+          fi
+
+          next_version="$(python - "$attested_version" <<'PY'
+          import re
+          import sys
+
+          value = sys.argv[1]
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+          if not match:
+              raise SystemExit(f"Unsupported VERSION format: {value!r}")
+          major, minor, patch = map(int, match.groups())
+          print(f"{major}.{minor}.{patch + 1}")
+          PY
+          )"
+
+          short_sha="${GITHUB_SHA:0:12}"
+          branch="automation/version-rollover-${next_version}-${short_sha}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '%s\n' "$next_version" > VERSION
+          git add VERSION
+          git commit -m "Roll deployment candidate to ${next_version}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${branch}"
+
+          pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "[version-rollover] ${next_version}" \
+            --body "Successful Watchtower deployment attestation and candidate rollover.\n\n- Attested version: \`${attested_version}\`\n- Attested SHA: \`${GITHUB_SHA}\`\n- Next candidate version: \`${next_version}\`\n- Watchtower Deploy run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\nThe deployed Watchtower remains on the attested SHA/version. This PR changes only \`VERSION\` so its merge must not trigger another deployment.")"
+          echo "Created version rollover: $pr_url"
+
+          for workflow in \
+            python-package.yml \
+            python-compatibility.yml \
+            python-quality.yml \
+            clean-install.yml; do
+            gh workflow run "$workflow" --ref "$branch"
+          done

@@ -1,0 +1,84 @@
+name: Watchtower Policy
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Watchtower Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workflow definitions
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Audit self-hosted workflow policy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          root = Path('.github/workflows')
+          failures = []
+          for path in sorted(root.glob('*.y*ml')):
+              text = path.read_text(encoding='utf-8')
+              runner_lines = re.findall(r'(?m)^\s*runs-on:\s*(.+?)\s*$', text)
+              if not any('self-hosted' in line or 'arthexis-ci' in line for line in runner_lines):
+                  continue
+
+              name_match = re.search(r'(?m)^name:\s*(.+?)\s*$', text)
+              name = name_match.group(1).strip() if name_match else ''
+              if not re.fullmatch(r'Watchtower\s+[A-Za-z0-9_-]+', name):
+                  failures.append(f'{path}: self-hosted workflow name must be "Watchtower <word>", got {name!r}')
+
+              if not any('arthexis-ci' in line for line in runner_lines):
+                  failures.append(f'{path}: self-hosted job must require the arthexis-ci runner label')
+
+              forbidden = [
+                  'pull_request:',
+                  'pull_request_target:',
+                  'issue_comment:',
+                  'repository_dispatch:',
+                  'workflow_run:',
+                  'schedule:',
+              ]
+              for trigger in forbidden:
+                  if re.search(rf'(?m)^\s{{2}}{re.escape(trigger)}\s*$', text):
+                      failures.append(f'{path}: forbidden self-hosted trigger {trigger[:-1]}')
+
+              required_guards = [
+                  "github.actor == 'arthexis'",
+                  "github.repository == 'arthexis/arthexis'",
+                  "github.ref == 'refs/heads/main'",
+              ]
+              for guard in required_guards:
+                  if guard not in text:
+                      failures.append(f'{path}: missing trust guard: {guard}')
+
+              if re.search(r'(?m)^\s{2}push:\s*$', text) and not re.search(
+                  r'(?m)^\s{4}branches:\s*\[main\]\s*$', text
+              ):
+                  failures.append(f'{path}: push trigger must be restricted to branches: [main]')
+
+          if failures:
+              print('Watchtower workflow policy violations:', file=sys.stderr)
+              for failure in failures:
+                  print(f' - {failure}', file=sys.stderr)
+              raise SystemExit(1)
+
+          print('All self-hosted workflows satisfy Watchtower policy.')
+          PY
