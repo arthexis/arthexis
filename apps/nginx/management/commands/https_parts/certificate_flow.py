@@ -12,9 +12,9 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import CommandError
 
-from apps.certs.models import SelfSignedCertificate
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
+from apps.ocpp.pki.models import SelfSignedCertificate
 
 _PUBLIC_TLS_MOVED_MESSAGE = (
     "Public-web certificate provisioning moved to gway-web. "

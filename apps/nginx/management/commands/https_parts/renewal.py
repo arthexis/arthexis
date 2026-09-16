@@ -8,9 +8,9 @@ from pathlib import Path
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from apps.certs.models import CertificateBase
 from apps.nginx.management.commands.https_parts.config_apply import _apply_config
 from apps.nginx.models import SiteConfiguration
+from apps.ocpp.pki.models import CertificateBase
 
 
 def _format_expiration(value: datetime | None) -> str:
