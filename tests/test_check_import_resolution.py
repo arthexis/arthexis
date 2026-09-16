@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+
 from scripts import check_import_resolution
 
 
@@ -64,6 +67,18 @@ def test_module_not_found_without_marker_still_reports_missing_import(
 
     assert len(issues) == 1
     assert issues[0].module == "definitely_missing_arthexis_required_module"
+
+
+def test_loaded_module_without_spec_is_treated_as_resolved(tmp_path, monkeypatch) -> None:
+    module_name = "arthexis_loaded_module_without_spec"
+    loaded_module = ModuleType(module_name)
+    loaded_module.__spec__ = None
+    monkeypatch.setitem(sys.modules, module_name, loaded_module)
+
+    module_path = tmp_path / "loaded_module.py"
+    module_path.write_text(f"import {module_name}\n", encoding="utf-8")
+
+    assert check_import_resolution.collect_missing_imports([module_path]) == []
 
 
 def test_qr_printing_windows_registry_import_is_optional(tmp_path) -> None:

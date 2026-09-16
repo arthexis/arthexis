@@ -243,6 +243,8 @@ class ImportCollector(ast.NodeVisitor):
         module_path = PROJECT_ROOT / Path(resolved_module.replace(".", "/"))
         if self._path_exists(module_path):
             return
+        if sys.modules.get(resolved_module) is not None:
+            return
         try:
             spec = importlib.util.find_spec(resolved_module)
         except Exception:
