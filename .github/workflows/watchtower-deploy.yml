@@ -135,16 +135,16 @@ jobs:
             echo '=== expected revision ==='
             echo "${GITHUB_SHA}"
             echo '=== managed Arthexis ==='
-            gway path arthexis
-            checkout="$(gway path arthexis 2>/dev/null || true)"
+            sudo -n gway path arthexis
+            checkout="$(sudo -n gway path arthexis 2>/dev/null || true)"
             if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
               git -C "$checkout" rev-parse HEAD
               git -C "$checkout" status --short
             fi
-            gway arthexis version
-            gway arthexis node-role
-            gway arthexis status --json
-            gway arthexis good
+            sudo -n gway arthexis version
+            sudo -n gway arthexis node-role
+            sudo -n gway arthexis status --json
+            sudo -n gway arthexis good
             echo '=== local health ==='
             curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
             echo '=== systemd ==='
