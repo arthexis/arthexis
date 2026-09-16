@@ -85,9 +85,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          checkout="$(gway path arthexis)"
+          checkout="$(sudo -n gway path arthexis)"
           test "${checkout}" = "/opt/arthexis/app"
-          deployed_sha="$(git -C "${checkout}" rev-parse HEAD)"
+          deployed_sha="$(sudo -n git -C "${checkout}" rev-parse HEAD)"
           if [[ "${deployed_sha}" != "${GITHUB_SHA}" ]]; then
             echo "Managed Arthexis revision mismatch: expected ${GITHUB_SHA}, got ${deployed_sha}" >&2
             exit 1
@@ -121,7 +121,7 @@ jobs:
           printf '%s\n' "${exposure}"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
 
-          test "$(gway web site arthexis --url)" = "https://arthexis.com"
+          test "$(sudo -n gway web site arthexis --url)" = "https://arthexis.com"
           curl --fail --show-error --silent --max-time 10 https://arthexis.com/health/
           echo
 
@@ -138,21 +138,21 @@ jobs:
             sudo -n gway path arthexis
             checkout="$(sudo -n gway path arthexis 2>/dev/null || true)"
             if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
-              git -C "$checkout" rev-parse HEAD
-              git -C "$checkout" status --short
+              sudo -n git -C "$checkout" rev-parse HEAD
+              sudo -n git -C "$checkout" status --short
             fi
             sudo -n gway arthexis version
-            sudo -n gway arthexis node-role
+            sudo -n gway arthexis role
             sudo -n gway arthexis status --json
             sudo -n gway arthexis good
             echo '=== local health ==='
             curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
             echo '=== systemd ==='
-            systemctl --no-pager --full status 'gway-arthexis-*'
-            systemctl --failed --no-pager
-            journalctl --no-pager --since '-10 minutes' -u 'gway-arthexis-*'
+            sudo -n systemctl --no-pager --full status 'gway-arthexis-*'
+            sudo -n systemctl --failed --no-pager
+            sudo -n journalctl --no-pager --since '-10 minutes' -u 'gway-arthexis-*'
             echo '=== port 8888 ==='
-            ss -ltnp | grep ':8888' || true
+            sudo -n ss -ltnp | grep ':8888' || true
             echo '=== nginx ==='
             sudo -n nginx -t
             sudo -n sed -n '1,220p' /etc/nginx/sites-enabled/gway-arthexis.com.conf 2>/dev/null || true
