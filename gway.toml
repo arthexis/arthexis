@@ -28,38 +28,19 @@ install = "apps.core.system.managed_install:install"
 upgrade = "apps.core.system.managed_update:upgrade"
 uninstall = "apps.core.system.managed_uninstall:uninstall"
 
-# Runtime topology is selected with GWAY_SERVICE_PROFILE using the canonical
-# Arthexis node roles. GWAY owns the resulting systemd units and uses the
-# managed project interpreter for every Python service. Django startup uses
-# .locks for cross-process application checks, so GWAY gives that exact path
-# to the resolved service account before starting managed services.
+# Arthexis has one managed runtime topology. Node roles are application state
+# and determine Arthexis behavior/features; they are not GWAY service profiles.
+# Public/LAN exposure belongs to GWAY Web/Wire, so the application web service
+# remains loopback-only on every role.
 [services.web-local]
-description = "Arthexis local web service"
+description = "Arthexis web service"
 command = ["{python}", "manage.py", "runserver", "127.0.0.1:8888", "--noreload"]
 working_directory = "{project}"
 writable_paths = ["{project}/.locks"]
-profiles = ["Terminal", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
 
 [services.web-local.environment]
-PYTHONUNBUFFERED = "1"
-ARTHEXIS_MODE = "installed"
-ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
-ARTHEXIS_LOG_DIR = "/opt/arthexis/var/log"
-ARTHEXIS_CACHE_DIR = "/opt/arthexis/var/cache"
-ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
-
-[services.web-edge]
-description = "Arthexis charger-facing web service"
-command = ["{python}", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
-working_directory = "{project}"
-writable_paths = ["{project}/.locks"]
-profiles = ["Control", "Satellite"]
-restart = "on-failure"
-restart_sec = 5
-
-[services.web-edge.environment]
 PYTHONUNBUFFERED = "1"
 ARTHEXIS_MODE = "installed"
 ARTHEXIS_DATA_DIR = "/opt/arthexis/var/lib"
@@ -72,7 +53,6 @@ description = "Arthexis Celery worker"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "worker", "--loglevel=INFO"]
 working_directory = "{project}"
 writable_paths = ["{project}/.locks"]
-profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
 
@@ -89,7 +69,6 @@ description = "Arthexis Celery beat scheduler"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "beat", "--loglevel=INFO"]
 working_directory = "{project}"
 writable_paths = ["{project}/.locks"]
-profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
 
