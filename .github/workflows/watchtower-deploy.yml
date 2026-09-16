@@ -63,15 +63,10 @@ jobs:
           fi
           echo "should_deploy=${should_deploy}" >> "${GITHUB_OUTPUT}"
 
-      - name: Upgrade GWay runtime
+      - name: Attest Watchtower dependencies
         if: steps.candidate.outputs.should_deploy == 'true'
         shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n gway upgrade gway --force
-          sudo -n gway upgrade web --install
-          sudo -n gway upgrade wire --install
-          gway --version
+        run: bash scripts/ci/watchtower-dependencies.sh
 
       - name: Exercise managed integration
         if: steps.candidate.outputs.should_deploy == 'true'
@@ -134,6 +129,10 @@ jobs:
           {
             echo '=== expected revision ==='
             echo "${GITHUB_SHA}"
+            echo '=== dependency revisions ==='
+            echo "gway=${GWAY_EXPECTED_SHA:-unknown}"
+            echo "web=${GWAY_WEB_EXPECTED_SHA:-unknown}"
+            echo "wire=${GWAY_WIRE_EXPECTED_SHA:-unknown}"
             echo '=== managed Arthexis ==='
             sudo -n gway path arthexis
             checkout="$(sudo -n gway path arthexis 2>/dev/null || true)"
@@ -224,7 +223,7 @@ jobs:
             --base main \
             --head "$branch" \
             --title "[version-rollover] ${next_version}" \
-            --body "Successful Watchtower deployment attestation and candidate rollover.\n\n- Attested version: \`${attested_version}\`\n- Attested SHA: \`${GITHUB_SHA}\`\n- Next candidate version: \`${next_version}\`\n- Watchtower Deploy run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\nThe deployed Watchtower remains on the attested SHA/version. This PR changes only \`VERSION\` so its merge must not trigger another deployment.")"
+            --body "Successful Watchtower deployment attestation and candidate rollover.\n\n- Attested version: \`${attested_version}\`\n- Attested SHA: \`${GITHUB_SHA}\`\n- GWay SHA: \`${GWAY_EXPECTED_SHA:-unknown}\`\n- GWay Web SHA: \`${GWAY_WEB_EXPECTED_SHA:-unknown}\`\n- GWay Wire SHA: \`${GWAY_WIRE_EXPECTED_SHA:-unknown}\`\n- Next candidate version: \`${next_version}\`\n- Watchtower Deploy run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\n\nThe deployed Watchtower remains on the attested SHA/version. This PR changes only \`VERSION\` so its merge must not trigger another deployment.")"
           echo "Created version rollover: $pr_url"
 
           for workflow in \
