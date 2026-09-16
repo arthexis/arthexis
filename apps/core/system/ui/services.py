@@ -52,21 +52,6 @@ class ServiceReportPayload(TypedDict):
     systemd_available: bool
 
 
-class NginxReportPayload(TypedDict):
-    """Comparison payload for managed nginx configuration output."""
-
-    actual_content: str
-    actual_error: str
-    actual_path: Path
-    differs: bool
-    expected_content: str
-    expected_error: str
-    expected_path: Path
-    external_websockets: bool
-    mode: str
-    port: int
-
-
 class UptimeSegmentPayload(TypedDict):
     """Raw uptime segment built from shutdown windows."""
 

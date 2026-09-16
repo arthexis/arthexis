@@ -19,9 +19,7 @@ from .system.ui import (
     _read_startup_report,
 )
 from .system.ui.formatting import _format_datetime, _format_timestamp
-from .system.ui.network_probe import _build_nginx_report
 from .system.ui.services import (
-    NginxReportPayload,
     ServiceReportPayload,
     ServiceStatusPayload,
     ServiceUnitConfig,
@@ -40,12 +38,6 @@ from .system.ui.uptime import (
     _suite_uptime_details,
     _system_boot_time,
 )
-
-
-def build_nginx_report() -> NginxReportPayload:
-    """Return nginx expected-vs-actual report metadata."""
-
-    return _build_nginx_report()
 
 
 def build_services_report() -> ServiceReportPayload:
@@ -151,7 +143,6 @@ __all__ = [
     "STARTUP_CLOCK_DRIFT_THRESHOLD",
     "STARTUP_REPORT_DEFAULT_LIMIT",
     "SystemField",
-    "build_nginx_report",
     "build_services_report",
     "build_system_fields",
     "build_uptime_report",
