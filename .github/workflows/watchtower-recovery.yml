@@ -57,9 +57,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n gway upgrade gway --force
-          sudo -n gway upgrade web --install
-          sudo -n gway upgrade wire --install
+          bash scripts/ci/watchtower-dependencies.sh
           sudo -n gway upgrade arthexis --install --service --role Watchtower
 
       - name: Capture recovery diagnostics
@@ -79,11 +77,11 @@ jobs:
             sudo -n gway path arthexis
             checkout="$(sudo -n gway path arthexis 2>/dev/null || true)"
             if [[ -n "$checkout" && -d "$checkout/.git" ]]; then
-              git -C "$checkout" rev-parse HEAD
-              git -C "$checkout" status --short
+              sudo -n git -C "$checkout" rev-parse HEAD
+              sudo -n git -C "$checkout" status --short
             fi
             sudo -n gway arthexis version
-            sudo -n gway arthexis node-role
+            sudo -n gway arthexis role
             sudo -n gway arthexis status --json
             sudo -n gway arthexis good
             echo '=== filesystem ==='
@@ -93,12 +91,12 @@ jobs:
             echo '=== local health ==='
             curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
             echo '=== services ==='
-            systemctl --no-pager --full status 'gway-arthexis-*'
-            systemctl --failed --no-pager
+            sudo -n systemctl --no-pager --full status 'gway-arthexis-*'
+            sudo -n systemctl --failed --no-pager
             echo '=== recent Arthexis journal ==='
-            journalctl --no-pager --since '-15 minutes' -u 'gway-arthexis-*'
+            sudo -n journalctl --no-pager --since '-15 minutes' -u 'gway-arthexis-*'
             echo '=== port 8888 ==='
-            ss -ltnp | grep ':8888' || true
+            sudo -n ss -ltnp | grep ':8888' || true
             echo '=== nginx ==='
             sudo -n nginx -t
             sudo -n sed -n '1,220p' /etc/nginx/sites-enabled/gway-arthexis.com.conf 2>/dev/null || true
