@@ -29,6 +29,8 @@ install = "apps.core.system.managed_install:install"
 upgrade = "apps.core.system.managed_update:upgrade"
 uninstall = "apps.core.system.managed_uninstall:uninstall"
 
+# Managed services write outside the checkout. Declare every runtime tree here so
+# GWAY creates/chowns it for the selected service account before startup.
 # Arthexis persists its canonical role in .locks/role.lck. GWAY uses that
 # project-owned value only as an internal service-profile selector, so callers
 # choose --role and do not need a separate --service-profile argument.
@@ -38,7 +40,7 @@ uninstall = "apps.core.system.managed_uninstall:uninstall"
 description = "Arthexis local web service"
 command = ["{python}", "manage.py", "runserver", "127.0.0.1:8888", "--noreload"]
 working_directory = "{project}"
-writable_paths = ["{project}/.locks"]
+writable_paths = ["{project}/.locks", "/opt/arthexis/var/lib", "/opt/arthexis/var/log", "/opt/arthexis/var/cache", "/opt/arthexis/var/run"]
 profiles = ["Terminal", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
@@ -55,7 +57,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis charger-facing web service"
 command = ["{python}", "manage.py", "runserver", "0.0.0.0:8888", "--noreload"]
 working_directory = "{project}"
-writable_paths = ["{project}/.locks"]
+writable_paths = ["{project}/.locks", "/opt/arthexis/var/lib", "/opt/arthexis/var/log", "/opt/arthexis/var/cache", "/opt/arthexis/var/run"]
 profiles = ["Control", "Satellite"]
 restart = "on-failure"
 restart_sec = 5
@@ -72,7 +74,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis Celery worker"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "worker", "--loglevel=INFO"]
 working_directory = "{project}"
-writable_paths = ["{project}/.locks"]
+writable_paths = ["{project}/.locks", "/opt/arthexis/var/lib", "/opt/arthexis/var/log", "/opt/arthexis/var/cache", "/opt/arthexis/var/run"]
 profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
@@ -89,7 +91,7 @@ ARTHEXIS_RUN_DIR = "/opt/arthexis/var/run"
 description = "Arthexis Celery beat scheduler"
 command = ["{python}", "-m", "celery", "-A", "config.celery:app", "beat", "--loglevel=INFO"]
 working_directory = "{project}"
-writable_paths = ["{project}/.locks"]
+writable_paths = ["{project}/.locks", "/opt/arthexis/var/lib", "/opt/arthexis/var/log", "/opt/arthexis/var/cache", "/opt/arthexis/var/run"]
 profiles = ["Control", "Satellite", "Watchtower"]
 restart = "on-failure"
 restart_sec = 5
