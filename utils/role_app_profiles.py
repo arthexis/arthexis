@@ -39,6 +39,7 @@ RETIRED_RUNTIME_APP_SELECTORS = frozenset(
         "apps.gallery",
         "apps.imager",
         "apps.links",
+        "apps.nginx",
         "apps.widgets",
         "apps.video",
     }
@@ -139,7 +140,6 @@ ROLE_DEFAULT_APP_SELECTORS: Mapping[RoleProfile, tuple[AppSelector, ...]] = {
         "apps.actions",
         "apps.certs",
         "apps.emails",
-        "apps.nginx",
         "apps.ops",
         "apps.protocols",
         "apps.reports",
