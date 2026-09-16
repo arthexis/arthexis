@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -12,13 +13,16 @@ from django.core.management import call_command
 from django.utils.functional import LazyObject
 
 from apps.core.entity import Entity
-from utils.arthexis_paths import resolve_arthexis_paths
+from utils.arthexis_paths import ArthexisMode, resolve_arthexis_paths
 
 logger = logging.getLogger(__name__)
 
 
 def _default_data_root() -> Path:
-    return resolve_arthexis_paths(project_root=settings.BASE_DIR).data_dir
+    paths = resolve_arthexis_paths(project_root=settings.BASE_DIR)
+    if paths.mode is ArthexisMode.INSTALLED or "ARTHEXIS_DATA_DIR" in os.environ:
+        return paths.data_dir
+    return Path(settings.BASE_DIR) / "data"
 
 
 def _data_root(user=None) -> Path:
