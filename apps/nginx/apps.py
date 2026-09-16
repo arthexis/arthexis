@@ -4,7 +4,7 @@ from django.apps import AppConfig
 
 
 class NginxConfig(AppConfig):
-    """Temporary app config retained for nginx migration compatibility."""
+    """Load retired nginx migration history without runtime models."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.nginx"
