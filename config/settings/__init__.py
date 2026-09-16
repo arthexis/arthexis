@@ -7,6 +7,9 @@ bootstrap_django_environment()
 from .apps import *  # noqa: F401,F403,E402
 from .base import *  # noqa: F401,F403,E402
 from .security import *  # noqa: F401,F403,E402
+from .nginx_retirement import apply_nginx_runtime_retirement  # noqa: E402
+
+apply_nginx_runtime_retirement(INSTALLED_APPS)
 
 # Events is a local Arthexis app and may be enabled by the install app lock.
 # Keep the assembled registry aware of it until the app registry is consolidated.
