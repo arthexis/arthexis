@@ -68,8 +68,8 @@ if [[ ! -x "$gway_runtime" ]]; then
 fi
 sudo -n "$gway_python" --version
 
-echo "=== verify installed dependency revisions ==="
-gway_actual="$(sudo -n "$gway_python" - <<'PY'
+printf '%s\n' '--- GWay package metadata ---'
+sudo -n "$gway_python" - <<'PY'
 import importlib.metadata
 import json
 
@@ -78,19 +78,32 @@ try:
 except importlib.metadata.PackageNotFoundError as exc:
     raise SystemExit("managed GWay interpreter cannot find the gway distribution") from exc
 
-print(f"gway distribution path: {dist._path}", flush=True)
+print(f"distribution path: {dist._path}")
 raw = dist.read_text("direct_url.json")
+print(f"direct_url.json present: {bool(raw)}")
+if raw:
+    data = json.loads(raw)
+    print(f"direct URL: {data.get('url', '<missing>')}")
+    vcs = data.get("vcs_info", {})
+    print(f"VCS: {vcs.get('vcs', '<missing>')}")
+    print(f"recorded commit: {vcs.get('commit_id', '<missing>')}")
+PY
+
+echo "=== verify installed dependency revisions ==="
+gway_actual="$(sudo -n "$gway_python" - <<'PY'
+import importlib.metadata
+import json
+
+raw = importlib.metadata.distribution("gway").read_text("direct_url.json")
 if not raw:
     raise SystemExit("installed gway has no direct_url.json VCS metadata")
 data = json.loads(raw)
 try:
-    commit = data["vcs_info"]["commit_id"]
+    print(data["vcs_info"]["commit_id"])
 except KeyError as exc:
     raise SystemExit(f"installed gway lacks VCS commit metadata: {data!r}") from exc
-print(commit)
 PY
 )"
-gway_actual="$(printf '%s\n' "$gway_actual" | tail -n 1)"
 assert_sha gway "$gway_expected" "$gway_actual"
 
 web_path="$(sudo -n gway path web)"
