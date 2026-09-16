@@ -20,7 +20,6 @@ from pathlib import Path
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from apps.nginx.renderers import generate_primary_config
 from utils.service_probe import detect_runserver_port, probe_admin_login
 
 from ..filesystem import _configured_backend_port, _nginx_site_path, _resolve_nginx_mode
@@ -74,6 +73,8 @@ def _build_nginx_report(
         else external_websockets
     )
     try:
+        from apps.nginx.renderers import generate_primary_config
+
         expected_content = _normalize_nginx_content(
             generate_primary_config(mode, port, external_websockets=resolved_websockets)
         )
