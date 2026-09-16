@@ -1,10 +1,8 @@
-"""Compatibility AppConfig for the historical ``apps.certs`` selector."""
-
 from django.apps import AppConfig
 from django.utils.translation import gettext_lazy as _
 
 
-class CertsCompatibilityConfig(AppConfig):
+class OcppPkiConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.ocpp.pki"
     label = "certs"

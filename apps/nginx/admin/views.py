@@ -8,7 +8,6 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponseNotAllowed
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx import services
@@ -25,17 +24,15 @@ class SiteConfigurationViewMixin:
         "protocol",
         "role",
         "port",
-        "certificate",
         "include_ipv6",
         "last_sync_at",
     )
     list_filter = ("enabled", "mode", "protocol", "include_ipv6")
-    search_fields = ("name", "role", "certificate__name")
+    search_fields = ("name", "role")
     readonly_fields = ("last_applied_at", "last_validated_at", "last_message")
     actions = [
         "validate_configurations",
         "preview_configurations",
-        "generate_certificates",
     ]
 
     def get_urls(self):  # pragma: no cover - admin hook
@@ -54,11 +51,6 @@ class SiteConfigurationViewMixin:
                 "preview-default/",
                 self.admin_site.admin_view(self.preview_default_view),
                 name="nginx_siteconfiguration_preview_default",
-            ),
-            path(
-                "generate-certificates/",
-                self.admin_site.admin_view(self.generate_certificates_view),
-                name="nginx_siteconfiguration_generate_certificates",
             ),
         ]
         return custom + super().get_urls()
@@ -141,7 +133,6 @@ class SiteConfigurationViewMixin:
             raise PermissionDenied
 
         ids_param, _pk_values, queryset = self._get_selection_from_request(request)
-        missing_certificates = self._find_missing_certificates(queryset)
         subdomain_form, subdomain_mixed = self._build_subdomain_form(queryset)
 
         if request.method == "POST":
@@ -154,7 +145,7 @@ class SiteConfigurationViewMixin:
                     self._apply_subdomains(request, queryset, subdomain_form)
                     should_redirect = True
             else:
-                self._apply_configurations(request, queryset, ids_param)
+                self._apply_configurations(request, queryset)
                 should_redirect = True
 
             if should_redirect:
@@ -167,7 +158,6 @@ class SiteConfigurationViewMixin:
             request,
             queryset=queryset,
             ids_param=ids_param,
-            missing_certificates=missing_certificates,
             subdomain_form=subdomain_form,
             subdomain_mixed=subdomain_mixed,
         )
@@ -179,7 +169,6 @@ class SiteConfigurationViewMixin:
         default_config = self.model.get_default()
         queryset = self.get_queryset(request).filter(pk=default_config.pk)
         ids_param = str(default_config.pk)
-        missing_certificates = self._find_missing_certificates(queryset)
         subdomain_form, subdomain_mixed = self._build_subdomain_form(queryset)
 
         if request.method == "POST":
@@ -192,7 +181,7 @@ class SiteConfigurationViewMixin:
                     self._apply_subdomains(request, queryset, subdomain_form)
                     should_redirect = True
             else:
-                self._apply_configurations(request, queryset, ids_param)
+                self._apply_configurations(request, queryset)
                 should_redirect = True
 
             if should_redirect:
@@ -204,7 +193,6 @@ class SiteConfigurationViewMixin:
             request,
             queryset=queryset,
             ids_param=ids_param,
-            missing_certificates=missing_certificates,
             subdomain_form=subdomain_form,
             subdomain_mixed=subdomain_mixed,
         )
@@ -215,7 +203,6 @@ class SiteConfigurationViewMixin:
         *,
         queryset,
         ids_param: str,
-        missing_certificates,
         subdomain_form,
         subdomain_mixed: bool,
     ):
@@ -235,12 +222,6 @@ class SiteConfigurationViewMixin:
             "media": self.media,
             "ids_param": ids_param,
             "can_apply": self.has_change_permission(request),
-            "missing_certificates": missing_certificates,
-            "generate_certificates_url": reverse(
-                "admin:nginx_siteconfiguration_generate_certificates"
-            ),
-            "certificate_type_choices": self._certificate_type_choices(),
-            "default_certificate_type": self.default_certificate_type,
             "subdomain_form": subdomain_form,
             "subdomain_mixed": subdomain_mixed,
         }
@@ -249,11 +230,8 @@ class SiteConfigurationViewMixin:
             request, "admin/nginx/siteconfiguration/preview.html", context
         )
 
-    def _apply_configurations(self, request, queryset, ids_param: str = ""):
+    def _apply_configurations(self, request, queryset):
         for config in queryset:
-            if config.protocol == "https" and config.certificate is None:
-                self._warn_missing_certificate(request, config, ids_param)
-                continue
             try:
                 result = config.apply()
             except (services.NginxUnavailableError, services.ValidationError) as exc:
@@ -268,7 +246,6 @@ class SiteConfigurationViewMixin:
             unified_content = generate_unified_config(
                 config.mode,
                 config.port,
-                certificate=config.certificate,
                 https_enabled=config.protocol == "https",
                 include_ipv6=config.include_ipv6,
                 external_websockets=config.external_websockets,
@@ -381,17 +358,8 @@ class SiteConfigurationViewMixin:
         ids_param = ",".join(str(pk) for pk in pk_values)
         return ids_param, pk_values, queryset
 
-    def _warn_missing_certificate(self, request: HttpRequest, config, ids_param: str):
-        generate_url = reverse("admin:nginx_siteconfiguration_generate_certificates")
-        if ids_param:
-            generate_url = f"{generate_url}?ids={ids_param}"
+    @staticmethod
+    def _http_redirect(url):
+        from django.http import HttpResponseRedirect
 
-        link = format_html(
-            '<a href="{}">{}</a>',
-            generate_url,
-            _("Generate Certificates"),
-        )
-        message = _(
-            "%(config)s requires a linked certificate before applying HTTPS. Use %(link)s after assigning one."
-        ) % {"config": config, "link": link}
-        self.message_user(request, message, messages.ERROR)
+        return HttpResponseRedirect(url)

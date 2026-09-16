@@ -5,14 +5,14 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 
-from apps.certs.models import CertificateBase
+from .models import CertificateBase
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(name="apps.certs.tasks.refresh_certificate_expirations")
 def refresh_certificate_expirations() -> dict[str, int]:
-    """Refresh certificate expirations and renew application-owned certificates."""
+    """Refresh certificate expirations and renew OCPP-owned certificates."""
     now = timezone.now()
     updated = 0
     renewed = 0

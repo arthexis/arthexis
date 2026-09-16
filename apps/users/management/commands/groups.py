@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.groups.constants import STAFF_SECURITY_GROUP_NAMES
-from apps.users.management.commands.utils import coerce_option_list
+from apps.users.management.commands._utils import coerce_option_list
 
 
 class Command(BaseCommand):

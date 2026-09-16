@@ -11,6 +11,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
@@ -32,6 +34,8 @@ MINIMUM_DISK_FREE_GB = 2
 MINIMUM_MEMORY_GB = 2
 LOG_LOOKBACK_DAYS = 7
 DEFAULT_CONNECTIVITY_ENDPOINTS = (("one.one.one.one", 443), ("dns.google", 443))
+GWAY_WEB_SITE_NAME = "arthexis"
+PUBLIC_SITE_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,7 @@ def _iter_issues() -> Iterable[GoodIssue]:
     """Yield readiness issues discovered across operational checks."""
 
     yield from _check_instance_availability()
+    yield from _check_public_site_reachability()
     yield from _check_internet_connectivity()
     yield from _check_recent_logs()
     yield from _check_recent_journal_errors()
@@ -171,6 +176,76 @@ def _check_instance_availability() -> Iterable[GoodIssue]:
         severity="important",
         category="availability",
     )
+
+
+def _check_public_site_reachability() -> Iterable[GoodIssue]:
+    """Probe the public URL advertised by GWAY Web when one is configured."""
+
+    public_url = _resolve_public_site_url()
+    if public_url is None:
+        return
+
+    try:
+        with urlopen(public_url, timeout=PUBLIC_SITE_TIMEOUT_SECONDS) as response:
+            status_code = response.getcode()
+    except HTTPError as exc:
+        status_code = exc.code
+    except (URLError, OSError, ValueError) as exc:
+        yield GoodIssue(
+            key="public-site-unreachable",
+            title="Configured public Arthexis site is unreachable",
+            detail=(
+                f"GWAY Web advertises {public_url}, but an HTTP(S) request failed: "
+                f"{exc}."
+            ),
+            severity="important",
+            category="availability",
+        )
+        return
+
+    if status_code is not None and 200 <= status_code < 400:
+        return
+
+    yield GoodIssue(
+        key="public-site-unreachable",
+        title="Configured public Arthexis site is unreachable",
+        detail=(
+            f"GWAY Web advertises {public_url}, but an HTTP(S) request returned "
+            f"status {status_code}."
+        ),
+        severity="important",
+        category="availability",
+    )
+
+
+def _resolve_public_site_url() -> str | None:
+    """Return the configured GWAY Web public URL, or ``None`` when not configured."""
+
+    gway = shutil.which("gway")
+    if gway is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            [gway, "web", "site", GWAY_WEB_SITE_NAME, "--url"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=PUBLIC_SITE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    public_url = next(
+        (line.strip() for line in reversed(result.stdout.splitlines()) if line.strip()),
+        "",
+    )
+    if not public_url.startswith(("http://", "https://")):
+        return None
+    return public_url
 
 
 def _iter_instance_connection_targets(node: Node) -> Iterable[tuple[str, str, int]]:
