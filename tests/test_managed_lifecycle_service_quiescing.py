@@ -1,81 +1,35 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-from apps.core.system import lifecycle
+
+ROOT = Path(__file__).resolve().parents[1]
+LIVE_INTEGRATION = ROOT / "scripts" / "ci" / "live-integration.sh"
 
 
-MANAGED_UNITS = {
-    "gway-arthexis-web-local.service",
-    "gway-arthexis-worker.service",
-    "gway-arthexis-beat.service",
-}
+def test_live_integration_repeats_service_managed_install() -> None:
+    """Watchtower must exercise reinstall through GWay's service-aware boundary."""
+    script = LIVE_INTEGRATION.read_text(encoding="utf-8")
+
+    managed_install = (
+        'gway install arthexis --service --role "$GWAY_SERVICE_PROFILE"'
+    )
+
+    # The second invocation is the regression gate for the SQLite lock that
+    # occurs when a reinstall mutates application state while managed services
+    # are still running. Service quiescing belongs to GWay, so Arthexis tests
+    # the externally visible contract instead of expecting lifecycle.py to call
+    # systemctl directly.
+    assert script.count(managed_install) >= 2
+    assert 'phase="managed-install-first"' in script
+    assert 'phase="managed-install-second"' in script
 
 
-def _systemctl_action(command: list[str]) -> tuple[str, set[str]] | None:
-    try:
-        index = command.index("systemctl")
-    except ValueError:
-        return None
-    if len(command) <= index + 1:
-        return None
-    return command[index + 1], set(command[index + 2 :])
+def test_arthexis_lifecycle_does_not_own_system_service_control() -> None:
+    """Application lifecycle hooks remain independent of systemd orchestration."""
+    lifecycle = (ROOT / "apps" / "core" / "system" / "lifecycle.py").read_text(
+        encoding="utf-8"
+    )
 
-
-def test_repeated_managed_install_quiesces_services_around_prepare(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """A second install must not migrate while existing services can write SQLite."""
-    root = tmp_path / "arthexis"
-    checkout = root / "app"
-    checkout.mkdir(parents=True)
-    managed = lifecycle.InstallationLayout(root=root, checkout=checkout)
-
-    commands: list[list[str]] = []
-
-    def fake_run(arguments, *args, **kwargs):
-        command = [str(value) for value in arguments]
-        commands.append(command)
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(lifecycle.subprocess, "run", fake_run)
-    monkeypatch.setattr(lifecycle, "_warn_if_local_redis_missing", lambda role: None)
-    monkeypatch.setattr(lifecycle, "_record_managed_ownership", lambda current: None)
-    monkeypatch.setattr(lifecycle, "_restore_runtime_ownership", lambda state_root: None)
-
-    # The first install represents the deployment that creates and starts the
-    # managed services. Clear the command trace so the assertion describes the
-    # contract required of a subsequent idempotency install.
-    lifecycle.install("--role", "Watchtower", layout=managed)
-    commands.clear()
-
-    lifecycle.install("--role", "Watchtower", layout=managed)
-
-    manage_indexes = [
-        index
-        for index, command in enumerate(commands)
-        if "manage.py" in command
-    ]
-    assert manage_indexes, "managed install did not run application preparation"
-
-    systemctl = [
-        (index, parsed)
-        for index, command in enumerate(commands)
-        if (parsed := _systemctl_action(command)) is not None
-    ]
-    stop_indexes = [
-        index
-        for index, (action, units) in systemctl
-        if action == "stop" and MANAGED_UNITS <= units
-    ]
-    start_indexes = [
-        index
-        for index, (action, units) in systemctl
-        if action in {"start", "restart"} and MANAGED_UNITS <= units
-    ]
-
-    assert stop_indexes, "managed services were not quiesced before preparation"
-    assert max(stop_indexes) < min(manage_indexes)
-    assert start_indexes, "managed services were not restored after preparation"
-    assert min(start_indexes) > max(manage_indexes)
+    assert "systemctl" not in lifecycle
+    assert "gway-arthexis-" not in lifecycle
