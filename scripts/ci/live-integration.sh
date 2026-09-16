@@ -31,9 +31,9 @@ echo "GWAY runtime: $(command -v gway)"
 gway --version
 
 profile="${GWAY_SERVICE_PROFILE:-}"
-if gway path arthexis >/dev/null 2>&1; then
+if sudo -n gway path arthexis >/dev/null 2>&1; then
   if [[ -z "$profile" ]]; then
-    profile="$(gway arthexis node-role | tail -n 1 | tr -d '\r' | xargs)"
+    profile="$(sudo -n gway arthexis role | tail -n 1 | tr -d '\r' | xargs)"
   fi
   echo "Existing managed Arthexis detected; refreshing it to the expected revision first"
   sudo -n gway upgrade arthexis
@@ -64,7 +64,7 @@ sudo -n --preserve-env=GWAY_SERVICE_PROFILE \
   gway install arthexis --service --role "$GWAY_SERVICE_PROFILE"
 
 phase="managed-layout"
-checkout="$(gway path arthexis)"
+checkout="$(sudo -n gway path arthexis)"
 if [[ "$checkout" != "/opt/arthexis/app" ]]; then
   echo "Unexpected managed checkout path: $checkout" >&2
   exit 1
@@ -86,23 +86,23 @@ if [[ ! -f /opt/arthexis/.gway/arthexis.json ]]; then
 fi
 
 phase="revision-check"
-deployed_sha="$(git -C "$checkout" rev-parse HEAD)"
+deployed_sha="$(sudo -n git -C "$checkout" rev-parse HEAD)"
 if [[ "$deployed_sha" != "$expected_sha" ]]; then
   echo "Managed deployment revision mismatch: expected $expected_sha, got $deployed_sha" >&2
   exit 1
 fi
-expected_version="$(tr -d '\r\n' < "$checkout/VERSION")"
+expected_version="$(sudo -n cat "$checkout/VERSION" | tr -d '\r\n')"
 
 phase="managed-command"
-gway arthexis version
-actual_profile="$(gway arthexis node-role | tail -n 1 | tr -d '\r' | xargs)"
+sudo -n gway arthexis version
+actual_profile="$(sudo -n gway arthexis role | tail -n 1 | tr -d '\r' | xargs)"
 if [[ "$actual_profile" != "$GWAY_SERVICE_PROFILE" ]]; then
   echo "Managed role/profile mismatch: expected $GWAY_SERVICE_PROFILE, got $actual_profile" >&2
   exit 1
 fi
 
 phase="pre-upgrade-status"
-pre_upgrade_status="$(gway arthexis status --json)"
+pre_upgrade_status="$(sudo -n gway arthexis status --json)"
 installation_id="$(STATUS_JSON="$pre_upgrade_status" python - <<'PY'
 import json
 import os
@@ -144,10 +144,10 @@ fi
 sudo -n rm -f "$sentinel"
 
 phase="service-status"
-gway service status arthexis
+sudo -n gway service status arthexis
 
 phase="lifecycle-status"
-status_json="$(gway arthexis status --json)"
+status_json="$(sudo -n gway arthexis status --json)"
 printf '%s\n' "$status_json"
 STATUS_JSON="$status_json" EXPECTED_SHA="$expected_sha" EXPECTED_VERSION="$expected_version" EXPECTED_PROFILE="$GWAY_SERVICE_PROFILE" EXPECTED_INSTALLATION_ID="$installation_id" \
   python - <<'PY'
@@ -172,7 +172,7 @@ assert report["problems"] == [], report
 PY
 
 phase="application-health"
-gway arthexis good
+sudo -n gway arthexis good
 
 # Keep the Watchtower acceptance path focused on deployment convergence. The
 # repeated install above is the idempotency gate that exercises service-aware
