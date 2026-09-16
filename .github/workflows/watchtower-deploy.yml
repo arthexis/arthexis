@@ -1,0 +1,144 @@
+name: Watchtower Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: watchtower-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Watchtower Deploy
+    if: >-
+      github.actor == 'arthexis' &&
+      github.repository == 'arthexis/arthexis' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout trusted main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify trusted invocation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_ACTOR}" = "arthexis"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "${remote_main}"
+          test "${remote_main}" = "${GITHUB_SHA}"
+          sudo -n true
+
+      - name: Skip version-only rollover
+        id: candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          should_deploy=true
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            mapfile -t changed < <(git diff --name-only HEAD^ HEAD)
+            if [[ "${#changed[@]}" -eq 1 && "${changed[0]}" == "VERSION" ]]; then
+              should_deploy=false
+              echo "VERSION-only rollover; no Watchtower deployment required."
+            fi
+          fi
+          echo "should_deploy=${should_deploy}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upgrade GWay runtime
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n gway upgrade gway --force
+          sudo -n gway upgrade web --install
+          sudo -n gway upgrade wire --install
+          gway --version
+
+      - name: Deploy Arthexis Watchtower
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n gway upgrade arthexis --install --service --role Watchtower
+
+          checkout="$(gway path arthexis)"
+          test "${checkout}" = "/opt/arthexis/app"
+          deployed_sha="$(git -C "${checkout}" rev-parse HEAD)"
+          if [[ "${deployed_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "Managed Arthexis revision mismatch: expected ${GITHUB_SHA}, got ${deployed_sha}" >&2
+            exit 1
+          fi
+
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8888/health/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "${ready}" != "true" ]]; then
+            echo "Arthexis did not become healthy on 127.0.0.1:8888" >&2
+            exit 1
+          fi
+
+      - name: Expose Arthexis
+        if: steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exposure="$(sudo -n gway --json wire server public expose \
+            --fqdn arthexis.com \
+            --upstream http://127.0.0.1:8888 \
+            --health-path /health/ \
+            --dns-provider godaddy \
+            --no-dns-rollback \
+            --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
+
+          test "$(gway web site arthexis --url)" = "https://arthexis.com"
+          curl --fail --show-error --silent --max-time 10 https://arthexis.com/health/
+          echo
+
+      - name: Capture Watchtower diagnostics
+        if: always() && steps.candidate.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set +e
+          echo '=== managed Arthexis ==='
+          gway path arthexis
+          gway arthexis version
+          gway arthexis node-role
+          gway arthexis status --json
+          echo '=== local health ==='
+          curl --show-error --silent --max-time 5 --write-out '\nHTTP %{http_code}\n' http://127.0.0.1:8888/health/
+          echo '=== systemd ==='
+          systemctl --no-pager --full status gway-arthexis-web-local.service
+          journalctl --no-pager -n 120 -u gway-arthexis-web-local.service
+          echo '=== port 8888 ==='
+          ss -ltnp | grep ':8888' || true
+          echo '=== nginx ==='
+          sudo -n nginx -t
+          sudo -n sed -n '1,220p' /etc/nginx/sites-enabled/gway-arthexis.com.conf 2>/dev/null || true
+          sudo -n tail -n 80 /var/log/nginx/error.log 2>/dev/null || true
+          echo '=== certificate ==='
+          sudo -n certbot certificates 2>/dev/null | sed -n '/Certificate Name: arthexis.com/,+8p'
+          echo '=== public health ==='
+          curl --show-error --silent --max-time 10 --write-out '\nHTTP %{http_code}\n' https://arthexis.com/health/ || true
