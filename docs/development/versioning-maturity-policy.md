@@ -10,9 +10,9 @@ The version number describes both application maturity and database compatibilit
 
 A second invariant governs ordinary version advancement:
 
-> A new PATCH version is earned by a successful deployment of Arthexis, not merely by merging source code.
+> `VERSION` on `main` is the version currently being developed and tested. A successful deployment attests that candidate version to the exact deployed SHA; only then does `main` roll forward to the next patch candidate.
 
-This makes the version sequence a deployment ledger. A source commit may exist on `main` without receiving a new patch number. Once that exact `main` revision is successfully deployed and passes the Arthexis live-integration checks, automation may create the version-attestation PR that advances PATCH.
+This separates the deployed version from the next development version without needing opaque commit identifiers as the primary progress signal. The Watchtower may remain on the exact SHA and VERSION that passed deployment while `main` advances its VERSION-only metadata to the next candidate.
 
 ## Version increment rules
 
@@ -50,43 +50,79 @@ Increment MINOR for meaningful application/domain contract changes that remain i
 
 When MINOR increments, PATCH resets to `0`.
 
-A deliberate MINOR bump may be included in the source revision that is deployed. If the successfully deployed revision already changed `VERSION`, that explicit version change is itself the version attestation and automation must not immediately add another PATCH bump.
+A deliberate MINOR or MAJOR transition sets the next candidate version before that candidate is deployed. The version is not considered deployment-attested until the corresponding SHA passes the deployment gate.
 
 ### PATCH
 
 PATCH is the normal deployment-progress counter inside the current MAJOR.MINOR line.
 
-When an exact Arthexis `main` revision is successfully deployed through the designated Arthexis live-integration/deployment environment and that revision did not already change `VERSION`, automation advances PATCH by one through a protected version-attestation pull request.
+If `main` carries candidate `1.0.7`, a successful deployment of that exact SHA proves `1.0.7`. Automation then opens a protected VERSION-only pull request that rolls `main` forward to candidate `1.0.8`.
+
+The rollover commit is metadata for future work. It is not itself a new deployable application change, does not make the Watchtower become `1.0.8`, and must not recursively earn another patch.
 
 Examples:
 
-- `1.0.7` source changes merge to `main`; no version change happens yet.
-- that exact `main` revision is deployed successfully; automation opens the attestation PR for `1.0.8`.
-- merging the version-only attestation PR does not count as a new deployable application change and must not recursively create `1.0.9`.
-- if a deliberate `1.1.0` change is deployed successfully, that explicit MINOR version already represents the deployment and no automatic `1.1.1` is created for the same deployment.
+- `main` carries `1.0.7` while ordinary source changes accumulate.
+- an exact `main` SHA is deployed successfully with `VERSION=1.0.7`; that SHA is now the attested `1.0.7` state.
+- automation opens `[version-rollover] 1.0.8`.
+- merging that VERSION-only PR means new work is now being developed as candidate `1.0.8`; the Watchtower may still correctly run the proven `1.0.7` SHA.
+- the next substantive deployment that carries `1.0.8` can attest `1.0.8`, after which `main` rolls to `1.0.9`.
 
-PATCH numbers therefore mean more than commit count: they identify successfully exercised deployed states.
+PATCH therefore measures proven deployment progress rather than source-commit count.
 
 ## Deployment-attested versioning
 
-The designated Arthexis deployment workflow is the release clock for ordinary PATCH movement.
+The designated Arthexis Watchtower workflow is the release clock for ordinary PATCH movement.
 
 The workflow must:
 
-1. resolve one exact `main` commit SHA before deployment
+1. resolve one exact candidate SHA and VERSION before deployment
 2. deploy and exercise that exact revision
 3. verify application health and the live-integration contract
-4. verify that `main` still points to the tested SHA before assigning a version
-5. refuse to assign a version to a newer, untested `main` revision if `main` moved during the run
-6. if the tested revision already changed `VERSION`, treat that explicit MAJOR/MINOR/PATCH change as the attestation for the deployment
-7. otherwise create a version-only PR that increments PATCH by exactly one
-8. never treat the version-only attestation commit itself as a new deployment candidate
+4. verify that the source branch still points at the tested SHA before attesting it
+5. bind the candidate VERSION to that successful SHA
+6. create a VERSION-only PR that rolls the repository forward to the next patch candidate
+7. never treat the VERSION-only rollover commit itself as a new deployment candidate
 
-The attestation PR must go through normal protected-branch checks. Arthexis does not bypass the `main` ruleset merely to write version metadata.
+The rollover PR must go through normal protected-branch checks. Arthexis does not bypass the `main` ruleset merely to write version metadata.
 
-Only one unmerged deployment-version attestation should exist at a time. The version sequence is intentionally linear; another deployment should not mint a competing next patch while the previous attestation remains unresolved.
+Only one unmerged rollover should exist for a repository at a time. The version sequence is intentionally linear.
 
-The deployment workflow is expected to live with Arthexis rather than being permanently coupled to whichever GWay repository happens to host the current Watchtower bootstrap. GWay provides the deployment/runtime capability; Arthexis owns the decision that an Arthexis revision has passed its deployment gate and earned a version.
+## Arthexis as Watchtower orchestrator
+
+The deployment workflow should live with Arthexis rather than being permanently coupled to GWay Wire or another infrastructure repository.
+
+The dependency direction is intentional:
+
+- Arthexis may depend on GWay and GWay peer packages for deployment/runtime capability.
+- GWay packages must not depend on Arthexis merely to participate in deployment.
+- a change in any managed GWay peer may be exercised by the Arthexis Watchtower even when Arthexis itself did not change.
+
+Arthexis therefore acts as the deployment orchestrator, while each repository retains ownership of its own VERSION history.
+
+## Peer deployment attestation
+
+The Watchtower should maintain a deployment manifest for every managed repository. A manifest entry records at least:
+
+- repository identity
+- candidate VERSION
+- exact deployed commit SHA
+
+At the beginning of a run, the Watchtower snapshots the candidate manifest. After a successful deployment, it compares that snapshot with the previous successfully attested manifest.
+
+A repository earns its current candidate version only when its substantive deployed SHA changed and the complete Watchtower deployment succeeded. Repositories that did not change do not roll their VERSION merely because another peer changed.
+
+A pure VERSION-rollover commit is metadata and must not count as a substantive SHA change for deployment-attestation purposes.
+
+For example, if a deployment contains new Arthexis and GWay Wire code but unchanged GWay Web code:
+
+- Arthexis earns its current candidate version and receives a rollover PR.
+- GWay Wire earns its current candidate version and receives a rollover PR.
+- GWay Web receives no version change.
+
+This peer-aware mechanism can later be standardized across the GWay ecosystem without making those repositories depend on Arthexis at runtime.
+
+Cross-repository rollover creation requires a credential or GitHub App with narrowly scoped contents/pull-request write access to the managed peer repositories. The ordinary repository-scoped `GITHUB_TOKEN` is insufficient for writing version PRs into sibling repositories.
 
 ## Database compatibility contract
 
@@ -114,7 +150,7 @@ Migration-only shells and other historical compatibility code that exist solely 
 
 ## Release procedure ownership
 
-Developers should not manually edit `VERSION` for ordinary patch-level work.
+Developers should not manually increment PATCH for ordinary work. `VERSION` on `main` already names the candidate being developed.
 
 Automatic release-impact detection still classifies the semantic minimum level of source changes:
 
@@ -124,7 +160,7 @@ Automatic release-impact detection still classifies the semantic minimum level o
 - docs, tests, scripts, workflow changes, internal settings/configuration changes, and admin-only changes are PATCH-level changes unless a higher rule applies
 - a requested MAJOR bump is an explicit schema-generation decision
 
-MAJOR and MINOR transitions remain deliberate release decisions. Ordinary PATCH advancement is deployment-attested and automated after the live deployment succeeds.
+MAJOR and MINOR transitions remain deliberate release decisions. Ordinary PATCH rollover happens only after the current candidate successfully deploys.
 
 Maintainers may force a higher bump level. Manual inputs are a floor: they may raise the computed bump level but must not downgrade automatic release-impact evidence.
 
@@ -132,8 +168,11 @@ Maintainers may force a higher bump level. Manual inputs are a floor: they may r
 
 - MAJOR = deliberate new schema generation; cross-major data movement uses reconciliation rather than Django migration history.
 - MINOR = meaningful application/domain contract change inside the same schema generation, including app addition or removal.
-- PATCH = successful deployment progress within the current MAJOR.MINOR line.
-- PATCH does not advance merely because a commit lands on `main`.
-- A successful deployment of an unchanged VERSION opens a protected version-attestation PR for the next patch.
+- `VERSION` on `main` = the version currently being developed/tested.
+- successful deployment binds that candidate VERSION to the exact tested SHA.
+- after success, a VERSION-only PR rolls `main` to the next patch candidate.
+- version-only rollover commits do not trigger deployment or earn versions.
+- Arthexis is the preferred Watchtower orchestrator for itself and its GWay peers.
+- a peer rolls forward only when its substantive deployed SHA changed in a successful Watchtower run.
 - Django migrations are a same-major compatibility contract.
 - Arthexis 1 is the cleanup line; Arthexis 2 is the first planned fresh migration lineage.
