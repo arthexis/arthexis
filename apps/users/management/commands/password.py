@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from apps.groups.security import ensure_default_staff_groups
 from apps.users import temp_passwords
-from apps.users.management.commands.utils import coerce_option_list
+from apps.users.management.commands._utils import coerce_option_list
 
 
 class Command(BaseCommand):
