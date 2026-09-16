@@ -212,7 +212,6 @@ PROJECT_LOCAL_APPS = [
     "apps.maps",
     "apps.media",
     "apps.modules",
-    "apps.nginx",
     "apps.nmcli",
     "apps.nodes",
     "apps.ocpp",

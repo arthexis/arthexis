@@ -10,6 +10,10 @@ from packaging.version import InvalidVersion, Version
 
 from arthexis import __version__ as ARTHEXIS_VERSION
 from config.settings.external_dbs import external_app_module
+from config.settings.nginx_retirement import (
+    MIGRATION_ONLY_APPS,
+    _is_migration_management_command,
+)
 
 APPS_REGISTRY_ENTRY_NOT_IMPORTABLE_ID = "core.E001"
 APPS_REGISTRY_UNLISTED_LOCAL_APP_ID = "core.E002"
@@ -185,6 +189,9 @@ def get_apps_registry_configuration_errors() -> list[Error]:
     allowed_project_apps = (
         set(project_local_apps) | set(optional_project_local_apps) | set(project_apps)
     )
+    if _is_migration_management_command():
+        allowed_project_apps.update(MIGRATION_ONLY_APPS)
+
     for app_path in installed_apps:
         if not app_path.startswith("apps."):
             continue
@@ -196,7 +203,8 @@ def get_apps_registry_configuration_errors() -> list[Error]:
                 (
                     "INSTALLED_APPS contains unlisted local app "
                     f"'{app_path}'. Declare it in PROJECT_LOCAL_APPS, "
-                    "OPTIONAL_PROJECT_LOCAL_APPS, or PROJECT_APPS."
+                    "OPTIONAL_PROJECT_LOCAL_APPS, PROJECT_APPS, or the "
+                    "migration-only compatibility allowlist."
                 ),
                 id=APPS_REGISTRY_UNLISTED_LOCAL_APP_ID,
                 obj=app_path,
