@@ -11,7 +11,7 @@ def resolve_ws_scheme(
     use_tls: bool | None = None,
     request=None,
 ) -> str:
-    """Return the websocket scheme based on explicit settings or site config."""
+    """Return the websocket scheme from explicit inputs, request, or settings."""
 
     if ws_scheme:
         normalized = ws_scheme.strip().lower()
@@ -39,16 +39,4 @@ def resolve_ws_scheme(
 
 
 def _site_http_protocol() -> str:
-    try:
-        from apps.nginx.models import SiteConfiguration
-
-        config = SiteConfiguration.objects.filter(enabled=True).order_by("pk").first()
-        if config:
-            if not getattr(config, "external_websockets", True):
-                return "http"
-            if config.protocol:
-                return str(config.protocol).strip().lower()
-    except Exception:
-        pass
-
     return str(getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")).strip().lower()
