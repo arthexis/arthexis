@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 import subprocess
 import uuid
 from pathlib import Path
@@ -132,24 +133,13 @@ def inspect_adoption(
         if path.is_file()
     ]
     if database.is_file():
-        if sqlite_sidecars:
-            database_classification = "requires-consistent-backup"
-            database_detail = (
-                "SQLite sidecar state is present; quiesce the source or use a consistent "
-                "SQLite backup before transferring the database."
-            )
-        else:
-            database_classification = "copyable"
-            database_detail = (
-                "Copy checkout-local SQLite state into managed persistent data."
-            )
         transfers.append(
             _transfer_item(
                 "database",
                 database,
                 target_data / "db.sqlite3",
-                database_classification,
-                database_detail,
+                "sqlite-backup",
+                "Create a consistent SQLite backup into managed persistent data.",
             )
         )
     else:
@@ -273,6 +263,21 @@ def _copy_transfer(source: Path, target: Path) -> None:
         shutil.copy2(source, target)
 
 
+def _snapshot_sqlite(source: Path, target: Path) -> None:
+    _reject_symlinks(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with (
+            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_db,
+            sqlite3.connect(target) as target_db,
+        ):
+            source_db.backup(target_db)
+    except sqlite3.Error as exc:
+        raise AdoptionExecutionError(
+            f"cannot create consistent SQLite adoption snapshot from {source}: {exc}"
+        ) from exc
+
+
 def execute_adoption(
     source: str | Path,
     *,
@@ -290,9 +295,6 @@ def execute_adoption(
         blockers.append(
             "source checkout has uncommitted changes; rerun with --allow-dirty-source to acknowledge that source changes are not copied"
         )
-    for item in plan["transfers"]:
-        if item["classification"] == "requires-consistent-backup":
-            blockers.append(str(item["detail"]))
     if blockers:
         raise AdoptionExecutionError("; ".join(blockers))
 
@@ -305,12 +307,15 @@ def execute_adoption(
     try:
         staged_data.mkdir(parents=True)
         for item in plan["transfers"]:
-            if item["classification"] != "copyable" or item["source"] is None:
+            if item["source"] is None:
                 continue
             source_path = Path(str(item["source"]))
             target_path = Path(str(item["target"]))
             relative = target_path.relative_to(target_data)
-            _copy_transfer(source_path, staged_data / relative)
+            if item["classification"] == "sqlite-backup":
+                _snapshot_sqlite(source_path, staged_data / relative)
+            elif item["classification"] == "copyable":
+                _copy_transfer(source_path, staged_data / relative)
 
         provenance = {
             "source": plan["source"],
@@ -332,9 +337,9 @@ def execute_adoption(
             )
         for staged in sorted(staged_data.iterdir(), key=lambda path: path.name):
             target = target_data / staged.name
-            staged.replace(target)
             created.append(target)
-    except Exception:
+            staged.replace(target)
+    except BaseException:
         for target in reversed(created):
             if target.is_dir():
                 shutil.rmtree(target, ignore_errors=True)
