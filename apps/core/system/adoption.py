@@ -333,3 +333,16 @@ def execute_adoption(
         shutil.rmtree(staging, ignore_errors=True)
 
     return plan
+
+
+def rollback_adoption(plan: dict[str, object]) -> None:
+    """Remove state created by a failed adoption lifecycle transaction."""
+    target_data = Path(str(plan["target_persistent_data"]))
+    provenance = target_data / "adoption.json"
+    if not provenance.is_file():
+        return
+    for child in list(target_data.iterdir()):
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
