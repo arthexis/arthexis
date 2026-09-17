@@ -273,44 +273,6 @@ def evaluate_email_profile_rules() -> dict[str, object]:
     return rule_success()
 
 
-def evaluate_nginx_site_configuration_rules() -> dict[str, object] | None:
-    if not django_apps.is_installed("apps.nginx"):
-        return rule_failure(_("Site config check failed: import err."))
-
-    try:
-        from apps.nginx.models import SiteConfiguration
-    except ImportError:
-        logger.exception("Unable to import nginx dashboard rule models")
-        return rule_failure(_("Site config check failed: import err."))
-
-    if not SiteConfiguration.objects.filter(name="default").exists():
-        return rule_failure(_("Missing default site config."))
-
-    enabled_sites = list(SiteConfiguration.objects.filter(enabled=True))
-    if not enabled_sites:
-        return rule_failure(_("Enable at least one site."))
-
-    cutoff = timezone.now() - timedelta(days=3)
-    recent_validation = False
-    for site in enabled_sites:
-        last_activity = max(
-            (
-                timestamp
-                for timestamp in [site.last_applied_at, site.last_validated_at]
-                if timestamp
-            ),
-            default=None,
-        )
-        if last_activity and last_activity >= cutoff:
-            recent_validation = True
-            break
-
-    if not recent_validation:
-        return rule_failure(_("Site validation is stale."))
-
-    return rule_success()
-
-
 def evaluate_user_story_assignment_rules() -> dict[str, object] | None:
     """Return failure only when open user stories still need assignment."""
 
