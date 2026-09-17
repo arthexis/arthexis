@@ -9,7 +9,7 @@ from apps.core.system import adoption, managed_install
 from apps.core.system.lifecycle import InstallationLayout
 
 
-def _source(root: Path, *, dirty: bool = False) -> Path:
+def _source(root: Path) -> Path:
     source = root / "source"
     source.mkdir()
     (source / "manage.py").write_text("# source checkout\n", encoding="utf-8")
@@ -95,6 +95,27 @@ class AdoptionExecutionTests(SimpleTestCase):
                     adoption.AdoptionExecutionError, "consistent SQLite backup"
                 ):
                     adoption.execute_adoption(source, target_root=layout.root)
+
+    def test_execution_refuses_symlinked_transfer_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = _source(root)
+            outside = root / "outside.txt"
+            outside.write_text("outside", encoding="utf-8")
+            (source / "media" / "escape").symlink_to(outside)
+            layout = _managed(root)
+
+            with mock.patch.object(
+                adoption,
+                "_git_inventory",
+                return_value=("abc123", "main", False),
+            ):
+                with self.assertRaisesRegex(
+                    adoption.AdoptionExecutionError, "contains a symlink"
+                ):
+                    adoption.execute_adoption(source, target_root=layout.root)
+
+            self.assertFalse((layout.root / "var" / "lib" / "adoption.json").exists())
 
     def test_managed_install_executes_transfer_then_normal_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
