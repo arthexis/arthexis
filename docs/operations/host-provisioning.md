@@ -54,7 +54,7 @@ After successful application preparation, Arthexis records managed ownership met
 
 The managed ownership contract distinguishes disposable/replaceable resources such as the managed checkout, Python environment, logs, cache, and runtime files from persistent instance data under `/opt/arthexis/var/lib`. Re-running install does not replace an existing managed database with a checkout-local database. A normal managed uninstall preserves `/opt/arthexis/var/lib` by default.
 
-A developer checkout is never converted in place into the managed production checkout. GWAY constructs and owns the canonical managed checkout independently of any nearby developer source tree. The planned adoption path in issue #208 will construct the normal managed layout and transfer the instance state that should survive promotion while leaving the developer checkout intact.
+A developer checkout is never converted in place into the managed production checkout. GWAY constructs and owns the canonical managed checkout independently of any nearby developer source tree. Adoption transfers durable instance state into that normal managed layout while leaving the developer checkout intact.
 
 ## Managed lifecycle status
 
@@ -94,25 +94,52 @@ If the Arthexis uninstall hook fails, GWAY leaves the checkout, environment, and
 
 This production uninstall path does not replace `uninstall.sh`; the repository script remains part of the developer/local ownership model.
 
-## Adoption preflight
+## Adoption and promotion
 
-Adoption is an install policy rather than a standalone lifecycle command. An operator must name the unmanaged source checkout explicitly; GWAY does not search the filesystem for a candidate. Before any production mutation, inspect the proposed transition with:
+Adoption is an install policy rather than a standalone lifecycle command. An operator must name the unmanaged source checkout explicitly; GWAY does not search the filesystem for a candidate.
+
+Inspect the proposed transition before mutation with:
 
 ```bash
 gway install arthexis --adopt --from /path/to/developer/arthexis --dry-run
 ```
 
-The preflight runs current trusted Arthexis lifecycle code from temporary GWAY resources and does not create `/opt/arthexis/app`, `/opt/arthexis/.venv`, ownership metadata, service units, or a GWAY registry entry. The source checkout is also read-only during inspection.
+The preflight runs trusted Arthexis lifecycle code and does not create or claim a managed installation. The source checkout is read-only during inspection. Arthexis inventories the source Git revision, branch and dirty state, version, node role, checkout-local SQLite database, root environment-file names, developer virtual environment, and persistent `media`/`uploads` directories when present. Environment-file values are deliberately not read or printed.
 
-Arthexis inventories the source Git revision, branch and dirty state, version, node role, checkout-local SQLite database, root environment-file names, developer virtual environment, and persistent `media`/`uploads` directories when present. Environment-file values are deliberately not read or printed. The plan classifies persistent files as copyable and virtual environments/services as regenerable, reports the canonical managed destinations, and lists blockers such as an invalid source checkout or conflicting managed target state.
+The plan classifies durable data as copyable and virtual environments/services as regenerable, reports canonical managed destinations, and lists blockers such as an invalid source checkout or conflicting managed target state.
 
-A dirty developer checkout is reported but is not itself a blocker: local source modifications remain in the developer checkout and are not copied into the managed production checkout. Adoption always uses the trusted managed checkout as the production code source.
+After reviewing a clean preflight, execute the promotion with:
 
-This lifecycle stage provides preflight only. `gway install arthexis --adopt --from ...` without `--dry-run` is deliberately refused until the subsequent adoption-execution stage implements the state transfer and final health verification.
+```bash
+sudo gway install arthexis --adopt --from /path/to/developer/arthexis --service
+```
+
+GWAY creates the canonical managed checkout and Python environment from the trusted managed source. The Arthexis adoption hook then transfers durable instance state into `/opt/arthexis/var/lib`, preserves the source node role, and runs the normal managed application preparation. The source checkout itself, its developer virtual environment, local service definitions, and source modifications are never copied into `/opt/arthexis/app`.
+
+For SQLite sources, adoption refuses to copy a database while `db.sqlite3-wal` or `db.sqlite3-shm` exists; quiesce the unmanaged instance or create a consistent SQLite backup first. Root `*.env` files are preserved under the managed persistent configuration area without exposing their values in preflight output. `media` and `uploads` are transferred when present.
+
+A dirty source checkout requires explicit acknowledgement:
+
+```bash
+sudo gway install arthexis --adopt --from /path/to/developer/arthexis --service --allow-dirty-source
+```
+
+This flag acknowledges only that uncommitted source changes exist. They are not promoted. Production code still comes from GWAY's managed checkout. Adoption records source revision, branch, version, role, and dirty-source acknowledgement in persistent provenance so the transition remains auditable.
+
+Adoption refuses an already-owned managed installation or a non-empty managed persistent-data directory. Transferable state is staged before it is committed. If normal Arthexis preparation fails after transfer, adoption-owned persistent state is rolled back so the operation can be corrected and retried. The original developer checkout remains unchanged throughout.
+
+After success, use the ordinary managed lifecycle:
+
+```bash
+gway arthexis status --json
+gway upgrade arthexis
+```
+
+The adopted installation is no longer a special lifecycle type; it is a standard GWAY-managed Arthexis instance.
 
 ## Generic lifecycle boundary
 
-GWAY is the intended OS-agnostic production lifecycle boundary for Arthexis. The command surface is being completed in issue #208; current GWAY conventions provide managed install/upgrade/uninstall and project operations around the `arthexis` project.
+GWAY is the OS-agnostic production lifecycle boundary for Arthexis. Managed install, status, update, uninstall, and one-way developer-to-production adoption all use the same ownership and persistent-state contract.
 
 The repository lifecycle scripts remain the supported local/developer workflow rather than compatibility wrappers around GWAY. See the [Install & Lifecycle Scripts Manual](../development/install-lifecycle-scripts-manual.md) for that workflow.
 

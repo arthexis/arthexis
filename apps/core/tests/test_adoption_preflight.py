@@ -59,14 +59,14 @@ class AdoptionPreflightTests(SimpleTestCase):
             self.assertFalse(target.exists())
 
             by_kind = {item["kind"]: item for item in plan["transfers"]}
-            self.assertEqual(by_kind["database"]["classification"], "copyable")
+            self.assertEqual(by_kind["database"]["classification"], "sqlite-backup")
             self.assertEqual(
                 by_kind["python-environment"]["classification"], "regenerable"
             )
             self.assertEqual(by_kind["media"]["classification"], "copyable")
             self.assertEqual(by_kind["services"]["classification"], "regenerable")
 
-    def test_preflight_requires_consistent_sqlite_backup_when_sidecars_exist(self) -> None:
+    def test_preflight_uses_sqlite_backup_when_sidecars_exist(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = _source(root)
@@ -88,11 +88,9 @@ class AdoptionPreflightTests(SimpleTestCase):
             database = next(
                 item for item in plan["transfers"] if item["kind"] == "database"
             )
-            self.assertEqual(
-                database["classification"], "requires-consistent-backup"
-            )
+            self.assertEqual(database["classification"], "sqlite-backup")
             self.assertEqual(plan["sqlite_sidecars"], [str(wal), str(shm)])
-            self.assertIn("quiesce", database["detail"])
+            self.assertIn("consistent SQLite backup", database["detail"])
 
     def test_preflight_reports_existing_managed_target_as_blocker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -219,7 +217,7 @@ class AdoptionPreflightTests(SimpleTestCase):
             self.assertIs(result, expected)
             install.assert_called_once_with("--role", "Terminal", layout=current)
 
-    def test_managed_install_refuses_mutating_adoption_for_now(self) -> None:
+    def test_managed_install_refuses_mutating_adoption_without_gway_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             source = _source(Path(temporary))
             with self.assertRaisesRegex(

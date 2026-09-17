@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import json
+import shutil
+import sqlite3
 import subprocess
+import uuid
 from pathlib import Path
 
 from config.roles import SUPPORTED_ROLES, normalize_role
+
+
+class AdoptionExecutionError(RuntimeError):
+    """Raised when an adoption plan cannot be executed safely."""
 
 
 def _git(source: Path, *arguments: str) -> str:
@@ -77,6 +85,7 @@ def inspect_adoption(
     source: str | Path,
     *,
     target_root: str | Path = "/opt/arthexis",
+    allow_managed_scaffold: bool = False,
 ) -> dict[str, object]:
     """Build a read-only plan for adopting one unmanaged Arthexis checkout."""
     source_path = Path(source).expanduser().resolve()
@@ -124,27 +133,20 @@ def inspect_adoption(
         if path.is_file()
     ]
     if database.is_file():
-        if sqlite_sidecars:
-            database_classification = "requires-consistent-backup"
-            database_detail = (
-                "SQLite sidecar state is present; quiesce the source or use a consistent "
-                "SQLite backup before transferring the database."
-            )
-        else:
-            database_classification = "copyable"
-            database_detail = (
-                "Copy checkout-local SQLite state into managed persistent data."
-            )
         transfers.append(
             _transfer_item(
                 "database",
                 database,
                 target_data / "db.sqlite3",
-                database_classification,
-                database_detail,
+                "sqlite-backup",
+                "Create a consistent SQLite backup into managed persistent data.",
             )
         )
     else:
+        if sqlite_sidecars:
+            blockers.append(
+                "SQLite WAL/SHM sidecar state exists without db.sqlite3; restore or remove the orphan sidecars before adoption"
+            )
         transfers.append(
             _transfer_item(
                 "database",
@@ -205,10 +207,16 @@ def inspect_adoption(
     )
 
     ownership_marker = root / ".gway" / "arthexis.json"
-    if target_checkout.exists():
-        blockers.append(f"managed target checkout already exists: {target_checkout}")
-    if target_environment.exists():
-        blockers.append(f"managed target environment already exists: {target_environment}")
+    if not allow_managed_scaffold:
+        if target_checkout.exists():
+            blockers.append(f"managed target checkout already exists: {target_checkout}")
+        if target_environment.exists():
+            blockers.append(f"managed target environment already exists: {target_environment}")
+    else:
+        if not target_checkout.is_dir():
+            blockers.append(f"GWAY managed checkout is missing: {target_checkout}")
+        if not target_environment.is_dir():
+            blockers.append(f"GWAY managed environment is missing: {target_environment}")
     if ownership_marker.exists():
         blockers.append(f"managed ownership metadata already exists: {ownership_marker}")
     if target_data.exists() and any(target_data.iterdir()):
@@ -237,3 +245,125 @@ def inspect_adoption(
             "Preflight reports environment file names only; it does not read or print secret values.",
         ],
     }
+
+
+def _reject_symlinks(source: Path) -> None:
+    if source.is_symlink():
+        raise AdoptionExecutionError(f"adoption transfer source is a symlink: {source}")
+    if source.is_dir():
+        for child in source.rglob("*"):
+            if child.is_symlink():
+                raise AdoptionExecutionError(
+                    f"adoption transfer tree contains a symlink: {child}"
+                )
+
+
+def _copy_transfer(source: Path, target: Path) -> None:
+    _reject_symlinks(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        shutil.copytree(source, target)
+    else:
+        shutil.copy2(source, target)
+
+
+def _snapshot_sqlite(source: Path, target: Path) -> None:
+    _reject_symlinks(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with (
+            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_db,
+            sqlite3.connect(target) as target_db,
+        ):
+            source_db.backup(target_db)
+    except sqlite3.Error as exc:
+        raise AdoptionExecutionError(
+            f"cannot create consistent SQLite adoption snapshot from {source}: {exc}"
+        ) from exc
+
+
+def execute_adoption(
+    source: str | Path,
+    *,
+    target_root: str | Path = "/opt/arthexis",
+    allow_dirty_source: bool = False,
+) -> dict[str, object]:
+    """Transfer durable unmanaged state into a GWAY-created managed scaffold."""
+    plan = inspect_adoption(
+        source,
+        target_root=target_root,
+        allow_managed_scaffold=True,
+    )
+    blockers = list(plan["blockers"])
+    if plan["dirty"] and not allow_dirty_source:
+        blockers.append(
+            "source checkout has uncommitted changes; rerun with --allow-dirty-source to acknowledge that source changes are not copied"
+        )
+    if blockers:
+        raise AdoptionExecutionError("; ".join(blockers))
+
+    root = Path(str(plan["target_root"]))
+    target_data = Path(str(plan["target_persistent_data"]))
+    staging = root / ".gway" / f"adoption-staging-{uuid.uuid4().hex}"
+    staged_data = staging / "data"
+    created: list[Path] = []
+
+    try:
+        staged_data.mkdir(parents=True)
+        for item in plan["transfers"]:
+            if item["source"] is None:
+                continue
+            source_path = Path(str(item["source"]))
+            target_path = Path(str(item["target"]))
+            relative = target_path.relative_to(target_data)
+            if item["classification"] == "sqlite-backup":
+                _snapshot_sqlite(source_path, staged_data / relative)
+            elif item["classification"] == "copyable":
+                _copy_transfer(source_path, staged_data / relative)
+
+        provenance = {
+            "source": plan["source"],
+            "revision": plan["revision"],
+            "branch": plan["branch"],
+            "version": plan["version"],
+            "dirty_source_acknowledged": bool(plan["dirty"]),
+            "role": plan["role"],
+        }
+        (staged_data / "adoption.json").write_text(
+            json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        target_data.mkdir(parents=True, exist_ok=True)
+        if any(target_data.iterdir()):
+            raise AdoptionExecutionError(
+                f"managed persistent data became non-empty during adoption: {target_data}"
+            )
+        for staged in sorted(staged_data.iterdir(), key=lambda path: path.name):
+            target = target_data / staged.name
+            created.append(target)
+            staged.replace(target)
+    except BaseException:
+        for target in reversed(created):
+            if target.is_dir():
+                shutil.rmtree(target, ignore_errors=True)
+            else:
+                target.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+    return plan
+
+
+def rollback_adoption(plan: dict[str, object]) -> None:
+    """Remove state created by a failed adoption lifecycle transaction."""
+    target_data = Path(str(plan["target_persistent_data"]))
+    provenance = target_data / "adoption.json"
+    if not provenance.is_file():
+        return
+    for child in list(target_data.iterdir()):
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()

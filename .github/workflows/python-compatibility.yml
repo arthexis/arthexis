@@ -74,6 +74,11 @@ jobs:
         run: python -m compileall -q apps arthexis config tests manage.py
       - name: Management command import smoke
         run: python -m pytest -q tests/test_management_command_discovery.py
+      - name: Managed adoption lifecycle
+        run: >-
+          python -m pytest -q
+          apps/core/tests/test_adoption_preflight.py
+          apps/core/tests/test_adoption_execution.py
 
   compatibility:
     name: python / Python compatibility
