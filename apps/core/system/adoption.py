@@ -143,6 +143,10 @@ def inspect_adoption(
             )
         )
     else:
+        if sqlite_sidecars:
+            blockers.append(
+                "SQLite WAL/SHM sidecar state exists without db.sqlite3; restore or remove the orphan sidecars before adoption"
+            )
         transfers.append(
             _transfer_item(
                 "database",
