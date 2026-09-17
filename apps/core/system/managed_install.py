@@ -63,6 +63,6 @@ def install(
     )
     try:
         return lifecycle.install("--role", str(plan["role"]), layout=target)
-    except Exception:
+    except BaseException:
         rollback_adoption(plan)
         raise
