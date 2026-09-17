@@ -122,6 +122,24 @@ class AdoptionExecutionTests(SimpleTestCase):
             with sqlite3.connect(installed) as database:
                 self.assertEqual(database.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
+    def test_execution_refuses_orphan_sqlite_sidecars(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = _source(root)
+            (source / "db.sqlite3").unlink()
+            (source / "db.sqlite3-wal").write_text("orphan-wal", encoding="utf-8")
+            layout = _managed(root)
+
+            with mock.patch.object(
+                adoption,
+                "_git_inventory",
+                return_value=("abc123", "main", False),
+            ):
+                with self.assertRaisesRegex(
+                    adoption.AdoptionExecutionError, "sidecar state exists without db.sqlite3"
+                ):
+                    adoption.execute_adoption(source, target_root=layout.root)
+
     def test_execution_refuses_symlinked_transfer_content(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
