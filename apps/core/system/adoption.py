@@ -253,10 +253,22 @@ def inspect_adoption(
     }
 
 
+def _reject_symlinks(source: Path) -> None:
+    if source.is_symlink():
+        raise AdoptionExecutionError(f"adoption transfer source is a symlink: {source}")
+    if source.is_dir():
+        for child in source.rglob("*"):
+            if child.is_symlink():
+                raise AdoptionExecutionError(
+                    f"adoption transfer tree contains a symlink: {child}"
+                )
+
+
 def _copy_transfer(source: Path, target: Path) -> None:
+    _reject_symlinks(source)
     target.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
-        shutil.copytree(source, target, symlinks=True)
+        shutil.copytree(source, target)
     else:
         shutil.copy2(source, target)
 
