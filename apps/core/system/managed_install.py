@@ -51,6 +51,11 @@ def install(
             )
         return inspect_adoption(options.source, target_root=target.root)
 
+    if not target.checkout.is_dir() or not (target.root / ".venv").is_dir():
+        raise AdoptionArgumentError(
+            "adoption execution is not implemented outside a GWAY-created managed scaffold"
+        )
+
     plan = execute_adoption(
         options.source,
         target_root=target.root,
