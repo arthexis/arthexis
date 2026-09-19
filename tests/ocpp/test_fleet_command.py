@@ -106,7 +106,9 @@ class FleetCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, "not allowed with argument"):
             call_command("fleet", "--charging", "--idle")
 
-    def test_detail_mode_adds_richer_columns_without_changing_default_view(self) -> None:
+    def test_detail_mode_adds_richer_columns_without_changing_default_view(
+        self,
+    ) -> None:
         default_output = StringIO()
         call_command("fleet", stdout=default_output)
         default = default_output.getvalue()
