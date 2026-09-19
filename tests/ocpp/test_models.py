@@ -21,7 +21,6 @@ from apps.ocpp.domain.reservations import record_reservation
 from apps.ocpp.models import (
     CertificateRecord,
     Charger,
-    ChargerConnection,
     ChargerVariable,
     ChargingProfile,
     MonitoringRecord,
