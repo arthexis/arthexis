@@ -57,7 +57,9 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
     current = current_transaction(charger)
     last_completed = last_completed_transaction(charger)
     completed = [
-        transaction for transaction in transactions if transaction.stopped_at is not None
+        transaction
+        for transaction in transactions
+        if transaction.stopped_at is not None
     ]
     energy_values = [
         transaction.energy_kwh
@@ -86,9 +88,7 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         ),
         current_transaction_id=current.remote_id if current else None,
         current_transaction_started=current.started_at if current else None,
-        last_transaction_id=(
-            last_completed.remote_id if last_completed else None
-        ),
+        last_transaction_id=(last_completed.remote_id if last_completed else None),
         last_transaction_stopped=(
             last_completed.stopped_at if last_completed else None
         ),
