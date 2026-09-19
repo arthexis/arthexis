@@ -10,6 +10,7 @@ from apps.ocpp.protocol.v16.inbound import InboundActions as Inbound16Actions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.transport.connection import load_or_enroll_charger
+from tests.ocpp.builders import charger
 
 
 class ChargerEnrollmentTests(TestCase):
@@ -41,9 +42,9 @@ class ChargerEnrollmentTests(TestCase):
 
 class AuthorizationPolicyTests(TestCase):
     def setUp(self) -> None:
-        self.open_charger = Charger.objects.create(identity="charger-open")
-        self.restricted_charger = Charger.objects.create(
-            identity="charger-restricted",
+        self.open_charger = charger("charger-open")
+        self.restricted_charger = charger(
+            "charger-restricted",
             authorization_mode=Charger.AuthorizationMode.RESTRICTED,
         )
         self.card = CardCredential.objects.create(
