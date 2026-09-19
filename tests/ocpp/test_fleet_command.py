@@ -6,34 +6,24 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from apps.ocpp.management.charger.selection import select_chargers
-from apps.ocpp.models import Charger, ChargerConnection, OcppTransaction, StationModel
+from apps.ocpp.models import Charger
+from tests.ocpp.builders import charger, connection, station_model, transaction
 
 
 class FleetCommandTests(TestCase):
     def setUp(self) -> None:
-        station_model = StationModel.objects.create(
-            vendor="ACME",
-            model="Model",
-            preferred_protocol="ocpp1.6",
-        )
-        self.charger = Charger.objects.create(
-            identity="charger-1",
-            station_model=station_model,
-        )
-        ChargerConnection.objects.create(
-            charger=self.charger,
-            channel_name="fleet-channel",
-            protocol="ocpp1.6",
-        )
-        OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="transaction-last",
+        model = station_model(protocol="ocpp1.6")
+        self.charger = charger("charger-1", station=model)
+        connection(self.charger, channel_name="fleet-channel")
+        transaction(
+            self.charger,
+            "transaction-last",
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
             stopped_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
         )
-        OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="transaction-active",
+        transaction(
+            self.charger,
+            "transaction-active",
             started_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
         )
 
@@ -89,13 +79,9 @@ class FleetCommandTests(TestCase):
         self.assertIn("No chargers found.", rendered)
 
     def test_filters_compose_across_dimensions(self) -> None:
-        idle = Charger.objects.create(identity="charger-idle")
-        ChargerConnection.objects.create(
-            charger=idle,
-            channel_name="idle-channel",
-            protocol="ocpp1.6",
-        )
-        disabled = Charger.objects.create(identity="charger-disabled", active=False)
+        idle = charger("charger-idle")
+        connection(idle, channel_name="idle-channel")
+        disabled = charger("charger-disabled", active=False)
 
         output = StringIO()
         call_command("fleet", "--enabled", "--connected", stdout=output)
