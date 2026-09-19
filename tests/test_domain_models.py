@@ -7,14 +7,9 @@ from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount, EnergyTariff, LedgerEntry
 from apps.events.models import EventEnvelope
 from apps.nodes.models import Node, NodeLink, NodeRole
-from apps.ocpp.models import (
-    Charger,
-    Connector,
-    MeterValue,
-    OcppTransaction,
-    StationModel,
-)
+from apps.ocpp.models import MeterValue
 from apps.sigils.models import SigilRoot
+from tests.ocpp.builders import charger, connector, station_model, transaction
 
 
 class DomainModelTests(TestCase):
@@ -43,21 +38,19 @@ class DomainModelTests(TestCase):
         ledger = LedgerEntry.objects.create(
             account=account, delta_kwh=Decimal("10"), source="purchase"
         )
-        station_model = StationModel.objects.create(vendor="ACME", model="Wallbox")
-        charger = Charger.objects.create(
-            identity="charger-1", station_model=station_model
-        )
-        connector = Connector.objects.create(charger=charger, number=1)
-        transaction = OcppTransaction.objects.create(
-            charger=charger,
-            connector=connector,
+        model = station_model(model="Wallbox")
+        selected_charger = charger("charger-1", station=model)
+        selected_connector = connector(selected_charger, number=1)
+        selected_transaction = transaction(
+            selected_charger,
+            "transaction-1",
+            connector=selected_connector,
             account=account,
-            remote_id="transaction-1",
             id_tag=card.ocpp_id_tag,
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         meter = MeterValue.objects.create(
-            transaction=transaction,
+            transaction=selected_transaction,
             sampled_at=datetime(2026, 1, 1, 0, 5, tzinfo=UTC),
             value=Decimal("1.5"),
         )
@@ -69,6 +62,6 @@ class DomainModelTests(TestCase):
         )
 
         self.assertEqual(account.ledger_entries.get(), ledger)
-        self.assertEqual(transaction.meter_values.get(), meter)
+        self.assertEqual(selected_transaction.meter_values.get(), meter)
         self.assertEqual(event.payload["accepted"], True)
         self.assertEqual(root.context_type, "energy.CustomerAccount")
