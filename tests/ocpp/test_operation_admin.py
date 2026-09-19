@@ -2,8 +2,9 @@ from django.contrib.admin.sites import site
 from django.test import TestCase
 
 from apps.ocpp.admin.operations import ProtocolOperationAdmin
-from apps.ocpp.models import Charger, ProtocolOperation
+from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
+from tests.ocpp.builders import charger
 
 
 class ProtocolOperationAdminTests(TestCase):
@@ -11,7 +12,7 @@ class ProtocolOperationAdminTests(TestCase):
         self,
     ) -> None:
         operation = ProtocolOperation.objects.create(
-            charger=Charger.objects.create(identity="charger-1"),
+            charger=charger("charger-1"),
             version=ProtocolVersion.OCPP_16,
             direction=Direction.CSMS_TO_CHARGE_POINT,
             action="Reset",
