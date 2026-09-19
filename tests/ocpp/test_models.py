@@ -32,11 +32,12 @@ from apps.ocpp.models import (
     Reservation,
 )
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
+from tests.ocpp.builders import charger, connection, transaction
 
 
 class OcppPersistenceTests(TestCase):
     def setUp(self) -> None:
-        self.charger = Charger.objects.create(identity="charger-1")
+        self.charger = charger("charger-1")
 
     def test_charger_uses_identity_as_its_natural_key(self) -> None:
         self.assertEqual(self.charger.natural_key(), ("charger-1",))
@@ -48,22 +49,18 @@ class OcppPersistenceTests(TestCase):
     def test_charger_queryset_separates_enabled_connected_and_charging_state(
         self,
     ) -> None:
-        disabled = Charger.objects.create(identity="charger-disabled", active=False)
-        connected_idle = Charger.objects.create(identity="charger-idle")
-        connected_charging = Charger.objects.create(identity="charger-charging")
-        ChargerConnection.objects.create(
-            charger=connected_idle,
-            channel_name="idle-channel",
-            protocol="ocpp1.6",
-        )
-        ChargerConnection.objects.create(
-            charger=connected_charging,
+        disabled = charger("charger-disabled", active=False)
+        connected_idle = charger("charger-idle")
+        connected_charging = charger("charger-charging")
+        connection(connected_idle, channel_name="idle-channel", protocol="ocpp1.6")
+        connection(
+            connected_charging,
             channel_name="charging-channel",
             protocol="ocpp2.0.1",
         )
-        OcppTransaction.objects.create(
-            charger=connected_charging,
-            remote_id="active-transaction",
+        transaction(
+            connected_charging,
+            "active-transaction",
             started_at=datetime(2026, 9, 19, tzinfo=UTC),
         )
 
@@ -93,25 +90,25 @@ class OcppPersistenceTests(TestCase):
         )
 
     def test_transaction_queries_and_read_helpers_are_deterministic(self) -> None:
-        first = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="first",
+        first = transaction(
+            self.charger,
+            "first",
             started_at=datetime(2026, 9, 19, 10, tzinfo=UTC),
             stopped_at=datetime(2026, 9, 19, 11, tzinfo=UTC),
         )
-        active_older = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="active-older",
+        active_older = transaction(
+            self.charger,
+            "active-older",
             started_at=datetime(2026, 9, 19, 12, tzinfo=UTC),
         )
-        active_newer = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="active-newer",
+        active_newer = transaction(
+            self.charger,
+            "active-newer",
             started_at=datetime(2026, 9, 19, 13, tzinfo=UTC),
         )
-        completed_newer = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="completed-newer",
+        completed_newer = transaction(
+            self.charger,
+            "completed-newer",
             started_at=datetime(2026, 9, 19, 14, tzinfo=UTC),
             stopped_at=datetime(2026, 9, 19, 15, tzinfo=UTC),
         )
@@ -135,16 +132,8 @@ class OcppPersistenceTests(TestCase):
         self,
     ) -> None:
         timestamp = datetime(2026, 9, 19, 12, tzinfo=UTC)
-        older_pk = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="tie-1",
-            started_at=timestamp,
-        )
-        newer_pk = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="tie-2",
-            started_at=timestamp,
-        )
+        older_pk = transaction(self.charger, "tie-1", started_at=timestamp)
+        newer_pk = transaction(self.charger, "tie-2", started_at=timestamp)
 
         self.assertEqual(
             list(OcppTransaction.objects.recent()),
