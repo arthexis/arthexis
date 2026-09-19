@@ -9,6 +9,21 @@ from apps.energy.models import CustomerAccount
 from apps.ocpp.models import Charger, Connector, MeterValue, OcppTransaction
 
 
+def current_transaction(charger: Charger) -> OcppTransaction | None:
+    """Return the most recently started active transaction for one charger."""
+    return charger.transactions.active().recent().first()
+
+
+def last_transaction(charger: Charger) -> OcppTransaction | None:
+    """Return the most recently started transaction for one charger."""
+    return charger.transactions.recent().first()
+
+
+def last_completed_transaction(charger: Charger) -> OcppTransaction | None:
+    """Return the most recently started completed transaction for one charger."""
+    return charger.transactions.completed().recent().first()
+
+
 def start_transaction(
     *,
     charger: Charger,
