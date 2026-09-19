@@ -11,6 +11,11 @@ from apps.ocpp.domain.notifications import (
     record_operational_status,
 )
 from apps.ocpp.domain.operations import complete_operation, create_operation
+from apps.ocpp.domain.sessions import (
+    current_transaction,
+    last_completed_transaction,
+    last_transaction,
+)
 from apps.ocpp.domain.profiles import record_profile
 from apps.ocpp.domain.reservations import record_reservation
 from apps.ocpp.models import (
@@ -86,6 +91,71 @@ class OcppPersistenceTests(TestCase):
             Charger.objects.idle(),
             [connected_idle],
         )
+
+    def test_transaction_queries_and_read_helpers_are_deterministic(self) -> None:
+        first = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="first",
+            started_at=datetime(2026, 9, 19, 10, tzinfo=UTC),
+            stopped_at=datetime(2026, 9, 19, 11, tzinfo=UTC),
+        )
+        active_older = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="active-older",
+            started_at=datetime(2026, 9, 19, 12, tzinfo=UTC),
+        )
+        active_newer = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="active-newer",
+            started_at=datetime(2026, 9, 19, 13, tzinfo=UTC),
+        )
+        completed_newer = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="completed-newer",
+            started_at=datetime(2026, 9, 19, 14, tzinfo=UTC),
+            stopped_at=datetime(2026, 9, 19, 15, tzinfo=UTC),
+        )
+
+        self.assertQuerySetEqual(
+            OcppTransaction.objects.active().recent(),
+            [active_newer, active_older],
+        )
+        self.assertQuerySetEqual(
+            OcppTransaction.objects.completed().recent(),
+            [completed_newer, first],
+        )
+        self.assertEqual(current_transaction(self.charger), active_newer)
+        self.assertEqual(last_transaction(self.charger), completed_newer)
+        self.assertEqual(
+            last_completed_transaction(self.charger),
+            completed_newer,
+        )
+
+    def test_transaction_recency_uses_primary_key_to_break_timestamp_ties(
+        self,
+    ) -> None:
+        timestamp = datetime(2026, 9, 19, 12, tzinfo=UTC)
+        older_pk = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="tie-1",
+            started_at=timestamp,
+        )
+        newer_pk = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="tie-2",
+            started_at=timestamp,
+        )
+
+        self.assertEqual(
+            list(OcppTransaction.objects.recent()),
+            [newer_pk, older_pk],
+        )
+        self.assertEqual(current_transaction(self.charger), newer_pk)
+
+    def test_transaction_read_helpers_return_none_without_transactions(self) -> None:
+        self.assertIsNone(current_transaction(self.charger))
+        self.assertIsNone(last_transaction(self.charger))
+        self.assertIsNone(last_completed_transaction(self.charger))
 
     def test_matrix_records_are_owned_by_small_domain_services(self) -> None:
         operation = create_operation(
