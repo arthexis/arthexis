@@ -1,0 +1,40 @@
+"""Persisted outbound OCPP operation and correlation outcomes."""
+
+import uuid
+
+from django.db import models
+
+from apps.ocpp.models.assets import Charger
+
+
+class ProtocolOperation(models.Model):
+    class Direction(models.TextChoices):
+        CHARGE_POINT_TO_CSMS = "charge_point_to_csms", "Charge point to CSMS"
+        CSMS_TO_CHARGE_POINT = "csms_to_charge_point", "CSMS to charge point"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        ERRORED = "errored", "Errored"
+        TIMED_OUT = "timed_out", "Timed out"
+        DISCONNECTED = "disconnected", "Disconnected"
+
+    charger = models.ForeignKey(
+        Charger, on_delete=models.CASCADE, related_name="protocol_operations"
+    )
+    version = models.CharField(max_length=12)
+    direction = models.CharField(max_length=24, choices=Direction.choices)
+    action = models.CharField(max_length=80)
+    unique_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    request_payload = models.JSONField(default=dict)
+    response_payload = models.JSONField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    error_code = models.CharField(max_length=80, blank=True)
+    error_description = models.CharField(max_length=240, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("charger", "status", "created_at"))]

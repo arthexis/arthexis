@@ -1,0 +1,22 @@
+[project]
+name = "arthexis"
+version = "2.0.0.dev0"
+requires-python = ">=3.11"
+dependencies = [
+    "Django==5.2.12",
+    "celery==5.5.3",
+    "channels==4.3.2",
+    "channels_redis==4.3.0",
+    "daphne==4.2.1",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+exclude = ["**/migrations/**"]
+
+[tool.ruff.lint]
+select = ["E9", "F823", "I", "UP", "B904"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

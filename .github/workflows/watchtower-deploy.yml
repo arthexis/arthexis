@@ -1,0 +1,46 @@
+name: Watchtower Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Rebuild branch to attest for GWAY deployment
+        required: true
+        default: arthexis-rebuild
+        type: string
+
+concurrency:
+  group: watchtower-deploy-${{ inputs.target_ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    if: github.repository == 'arthexis/arthexis'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.target_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Attest a fresh clone-local install
+        env:
+          ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-watchtower
+        run: |
+          ./install.sh
+          .venv/bin/python manage.py check --fail-level ERROR
+          .venv/bin/python manage.py ocpp_matrix
+          git rev-parse HEAD | tee "${RUNNER_TEMP}/arthexis-rebuild-sha.txt"
+      - name: Upload deployment evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: watchtower-deploy-${{ github.run_id }}
+          path: ${{ runner.temp }}/arthexis-rebuild-sha.txt
+          if-no-files-found: error

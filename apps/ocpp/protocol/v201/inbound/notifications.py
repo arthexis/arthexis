@@ -1,0 +1,82 @@
+"""OCPP 2.0.1 notification, status, limit, and reservation handlers."""
+
+from collections.abc import Awaitable, Callable
+
+from asgiref.sync import sync_to_async
+
+from apps.ocpp.domain.notifications import (
+    record_notification,
+    record_operational_status,
+)
+from apps.ocpp.models import Charger, OperationalStatusRecord
+
+Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
+
+
+class NotificationActions:
+    """Persist retained OCPP 2.0.1 notifications without initiating work."""
+
+    def __init__(self, charger: Charger) -> None:
+        self.charger = charger
+        self.handlers: dict[str, Handler] = {
+            "ClearedChargingLimit": self._acknowledge("ClearedChargingLimit"),
+            "CostUpdated": self._acknowledge("CostUpdated"),
+            "DataTransfer": self.data_transfer,
+            "FirmwareStatusNotification": self.firmware_status,
+            "LogStatusNotification": self.log_status,
+            "NotifyChargingLimit": self._acknowledge("NotifyChargingLimit"),
+            "NotifyCustomerInformation": self._acknowledge("NotifyCustomerInformation"),
+            "NotifyDisplayMessages": self._acknowledge("NotifyDisplayMessages"),
+            "NotifyEVChargingNeeds": self._acknowledge("NotifyEVChargingNeeds"),
+            "NotifyEVChargingSchedule": self._acknowledge("NotifyEVChargingSchedule"),
+            "NotifyEvent": self._acknowledge("NotifyEvent"),
+            "PublishFirmwareStatusNotification": self.firmware_status,
+            "ReservationStatusUpdate": self._acknowledge("ReservationStatusUpdate"),
+            "SecurityEventNotification": self._acknowledge("SecurityEventNotification"),
+        }
+
+    async def data_transfer(self, payload: dict[str, object]) -> dict[str, object]:
+        _required_text(payload, "vendorId")
+        await self._record("DataTransfer", payload)
+        return {"status": "Accepted"}
+
+    async def firmware_status(self, payload: dict[str, object]) -> dict[str, object]:
+        status = _required_text(payload, "status")
+        await sync_to_async(record_operational_status)(
+            charger=self.charger,
+            kind=OperationalStatusRecord.Kind.FIRMWARE,
+            status=status,
+            payload=payload,
+        )
+        return {}
+
+    async def log_status(self, payload: dict[str, object]) -> dict[str, object]:
+        status = _required_text(payload, "status")
+        await sync_to_async(record_operational_status)(
+            charger=self.charger,
+            kind=OperationalStatusRecord.Kind.LOG,
+            status=status,
+            payload=payload,
+        )
+        return {}
+
+    def _acknowledge(self, action: str) -> Handler:
+        async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
+            await self._record(action, payload)
+            return {}
+
+        return acknowledge
+
+    async def _record(self, action: str, payload: dict[str, object]) -> None:
+        await sync_to_async(record_notification)(
+            charger=self.charger,
+            action=action,
+            payload=payload,
+        )
+
+
+def _required_text(payload: dict[str, object], name: str) -> str:
+    value = payload.get(name)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} is required")
+    return value

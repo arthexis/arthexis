@@ -1,0 +1,55 @@
+name: Watchtower Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Rebuild branch to diagnose
+        required: true
+        default: arthexis-rebuild
+        type: string
+      mode:
+        description: Evidence action
+        required: true
+        default: diagnose
+        type: choice
+        options: [diagnose, rebuild-test]
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    if: github.repository == 'arthexis/arthexis'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.target_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Capture repository diagnostics
+        run: |
+          {
+            echo "mode=${{ inputs.mode }}"
+            git rev-parse HEAD
+            git status --short
+            python --version
+            python manage.py check --fail-level ERROR
+          } | tee "${RUNNER_TEMP}/watchtower-recovery.txt"
+      - name: Rebuild test installation
+        if: inputs.mode == 'rebuild-test'
+        env:
+          ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-recovery
+        run: ./install.sh
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: watchtower-recovery-${{ github.run_id }}
+          path: ${{ runner.temp }}/watchtower-recovery.txt
+          if-no-files-found: warn
