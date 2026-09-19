@@ -18,7 +18,11 @@ def current_transaction(charger: Charger) -> OcppTransaction | None:
     prefetched = _prefetched_transactions(charger)
     if prefetched is not None:
         return next(
-            (transaction for transaction in prefetched if transaction.stopped_at is None),
+            (
+                transaction
+                for transaction in prefetched
+                if transaction.stopped_at is None
+            ),
             None,
         )
     return charger.transactions.active().recent().first()
