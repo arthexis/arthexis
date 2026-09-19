@@ -26,10 +26,19 @@ class StationModel(models.Model):
         return f"{self.vendor} {self.model}"
 
 
+class ChargerManager(models.Manager):
+    """Django-native natural-key lookup for chargers."""
+
+    def get_by_natural_key(self, identity: str):
+        return self.get(identity=identity)
+
+
 class Charger(models.Model):
     class AuthorizationMode(models.TextChoices):
         OPEN = "open", "Open"
         RESTRICTED = "restricted", "Restricted"
+
+    objects = ChargerManager()
 
     identity = models.CharField(max_length=120, unique=True)
     connection_token_hash = models.CharField(max_length=128, blank=True)
@@ -58,6 +67,9 @@ class Charger(models.Model):
 
     def __str__(self) -> str:
         return self.identity
+
+    def natural_key(self) -> tuple[str]:
+        return (self.identity,)
 
     @classmethod
     async def reset(
