@@ -1,9 +1,8 @@
 """Charger selection rules shared by the operator command surface."""
 
+from apps.ocpp.models import Charger
 from django.core.management.base import CommandError
 from django.db.models.query import QuerySet
-
-from apps.ocpp.models import Charger
 
 
 FLEET_FILTERS = frozenset(
