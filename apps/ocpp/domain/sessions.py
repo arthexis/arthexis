@@ -9,18 +9,41 @@ from apps.energy.models import CustomerAccount
 from apps.ocpp.models import Charger, Connector, MeterValue, OcppTransaction
 
 
+def _prefetched_transactions(charger: Charger) -> list[OcppTransaction] | None:
+    return getattr(charger, "_prefetched_transactions", None)
+
+
 def current_transaction(charger: Charger) -> OcppTransaction | None:
     """Return the most recently started active transaction for one charger."""
+    prefetched = _prefetched_transactions(charger)
+    if prefetched is not None:
+        return next(
+            (transaction for transaction in prefetched if transaction.stopped_at is None),
+            None,
+        )
     return charger.transactions.active().recent().first()
 
 
 def last_transaction(charger: Charger) -> OcppTransaction | None:
     """Return the most recently started transaction for one charger."""
+    prefetched = _prefetched_transactions(charger)
+    if prefetched is not None:
+        return prefetched[0] if prefetched else None
     return charger.transactions.recent().first()
 
 
 def last_completed_transaction(charger: Charger) -> OcppTransaction | None:
     """Return the most recently started completed transaction for one charger."""
+    prefetched = _prefetched_transactions(charger)
+    if prefetched is not None:
+        return next(
+            (
+                transaction
+                for transaction in prefetched
+                if transaction.stopped_at is not None
+            ),
+            None,
+        )
     return charger.transactions.completed().recent().first()
 
 
