@@ -31,6 +31,13 @@ class OcppPersistenceTests(TestCase):
     def setUp(self) -> None:
         self.charger = Charger.objects.create(identity="charger-1")
 
+    def test_charger_uses_identity_as_its_natural_key(self) -> None:
+        self.assertEqual(self.charger.natural_key(), ("charger-1",))
+        self.assertEqual(
+            Charger.objects.get_by_natural_key("charger-1"),
+            self.charger,
+        )
+
     def test_matrix_records_are_owned_by_small_domain_services(self) -> None:
         operation = create_operation(
             charger=self.charger,
