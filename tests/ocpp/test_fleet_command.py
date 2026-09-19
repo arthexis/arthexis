@@ -5,6 +5,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from apps.ocpp.management.charger.selection import select_chargers
 from apps.ocpp.models import Charger, ChargerConnection, OcppTransaction, StationModel
 
 
@@ -141,3 +142,14 @@ class FleetCommandTests(TestCase):
         self.assertIn("Unresolved", detail)
         self.assertIn("transaction-active", detail)
         self.assertIn("transaction-last", detail)
+
+
+    def test_selection_rejects_unknown_filter_names(self) -> None:
+        with self.assertRaisesMessage(CommandError, "Unknown fleet filter"):
+            list(
+                select_chargers(
+                    identities=[],
+                    select_all=False,
+                    filters=("reset",),
+                )
+            )
