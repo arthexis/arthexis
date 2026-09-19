@@ -23,10 +23,40 @@ class Command(BaseCommand):
             action="store_true",
             help="Explicitly select all configured chargers.",
         )
+        for first, second in (
+            ("enabled", "disabled"),
+            ("connected", "disconnected"),
+            ("charging", "idle"),
+        ):
+            group = parser.add_mutually_exclusive_group()
+            group.add_argument(f"--{first}", action="store_true")
+            group.add_argument(f"--{second}", action="store_true")
+        parser.add_argument(
+            "--detail",
+            action="store_true",
+            help="Include connector, transaction timing, and energy detail.",
+        )
 
     def handle(self, *args, **options) -> None:
+        filters = tuple(
+            name
+            for name in (
+                "enabled",
+                "disabled",
+                "connected",
+                "disconnected",
+                "charging",
+                "idle",
+            )
+            if options[name]
+        )
         chargers = select_chargers(
             identities=options["charger"],
             select_all=options["all"],
+            filters=filters,
         )
-        render_snapshots(self, snapshot_chargers(chargers))
+        render_snapshots(
+            self,
+            snapshot_chargers(chargers),
+            detail=options["detail"],
+        )
