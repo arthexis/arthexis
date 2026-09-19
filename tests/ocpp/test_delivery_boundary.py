@@ -2,13 +2,15 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.ocpp.domain.operations import create_operation
-from apps.ocpp.models import Charger, ChargerConnection, ProtocolOperation
+from apps.ocpp.models import ChargerConnection, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.errors import (
     ConnectionClosed,
     OutboundCallError,
     OutboundCallTimeout,
 )
+from tests.ocpp.builders import charger, connection
+
 from apps.ocpp.transport.operations import (
     ExplicitDeliveryUnavailable,
     ProtocolVersionMismatch,
@@ -51,7 +53,7 @@ class OutcomeSender:
 
 class DeliveryBoundaryTests(TestCase):
     def setUp(self) -> None:
-        self.charger = Charger.objects.create(identity="charger-1")
+        self.charger = charger("charger-1")
 
     def tearDown(self) -> None:
         active_connections.unregister(self.charger)
@@ -92,11 +94,7 @@ class DeliveryBoundaryTests(TestCase):
     def test_explicit_delivery_fails_closed_without_a_shared_channel_layer(
         self,
     ) -> None:
-        ChargerConnection.objects.create(
-            charger=self.charger,
-            channel_name="specific.channel",
-            protocol="ocpp1.6",
-        )
+        connection(self.charger, channel_name="specific.channel")
 
         with self.assertRaises(ExplicitDeliveryUnavailable):
             async_to_sync(request_explicit_operation)(
