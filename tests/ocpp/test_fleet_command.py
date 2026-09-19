@@ -77,7 +77,6 @@ class FleetCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, "unrecognized arguments: reset"):
             call_command("fleet", "reset", "--charger", self.charger.identity)
 
-
     def test_command_is_one_shot_and_handles_an_empty_fleet(self) -> None:
         Charger.objects.all().delete()
         output = StringIO()
@@ -87,7 +86,6 @@ class FleetCommandTests(TestCase):
         rendered = output.getvalue()
         self.assertEqual(rendered.count("Fleet snapshot:"), 1)
         self.assertIn("No chargers found.", rendered)
-
 
     def test_filters_compose_across_dimensions(self) -> None:
         idle = Charger.objects.create(identity="charger-idle")
