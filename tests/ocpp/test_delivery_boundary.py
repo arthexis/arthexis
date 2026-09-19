@@ -9,8 +9,6 @@ from apps.ocpp.protocol.errors import (
     OutboundCallError,
     OutboundCallTimeout,
 )
-from tests.ocpp.builders import charger, connection
-
 from apps.ocpp.transport.operations import (
     ExplicitDeliveryUnavailable,
     ProtocolVersionMismatch,
@@ -20,6 +18,7 @@ from apps.ocpp.transport.operations import (
     request_explicit_operation,
     unregister_connection,
 )
+from tests.ocpp.builders import charger, connection
 
 
 class SuccessfulSender:
@@ -107,11 +106,7 @@ class DeliveryBoundaryTests(TestCase):
         self.assertFalse(ProtocolOperation.objects.exists())
 
     def test_explicit_delivery_rejects_a_live_protocol_mismatch(self) -> None:
-        ChargerConnection.objects.create(
-            charger=self.charger,
-            channel_name="specific.channel",
-            protocol="ocpp1.6",
-        )
+        connection(self.charger, channel_name="specific.channel")
 
         with self.assertRaises(ProtocolVersionMismatch):
             async_to_sync(request_explicit_operation)(
