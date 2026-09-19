@@ -4,7 +4,6 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.ocpp.domain.snapshots import snapshot_charger, snapshot_chargers
-from apps.ocpp.models import Charger
 from tests.ocpp.builders import charger, connection, connector, station_model, transaction
 
 
@@ -73,7 +72,6 @@ class ChargerSnapshotTests(TestCase):
         self.assertIsNone(snapshot.current_transaction_started)
         self.assertIsNone(snapshot.last_transaction_id)
         self.assertIsNone(snapshot.last_transaction_stopped)
-
 
     def test_snapshot_state_precedence_distinguishes_disabled_idle_and_charging(
         self,
