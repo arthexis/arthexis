@@ -99,13 +99,7 @@ class Charger(models.Model):
     async def reset(
         cls, charger: "Charger", *, hard: bool = False, timeout: float = 30
     ):
-        """Request a graceful or immediate reset for one selected charger.
-
-        The explicit ``charger`` argument lets GWAY pipe a manager lookup into
-        this model operation, for example ``get charger --identity depot-a -
-        reset``.  Delivery remains explicit and is rejected unless the shared
-        live-consumer channel is available.
-        """
+        """Request a graceful or immediate reset for one selected charger."""
         version = await sync_to_async(cls._configured_protocol)(charger)
         payload = (
             {"type": "Hard" if hard else "Soft"}
