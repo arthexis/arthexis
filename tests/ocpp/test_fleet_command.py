@@ -87,3 +87,59 @@ class FleetCommandTests(TestCase):
         rendered = output.getvalue()
         self.assertEqual(rendered.count("Fleet snapshot:"), 1)
         self.assertIn("No chargers found.", rendered)
+
+
+    def test_filters_compose_across_dimensions(self) -> None:
+        idle = Charger.objects.create(identity="charger-idle")
+        ChargerConnection.objects.create(
+            charger=idle,
+            channel_name="idle-channel",
+            protocol="ocpp1.6",
+        )
+        disabled = Charger.objects.create(identity="charger-disabled", active=False)
+
+        output = StringIO()
+        call_command("fleet", "--enabled", "--connected", stdout=output)
+        rendered = output.getvalue()
+
+        self.assertIn(self.charger.identity, rendered)
+        self.assertIn(idle.identity, rendered)
+        self.assertNotIn(disabled.identity, rendered)
+
+        output = StringIO()
+        call_command("fleet", "--idle", stdout=output)
+        rendered = output.getvalue()
+
+        self.assertIn(idle.identity, rendered)
+        self.assertNotIn(self.charger.identity, rendered)
+
+    def test_opposing_filters_are_mutually_exclusive(self) -> None:
+        with self.assertRaisesMessage(CommandError, "not allowed with argument"):
+            call_command("fleet", "--enabled", "--disabled")
+        with self.assertRaisesMessage(CommandError, "not allowed with argument"):
+            call_command("fleet", "--connected", "--disconnected")
+        with self.assertRaisesMessage(CommandError, "not allowed with argument"):
+            call_command("fleet", "--charging", "--idle")
+
+    def test_detail_mode_adds_richer_columns_without_changing_default_view(self) -> None:
+        default_output = StringIO()
+        call_command("fleet", stdout=default_output)
+        default = default_output.getvalue()
+
+        self.assertNotIn("Connectors", default)
+        self.assertNotIn("Active since", default)
+        self.assertNotIn("Last stopped", default)
+        self.assertNotIn("Energy total", default)
+        self.assertNotIn("Unresolved", default)
+
+        detail_output = StringIO()
+        call_command("fleet", "--detail", stdout=detail_output)
+        detail = detail_output.getvalue()
+
+        self.assertIn("Connectors", detail)
+        self.assertIn("Active since", detail)
+        self.assertIn("Last stopped", detail)
+        self.assertIn("Energy total", detail)
+        self.assertIn("Unresolved", detail)
+        self.assertIn("transaction-active", detail)
+        self.assertIn("transaction-last", detail)
