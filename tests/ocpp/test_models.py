@@ -16,9 +16,11 @@ from apps.ocpp.domain.reservations import record_reservation
 from apps.ocpp.models import (
     CertificateRecord,
     Charger,
+    ChargerConnection,
     ChargerVariable,
     ChargingProfile,
     MonitoringRecord,
+    OcppTransaction,
     NotificationRecord,
     OperationalStatusRecord,
     ProtocolOperation,
@@ -36,6 +38,53 @@ class OcppPersistenceTests(TestCase):
         self.assertEqual(
             Charger.objects.get_by_natural_key("charger-1"),
             self.charger,
+        )
+
+    def test_charger_queryset_separates_enabled_connected_and_charging_state(
+        self,
+    ) -> None:
+        disabled = Charger.objects.create(identity="charger-disabled", active=False)
+        connected_idle = Charger.objects.create(identity="charger-idle")
+        connected_charging = Charger.objects.create(identity="charger-charging")
+        ChargerConnection.objects.create(
+            charger=connected_idle,
+            channel_name="idle-channel",
+            protocol="ocpp1.6",
+        )
+        ChargerConnection.objects.create(
+            charger=connected_charging,
+            channel_name="charging-channel",
+            protocol="ocpp2.0.1",
+        )
+        OcppTransaction.objects.create(
+            charger=connected_charging,
+            remote_id="active-transaction",
+            started_at=datetime(2026, 9, 19, tzinfo=UTC),
+        )
+
+        self.assertQuerySetEqual(
+            Charger.objects.enabled().order_by("identity"),
+            [self.charger, connected_charging, connected_idle],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.disabled(),
+            [disabled],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.connected().order_by("identity"),
+            [connected_charging, connected_idle],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.disconnected().order_by("identity"),
+            [self.charger, disabled],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.charging(),
+            [connected_charging],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.idle(),
+            [connected_idle],
         )
 
     def test_matrix_records_are_owned_by_small_domain_services(self) -> None:
