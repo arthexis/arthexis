@@ -45,9 +45,9 @@ class ChargerQuerySet(models.QuerySet):
         return self.filter(transactions__stopped_at__isnull=True).distinct()
 
     def idle(self):
-        return self.connected().exclude(
-            transactions__stopped_at__isnull=True
-        ).distinct()
+        return (
+            self.connected().exclude(transactions__stopped_at__isnull=True).distinct()
+        )
 
 
 class ChargerManager(models.Manager.from_queryset(ChargerQuerySet)):
