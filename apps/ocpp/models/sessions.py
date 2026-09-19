@@ -5,7 +5,22 @@ from django.db import models
 from apps.ocpp.models.assets import Charger, Connector
 
 
+class OcppTransactionQuerySet(models.QuerySet):
+    """Reusable retained-transaction selections."""
+
+    def active(self):
+        return self.filter(stopped_at__isnull=True)
+
+    def completed(self):
+        return self.filter(stopped_at__isnull=False)
+
+    def recent(self):
+        return self.order_by("-started_at", "-pk")
+
+
 class OcppTransaction(models.Model):
+    objects = OcppTransactionQuerySet.as_manager()
+
     charger = models.ForeignKey(
         Charger, on_delete=models.CASCADE, related_name="transactions"
     )
