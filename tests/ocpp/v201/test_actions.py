@@ -8,6 +8,7 @@ from apps.ocpp.protocol.v201.inbound import InboundActions
 from apps.ocpp.protocol.v201.outbound import VALIDATORS, validate_outbound
 from apps.ocpp.transport.operations import active_connections, emit_v201_operation
 from tests.ocpp.builders import charger
+from tests.ocpp.fakes import RecordingSender
 
 VALID_PAYLOADS = {
     "CancelReservation": {"reservationId": 1},
@@ -95,29 +96,6 @@ INBOUND_PAYLOADS = {
 }
 
 
-class SuccessfulSender:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
-
-    async def send(
-        self,
-        *,
-        action: str,
-        payload: dict[str, object],
-        timeout: float = 30,
-        unique_id: str | None = None,
-    ) -> dict[str, object]:
-        self.calls.append(
-            {
-                "action": action,
-                "payload": payload,
-                "timeout": timeout,
-                "unique_id": unique_id,
-            }
-        )
-        return {"status": "Accepted"}
-
-
 class Ocpp201ActionTests(TestCase):
     def setUp(self) -> None:
         self.charger = charger("charger-201")
@@ -151,7 +129,7 @@ class Ocpp201ActionTests(TestCase):
                 async_to_sync(handlers[action])(payload)
 
     def test_explicit_outbound_operation_records_its_correlated_result(self) -> None:
-        sender = SuccessfulSender()
+        sender = RecordingSender()
         active_connections.register(self.charger, sender)
 
         operation = async_to_sync(emit_v201_operation)(
