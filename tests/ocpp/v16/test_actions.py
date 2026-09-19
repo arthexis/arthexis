@@ -2,7 +2,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.cards.models import CardCredential
-from apps.ocpp.models import Charger, Connector, OcppTransaction, ProtocolOperation
+from apps.ocpp.models import Connector, OcppTransaction, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
@@ -11,6 +11,7 @@ from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v16.outbound import VALIDATORS, validate_outbound
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.operations import active_connections, emit_v16_operation
+from tests.ocpp.builders import charger
 
 VALID_PAYLOADS = {
     "CancelReservation": {"reservationId": 1},
@@ -67,7 +68,7 @@ class SuccessfulSender:
 
 class Ocpp16ActionTests(TestCase):
     def setUp(self) -> None:
-        self.charger = Charger.objects.create(identity="charger-1")
+        self.charger = charger("charger-1")
         self.card = CardCredential.objects.create(
             external_id="card-1",
             ocpp_id_tag="card-tag",
