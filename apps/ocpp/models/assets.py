@@ -26,8 +26,32 @@ class StationModel(models.Model):
         return f"{self.vendor} {self.model}"
 
 
-class ChargerManager(models.Manager):
-    """Django-native natural-key lookup for chargers."""
+class ChargerQuerySet(models.QuerySet):
+    """Composable operational selections for charger fleet state."""
+
+    def enabled(self):
+        return self.filter(active=True)
+
+    def disabled(self):
+        return self.filter(active=False)
+
+    def connected(self):
+        return self.filter(connection__isnull=False)
+
+    def disconnected(self):
+        return self.filter(connection__isnull=True)
+
+    def charging(self):
+        return self.filter(transactions__stopped_at__isnull=True).distinct()
+
+    def idle(self):
+        return self.connected().exclude(
+            transactions__stopped_at__isnull=True
+        ).distinct()
+
+
+class ChargerManager(models.Manager.from_queryset(ChargerQuerySet)):
+    """Django-native manager for charger identity and fleet selections."""
 
     def get_by_natural_key(self, identity: str):
         return self.get(identity=identity)
