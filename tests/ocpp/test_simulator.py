@@ -1,16 +1,16 @@
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
-from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ALL_ACTIONS
 from apps.ocpp.simulator import run_v16_scenario, run_v201_scenario
+from tests.ocpp.builders import charger
 
 
 class OcppSimulatorTests(TestCase):
     def test_v16_protocol_client_exercises_every_retained_inbound_action(self) -> None:
         completed = async_to_sync(run_v16_scenario)(
-            Charger.objects.create(identity="simulator-v16")
+            charger("simulator-v16")
         )
 
         self.assertEqual(set(completed), self._inbound_actions(ProtocolVersion.OCPP_16))
@@ -18,7 +18,7 @@ class OcppSimulatorTests(TestCase):
 
     def test_v201_protocol_client_exercises_every_retained_inbound_action(self) -> None:
         completed = async_to_sync(run_v201_scenario)(
-            Charger.objects.create(identity="simulator-v201")
+            charger("simulator-v201")
         )
 
         self.assertEqual(
