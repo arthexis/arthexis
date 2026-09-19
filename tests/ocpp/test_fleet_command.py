@@ -44,7 +44,7 @@ class FleetCommandTests(TestCase):
             call_command("fleet", "--charger", "missing")
         with self.assertRaisesMessage(CommandError, "only once"):
             call_command(
-                "charger",
+                "fleet",
                 "--charger",
                 self.charger.identity,
                 "--charger",
