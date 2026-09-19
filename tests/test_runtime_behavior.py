@@ -24,6 +24,7 @@ from apps.ocpp.models import (
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.tasks import refresh_stale_connections
 from arthexis.asgi import application
+from tests.ocpp.builders import charger
 
 
 class RuntimeBehaviorTests(TestCase):
@@ -34,8 +35,8 @@ class RuntimeBehaviorTests(TestCase):
         self.card = CardCredential.objects.create(
             external_id="card-1", account=self.account, ocpp_id_tag="card-tag"
         )
-        self.charger = Charger.objects.create(
-            identity="charger-1",
+        self.charger = charger(
+            "charger-1",
             connection_token_hash=make_password("charger-secret"),
         )
 
