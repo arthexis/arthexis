@@ -9,18 +9,19 @@ from apps.ocpp.domain.snapshots import ChargerSnapshot
 
 def render_snapshots(command, snapshots: list[ChargerSnapshot]) -> None:
     """Write a captured charger inventory without protocol payloads or secrets."""
-    command.stdout.write(f"Charger snapshot: {timezone.now().isoformat()}")
+    command.stdout.write(f"Fleet snapshot: {timezone.now().isoformat()}")
     if not snapshots:
         command.stdout.write("No chargers found.")
         return
     rows = [_row(snapshot) for snapshot in snapshots]
     headers = {
         "identity": "Charger",
-        "protocol": "Protocol",
+        "enabled": "Enabled",
         "connection": "Connection",
-        "connectors": "Connectors",
-        "sessions": "Active",
-        "energy": "Energy total",
+        "state": "State",
+        "protocol": "Protocol",
+        "current": "Active TX",
+        "last": "Last TX",
         "contact": "Last contact",
     }
     widths = {
@@ -36,24 +37,14 @@ def render_snapshots(command, snapshots: list[ChargerSnapshot]) -> None:
 def _row(snapshot: ChargerSnapshot) -> dict[str, str]:
     return {
         "identity": snapshot.identity,
-        "protocol": snapshot.configured_protocol or "unconfigured",
+        "enabled": "yes" if snapshot.enabled else "no",
         "connection": snapshot.connection_state,
-        "connectors": ", ".join(snapshot.connector_states) or "-",
-        "sessions": str(snapshot.active_transactions),
-        "energy": _energy(snapshot),
+        "state": snapshot.state,
+        "protocol": snapshot.configured_protocol or "unconfigured",
+        "current": snapshot.current_transaction_id or "-",
+        "last": snapshot.last_transaction_id or "-",
         "contact": _timestamp(snapshot.last_contact),
     }
-
-
-def _energy(snapshot: ChargerSnapshot) -> str:
-    if snapshot.energy_kwh is None:
-        return "unknown"
-    unresolved = (
-        f" + {snapshot.unresolved_sessions} unresolved"
-        if snapshot.unresolved_sessions
-        else ""
-    )
-    return f"{snapshot.energy_kwh:.4f} kWh{unresolved}"
 
 
 def _timestamp(value: datetime | None) -> str:
