@@ -38,7 +38,9 @@ def _transactions(charger: Charger) -> list[OcppTransaction]:
     prefetched = getattr(charger, "_prefetched_transactions", None)
     if prefetched is not None:
         return prefetched
-    return list(charger.transactions.recent())
+    transactions = list(charger.transactions.recent())
+    charger._prefetched_transactions = transactions
+    return transactions
 
 
 def _state(charger: Charger, current: OcppTransaction | None) -> str:
@@ -74,7 +76,10 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         else "disconnected",
         connector_states=tuple(
             f"{connector.number}:{connector.status}"
-            for connector in charger.connectors.order_by("number")
+            for connector in sorted(
+                charger.connectors.all(),
+                key=lambda connector: connector.number,
+            )
         ),
         active_transactions=sum(
             transaction.stopped_at is None for transaction in transactions
