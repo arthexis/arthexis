@@ -129,7 +129,6 @@ class FleetCommandTests(TestCase):
         self.assertIn("transaction-active", detail)
         self.assertIn("transaction-last", detail)
 
-
     def test_selection_rejects_unknown_filter_names(self) -> None:
         with self.assertRaisesMessage(CommandError, "Unknown fleet filter"):
             list(
