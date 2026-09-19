@@ -1,12 +1,13 @@
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
-from apps.ocpp.models import Charger, ProtocolOperation
+from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ALL_ACTIONS
 from apps.ocpp.protocol.v201.inbound import InboundActions
 from apps.ocpp.protocol.v201.outbound import VALIDATORS, validate_outbound
 from apps.ocpp.transport.operations import active_connections, emit_v201_operation
+from tests.ocpp.builders import charger
 
 VALID_PAYLOADS = {
     "CancelReservation": {"reservationId": 1},
@@ -119,7 +120,7 @@ class SuccessfulSender:
 
 class Ocpp201ActionTests(TestCase):
     def setUp(self) -> None:
-        self.charger = Charger.objects.create(identity="charger-201")
+        self.charger = charger("charger-201")
 
     def tearDown(self) -> None:
         active_connections.unregister(self.charger)
