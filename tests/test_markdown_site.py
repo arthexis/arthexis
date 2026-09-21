@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
 from django.test import Client, SimpleTestCase, override_settings
 
 from arthexis.markdown_site import public_markdown_files
@@ -11,7 +12,7 @@ class MarkdownSiteTests(SimpleTestCase):
         response = Client().get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<h1>Arthexis</h1>", html=True)
+        self.assertContains(response, '<h1 id="arthexis">Arthexis</h1>', html=True)
         self.assertNotContains(response, "/admin/")
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -19,7 +20,7 @@ class MarkdownSiteTests(SimpleTestCase):
         response = Client().get("/docs/operator-guide.md")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<h1>Operator Guide</h1>", html=True)
+        self.assertContains(response, '<h1 id="operator-guide">Operator Guide</h1>', html=True)
 
     def test_only_readme_reachable_markdown_is_exposed(self) -> None:
         with TemporaryDirectory() as directory:
