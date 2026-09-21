@@ -90,6 +90,6 @@ class ReconciliationTests(TestCase):
         with sqlite3.connect(unrelated) as database:
             database.execute("CREATE TABLE unrelated (id integer)")
 
-        with self.assertRaisesMessage(ValueError, "supported Arthexis 1.x tables"):
+        with self.assertRaisesMessage(ValueError, "detected fresh"):
             reconcile(unrelated)
         self.assertEqual(CardCredential.objects.count(), 0)

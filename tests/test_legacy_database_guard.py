@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from scripts.detect_legacy_database import classify_database
+from arthexis.reconciliation.source import classify_database
 
 
 class LegacyDatabaseGuardTests(SimpleTestCase):
