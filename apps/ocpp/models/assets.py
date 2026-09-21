@@ -42,12 +42,14 @@ class ChargerQuerySet(models.QuerySet):
         return self.filter(connection__isnull=True)
 
     def charging(self):
-        return self.filter(transactions__stopped_at__isnull=True).distinct()
+        return self.filter(
+            transactions__isnull=False,
+            transactions__stopped_at__isnull=True,
+        ).distinct()
 
     def idle(self):
-        return (
-            self.connected().exclude(transactions__stopped_at__isnull=True).distinct()
-        )
+        charging = self.charging().values("pk")
+        return self.connected().exclude(pk__in=charging)
 
 
 class ChargerManager(models.Manager.from_queryset(ChargerQuerySet)):

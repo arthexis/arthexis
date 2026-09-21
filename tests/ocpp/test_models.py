@@ -88,6 +88,14 @@ class OcppPersistenceTests(TestCase):
             [connected_idle],
         )
 
+    def test_charging_requires_an_actual_active_transaction(self) -> None:
+        connected_without_transactions = charger("charger-idle")
+        connection(connected_without_transactions, channel_name="idle-channel")
+
+        self.assertNotIn(self.charger, Charger.objects.charging())
+        self.assertNotIn(connected_without_transactions, Charger.objects.charging())
+        self.assertIn(connected_without_transactions, Charger.objects.idle())
+
     def test_transaction_queries_and_read_helpers_are_deterministic(self) -> None:
         first = transaction(
             self.charger,
