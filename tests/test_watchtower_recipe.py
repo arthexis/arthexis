@@ -5,9 +5,10 @@ def test_watchtower_recipe_uses_public_exposure_bundle() -> None:
     recipe = Path("deploy/watchtower.rx").read_text(encoding="utf-8")
 
     assert "recipe web/expose" in recipe
-    assert "--domain [domain|arthexis.com]" in recipe
-    assert "--host [host|127.0.0.1]" in recipe
-    assert "--port [port|8888]" in recipe
+    assert "--site arthexis.com" in recipe
+    assert "--domain arthexis.com" in recipe
+    assert "--host 127.0.0.1" in recipe
+    assert "--port 8888" in recipe
     assert "--email [email]" in recipe
 
 
