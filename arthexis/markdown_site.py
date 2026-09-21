@@ -1,8 +1,8 @@
 """README-rooted Markdown site for trusted operator documentation."""
 
+import re
 from html.parser import HTMLParser
 from pathlib import Path
-import re
 from urllib.parse import unquote, urlsplit
 
 import markdown
