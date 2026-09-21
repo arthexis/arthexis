@@ -14,73 +14,102 @@ permissions:
 
 jobs:
   deploy:
-    if: github.repository == 'arthexis/arthexis'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: Watchtower Deploy
+    if: >-
+      github.repository == 'arthexis/arthexis' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 45
     env:
-      GWAY_DATA_DIR: /tmp/gway-data
-      GWAY_CACHE_DIR: /tmp/gway-cache
-      GWAY_BIN_DIR: /tmp/gway-bin
-      ARTHEXIS_DATA_DIR: /tmp/arthexis-data
+      ARTHEXIS_DATA_DIR: /var/lib/arthexis
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Checkout trusted main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          persist-credentials: false
+          ref: ${{ github.sha }}
+          clean: true
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.13'
-          cache: pip
-
-      - name: Install canonical Gway
+      - name: Verify trusted invocation
+        shell: bash
         run: |
-          python -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@main"
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "${remote_main}"
+          test "${remote_main}" = "${GITHUB_SHA}"
+          sudo -n true
+
+      - name: Install exact canonical Gway
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test -n "${gway_sha}"
+          python3 -m venv "${RUNNER_TEMP}/gway-venv"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@${gway_sha}"
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+          echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
 
-      - name: Record deployment inputs
+      - name: Deploy Arthexis through Gway system scope
+        shell: bash
         run: |
-          git rev-parse HEAD | tee "${RUNNER_TEMP}/arthexis-sha.txt"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("gway"))' | tee "${RUNNER_TEMP}/gway-version.txt"
-          python --version | tee "${RUNNER_TEMP}/python-version.txt"
+          set -Eeuo pipefail
+          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force
+          test -f /var/lib/gway/projects/arthexis/pyproject.toml
+          test -f /var/lib/gway/projects/arthexis/install.sh
 
-      - name: Install Arthexis through Gway
+      - name: Prepare persistent Arthexis runtime
+        shell: bash
         run: |
-          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
-          test -d "${GWAY_DATA_DIR}/projects/arthexis"
-          test -f "${GWAY_DATA_DIR}/projects/arthexis/pyproject.toml"
+          set -Eeuo pipefail
+          sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
+          cd /var/lib/gway/projects/arthexis
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" ./install.sh
 
-      - name: Prepare managed Arthexis runtime
+      - name: Verify deployed Arthexis
+        shell: bash
         run: |
-          cd "${GWAY_DATA_DIR}/projects/arthexis"
-          ./install.sh
-          .venv/bin/python manage.py check --fail-level ERROR
-          .venv/bin/python manage.py makemigrations --check --dry-run
-          .venv/bin/python manage.py ocpp_matrix
+          set -Eeuo pipefail
+          cd /var/lib/gway/projects/arthexis
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py check --fail-level ERROR
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py makemigrations --check --dry-run
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py ocpp_matrix
 
-      - name: Verify Gway convergence
+      - name: Capture deployment evidence
+        if: always()
+        shell: bash
         run: |
-          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
-          test -d "${GWAY_DATA_DIR}/projects/arthexis"
-
-      - name: Capture managed deployment evidence
-        run: |
+          set +e
+          evidence="${RUNNER_TEMP}/watchtower-deploy-${GITHUB_SHA}.txt"
           {
-            echo "arthexis_sha=$(cat "${RUNNER_TEMP}/arthexis-sha.txt")"
-            echo "gway_version=$(cat "${RUNNER_TEMP}/gway-version.txt")"
-            echo "python=$(cat "${RUNNER_TEMP}/python-version.txt")"
-            echo "managed_path=${GWAY_DATA_DIR}/projects/arthexis"
+            echo "arthexis_sha=${GITHUB_SHA}"
+            echo "gway_sha=${GWAY_EXPECTED_SHA:-unknown}"
+            echo "runner=${RUNNER_NAME}"
+            echo "managed_path=/var/lib/gway/projects/arthexis"
             echo "data_path=${ARTHEXIS_DATA_DIR}"
-          } > "${RUNNER_TEMP}/watchtower-deploy.txt"
+            echo "=== managed project ==="
+            sudo -n ls -ld /var/lib/gway /var/lib/gway/projects /var/lib/gway/projects/arthexis 2>&1
+            sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1
+            echo "=== package/runtime ==="
+            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python --version 2>&1
+            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1
+            echo "=== django ==="
+            cd /var/lib/gway/projects/arthexis
+            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py check --fail-level ERROR 2>&1
+          } | tee "${evidence}"
+          echo "WATCHTOWER_EVIDENCE=${evidence}" >> "${GITHUB_ENV}"
 
       - name: Upload deployment evidence
-        uses: actions/upload-artifact@v7
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: watchtower-deploy-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/watchtower-deploy.txt
-            ${{ runner.temp }}/arthexis-sha.txt
-            ${{ runner.temp }}/gway-version.txt
-            ${{ runner.temp }}/python-version.txt
-          if-no-files-found: error
+          name: watchtower-deploy-${{ github.sha }}
+          path: ${{ env.WATCHTOWER_EVIDENCE }}
+          if-no-files-found: warn
