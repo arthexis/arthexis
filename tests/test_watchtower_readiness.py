@@ -1,10 +1,8 @@
 from pathlib import Path
-from unittest.mock import patch
 from urllib.error import URLError
+from unittest.mock import patch
 
-import pytest
-
-from arthexis.ready import main, local
+from arthexis.ready import local, main
 
 
 class Response:
@@ -48,8 +46,12 @@ def test_ready_local_flag_runs_local_check() -> None:
 
 
 def test_ready_without_scope_is_not_defined_yet() -> None:
-    with pytest.raises(ValueError, match="requires --local"):
+    try:
         main()
+    except ValueError as error:
+        assert "requires --local" in str(error)
+    else:
+        raise AssertionError("ready without a scope should fail")
 
 
 def test_ready_recipe_uses_bounded_repeat_interval() -> None:
