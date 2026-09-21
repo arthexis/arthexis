@@ -11,5 +11,5 @@ recipe web/expose
 --port 8888
 --email [email]
 
-curl --fail --silent --show-error --
+curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors --
 https://[domain|arthexis.com][health_path|/health/]
