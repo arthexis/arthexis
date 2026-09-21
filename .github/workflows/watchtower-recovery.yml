@@ -3,49 +3,96 @@ name: Watchtower Recovery
 on:
   workflow_dispatch:
     inputs:
-      target_ref:
-        description: Rebuild branch to diagnose
-        required: true
-        default: arthexis-rebuild
-        type: string
       mode:
-        description: Evidence action
+        description: Recovery action
         required: true
         default: diagnose
         type: choice
-        options: [diagnose, rebuild-test]
+        options: [diagnose, redeploy]
 
 permissions:
   contents: read
 
 jobs:
   recovery:
-    if: github.repository == 'arthexis/arthexis'
+    name: Watchtower Recovery
+    if: github.repository == 'arthexis/arthexis' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      GWAY_DATA_DIR: /tmp/gway-data
+      GWAY_CACHE_DIR: /tmp/gway-cache
+      GWAY_BIN_DIR: /tmp/gway-bin
+      ARTHEXIS_DATA_DIR: /tmp/arthexis-data
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ inputs.target_ref }}
+          ref: main
           persist-credentials: false
+          fetch-depth: 1
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.13'
           cache: pip
-      - name: Capture repository diagnostics
+
+      - name: Install canonical Gway
+        run: |
+          python -m venv "${RUNNER_TEMP}/gway-venv"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@main"
+          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+
+      - name: Capture preflight diagnostics
         run: |
           {
             echo "mode=${{ inputs.mode }}"
+            echo "arthexis_sha=$(git rev-parse HEAD)"
+            echo "python=$(python --version 2>&1)"
+            "${RUNNER_TEMP}/gway-venv/bin/python" -c 'import importlib.metadata; print("gway_version=" + importlib.metadata.version("gway"))'
+            echo "gway_data=${GWAY_DATA_DIR}"
+            echo "arthexis_data=${ARTHEXIS_DATA_DIR}"
+          } | tee "${RUNNER_TEMP}/watchtower-recovery.txt"
+
+      - name: Install Arthexis through Gway
+        if: inputs.mode == 'redeploy'
+        run: |
+          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
+          test -d "${GWAY_DATA_DIR}/projects/arthexis"
+          test -f "${GWAY_DATA_DIR}/projects/arthexis/pyproject.toml"
+
+      - name: Prepare managed Arthexis runtime
+        if: inputs.mode == 'redeploy'
+        run: |
+          cd "${GWAY_DATA_DIR}/projects/arthexis"
+          ./install.sh
+          .venv/bin/python manage.py check --fail-level ERROR
+          .venv/bin/python manage.py makemigrations --check --dry-run
+          .venv/bin/python manage.py ocpp_matrix
+
+      - name: Verify Gway convergence
+        if: inputs.mode == 'redeploy'
+        run: |
+          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
+          test -d "${GWAY_DATA_DIR}/projects/arthexis"
+
+      - name: Capture post-run diagnostics
+        if: always()
+        run: |
+          {
+            echo "=== checkout ==="
             git rev-parse HEAD
             git status --short
-            python --version
-            python manage.py check --fail-level ERROR
-          } | tee "${RUNNER_TEMP}/watchtower-recovery.txt"
-      - name: Rebuild test installation
-        if: inputs.mode == 'rebuild-test'
-        env:
-          ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-recovery
-        run: ./install.sh
+            echo "=== gway ==="
+            "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null && echo "gway_bootstrap=ok"
+            echo "=== managed project ==="
+            ls -la "${GWAY_DATA_DIR}" 2>/dev/null || true
+            ls -la "${GWAY_DATA_DIR}/projects/arthexis" 2>/dev/null || true
+            if [[ -x "${GWAY_DATA_DIR}/projects/arthexis/.venv/bin/python" ]]; then
+              "${GWAY_DATA_DIR}/projects/arthexis/.venv/bin/python" "${GWAY_DATA_DIR}/projects/arthexis/manage.py" check --fail-level ERROR || true
+            fi
+          } 2>&1 | tee -a "${RUNNER_TEMP}/watchtower-recovery.txt"
+
       - name: Upload recovery evidence
         if: always()
         uses: actions/upload-artifact@v7
