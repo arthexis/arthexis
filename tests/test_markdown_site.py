@@ -1,13 +1,11 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import TestCase
-
-from django.test import Client, override_settings
+from django.test import Client, SimpleTestCase, override_settings
 
 from arthexis.markdown_site import public_markdown_files
 
 
-class MarkdownSiteTests(TestCase):
+class MarkdownSiteTests(SimpleTestCase):
     @override_settings(ALLOWED_HOSTS=["testserver"])
     def test_repository_readme_is_public_home(self) -> None:
         response = Client().get("/")
