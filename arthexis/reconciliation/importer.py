@@ -13,7 +13,7 @@ from django.db import transaction
 from django.utils.text import slugify
 from django.utils.timezone import now
 
-from arthexis.reconciliation.source import LegacySource
+from arthexis.reconciliation.source import LegacySource, inspect_source
 
 
 def _first(row: dict[str, Any], *names: str, default: Any = "") -> Any:
@@ -51,6 +51,8 @@ class ReconciliationReport:
     """Redacted reconciliation outcome suitable for an operator receipt."""
 
     source: str
+    source_sha256: str
+    source_size: int
     dry_run: bool
     imported: dict[str, int] = field(default_factory=dict)
     skipped: dict[str, str] = field(default_factory=dict)
@@ -62,6 +64,8 @@ class ReconciliationReport:
         return {
             "format": "arthexis-reconciliation-v1",
             "source": self.source,
+            "source_sha256": self.source_sha256,
+            "source_size": self.source_size,
             "dry_run": self.dry_run,
             "imported": self.imported,
             "skipped": self.skipped,
@@ -337,7 +341,18 @@ class _Importer:
 
 def reconcile(source_path: Path, *, dry_run: bool = False) -> ReconciliationReport:
     """Reconcile supported 1.x logical records without changing the source."""
-    report = ReconciliationReport(source=source_path.name, dry_run=dry_run)
+    inspection = inspect_source(source_path)
+    if inspection.classification != "legacy":
+        raise ValueError(
+            "Reconciliation requires a legacy Arthexis database; "
+            f"detected {inspection.classification}."
+        )
+    report = ReconciliationReport(
+        source=source_path.name,
+        source_sha256=inspection.sha256,
+        source_size=inspection.size,
+        dry_run=dry_run,
+    )
     with LegacySource(source_path) as source:
         source.validate()
         importer = _Importer(source, report)
