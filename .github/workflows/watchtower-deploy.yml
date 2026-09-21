@@ -91,7 +91,7 @@ jobs:
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name web --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
           sudo -n systemctl is-active --quiet arthexis-web.service
-          curl --fail --silent --show-error --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ >/dev/null
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx'
 
       - name: Expose Arthexis publicly through Gway recipe
         if: env.ARTHEXIS_CERTBOT_EMAIL != ''
