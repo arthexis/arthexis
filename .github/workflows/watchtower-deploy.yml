@@ -1,46 +1,96 @@
 name: Watchtower Deploy
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_ref:
-        description: Rebuild branch to attest for GWAY deployment
+        description: Arthexis ref to deploy
         required: true
-        default: arthexis-rebuild
+        default: main
         type: string
 
 concurrency:
-  group: watchtower-deploy-${{ inputs.target_ref }}
+  group: watchtower-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  attest:
+  deploy:
     if: github.repository == 'arthexis/arthexis'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      GWAY_DATA_DIR: ${{ runner.temp }}/gway-data
+      GWAY_CACHE_DIR: ${{ runner.temp }}/gway-cache
+      GWAY_BIN_DIR: ${{ runner.temp }}/gway-bin
+      ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-data
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ inputs.target_ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.sha }}
           persist-credentials: false
+          fetch-depth: 1
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.13'
           cache: pip
-      - name: Attest a fresh clone-local install
-        env:
-          ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-watchtower
+
+      - name: Install canonical Gway
+        run: |
+          python -m venv "${RUNNER_TEMP}/gway-venv"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install             "git+https://github.com/arthexis/gway.git@main"
+          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+
+      - name: Record deployment inputs
+        run: |
+          git rev-parse HEAD | tee "${RUNNER_TEMP}/arthexis-sha.txt"
+          "${RUNNER_TEMP}/gway-venv/bin/python" - <<'PY' | tee "${RUNNER_TEMP}/gway-version.txt"
+          import importlib.metadata
+          print(importlib.metadata.version("gway"))
+          PY
+          python --version | tee "${RUNNER_TEMP}/python-version.txt"
+
+      - name: Install Arthexis through Gway
+        run: |
+          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
+          test -d "${GWAY_DATA_DIR}/projects/arthexis"
+          test -f "${GWAY_DATA_DIR}/projects/arthexis/pyproject.toml"
+
+      - name: Prepare managed Arthexis runtime
+        working-directory: ${{ runner.temp }}/gway-data/projects/arthexis
         run: |
           ./install.sh
           .venv/bin/python manage.py check --fail-level ERROR
+          .venv/bin/python manage.py makemigrations --check --dry-run
           .venv/bin/python manage.py ocpp_matrix
-          git rev-parse HEAD | tee "${RUNNER_TEMP}/arthexis-rebuild-sha.txt"
+
+      - name: Verify Gway convergence
+        run: |
+          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
+          test -d "${GWAY_DATA_DIR}/projects/arthexis"
+
+      - name: Capture managed deployment evidence
+        run: |
+          {
+            echo "arthexis_sha=$(cat "${RUNNER_TEMP}/arthexis-sha.txt")"
+            echo "gway_version=$(cat "${RUNNER_TEMP}/gway-version.txt")"
+            echo "python=$(cat "${RUNNER_TEMP}/python-version.txt")"
+            echo "managed_path=${GWAY_DATA_DIR}/projects/arthexis"
+            echo "data_path=${ARTHEXIS_DATA_DIR}"
+          } > "${RUNNER_TEMP}/watchtower-deploy.txt"
+
       - name: Upload deployment evidence
         uses: actions/upload-artifact@v7
         with:
           name: watchtower-deploy-${{ github.run_id }}
-          path: ${{ runner.temp }}/arthexis-rebuild-sha.txt
+          path: |
+            ${{ runner.temp }}/watchtower-deploy.txt
+            ${{ runner.temp }}/arthexis-sha.txt
+            ${{ runner.temp }}/gway-version.txt
+            ${{ runner.temp }}/python-version.txt
           if-no-files-found: error
