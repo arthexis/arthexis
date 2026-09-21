@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 45
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
+      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean privileged Python bytecode from runner workspace
