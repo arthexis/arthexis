@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from django.test import TestCase
@@ -26,20 +26,20 @@ class ChargerSnapshotTests(TestCase):
         transaction(
             selected,
             "complete",
-            started_at=datetime(2026, 1, 1, tzinfo=UTC),
-            stopped_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
             energy_kwh=Decimal("1.2500"),
         )
         transaction(
             selected,
             "unresolved",
-            started_at=datetime(2026, 1, 1, tzinfo=UTC),
-            stopped_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
         )
         transaction(
             selected,
             "active",
-            started_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
         snapshot = snapshot_charger(selected)
@@ -53,12 +53,12 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.current_transaction_id, "active")
         self.assertEqual(
             snapshot.current_transaction_started,
-            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
         self.assertEqual(snapshot.last_transaction_id, "unresolved")
         self.assertEqual(
             snapshot.last_transaction_stopped,
-            datetime(2026, 1, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
         )
         self.assertEqual(snapshot.energy_kwh, Decimal("1.25"))
         self.assertEqual(snapshot.unresolved_sessions, 1)
@@ -87,7 +87,7 @@ class ChargerSnapshotTests(TestCase):
         transaction(
             disabled,
             "disabled-active",
-            started_at=datetime(2026, 9, 19, 12, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
         )
 
         idle = charger("idle")
@@ -98,7 +98,7 @@ class ChargerSnapshotTests(TestCase):
         transaction(
             charging,
             "charging-active",
-            started_at=datetime(2026, 9, 19, 13, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
         )
 
         self.assertEqual(snapshot_charger(disabled).state, "disabled")
@@ -113,7 +113,7 @@ class ChargerSnapshotTests(TestCase):
             transaction(
                 selected,
                 f"tx-{index}",
-                started_at=datetime(2026, 9, 19, 12 + index, tzinfo=UTC),
+                started_at=datetime(2026, 9, 19, 12 + index, tzinfo=timezone.utc),
             )
 
         with self.assertNumQueries(3):

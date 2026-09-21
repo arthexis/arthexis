@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -57,7 +57,7 @@ class ChargerModelOperationTests(TestCase):
         active = transaction(
             self.charger,
             "transaction-active",
-            started_at=datetime(2026, 1, 2, tzinfo=UTC),
+            started_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         )
 
         async_to_sync(Charger.stop)(self.charger)

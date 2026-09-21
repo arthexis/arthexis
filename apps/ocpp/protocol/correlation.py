@@ -34,7 +34,7 @@ class PendingCalls:
     ) -> dict[str, object]:
         try:
             return await asyncio.wait_for(future, timeout=timeout)
-        except TimeoutError as error:
+        except asyncio.TimeoutError as error:
             raise OutboundCallTimeout(f"OCPP call {unique_id} timed out.") from error
         finally:
             self._calls.pop(unique_id, None)
