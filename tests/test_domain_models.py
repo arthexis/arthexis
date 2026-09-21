@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from django.test import TestCase
@@ -47,11 +47,11 @@ class DomainModelTests(TestCase):
             connector=selected_connector,
             account=account,
             id_tag=card.ocpp_id_tag,
-            started_at=datetime(2026, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
         meter = MeterValue.objects.create(
             transaction=selected_transaction,
-            sampled_at=datetime(2026, 1, 1, 0, 5, tzinfo=UTC),
+            sampled_at=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
             value=Decimal("1.5"),
         )
         event = EventEnvelope.objects.create(
