@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 arthexis = "manage:main"
 reconcile = "scripts.reconcile:main"
+ready = "arthexis.ready:main"
 serve = "arthexis.server:main"
 
 [project.urls]

@@ -1,0 +1,12 @@
+# Wait for the local Arthexis service to become healthy.
+ready --local
+--host [host|127.0.0.1]
+--port [port|8888]
+--domain [domain|arthexis.com]
+--path [health_path|/health/]
+--timeout [probe_timeout|2]
+
+repeat
+--until true
+--max [readiness_attempts|20]
+--interval [readiness_interval|1]
