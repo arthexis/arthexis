@@ -8,7 +8,19 @@ on:
         required: true
         default: diagnose
         type: choice
-        options: [diagnose, redeploy]
+        options:
+          - diagnose
+          - cleanup-legacy
+          - redeploy
+      confirm_cleanup:
+        description: Confirm moving the stale managed Arthexis checkout aside
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: watchtower-recovery
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -16,87 +28,140 @@ permissions:
 jobs:
   recovery:
     name: Watchtower Recovery
-    if: github.repository == 'arthexis/arthexis' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'arthexis/arthexis' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
     timeout-minutes: 30
     env:
-      GWAY_DATA_DIR: /tmp/gway-data
-      GWAY_CACHE_DIR: /tmp/gway-cache
-      GWAY_BIN_DIR: /tmp/gway-bin
-      ARTHEXIS_DATA_DIR: /tmp/arthexis-data
+      ARTHEXIS_DATA_DIR: /var/lib/arthexis
     steps:
-      - name: Checkout main
+      - name: Checkout trusted main revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: main
-          persist-credentials: false
+          ref: ${{ github.sha }}
+          clean: true
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.13'
-          cache: pip
-
-      - name: Install canonical Gway
+      - name: Verify trusted invocation
+        shell: bash
         run: |
-          python -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@main"
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          sudo -n true
+
+      - name: Install exact canonical Gway
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test -n "${gway_sha}"
+          python3 -m venv "${RUNNER_TEMP}/gway-venv"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}"
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+          echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
 
       - name: Capture preflight diagnostics
+        shell: bash
         run: |
+          set +e
           {
             echo "mode=${{ inputs.mode }}"
-            echo "arthexis_sha=$(git rev-parse HEAD)"
-            echo "python=$(python --version 2>&1)"
-            "${RUNNER_TEMP}/gway-venv/bin/python" -c 'import importlib.metadata; print("gway_version=" + importlib.metadata.version("gway"))'
-            echo "gway_data=${GWAY_DATA_DIR}"
-            echo "arthexis_data=${ARTHEXIS_DATA_DIR}"
+            echo "confirm_cleanup=${{ inputs.confirm_cleanup }}"
+            echo "arthexis_sha=${GITHUB_SHA}"
+            echo "gway_sha=${GWAY_EXPECTED_SHA:-unknown}"
+            echo "runner=${RUNNER_NAME}"
+            echo "=== system Gway paths ==="
+            sudo -n ls -ld /var/lib/gway /var/lib/gway/projects /var/lib/gway/projects/arthexis 2>&1 || true
+            sudo -n ls -l /var/lib/gway/state.sqlite 2>&1 || true
+            echo "=== durable Arthexis data ==="
+            sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1 || true
           } | tee "${RUNNER_TEMP}/watchtower-recovery.txt"
 
-      - name: Install Arthexis through Gway
-        if: inputs.mode == 'redeploy'
+      - name: Require cleanup confirmation
+        if: inputs.mode == 'cleanup-legacy' && inputs.confirm_cleanup != true
+        shell: bash
         run: |
-          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
-          test -d "${GWAY_DATA_DIR}/projects/arthexis"
-          test -f "${GWAY_DATA_DIR}/projects/arthexis/pyproject.toml"
+          echo "cleanup-legacy requires confirm_cleanup=true" >&2
+          exit 64
 
-      - name: Prepare managed Arthexis runtime
-        if: inputs.mode == 'redeploy'
+      - name: Remove registered system installation
+        if: inputs.mode == 'cleanup-legacy' && inputs.confirm_cleanup == true
+        shell: bash
         run: |
-          cd "${GWAY_DATA_DIR}/projects/arthexis"
-          ./install.sh
-          .venv/bin/python manage.py check --fail-level ERROR
-          .venv/bin/python manage.py makemigrations --check --dry-run
-          .venv/bin/python manage.py ocpp_matrix
+          set -Eeuo pipefail
+          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" uninstall arthexis --system || true
 
-      - name: Verify Gway convergence
-        if: inputs.mode == 'redeploy'
+      - name: Preserve stale managed checkout
+        if: inputs.mode == 'cleanup-legacy' && inputs.confirm_cleanup == true
+        shell: bash
         run: |
-          "${RUNNER_TEMP}/gway-venv/bin/gway" install .
-          test -d "${GWAY_DATA_DIR}/projects/arthexis"
+          set -Eeuo pipefail
+          source_path=/var/lib/gway/projects/arthexis
+          recovery_root=/var/lib/gway/recovery
+          if sudo -n test -e "${source_path}"; then
+            stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+            recovery_path="${recovery_root}/arthexis-legacy-${stamp}"
+            sudo -n mkdir -p "${recovery_root}"
+            sudo -n mv "${source_path}" "${recovery_path}"
+            echo "WATCHTOWER_RECOVERY_PATH=${recovery_path}" >> "${GITHUB_ENV}"
+            echo "Preserved stale checkout at ${recovery_path}"
+          else
+            echo "No stale managed checkout remains at ${source_path}"
+          fi
+
+      - name: Verify cleanup boundary
+        if: inputs.mode == 'cleanup-legacy' && inputs.confirm_cleanup == true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if sudo -n test -e /var/lib/gway/projects/arthexis; then
+            echo "Managed Arthexis checkout still exists after cleanup" >&2
+            exit 1
+          fi
+          echo "Durable application data was not modified:"
+          sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1 || true
+
+      - name: Redeploy current main through Gway
+        if: inputs.mode == 'redeploy'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force
+          test -f /var/lib/gway/projects/arthexis/pyproject.toml
+          sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
+          cd /var/lib/gway/projects/arthexis
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" ./install.sh
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py check --fail-level ERROR
 
       - name: Capture post-run diagnostics
         if: always()
+        shell: bash
         run: |
+          set +e
           {
-            echo "=== checkout ==="
-            git rev-parse HEAD
-            git status --short
-            echo "=== gway ==="
-            "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null && echo "gway_bootstrap=ok"
-            echo "=== managed project ==="
-            ls -la "${GWAY_DATA_DIR}" 2>/dev/null || true
-            ls -la "${GWAY_DATA_DIR}/projects/arthexis" 2>/dev/null || true
-            if [[ -x "${GWAY_DATA_DIR}/projects/arthexis/.venv/bin/python" ]]; then
-              "${GWAY_DATA_DIR}/projects/arthexis/.venv/bin/python" "${GWAY_DATA_DIR}/projects/arthexis/manage.py" check --fail-level ERROR || true
-            fi
+            echo "=== result ==="
+            echo "mode=${{ inputs.mode }}"
+            echo "recovery_path=${WATCHTOWER_RECOVERY_PATH:-none}"
+            echo "=== managed checkout ==="
+            sudo -n ls -ld /var/lib/gway/projects/arthexis 2>&1 || true
+            echo "=== recovery snapshots ==="
+            sudo -n ls -ld /var/lib/gway/recovery /var/lib/gway/recovery/arthexis-legacy-* 2>&1 || true
+            echo "=== durable Arthexis data ==="
+            sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1 || true
           } 2>&1 | tee -a "${RUNNER_TEMP}/watchtower-recovery.txt"
+          echo "WATCHTOWER_RECOVERY_EVIDENCE=${RUNNER_TEMP}/watchtower-recovery.txt" >> "${GITHUB_ENV}"
 
       - name: Upload recovery evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: watchtower-recovery-${{ github.run_id }}
-          path: ${{ runner.temp }}/watchtower-recovery.txt
+          path: ${{ env.WATCHTOWER_RECOVERY_EVIDENCE }}
           if-no-files-found: warn
