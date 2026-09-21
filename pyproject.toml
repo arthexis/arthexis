@@ -6,9 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "arthexis"
 version = "2.0.0.dev0"
 description = "Field-safe EV charging operations and OCPP services"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "Django==5.2.12",
+    "Markdown==3.10.3",
     "celery==5.5.3",
     "channels==4.3.2",
     "channels_redis==4.3.0",
@@ -27,6 +29,9 @@ Repository = "https://github.com/arthexis/arthexis"
 [tool.setuptools]
 include-package-data = true
 py-modules = ["manage"]
+
+[tool.setuptools.package-data]
+"apps.base" = ["templates/**/*.html"]
 
 [tool.setuptools.packages.find]
 include = ["apps*", "arthexis*", "scripts*"]
