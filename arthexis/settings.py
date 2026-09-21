@@ -11,7 +11,11 @@ SECRET_KEY = os.environ.get(
     "ARTHEXIS_SECRET_KEY", "development-only-change-before-deploy"
 )
 DEBUG = os.environ.get("ARTHEXIS_DEBUG", "0") == "1"
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get("ARTHEXIS_ALLOWED_HOSTS", "0.0.0.0").split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
