@@ -61,25 +61,23 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force
-          test -f /var/lib/gway/projects/arthexis/pyproject.toml
-          test -f /var/lib/gway/projects/arthexis/install.sh
+          sudo -n test -f /var/lib/gway/projects/arthexis/pyproject.toml
+          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
 
       - name: Prepare persistent Arthexis runtime
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
-          cd /var/lib/gway/projects/arthexis
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" ./install.sh
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh
 
       - name: Verify deployed Arthexis
         shell: bash
         run: |
           set -Eeuo pipefail
-          cd /var/lib/gway/projects/arthexis
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py check --fail-level ERROR
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py makemigrations --check --dry-run
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py ocpp_matrix
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix
 
       - name: Capture deployment evidence
         if: always()
@@ -100,8 +98,7 @@ jobs:
             sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python --version 2>&1
             sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1
             echo "=== django ==="
-            cd /var/lib/gway/projects/arthexis
-            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" .venv/bin/python manage.py check --fail-level ERROR 2>&1
+            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR 2>&1
           } | tee "${evidence}"
           echo "WATCHTOWER_EVIDENCE=${evidence}" >> "${GITHUB_ENV}"
 
