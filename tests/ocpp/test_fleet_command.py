@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from io import StringIO
 
 from django.core.management import call_command
@@ -18,13 +18,13 @@ class FleetCommandTests(TestCase):
         transaction(
             self.charger,
             "transaction-last",
-            started_at=datetime(2026, 1, 1, tzinfo=UTC),
-            stopped_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
         )
         transaction(
             self.charger,
             "transaction-active",
-            started_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
+            started_at=datetime(2026, 1, 1, 2, tzinfo=timezone.utc),
         )
 
     def test_command_renders_the_app_wide_fleet_snapshot(self) -> None:
