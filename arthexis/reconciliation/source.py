@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 KNOWN_DATABASE_PATHS = (
     Path("db.sqlite3"),
     Path("var/db.sqlite3"),
