@@ -23,7 +23,8 @@ jobs:
     timeout-minutes: 45
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
-      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0
+      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
+      ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean privileged Python bytecode from runner workspace
@@ -87,9 +88,23 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis'
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name web --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis'
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name web --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
           sudo -n systemctl is-active --quiet arthexis-web.service
+          curl --fail --silent --show-error --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ >/dev/null
+
+      - name: Expose Arthexis publicly through Gway recipe
+        if: env.ARTHEXIS_CERTBOT_EMAIL != ''
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'"'
+
+      - name: Record public exposure prerequisite
+        if: env.ARTHEXIS_CERTBOT_EMAIL == ''
+        shell: bash
+        run: |
+          echo "::notice::ARTHEXIS_CERTBOT_EMAIL is not configured; local service health was verified but public Nginx/TLS exposure was not attempted."
 
       - name: Verify deployed Arthexis
         shell: bash
@@ -119,6 +134,12 @@ jobs:
             sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1
             echo "=== systemd ==="
             sudo -n systemctl status arthexis-web.service --no-pager 2>&1
+            echo "=== local health ==="
+            curl --fail --silent --show-error --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ 2>&1
+            echo
+            echo "=== public health ==="
+            curl --fail --silent --show-error https://arthexis.com/health/ 2>&1 || true
+            echo
             echo "=== django ==="
             sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR 2>&1
           } | tee "${evidence}"

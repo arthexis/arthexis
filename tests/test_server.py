@@ -17,10 +17,17 @@ class ServerEntrypointTests(SimpleTestCase):
         command.return_value = ("/runtime/bin/daphne", "daphne-arg")
 
         with patch.dict("arthexis.server.os.environ", {}, clear=True):
-            main(data_dir="/var/lib/arthexis")
+            main(
+                data_dir="/var/lib/arthexis",
+                allowed_hosts="0.0.0.0,arthexis.com",
+            )
             self.assertEqual(
                 __import__("os").environ["ARTHEXIS_DATA_DIR"],
                 "/var/lib/arthexis",
+            )
+            self.assertEqual(
+                __import__("os").environ["ARTHEXIS_ALLOWED_HOSTS"],
+                "0.0.0.0,arthexis.com",
             )
 
         execv.assert_called_once_with("/runtime/bin/daphne", ("/runtime/bin/daphne", "daphne-arg"))
