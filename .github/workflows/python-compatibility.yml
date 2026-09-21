@@ -1,20 +1,18 @@
-name: Python Compatibility
+name: python / Python compatibility
 
 on:
-  push:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   tests:
+    name: Tests (Python ${{ matrix.python-version }})
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     strategy:
@@ -31,7 +29,24 @@ jobs:
           cache: pip
       - name: Install test runtime
         run: python -m pip install --requirement requirements.txt
-      - name: Compile the rebuilt source
+      - name: Compile rebuilt source
         run: python -m compileall -q apps arthexis scripts tests manage.py
-      - name: Run the complete test suite
+      - name: Django startup check
+        run: python manage.py check --fail-level ERROR
+      - name: Run complete test suite
         run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
+
+  compatibility:
+    name: python / Python compatibility
+    needs: tests
+    if: always() && needs.tests.result != 'skipped' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Python versions
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          if [[ "$TEST_RESULT" != "success" ]]; then
+            echo "Python compatibility matrix result: $TEST_RESULT"
+            exit 1
+          fi
