@@ -23,7 +23,17 @@ jobs:
     timeout-minutes: 45
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      - name: Clean privileged Python bytecode from runner workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -d "${GITHUB_WORKSPACE}" ]]; then
+            sudo -n find "${GITHUB_WORKSPACE}" -type d -name __pycache__ -prune -exec rm -rf {} +
+            sudo -n find "${GITHUB_WORKSPACE}" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+          fi
+
       - name: Checkout trusted main revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
