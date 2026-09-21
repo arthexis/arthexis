@@ -81,6 +81,15 @@ jobs:
           set -Eeuo pipefail
           sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
           sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}"
+
+      - name: Install and start Arthexis systemd service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis'
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name web --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis'
+          sudo -n systemctl is-active --quiet arthexis-web.service
 
       - name: Verify deployed Arthexis
         shell: bash
@@ -108,6 +117,8 @@ jobs:
             echo "=== package/runtime ==="
             sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python --version 2>&1
             sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1
+            echo "=== systemd ==="
+            sudo -n systemctl status arthexis-web.service --no-pager 2>&1
             echo "=== django ==="
             sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR 2>&1
           } | tee "${evidence}"
