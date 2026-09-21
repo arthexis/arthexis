@@ -14,6 +14,15 @@ KNOWN_DATABASE_PATHS = (
     Path("var/db.sqlite3"),
 )
 
+RETAINED_LEGACY_TABLES = {
+    "core_rfid",
+    "core_energytariff",
+    "core_account",
+    "core_sigilroot",
+    "core_stationmodel",
+    "ocpp_charger",
+}
+
 
 @dataclass(frozen=True)
 class SourceInspection:
@@ -96,7 +105,9 @@ def classify_database(database_path: Path) -> str:
                 ).fetchall()
                 if any(generation == 2 for (generation,) in generations):
                     return "v2"
-            if "django_migrations" in tables:
+            if "django_migrations" in tables or tables.intersection(
+                RETAINED_LEGACY_TABLES
+            ):
                 return "legacy"
     except sqlite3.DatabaseError:
         return "unreadable"
@@ -175,15 +186,7 @@ class LegacySource:
 
     def validate(self) -> None:
         """Reject unrelated SQLite files before the destination transaction opens."""
-        retained_tables = {
-            "core_rfid",
-            "core_energytariff",
-            "core_account",
-            "core_sigilroot",
-            "core_stationmodel",
-            "ocpp_charger",
-        }
-        if not self.tables.intersection(retained_tables):
+        if not self.tables.intersection(RETAINED_LEGACY_TABLES):
             raise ValueError(
                 "Legacy database has none of the supported Arthexis 1.x tables."
             )
