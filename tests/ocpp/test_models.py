@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from django.contrib import admin
 from django.test import TestCase
@@ -60,7 +60,7 @@ class OcppPersistenceTests(TestCase):
         transaction(
             connected_charging,
             "active-transaction",
-            started_at=datetime(2026, 9, 19, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
         )
 
         self.assertQuerySetEqual(
@@ -100,24 +100,24 @@ class OcppPersistenceTests(TestCase):
         first = transaction(
             self.charger,
             "first",
-            started_at=datetime(2026, 9, 19, 10, tzinfo=UTC),
-            stopped_at=datetime(2026, 9, 19, 11, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 10, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 19, 11, tzinfo=timezone.utc),
         )
         active_older = transaction(
             self.charger,
             "active-older",
-            started_at=datetime(2026, 9, 19, 12, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
         )
         active_newer = transaction(
             self.charger,
             "active-newer",
-            started_at=datetime(2026, 9, 19, 13, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
         )
         completed_newer = transaction(
             self.charger,
             "completed-newer",
-            started_at=datetime(2026, 9, 19, 14, tzinfo=UTC),
-            stopped_at=datetime(2026, 9, 19, 15, tzinfo=UTC),
+            started_at=datetime(2026, 9, 19, 14, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 19, 15, tzinfo=timezone.utc),
         )
 
         self.assertQuerySetEqual(
@@ -138,7 +138,7 @@ class OcppPersistenceTests(TestCase):
     def test_transaction_recency_uses_primary_key_to_break_timestamp_ties(
         self,
     ) -> None:
-        timestamp = datetime(2026, 9, 19, 12, tzinfo=UTC)
+        timestamp = datetime(2026, 9, 19, 12, tzinfo=timezone.utc)
         older_pk = transaction(self.charger, "tie-1", started_at=timestamp)
         newer_pk = transaction(self.charger, "tie-2", started_at=timestamp)
 
@@ -181,7 +181,7 @@ class OcppPersistenceTests(TestCase):
             charger=self.charger,
             remote_id="reservation-1",
             id_tag="card-1",
-            expires_at=datetime(2026, 1, 1, tzinfo=UTC),
+            expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
         self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
