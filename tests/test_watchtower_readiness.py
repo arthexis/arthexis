@@ -59,8 +59,8 @@ def test_ready_recipe_uses_bounded_repeat_interval() -> None:
 
     assert "ready --local" in recipe
     assert "--until true" in recipe
-    assert "--max [readiness_attempts|20]" in recipe
-    assert "--interval [readiness_interval|1]" in recipe
+    assert "--max 10" in recipe
+    assert "--interval 1" in recipe
 
 
 def test_watchtower_recipe_composes_readiness() -> None:
