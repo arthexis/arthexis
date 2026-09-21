@@ -9,6 +9,10 @@ import os
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from arthexis.reconciliation.source import inspect_source, resolve_source
 
 
@@ -34,9 +38,6 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _setup_django() -> None:
-    project_root = Path(__file__).resolve().parents[1]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arthexis.settings")
     import django
 
