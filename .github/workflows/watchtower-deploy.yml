@@ -52,7 +52,7 @@ jobs:
           test -n "${gway_sha}"
           python3 -m venv "${RUNNER_TEMP}/gway-venv"
           "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@${gway_sha}"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}"
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
           echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
 
