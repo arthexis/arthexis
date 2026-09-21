@@ -1,5 +1,5 @@
 # Wait for the local Arthexis service to become healthy.
-ready
+ready --local
 --host [host|127.0.0.1]
 --port [port|8888]
 --domain [domain|arthexis.com]
