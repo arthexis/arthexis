@@ -8,5 +8,5 @@ ready --local
 
 repeat
 --until true
---max [readiness_attempts|20]
---interval [readiness_interval|1]
+--max 10
+--interval 1
