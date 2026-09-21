@@ -23,8 +23,10 @@ def main(
     host: str = "127.0.0.1",
     port: int = 8888,
     data_dir: str = "/var/lib/arthexis",
+    allowed_hosts: str = "0.0.0.0",
 ) -> None:
     """Replace this process with Daphne serving the Arthexis ASGI application."""
     os.environ["ARTHEXIS_DATA_DIR"] = str(Path(data_dir).expanduser())
+    os.environ["ARTHEXIS_ALLOWED_HOSTS"] = allowed_hosts
     command = daphne_command(host=host, port=port)
     os.execv(command[0], command)
