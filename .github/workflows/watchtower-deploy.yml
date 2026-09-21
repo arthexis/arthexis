@@ -4,15 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      target_ref:
-        description: Arthexis ref to deploy
-        required: true
-        default: main
-        type: string
 
 concurrency:
-  group: watchtower-deploy-${{ github.ref }}
+  group: watchtower-deploy-main
   cancel-in-progress: false
 
 permissions:
@@ -31,7 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.sha }}
           persist-credentials: false
           fetch-depth: 1
 
@@ -43,16 +36,13 @@ jobs:
       - name: Install canonical Gway
         run: |
           python -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install             "git+https://github.com/arthexis/gway.git@main"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "git+https://github.com/arthexis/gway.git@main"
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
 
       - name: Record deployment inputs
         run: |
           git rev-parse HEAD | tee "${RUNNER_TEMP}/arthexis-sha.txt"
-          "${RUNNER_TEMP}/gway-venv/bin/python" - <<'PY' | tee "${RUNNER_TEMP}/gway-version.txt"
-          import importlib.metadata
-          print(importlib.metadata.version("gway"))
-          PY
+          "${RUNNER_TEMP}/gway-venv/bin/python" -c 'import importlib.metadata; print(importlib.metadata.version("gway"))' | tee "${RUNNER_TEMP}/gway-version.txt"
           python --version | tee "${RUNNER_TEMP}/python-version.txt"
 
       - name: Install Arthexis through Gway
@@ -62,8 +52,8 @@ jobs:
           test -f "${GWAY_DATA_DIR}/projects/arthexis/pyproject.toml"
 
       - name: Prepare managed Arthexis runtime
-        working-directory: ${{ runner.temp }}/gway-data/projects/arthexis
         run: |
+          cd "${GWAY_DATA_DIR}/projects/arthexis"
           ./install.sh
           .venv/bin/python manage.py check --fail-level ERROR
           .venv/bin/python manage.py makemigrations --check --dry-run
