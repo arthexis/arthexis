@@ -2,7 +2,7 @@ name: python / Python compatibility
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -13,7 +13,6 @@ permissions:
 jobs:
   tests:
     name: Tests (Python ${{ matrix.python-version }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -39,7 +38,7 @@ jobs:
   compatibility:
     name: python / Python compatibility
     needs: tests
-    if: always() && needs.tests.result != 'skipped' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    if: always() && needs.tests.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - name: Require all Python versions
