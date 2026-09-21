@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 arthexis = "manage:main"
+reconcile = "scripts.reconcile:main"
 
 [tool.ruff]
 target-version = "py311"
