@@ -1,6 +1,11 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "arthexis"
 version = "2.0.0.dev0"
+description = "Field-safe EV charging operations and OCPP services"
 requires-python = ">=3.11"
 dependencies = [
     "Django==5.2.12",
@@ -13,6 +18,16 @@ dependencies = [
 [project.scripts]
 arthexis = "manage:main"
 reconcile = "scripts.reconcile:main"
+
+[project.urls]
+Repository = "https://github.com/arthexis/arthexis"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = ["manage"]
+
+[tool.setuptools.packages.find]
+include = ["apps*", "arthexis*", "scripts*"]
 
 [tool.ruff]
 target-version = "py311"
