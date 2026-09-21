@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      GWAY_DATA_DIR: ${{ runner.temp }}/gway-data
-      GWAY_CACHE_DIR: ${{ runner.temp }}/gway-cache
-      GWAY_BIN_DIR: ${{ runner.temp }}/gway-bin
-      ARTHEXIS_DATA_DIR: ${{ runner.temp }}/arthexis-data
+      GWAY_DATA_DIR: /tmp/gway-data
+      GWAY_CACHE_DIR: /tmp/gway-cache
+      GWAY_BIN_DIR: /tmp/gway-bin
+      ARTHEXIS_DATA_DIR: /tmp/arthexis-data
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
