@@ -1,15 +1,15 @@
 """Protocol action metadata shared by both retained OCPP versions."""
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 
-class Direction(StrEnum):
+class Direction(str, Enum):
     CHARGE_POINT_TO_CSMS = "charge_point_to_csms"
     CSMS_TO_CHARGE_POINT = "csms_to_charge_point"
 
 
-class ProtocolVersion(StrEnum):
+class ProtocolVersion(str, Enum):
     OCPP_16 = "ocpp1.6"
     OCPP_201 = "ocpp2.0.1"
 
