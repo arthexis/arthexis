@@ -100,6 +100,10 @@ CELERY_RESULT_BACKEND = os.environ.get(
     "ARTHEXIS_CELERY_RESULT_BACKEND", "cache+memory://"
 )
 CELERY_BEAT_SCHEDULE = {
+    "events-dispatch-pending": {
+        "task": "events.dispatch_pending",
+        "schedule": 30,
+    },
     "ocpp-refresh-stale-connections": {
         "task": "ocpp.maintenance.refresh_stale_connections",
         "schedule": 3600,

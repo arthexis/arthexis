@@ -33,11 +33,35 @@ The database is authoritative. Celery and Redis must remain recoverable
 secondary infrastructure rather than prerequisites for a valid immediate
 charger response.
 
+## E1 durable outbox
+
+E1 turns `EventEnvelope` into a SQL-backed outbox without changing the publish
+API. New events begin in `pending`. A Celery Beat task periodically claims due
+events in short database transactions, releases database locks, then hands only
+the durable `event_id` to the broker.
+
+Successful broker handoff marks the event `published` and sets
+`published_at`. Broker failures become retryable `failed` rows with bounded
+backoff. A process that dies after claiming work leaves a `dispatching` event;
+claims older than five minutes are stale and can be recovered by a later pass.
+
+The broker handoff is at-least-once. A crash after the broker accepts a task but
+before SQL records `published` can cause the same event to be handed off again.
+Downstream event consumers therefore must be idempotent.
+
+The generic worker reloads the full envelope from SQL by `event_id` and invokes
+registered consumers. SQL remains the source of truth; broker messages carry no
+copy of the domain payload.
+
+`published_at` means that asynchronous processing was successfully handed to
+Celery. It does not mean that every eventual subscriber completed. Per-consumer
+delivery state can be introduced later if real consumers require that stronger
+contract.
+
 ## Planned evolution
 
-The next phases will turn `EventEnvelope` into a durable outbox, add
-restart-safe inbound OCPP replay identities, restore crash-safe transaction
-reconciliation, and progressively move secondary charger work behind durable
-event processing.
+The next phases add restart-safe inbound OCPP replay identities, restore
+crash-safe transaction reconciliation, and progressively move secondary charger
+work behind durable event processing.
 
 Those changes must preserve the E0 fail-soft hot-path rule.

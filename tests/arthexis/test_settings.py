@@ -16,6 +16,15 @@ class OcppSchedulingTests(SimpleTestCase):
 
         self.assertFalse(any("charger" in task for task in scheduled_tasks))
 
+    def test_event_outbox_dispatch_is_scheduled(self) -> None:
+        self.assertEqual(
+            CELERY_BEAT_SCHEDULE["events-dispatch-pending"],
+            {
+                "task": "events.dispatch_pending",
+                "schedule": 30,
+            },
+        )
+
 
 SELECTED_APPS = (
     "apps.base",
