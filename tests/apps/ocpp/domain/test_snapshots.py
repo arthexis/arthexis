@@ -63,7 +63,6 @@ class ChargerSnapshotTests(TestCase):
         )
         self.assertEqual(snapshot.energy_kwh, Decimal("1.25"))
         self.assertEqual(snapshot.unresolved_sessions, 0)
-        self.assertEqual(snapshot.unresolved_energy_sessions, 0)
         self.assertEqual(snapshot.unresolved_energy_sessions, 1)
         self.assertEqual(snapshot_chargers(), [snapshot])
 
@@ -74,6 +73,7 @@ class ChargerSnapshotTests(TestCase):
 
         self.assertIsNone(snapshot.energy_kwh)
         self.assertEqual(snapshot.unresolved_sessions, 0)
+        self.assertEqual(snapshot.unresolved_energy_sessions, 0)
         self.assertEqual(snapshot.connection_state, "disconnected")
         self.assertTrue(snapshot.enabled)
         self.assertEqual(snapshot.state, "offline")
