@@ -6,7 +6,15 @@ from django.db.models.query import QuerySet
 from apps.ocpp.models import Charger
 
 FLEET_FILTERS = frozenset(
-    {"enabled", "disabled", "connected", "disconnected", "charging", "idle"}
+    {
+        "enabled",
+        "disabled",
+        "connected",
+        "disconnected",
+        "charging",
+        "idle",
+        "unresolved",
+    }
 )
 
 
