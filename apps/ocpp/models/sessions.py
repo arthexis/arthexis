@@ -112,3 +112,13 @@ class MeterValue(models.Model):
     measurand = models.CharField(max_length=60, default="Energy.Active.Import.Register")
     unit = models.CharField(max_length=12, default="Wh")
     multiplier = models.SmallIntegerField(default=0)
+    source_fingerprint = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("transaction", "source_fingerprint"),
+                condition=~models.Q(source_fingerprint=""),
+                name="unique_ocpp_meter_sample_fingerprint",
+            )
+        ]
