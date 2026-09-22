@@ -6,7 +6,8 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
-from apps.ocpp.models import Charger, Connector
+from apps.ocpp.domain.sessions import reconcile_connector_status
+from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.services.transactions import (
     process_v201_meter_values,
@@ -74,8 +75,11 @@ class SessionActions:
     ) -> dict[str, object]:
         evse_id = _required_int(payload, "evseId")
         connector_id = _required_int(payload, "connectorId")
-        await self._set_connector_status(
-            evse_id, connector_id, _required_text(payload, "connectorStatus")
+        await sync_to_async(reconcile_connector_status)(
+            charger=self.charger,
+            connector_number=(evse_id * 1000) + connector_id,
+            status=_required_text(payload, "connectorStatus"),
+            observed_at=payload.get("timestamp"),
         )
         return {}
 
@@ -88,16 +92,6 @@ class SessionActions:
     @sync_to_async
     def _record_connection(self) -> None:
         Charger.objects.filter(pk=self.charger.pk).update(connected_at=timezone.now())
-
-    @sync_to_async
-    def _set_connector_status(
-        self, evse_id: int, connector_id: int, status: str
-    ) -> None:
-        Connector.objects.update_or_create(
-            charger=self.charger,
-            number=(evse_id * 1000) + connector_id,
-            defaults={"status": status},
-        )
 
 
 def _id_token(payload: dict[str, object]) -> str:
