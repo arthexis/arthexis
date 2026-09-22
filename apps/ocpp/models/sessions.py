@@ -122,3 +122,26 @@ class MeterValue(models.Model):
                 name="unique_ocpp_meter_sample_fingerprint",
             )
         ]
+
+
+class MeterReadingBatch(models.Model):
+    """Retained standalone meter evidence that is not bound to a transaction."""
+
+    charger = models.ForeignKey(
+        Charger,
+        on_delete=models.CASCADE,
+        related_name="meter_reading_batches",
+    )
+    protocol = models.CharField(max_length=12, default="ocpp2.0.1")
+    evse_id = models.PositiveIntegerField(null=True, blank=True)
+    reported_at = models.DateTimeField(null=True, blank=True)
+    payload = models.JSONField(default=dict)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=("charger", "reported_at", "received_at"),
+                name="ocpp_meter_batch_time_idx",
+            ),
+        ]

@@ -20,6 +20,7 @@ from apps.ocpp.services.intake import (
     process_operational_status,
     process_report_intake,
 )
+from apps.ocpp.services.metering import process_v201_standalone_meter_values
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
@@ -110,19 +111,7 @@ class FrameDispatcher:
                     self.version is ProtocolVersion.OCPP_16
                     and frame.action in {"StartTransaction", "StopTransaction"}
                 )
-                or (
-                    frame.action == "MeterValues"
-                    and (
-                        self.version is ProtocolVersion.OCPP_16
-                        or (
-                            self.version is ProtocolVersion.OCPP_201
-                            and isinstance(
-                                frame.payload.get("transactionInfo"),
-                                dict,
-                            )
-                        )
-                    )
-                )
+                or frame.action == "MeterValues"
                 or (
                     self.version is ProtocolVersion.OCPP_201
                     and frame.action == "TransactionEvent"
@@ -282,6 +271,27 @@ class FrameDispatcher:
         ):
             try:
                 payload = await sync_to_async(process_v201_meter_values)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if (
+            self.version is ProtocolVersion.OCPP_201
+            and frame.action == "MeterValues"
+        ):
+            try:
+                payload = await sync_to_async(process_v201_standalone_meter_values)(
                     charger=self.charger,
                     payload=frame.payload,
                     replay_request=acquired.request,
