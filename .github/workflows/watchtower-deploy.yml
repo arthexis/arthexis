@@ -102,6 +102,14 @@ jobs:
           set -Eeuo pipefail
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'"'
 
+      - name: Verify public Markdown root
+        if: env.ARTHEXIS_CERTBOT_EMAIL != ''
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root_html="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors https://arthexis.com/)"
+          grep -F '<h1 id="arthexis">Arthexis</h1>' <<<"${root_html}" >/dev/null
+
       - name: Record public exposure prerequisite
         if: env.ARTHEXIS_CERTBOT_EMAIL == ''
         shell: bash
