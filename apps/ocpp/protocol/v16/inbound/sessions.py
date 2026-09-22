@@ -5,10 +5,13 @@ from collections.abc import Awaitable, Callable
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.domain.sessions import record_meter_values, stop_transaction
+from apps.ocpp.domain.sessions import stop_transaction
 from apps.ocpp.models import Charger, Connector
 from apps.ocpp.services.authorization import authorize_id_tag
-from apps.ocpp.services.transactions import process_v16_start_transaction
+from apps.ocpp.services.transactions import (
+    process_v16_meter_values,
+    process_v16_start_transaction,
+)
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -50,12 +53,10 @@ class SessionActions:
         return {"currentTime": timezone.now().isoformat()}
 
     async def meter_values(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(record_meter_values)(
-            transaction_id=int(payload["transactionId"]),
+        return await sync_to_async(process_v16_meter_values)(
             charger=self.charger,
-            meter_values=payload["meterValue"],
+            payload=payload,
         )
-        return {}
 
     async def start_transaction(self, payload: dict[str, object]) -> dict[str, object]:
         return await sync_to_async(process_v16_start_transaction)(
