@@ -1,7 +1,9 @@
 """Durable persistence services for inbound OCPP replay."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -26,6 +28,10 @@ class ReplayAcquisition:
     @property
     def completed(self) -> bool:
         return self.request.status == InboundProtocolRequest.Status.COMPLETED
+
+    @property
+    def stale(self) -> bool:
+        return self.request.status == InboundProtocolRequest.Status.STALE
 
 
 def acquire_inbound_request(
@@ -61,6 +67,8 @@ def acquire_inbound_request(
             "request_payload": payload,
         },
     )
+    if not created:
+        request = _mark_stale_if_needed(request)
     return ReplayAcquisition(request=request, created=created)
 
 
@@ -189,3 +197,19 @@ def _response_signature(
         error_description,
         error_details,
     )
+
+
+@transaction.atomic
+def _mark_stale_if_needed(
+    request: InboundProtocolRequest,
+) -> InboundProtocolRequest:
+    current = InboundProtocolRequest.objects.select_for_update().get(pk=request.pk)
+    if current.status != InboundProtocolRequest.Status.PROCESSING:
+        return current
+    cutoff = timezone.now() - timedelta(seconds=settings.OCPP_REPLAY_STALE_SECONDS)
+    if current.received_at > cutoff:
+        return current
+    current.status = InboundProtocolRequest.Status.STALE
+    current.stale_at = timezone.now()
+    current.save(update_fields=("status", "stale_at"))
+    return current
