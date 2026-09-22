@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
@@ -45,7 +46,7 @@ class SessionActions:
         _required_text(station, "vendorName")
         _required_text(station, "model")
         await self._record_connection()
-        interval = 300
+        interval = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS
         await sync_to_async(configure_heartbeat)(
             charger=self.charger,
             interval_seconds=interval,
