@@ -37,6 +37,15 @@ class ChargerRenderTests(SimpleTestCase):
             energy_kwh=Decimal("1.2500"),
             unresolved_sessions=1,
             unresolved_energy_sessions=2,
+            authority_cutover_at=datetime(2026, 1, 1, 0, tzinfo=timezone.utc),
+            historical_sessions=3,
+            historical_open_sessions=1,
+            historical_oldest_started=datetime(
+                2023, 1, 1, 0, tzinfo=timezone.utc
+            ),
+            historical_latest_activity=datetime(
+                2025, 12, 31, 23, 30, tzinfo=timezone.utc
+            ),
             last_contact=datetime(2026, 1, 1, 2, 5, tzinfo=timezone.utc),
         )
 
@@ -52,6 +61,9 @@ class ChargerRenderTests(SimpleTestCase):
         self.assertNotIn("Energy total", rendered)
         self.assertNotIn("Recovery unresolved", rendered)
         self.assertNotIn("Energy unresolved", rendered)
+        self.assertNotIn("Authority cutover", rendered)
+        self.assertNotIn("Historical TX", rendered)
+        self.assertNotIn("Historical open", rendered)
 
     def test_detail_view_adds_richer_columns_and_values(self) -> None:
         command = RecordingCommand()
@@ -65,6 +77,11 @@ class ChargerRenderTests(SimpleTestCase):
         self.assertIn("Energy total", rendered)
         self.assertIn("Recovery unresolved", rendered)
         self.assertIn("Energy unresolved", rendered)
+        self.assertIn("Authority cutover", rendered)
+        self.assertIn("Historical TX", rendered)
+        self.assertIn("Historical open", rendered)
+        self.assertIn("Historical oldest", rendered)
+        self.assertIn("Historical latest", rendered)
         self.assertIn("transaction-active", rendered)
         self.assertIn("transaction-last", rendered)
         self.assertIn("1.2500 kWh", rendered)
