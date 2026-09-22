@@ -1,4 +1,5 @@
 import os
+import unittest
 from pathlib import Path
 
 from asgiref.sync import async_to_sync
@@ -21,7 +22,7 @@ class OfficialSchemaConformanceTests(TransactionTestCase):
         super().setUpClass()
         root = os.environ.get("OCPP_CONFORMANCE_SCHEMA_ROOT")
         if not root:
-            raise cls.skipTest("official OCPP schemas are not prepared")
+            raise unittest.SkipTest("official OCPP schemas are not prepared")
         cls.schema_root = Path(root)
 
         import jsonschema
