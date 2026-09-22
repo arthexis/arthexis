@@ -85,7 +85,46 @@ class FleetCommandTests(TestCase):
         self.assertIn("Energy total", rendered)
         self.assertIn("Recovery unresolved", rendered)
         self.assertIn("Energy unresolved", rendered)
+        self.assertIn("Authority cutover", rendered)
+        self.assertIn("Historical TX", rendered)
+        self.assertIn("Historical open", rendered)
+        self.assertIn("Historical oldest", rendered)
+        self.assertIn("Historical latest", rendered)
 
+
+    def test_historical_filter_and_detail_surface_retained_history(self) -> None:
+        historical_charger = charger("charger-historical")
+        connection(historical_charger, channel_name="historical-channel")
+        historical_charger.authority_cutover_at = datetime(
+            2026, 9, 22, 12, tzinfo=timezone.utc
+        )
+        historical_charger.save(update_fields=("authority_cutover_at",))
+        transaction(
+            historical_charger,
+            "historical-complete",
+            started_at=datetime(2023, 1, 1, 10, tzinfo=timezone.utc),
+            stopped_at=datetime(2023, 1, 1, 11, tzinfo=timezone.utc),
+            historical=True,
+        )
+        transaction(
+            historical_charger,
+            "historical-open",
+            started_at=datetime(2023, 1, 2, 10, tzinfo=timezone.utc),
+            historical=True,
+        )
+        output = StringIO()
+
+        call_command("fleet", "--historical", "--detail", stdout=output)
+
+        rendered = output.getvalue()
+        self.assertIn("charger-historical", rendered)
+        self.assertNotIn("charger-1", rendered)
+        self.assertIn("Historical TX", rendered)
+        self.assertIn("Historical open", rendered)
+        self.assertIn("2", rendered)
+        self.assertIn("1", rendered)
+        self.assertIn("2023-01-01", rendered)
+        self.assertIn("2023-01-02", rendered)
 
     def test_unresolved_filter_and_state_are_visible_to_operators(self) -> None:
         uncertain = Charger.objects.get(pk=self.charger.pk).transactions.get(
