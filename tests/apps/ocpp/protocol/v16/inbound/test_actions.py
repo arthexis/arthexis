@@ -23,6 +23,7 @@ class Ocpp16InboundTests(TestCase):
             authorization_mode=Charger.AuthorizationMode.RESTRICTED,
         )
         self.dispatcher = FrameDispatcher(
+            charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
             handler_resolver=InboundActions(self.charger).resolve,
