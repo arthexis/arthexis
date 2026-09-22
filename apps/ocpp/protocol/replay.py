@@ -95,3 +95,15 @@ def identity_key(identity: ReplayIdentity) -> str:
     """Hash one policy-specific logical replay identity for SQL uniqueness."""
     material = "\n".join(identity.logical_key()).encode()
     return sha256(material).hexdigest()
+
+
+_TRANSACTION_REPLAY_ACTIONS = frozenset(
+    {"StartTransaction", "StopTransaction", "MeterValues", "TransactionEvent"}
+)
+
+
+def replay_policy_for_action(action: str) -> ReplayPolicy:
+    """Select bounded replay for repeatable actions pending domain-aware recovery."""
+    if action in _TRANSACTION_REPLAY_ACTIONS:
+        return ReplayPolicy.CALL_ID_AND_FINGERPRINT
+    return ReplayPolicy.NO_CROSS_CALL_DEDUP
