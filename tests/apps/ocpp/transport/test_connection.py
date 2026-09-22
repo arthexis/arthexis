@@ -41,6 +41,7 @@ class ChargerEnrollmentTests(TestCase):
         self.assertIsNotNone(enrolled)
         self.assertEqual(enrolled.identity, "charger-new")
         self.assertIsNotNone(enrolled.enrolled_at)
+        self.assertEqual(enrolled.authority_cutover_at, enrolled.enrolled_at)
         self.assertTrue(enrolled.active)
         self.assertEqual(enrolled.authorization_mode, Charger.AuthorizationMode.OPEN)
         self.assertFalse(Charger.objects.filter(identity="charger-rejected").exists())

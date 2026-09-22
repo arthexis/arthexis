@@ -79,6 +79,7 @@ def transaction(
     *,
     started_at: datetime,
     stopped_at: datetime | None = None,
+    historical: bool = False,
     **values,
 ) -> OcppTransaction:
     values.setdefault("last_activity_at", stopped_at or started_at)
@@ -95,5 +96,6 @@ def transaction(
         remote_id=remote_id,
         started_at=started_at,
         stopped_at=stopped_at,
+        historical=historical,
         **values,
     )

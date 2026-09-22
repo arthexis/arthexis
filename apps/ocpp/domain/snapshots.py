@@ -68,7 +68,8 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         transaction
         for transaction in transactions
         if (
-            transaction.recovery_state
+            not transaction.historical
+            and transaction.recovery_state
             == OcppTransaction.RecoveryState.UNRESOLVED
             and transaction.stopped_at is None
         )
@@ -99,7 +100,8 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
             )
         ),
         active_transactions=sum(
-            transaction.recovery_state == OcppTransaction.RecoveryState.ACTIVE
+            not transaction.historical
+            and transaction.recovery_state == OcppTransaction.RecoveryState.ACTIVE
             and transaction.stopped_at is None
             for transaction in transactions
         ),

@@ -25,7 +25,8 @@ def current_transaction(charger: Charger) -> OcppTransaction | None:
                 transaction
                 for transaction in prefetched
                 if (
-                    transaction.recovery_state
+                    not transaction.historical
+                    and transaction.recovery_state
                     == OcppTransaction.RecoveryState.ACTIVE
                     and transaction.stopped_at is None
                 )
@@ -58,6 +59,21 @@ def last_completed_transaction(charger: Charger) -> OcppTransaction | None:
     return charger.transactions.completed().recent().first()
 
 
+def is_historical_evidence(charger: Charger, occurred_at: datetime) -> bool:
+    """Return whether charger-reported evidence predates Arthexis authority."""
+    cutover = charger.authority_cutover_at
+    return cutover is not None and occurred_at < cutover
+
+
+def classify_transaction_evidence(
+    charger: Charger,
+    timestamp: object | None,
+) -> tuple[datetime, bool]:
+    """Parse charger-reported time and classify it against authority cutover."""
+    occurred_at = _parse_timestamp(timestamp)
+    return occurred_at, is_historical_evidence(charger, occurred_at)
+
+
 def start_transaction(
     *,
     charger: Charger,
@@ -66,6 +82,7 @@ def start_transaction(
     account: CustomerAccount | None,
     meter_start: object | None,
     timestamp: object | None,
+    historical: bool = False,
 ) -> OcppTransaction:
     """Persist an authorized OCPP 1.6 transaction start."""
     connector, _ = Connector.objects.get_or_create(charger=charger, number=connector_id)
@@ -78,6 +95,7 @@ def start_transaction(
         remote_id=f"{charger.pk}-{timezone.now().timestamp()}",
         started_at=started_at,
         last_activity_at=started_at,
+        historical=historical,
         meter_start=_parse_decimal(meter_start),
     )
     return transaction
@@ -386,7 +404,10 @@ def _touch_transaction_activity(
         return
     update_fields = ["last_activity_at"]
     transaction.last_activity_at = occurred_at
-    if transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED:
+    if (
+        not transaction.historical
+        and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+    ):
         transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
         update_fields.append("recovery_state")
     transaction.save(update_fields=tuple(update_fields))

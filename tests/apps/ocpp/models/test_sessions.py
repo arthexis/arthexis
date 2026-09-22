@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from apps.ocpp.domain.sessions import (
     current_transaction,
+    is_historical_evidence,
     last_completed_transaction,
     last_transaction,
     mark_transaction_unresolved,
@@ -93,6 +94,61 @@ class OcppTransactionTests(TestCase):
             [unresolved_energy],
         )
         self.assertNotIn(open_unresolved, OcppTransaction.objects.energy_unresolved())
+
+    def test_authority_cutover_classification_is_strictly_before(self) -> None:
+        cutover = datetime(2026, 9, 22, 14, 0, tzinfo=timezone.utc)
+        self.charger.authority_cutover_at = cutover
+        self.charger.save(update_fields=("authority_cutover_at",))
+
+        self.assertTrue(
+            is_historical_evidence(
+                self.charger,
+                datetime(2026, 9, 22, 13, 59, 59, tzinfo=timezone.utc),
+            )
+        )
+        self.assertFalse(is_historical_evidence(self.charger, cutover))
+        self.assertFalse(
+            is_historical_evidence(
+                self.charger,
+                datetime(2026, 9, 22, 14, 0, 1, tzinfo=timezone.utc),
+            )
+        )
+
+    def test_null_cutover_preserves_normal_semantics(self) -> None:
+        self.assertIsNone(self.charger.authority_cutover_at)
+        self.assertFalse(
+            is_historical_evidence(
+                self.charger,
+                datetime(2020, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+
+    def test_historical_open_transaction_is_not_live_or_current(self) -> None:
+        historical = transaction(
+            self.charger,
+            "historical-open",
+            started_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            historical=True,
+        )
+
+        self.assertQuerySetEqual(OcppTransaction.objects.historical(), [historical])
+        self.assertQuerySetEqual(OcppTransaction.objects.live(), [])
+        self.assertQuerySetEqual(OcppTransaction.objects.active(), [])
+        self.assertQuerySetEqual(OcppTransaction.objects.open(), [])
+        self.assertIsNone(current_transaction(self.charger))
+
+    def test_historical_unresolved_transaction_is_not_live_unresolved(self) -> None:
+        historical = transaction(
+            self.charger,
+            "historical-unresolved",
+            started_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            historical=True,
+        )
+        historical.recovery_state = OcppTransaction.RecoveryState.UNRESOLVED
+        historical.save(update_fields=("recovery_state",))
+
+        self.assertQuerySetEqual(OcppTransaction.objects.unresolved(), [])
+        self.assertQuerySetEqual(OcppTransaction.objects.historical(), [historical])
 
     def test_transaction_read_helpers_return_none_without_transactions(self) -> None:
         self.assertIsNone(current_transaction(self.charger))
