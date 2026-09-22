@@ -73,6 +73,13 @@ class FrameDispatcher:
         )
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
+        if acquired.stale:
+            return CallError(
+                unique_id=frame.unique_id,
+                code="InternalError",
+                description="Request recovery is required.",
+                details={},
+            )
         if not acquired.created:
             return CallError(
                 unique_id=frame.unique_id,
