@@ -3,7 +3,7 @@
   "publication": "OCPP 2.0.1 Edition 4 (all files)",
   "source_page": "https://openchargealliance.org/my-oca/ocpp/",
   "download_label": "OCPP 2.0.1 Edition 4 (all files)",
-  "archive_sha256": null,
+  "archive_sha256": "192482c82a5e27a2319d2142be2d8c074b68a22851ff5a12d0541efc1eda775a",
   "directions": {
     "charge_point_to_csms": [
       "Authorize",
@@ -71,6 +71,7 @@
       "SetVariables",
       "TriggerMessage",
       "UnlockConnector",
+      "UnpublishFirmware",
       "UpdateFirmware"
     ]
   },
@@ -81,7 +82,8 @@
       "GetChargingProfiles",
       "GetMonitoringReport",
       "GetTransactionStatus",
-      "SetNetworkProfile"
+      "SetNetworkProfile",
+      "UnpublishFirmware"
     ]
   }
 }
