@@ -33,7 +33,6 @@ class ReadmeContractTests(SimpleTestCase):
             with self.subTest(heading=heading):
                 self.assertIn(heading, readme)
 
-
     def test_readme_documents_operational_capabilities(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
 
