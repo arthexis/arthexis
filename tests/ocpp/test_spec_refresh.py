@@ -48,3 +48,30 @@ def test_extract_request_actions_uses_schema_titles_and_filenames() -> None:
         "BootNotification",
         "Heartbeat",
     }
+
+
+def _zip_bytes(files: dict[str, bytes | str]) -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        for name, content in files.items():
+            bundle.writestr(name, content)
+    return buffer.getvalue()
+
+
+def test_extract_request_actions_recurses_into_nested_zip() -> None:
+    nested = _zip_bytes(
+        {
+            "schemas/AuthorizeRequest.json": json.dumps(
+                {"title": "AuthorizeRequest", "type": "object"}
+            ),
+            "schemas/HeartbeatRequest.json": json.dumps({"type": "object"}),
+        }
+    )
+    outer = _zip_bytes(
+        {
+            "OCPP-2.0.1-Part3-Schemas.zip": nested,
+            "README.txt": "publication bundle",
+        }
+    )
+
+    assert extract_request_actions(outer) == {"Authorize", "Heartbeat"}
