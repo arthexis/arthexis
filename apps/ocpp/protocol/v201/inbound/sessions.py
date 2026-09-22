@@ -6,12 +6,10 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
-from apps.ocpp.domain.sessions import (
-    record_v201_meter_values,
-    record_v201_transaction_event,
-)
+from apps.ocpp.domain.sessions import record_v201_meter_values
 from apps.ocpp.models import Charger, Connector
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.transactions import process_v201_transaction_event
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -81,29 +79,10 @@ class SessionActions:
         return {}
 
     async def transaction_event(self, payload: dict[str, object]) -> dict[str, object]:
-        event_type = _required_text(payload, "eventType")
-        id_token = _optional_id_token(payload)
-        if event_type == "Started":
-            id_token = _id_token(payload)
-            authorization = await sync_to_async(authorize_id_tag)(
-                charger=self.charger,
-                id_tag=id_token,
-            )
-            if not authorization.accepted:
-                return {"idTokenInfo": {"status": "Invalid"}}
-        evse = payload.get("evse")
-        evse_id = _optional_int(evse, "id")
-        connector_id = _optional_int(evse, "connectorId")
-        await sync_to_async(record_v201_transaction_event)(
+        return await sync_to_async(process_v201_transaction_event)(
             charger=self.charger,
-            event_type=event_type,
-            transaction_id=_transaction_id(payload),
-            id_token=id_token,
-            evse_id=evse_id,
-            connector_id=connector_id,
-            timestamp=payload.get("timestamp"),
+            payload=payload,
         )
-        return {"idTokenInfo": {"status": "Accepted"}}
 
     @sync_to_async
     def _record_connection(self) -> None:
