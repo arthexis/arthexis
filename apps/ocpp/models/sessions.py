@@ -124,7 +124,6 @@ class MeterValue(models.Model):
         ]
 
 
-
 class MeterReadingBatch(models.Model):
     """Retained standalone meter evidence that is not bound to a transaction."""
 
@@ -141,5 +140,8 @@ class MeterReadingBatch(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=("charger", "reported_at", "received_at")),
+            models.Index(
+                fields=("charger", "reported_at", "received_at"),
+                name="ocpp_meter_batch_time_idx",
+            ),
         ]
