@@ -43,6 +43,7 @@ class InboundProtocolRequest(models.Model):
     )
     domain_identity = models.CharField(max_length=160, blank=True)
     identity_key = models.CharField(max_length=64)
+    replay_generation = models.CharField(max_length=32, blank=True)
     request_payload = models.JSONField(default=dict)
 
     status = models.CharField(
@@ -83,6 +84,7 @@ class InboundProtocolRequest(models.Model):
                     "direction",
                     "action",
                     "identity_key",
+                    "replay_generation",
                 ),
                 name="unique_ocpp_inbound_replay_identity",
             )
