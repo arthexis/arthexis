@@ -11,7 +11,10 @@ class OperationalStatusRecordTests(TestCase):
             charger=charger("charger-1"),
             kind=OperationalStatusRecord.Kind.FIRMWARE,
             status="Downloaded",
+            source_action="FirmwareStatusNotification",
             payload={},
         )
 
         self.assertEqual(status.kind, OperationalStatusRecord.Kind.FIRMWARE)
+        self.assertEqual(status.source_action, "FirmwareStatusNotification")
+        self.assertIsNone(status.reported_at)
