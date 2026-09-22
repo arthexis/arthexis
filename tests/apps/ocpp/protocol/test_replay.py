@@ -7,6 +7,7 @@ from apps.ocpp.protocol.replay import (
     canonical_payload,
     replay_identity,
     request_fingerprint,
+    replay_policy_for_action,
 )
 
 
@@ -165,3 +166,21 @@ class ReplayIdentityTests(TestCase):
         )
 
         self.assertEqual(first.logical_key(), second.logical_key())
+
+
+    def test_repeatable_action_uses_bounded_replay_policy(self) -> None:
+        self.assertEqual(
+            replay_policy_for_action("Heartbeat"),
+            ReplayPolicy.NO_CROSS_CALL_DEDUP,
+        )
+        self.assertEqual(
+            replay_policy_for_action("DataTransfer"),
+            ReplayPolicy.NO_CROSS_CALL_DEDUP,
+        )
+
+    def test_transaction_actions_keep_durable_replay_policy(self) -> None:
+        for action in ("StartTransaction", "StopTransaction", "MeterValues", "TransactionEvent"):
+            self.assertEqual(
+                replay_policy_for_action(action),
+                ReplayPolicy.CALL_ID_AND_FINGERPRINT,
+            )
