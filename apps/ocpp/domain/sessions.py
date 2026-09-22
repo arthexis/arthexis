@@ -23,7 +23,11 @@ def current_transaction(charger: Charger) -> OcppTransaction | None:
             (
                 transaction
                 for transaction in prefetched
-                if transaction.stopped_at is None
+                if (
+                    transaction.recovery_state
+                    == OcppTransaction.RecoveryState.ACTIVE
+                    and transaction.stopped_at is None
+                )
             ),
             None,
         )
@@ -61,6 +65,7 @@ def start_transaction(
     account: CustomerAccount | None,
     meter_start: object | None,
     timestamp: object | None,
+    live_evidence: bool = True,
 ) -> OcppTransaction:
     """Persist an authorized OCPP 1.6 transaction start."""
     connector, _ = Connector.objects.get_or_create(charger=charger, number=connector_id)
@@ -158,6 +163,21 @@ def record_v201_transaction_event(
     if latest_activity != transaction.last_activity_at:
         transaction.last_activity_at = latest_activity
         update_fields.append("last_activity_at")
+    if (
+        live_evidence
+        and event_type != "Ended"
+        and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+        and occurred_at > transaction.last_activity_at
+    ):
+        transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+        update_fields.append("recovery_state")
+    if (
+        not live_evidence
+        and transaction.stopped_at is None
+        and transaction.recovery_state == OcppTransaction.RecoveryState.ACTIVE
+    ):
+        transaction.recovery_state = OcppTransaction.RecoveryState.UNRESOLVED
+        update_fields.append("recovery_state")
     if event_type == "Ended" and transaction.stopped_at is None:
         transaction.stopped_at = occurred_at
         transaction.recovery_state = OcppTransaction.RecoveryState.COMPLETED
@@ -358,11 +378,15 @@ def _touch_transaction_activity(
 ) -> None:
     if occurred_at is None:
         return
-    latest = _latest_activity(transaction.last_activity_at, occurred_at)
-    if latest == transaction.last_activity_at:
+    current = transaction.last_activity_at
+    if occurred_at <= current:
         return
-    transaction.last_activity_at = latest
-    transaction.save(update_fields=("last_activity_at",))
+    update_fields = ["last_activity_at"]
+    transaction.last_activity_at = occurred_at
+    if transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED:
+        transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+        update_fields.append("recovery_state")
+    transaction.save(update_fields=tuple(update_fields))
 
 
 def _latest_activity(current: datetime, candidate: datetime) -> datetime:
@@ -389,3 +413,30 @@ def _meter_sample_fingerprint(
         sort_keys=True,
     ).encode()
     return sha256(material).hexdigest()
+
+
+
+def reconcile_connector_status(
+    *,
+    charger: Charger,
+    connector_number: int,
+    status: str,
+    observed_at: object | None = None,
+) -> Connector:
+    """Persist fresh connector evidence and mark contradictory open sessions unresolved."""
+    connector, _ = Connector.objects.update_or_create(
+        charger=charger,
+        number=connector_number,
+        defaults={"status": status},
+    )
+    if status != "Available":
+        return connector
+
+    evidence_at = _parse_timestamp(observed_at)
+    for selected in (
+        OcppTransaction.objects.active()
+        .filter(charger=charger, connector=connector)
+        .select_for_update()
+    ):
+        mark_transaction_unresolved(selected, observed_at=evidence_at)
+    return connector
