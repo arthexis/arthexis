@@ -14,7 +14,8 @@ from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.transport.dispatch import FrameDispatcher
-from tests.apps.ocpp.builders import charger, connection as charger_connection
+from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.builders import connection as charger_connection
 
 
 class HistoricalBacklogDrainAcceptanceTests(TransactionTestCase):
