@@ -12,8 +12,15 @@ class MarkdownSiteTests(SimpleTestCase):
         response = Client().get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h1 id="arthexis">Arthexis</h1>', html=True)
-        self.assertNotContains(response, "/admin/")
+        self.assertContains(
+            response, '<h1 id="constellation">Constellation</h1>', html=True
+        )
+        self.assertContains(
+            response,
+            '<h2 id="operational-capabilities">Operational Capabilities</h2>',
+            html=True,
+        )
+        self.assertNotContains(response, '<a href="/admin/"')
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
     def test_linked_operator_guide_is_public(self) -> None:
@@ -48,3 +55,22 @@ class MarkdownSiteTests(SimpleTestCase):
         response = Client().get("/FROZEN_1X_SOURCE.md")
 
         self.assertEqual(response.status_code, 404)
+
+
+class MarkdownPresentationTests(SimpleTestCase):
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    def test_home_renders_contents_sidebar(self) -> None:
+        response = Client().get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="Contents"')
+        self.assertContains(response, 'href="#purpose"')
+        self.assertContains(response, 'href="#suite-features"')
+
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    def test_markdown_site_is_dark_first(self) -> None:
+        response = Client().get("/")
+
+        self.assertContains(response, "color-scheme: dark")
+        self.assertContains(response, 'class="site-header"')
+        self.assertContains(response, 'class="markdown-body"')

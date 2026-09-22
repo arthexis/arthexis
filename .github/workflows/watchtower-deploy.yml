@@ -108,7 +108,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           root_html="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors https://arthexis.com/)"
-          grep -F '<h1 id="arthexis">Arthexis</h1>' <<<"${root_html}" >/dev/null
+          grep -F '<h1 id="constellation">Constellation</h1>' <<<"${root_html}" >/dev/null
+          grep -F '<h2 id="operational-capabilities">Operational Capabilities</h2>' <<<"${root_html}" >/dev/null
 
       - name: Record public exposure prerequisite
         if: env.ARTHEXIS_CERTBOT_EMAIL == ''

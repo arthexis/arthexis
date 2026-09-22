@@ -7,6 +7,10 @@ class WatchtowerWorkflowTests(TestCase):
         workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
             encoding="utf-8"
         )
+        self.assertIn(
+            "grep -F '<h2 id=\"operational-capabilities\">Operational Capabilities</h2>'",
+            workflow,
+        )
 
         self.assertIn("Verify public Markdown root", workflow)
         self.assertIn(
@@ -15,6 +19,6 @@ class WatchtowerWorkflowTests(TestCase):
             workflow,
         )
         self.assertIn(
-            "grep -F '<h1 id=\"arthexis\">Arthexis</h1>'",
+            "grep -F '<h1 id=\"constellation\">Constellation</h1>'",
             workflow,
         )
