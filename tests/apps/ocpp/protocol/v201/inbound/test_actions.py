@@ -137,8 +137,13 @@ class Ocpp201InboundTests(TestCase):
         )
 
         self.assertEqual(response, {})
-        notification = self.charger.ocpp_notifications.get(action="MeterValues")
-        self.assertEqual(notification.payload["evseId"], 1)
+        batch = self.charger.meter_reading_batches.get()
+        self.assertEqual(batch.evse_id, 1)
+        self.assertEqual(batch.payload["evseId"], 1)
+        self.assertEqual(
+            batch.reported_at.isoformat(),
+            "2026-01-01T00:00:00+00:00",
+        )
 
     def test_conformance_sensitive_inbound_responses_are_complete(self) -> None:
         handlers = InboundActions(self.charger)._handlers
