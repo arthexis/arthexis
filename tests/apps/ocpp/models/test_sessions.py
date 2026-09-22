@@ -67,7 +67,6 @@ class OcppTransactionTests(TestCase):
         self.assertIsNone(last_transaction(self.charger))
         self.assertIsNone(last_completed_transaction(self.charger))
 
-
     def test_unresolved_transaction_is_open_but_not_current(self) -> None:
         selected = transaction(
             self.charger,
@@ -107,7 +106,6 @@ class OcppTransactionTests(TestCase):
             "Completed transactions cannot become unresolved",
         ):
             mark_transaction_unresolved(selected)
-
 
 
 class MeterReadingBatchTests(TestCase):
