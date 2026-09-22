@@ -1,11 +1,15 @@
 """Persist-and-ack services for ACK-oriented inbound OCPP actions."""
 
+import logging
+
 from django.db import transaction
 
 from apps.events.services import publish_safely
 from apps.ocpp.domain.notifications import record_notification
 from apps.ocpp.models import Charger, InboundProtocolRequest, NotificationRecord
 from apps.ocpp.services.replay import complete_with_result
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -34,12 +38,18 @@ def process_data_transfer(
 
 
 def _publish_data_transfer(record: NotificationRecord) -> None:
-    publish_safely(
-        event_type="ocpp.data_transfer.received",
-        producer="ocpp",
-        payload={
-            "notification_id": record.pk,
-            "charger_id": record.charger_id,
-            "action": record.action,
-        },
-    )
+    try:
+        publish_safely(
+            event_type="ocpp.data_transfer.received",
+            producer="ocpp",
+            payload={
+                "notification_id": record.pk,
+                "charger_id": record.charger_id,
+                "action": record.action,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Could not enqueue secondary processing for DataTransfer %s",
+            record.pk,
+        )
