@@ -20,6 +20,7 @@ from apps.ocpp.transport.connection import (
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.operations import (
     deliver_queued_operation,
+    recover_connected_operations,
     register_connection,
     unregister_connection,
 )
@@ -69,6 +70,13 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             version=self.version,
         )
         await self.accept(subprotocol=self.subprotocol)
+        asyncio.create_task(
+            recover_connected_operations(
+                charger=self.charger,
+                sender=self.outbound,
+                version=self.version,
+            )
+        )
 
     async def disconnect(self, close_code: int) -> None:
         if hasattr(self, "pending_calls"):
