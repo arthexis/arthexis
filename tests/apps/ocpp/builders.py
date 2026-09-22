@@ -1,6 +1,8 @@
 """Small OCPP test builders that keep setup explicit without repetition."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from django.utils import timezone
 
 from apps.ocpp.models import (
     Charger,
@@ -44,11 +46,17 @@ def connection(
     *,
     protocol: str = "ocpp1.6",
     channel_name: str | None = None,
+    heartbeat_interval_seconds: int | None = None,
+    lease_seconds: int = 900,
 ) -> ChargerConnection:
+    now = timezone.now()
     return ChargerConnection.objects.create(
         charger=charger,
         channel_name=channel_name or f"{charger.identity}.channel",
         protocol=protocol,
+        last_seen_at=now,
+        heartbeat_interval_seconds=heartbeat_interval_seconds,
+        lease_expires_at=now + timedelta(seconds=lease_seconds),
     )
 
 

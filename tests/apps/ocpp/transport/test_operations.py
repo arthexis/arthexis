@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from asgiref.sync import async_to_sync
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import ChargerConnection, ProtocolOperation
@@ -94,6 +97,22 @@ class DeliveryBoundaryTests(TestCase):
         self,
     ) -> None:
         connection(self.charger, channel_name="specific.channel")
+
+        with self.assertRaises(ExplicitDeliveryUnavailable):
+            async_to_sync(request_explicit_operation)(
+                charger=self.charger,
+                version=ProtocolVersion.OCPP_16,
+                action="GetConfiguration",
+                payload={},
+            )
+
+        self.assertFalse(ProtocolOperation.objects.exists())
+
+    def test_explicit_delivery_rejects_expired_persisted_connection(self) -> None:
+        live = connection(self.charger, channel_name="specific.channel")
+        ChargerConnection.objects.filter(pk=live.pk).update(
+            lease_expires_at=timezone.now() - timedelta(seconds=1),
+        )
 
         with self.assertRaises(ExplicitDeliveryUnavailable):
             async_to_sync(request_explicit_operation)(

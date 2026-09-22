@@ -3,12 +3,14 @@
 from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
 from apps.ocpp.domain.sessions import reconcile_connector_status
 from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.presence import configure_heartbeat
 from apps.ocpp.services.transactions import (
     process_v201_meter_values,
     process_v201_transaction_event,
@@ -44,9 +46,14 @@ class SessionActions:
         _required_text(station, "vendorName")
         _required_text(station, "model")
         await self._record_connection()
+        interval = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS
+        await sync_to_async(configure_heartbeat)(
+            charger=self.charger,
+            interval_seconds=interval,
+        )
         return {
             "currentTime": timezone.now().isoformat(),
-            "interval": 300,
+            "interval": interval,
             "status": "Accepted",
         }
 
