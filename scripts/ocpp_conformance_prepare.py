@@ -10,18 +10,9 @@ from scripts.ocpp_spec_refresh import (
     _get,
     _load_manifest,
     discover_download_url,
+    identify_schema,
     iter_archive_json,
 )
-
-
-def _schema_kind(path: str) -> tuple[str, str] | None:
-    stem = Path(path).stem
-    for suffix, kind in (("Request", "request"), ("Response", "response")):
-        if stem.endswith(suffix):
-            action = stem[: -len(suffix)]
-            if action:
-                return action, kind
-    return None
 
 
 def prepare_manifest(
@@ -41,15 +32,15 @@ def prepare_manifest(
     index: dict[str, dict[str, str]] = {}
 
     for source_path, payload in iter_archive_json(archive):
-        identified = _schema_kind(source_path)
+        try:
+            schema = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        identified = identify_schema(source_path, schema)
         if identified is None:
             continue
         action, kind = identified
         target = version_root / f"{action}{kind.title()}.json"
-        try:
-            json.loads(payload)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            continue
         if target.exists() and target.read_bytes() != payload:
             raise RuntimeError(
                 f"Conflicting official schemas for {action} {kind} in {label}: "
