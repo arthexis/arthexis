@@ -44,6 +44,17 @@ class ChargerSelectionTests(TestCase):
         idle = charger("charger-idle")
         connection(idle, channel_name="idle-channel")
         disabled = charger("charger-disabled", active=False)
+        unresolved = charger("charger-unresolved")
+        connection(unresolved, channel_name="unresolved-channel")
+        unresolved_transaction = transaction(
+            unresolved,
+            "transaction-unresolved",
+            started_at=datetime(2026, 1, 1, 3, tzinfo=timezone.utc),
+        )
+        unresolved_transaction.recovery_state = (
+            unresolved_transaction.RecoveryState.UNRESOLVED
+        )
+        unresolved_transaction.save(update_fields=("recovery_state",))
 
         enabled_connected = list(
             select_chargers(
@@ -65,6 +76,16 @@ class ChargerSelectionTests(TestCase):
         )
         self.assertIn(idle, idle_only)
         self.assertNotIn(self.charger, idle_only)
+        self.assertNotIn(unresolved, idle_only)
+
+        unresolved_only = list(
+            select_chargers(
+                identities=[],
+                select_all=False,
+                filters=("unresolved",),
+            )
+        )
+        self.assertEqual(unresolved_only, [unresolved])
 
     def test_rejects_unknown_filter_names(self) -> None:
         with self.assertRaisesMessage(CommandError, "Unknown fleet filter"):
