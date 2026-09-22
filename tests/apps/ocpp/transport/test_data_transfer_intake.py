@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import timedelta
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
+from django.utils import timezone
 
 from apps.events.models import EventEnvelope
 from apps.ocpp.models import InboundProtocolRequest, NotificationRecord
@@ -138,6 +139,10 @@ class DataTransferPersistAndAckTests(TransactionTestCase):
         )
         self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
 
+    @override_settings(
+        OCPP_REPLAY_STALE_SECONDS=1,
+        OCPP_REPLAY_WINDOW_SECONDS=60,
+    )
     def test_stale_processing_request_recovers_after_fresh_dispatcher(self) -> None:
         frame = self._frame("transfer-restart")
         with patch(
@@ -158,7 +163,7 @@ class DataTransferPersistAndAckTests(TransactionTestCase):
             unique_id="transfer-restart",
         )
         InboundProtocolRequest.objects.filter(pk=replay.pk).update(
-            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            received_at=timezone.now() - timedelta(seconds=2),
         )
 
         recovered = async_to_sync(
