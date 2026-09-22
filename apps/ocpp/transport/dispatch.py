@@ -17,6 +17,7 @@ from apps.ocpp.services.replay import (
     complete_with_result,
     stored_response,
 )
+from apps.ocpp.services.transactions import process_v16_start_transaction
 
 ActionHandler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 HandlerResolver = Callable[[str], ActionHandler | None]
@@ -89,6 +90,24 @@ class FrameDispatcher:
                 description="Request is already processing.",
                 details={},
             )
+
+        if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
+            try:
+                payload = await sync_to_async(process_v16_start_transaction)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
 
         try:
             response = CallResult(
