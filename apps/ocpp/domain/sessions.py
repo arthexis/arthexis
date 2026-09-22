@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 
+from django.db import transaction as db_transaction
 from django.utils import timezone
 
 from apps.energy.models import CustomerAccount
@@ -65,7 +66,6 @@ def start_transaction(
     account: CustomerAccount | None,
     meter_start: object | None,
     timestamp: object | None,
-    live_evidence: bool = True,
 ) -> OcppTransaction:
     """Persist an authorized OCPP 1.6 transaction start."""
     connector, _ = Connector.objects.get_or_create(charger=charger, number=connector_id)
@@ -144,6 +144,7 @@ def record_v201_transaction_event(
     evse_id: int | None,
     connector_id: int | None,
     timestamp: object | None,
+    live_evidence: bool = True,
 ) -> OcppTransaction:
     """Persist a retained OCPP 2.0.1 transaction lifecycle event."""
     connector = _connector(charger, evse_id, connector_id)
@@ -159,15 +160,16 @@ def record_v201_transaction_event(
         },
     )
     update_fields: list[str] = []
-    latest_activity = _latest_activity(transaction.last_activity_at, occurred_at)
-    if latest_activity != transaction.last_activity_at:
+    previous_activity = transaction.last_activity_at
+    latest_activity = _latest_activity(previous_activity, occurred_at)
+    if latest_activity != previous_activity:
         transaction.last_activity_at = latest_activity
         update_fields.append("last_activity_at")
     if (
         live_evidence
         and event_type != "Ended"
         and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
-        and occurred_at > transaction.last_activity_at
+        and occurred_at > previous_activity
     ):
         transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
         update_fields.append("recovery_state")
@@ -416,6 +418,7 @@ def _meter_sample_fingerprint(
 
 
 
+@db_transaction.atomic
 def reconcile_connector_status(
     *,
     charger: Charger,
