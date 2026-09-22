@@ -1,0 +1,48 @@
+{
+  "protocol": "OCPP 1.6 JSON",
+  "publication": "OCPP 1.6 (all files & errata)",
+  "source_page": "https://openchargealliance.org/my-oca/ocpp/",
+  "download_label": "OCPP 1.6 (all files & errata)",
+  "archive_sha256": null,
+  "directions": {
+    "charge_point_to_csms": [
+      "Authorize",
+      "BootNotification",
+      "DataTransfer",
+      "DiagnosticsStatusNotification",
+      "FirmwareStatusNotification",
+      "Heartbeat",
+      "MeterValues",
+      "StartTransaction",
+      "StatusNotification",
+      "StopTransaction"
+    ],
+    "csms_to_charge_point": [
+      "CancelReservation",
+      "ChangeAvailability",
+      "ChangeConfiguration",
+      "ClearCache",
+      "ClearChargingProfile",
+      "DataTransfer",
+      "GetCompositeSchedule",
+      "GetConfiguration",
+      "GetDiagnostics",
+      "GetLocalListVersion",
+      "RemoteStartTransaction",
+      "RemoteStopTransaction",
+      "ReserveNow",
+      "Reset",
+      "SendLocalList",
+      "SetChargingProfile",
+      "TriggerMessage",
+      "UnlockConnector",
+      "UpdateFirmware"
+    ]
+  },
+  "known_missing_in_arthexis": {
+    "charge_point_to_csms": [],
+    "csms_to_charge_point": [
+      "ClearCache"
+    ]
+  }
+}
