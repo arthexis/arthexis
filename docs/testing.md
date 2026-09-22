@@ -107,11 +107,11 @@ Move it outward only when multiple sibling ownership areas genuinely share it.
 `tests/test_architecture.py` protects the package topology without imposing
 one-test-file-per-source-file parity. It verifies that:
 
-1. every first-party app with a manifest has a `tests/apps/<app>/` package;
+1. every first-party app package under `apps/*/` has a `tests/apps/<app>/` package;
 2. mirrored test packages under `tests/apps/` and `tests/arthexis/` point
    to real source packages;
 3. only explicitly approved repository-wide tests live at the test root;
-4. the integration, deploy, and conformance exception buckets remain explicit;
+4. the integration, deploy, and conformance exception buckets remain explicit Python test packages;
 5. the conformance suite does not recreate legacy version-package mirrors.
 
 When adding a new first-party app, create its mirrored test package as part of
