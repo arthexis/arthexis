@@ -4,9 +4,12 @@ from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
 
-from apps.ocpp.domain.notifications import record_notification
 from apps.ocpp.models import Charger
-from apps.ocpp.services.intake import process_data_transfer, process_operational_status
+from apps.ocpp.services.intake import (
+    process_data_transfer,
+    process_generic_notification,
+    process_operational_status,
+)
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -17,22 +20,20 @@ class NotificationActions:
     def __init__(self, charger: Charger) -> None:
         self.charger = charger
         self.handlers: dict[str, Handler] = {
-            "ClearedChargingLimit": self._acknowledge("ClearedChargingLimit"),
-            "CostUpdated": self._acknowledge("CostUpdated"),
+            "ClearedChargingLimit": self._generic("ClearedChargingLimit"),
+            "CostUpdated": self._generic("CostUpdated"),
             "DataTransfer": self.data_transfer,
             "FirmwareStatusNotification": self.firmware_status,
             "LogStatusNotification": self.log_status,
-            "NotifyChargingLimit": self._acknowledge("NotifyChargingLimit"),
-            "NotifyCustomerInformation": self._acknowledge("NotifyCustomerInformation"),
-            "NotifyDisplayMessages": self._acknowledge("NotifyDisplayMessages"),
-            "NotifyEVChargingNeeds": self._acknowledge_status("NotifyEVChargingNeeds"),
-            "NotifyEVChargingSchedule": self._acknowledge_status(
-                "NotifyEVChargingSchedule"
-            ),
-            "NotifyEvent": self._acknowledge("NotifyEvent"),
+            "NotifyChargingLimit": self._generic("NotifyChargingLimit"),
+            "NotifyCustomerInformation": self._generic("NotifyCustomerInformation"),
+            "NotifyDisplayMessages": self._generic("NotifyDisplayMessages"),
+            "NotifyEVChargingNeeds": self._generic("NotifyEVChargingNeeds"),
+            "NotifyEVChargingSchedule": self._generic("NotifyEVChargingSchedule"),
+            "NotifyEvent": self._generic("NotifyEvent"),
             "PublishFirmwareStatusNotification": self.publish_firmware_status,
-            "ReservationStatusUpdate": self._acknowledge("ReservationStatusUpdate"),
-            "SecurityEventNotification": self._acknowledge("SecurityEventNotification"),
+            "ReservationStatusUpdate": self._generic("ReservationStatusUpdate"),
+            "SecurityEventNotification": self._generic("SecurityEventNotification"),
         }
 
     async def data_transfer(self, payload: dict[str, object]) -> dict[str, object]:
@@ -64,26 +65,15 @@ class NotificationActions:
             payload=payload,
         )
 
-    def _acknowledge(self, action: str) -> Handler:
+    def _generic(self, action: str) -> Handler:
         async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
-            await self._record(action, payload)
-            return {}
+            return await sync_to_async(process_generic_notification)(
+                charger=self.charger,
+                action=action,
+                payload=payload,
+            )
 
         return acknowledge
-
-    def _acknowledge_status(self, action: str) -> Handler:
-        async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
-            await self._record(action, payload)
-            return {"status": "Accepted"}
-
-        return acknowledge
-
-    async def _record(self, action: str, payload: dict[str, object]) -> None:
-        await sync_to_async(record_notification)(
-            charger=self.charger,
-            action=action,
-            payload=payload,
-        )
 
 
 def _required_text(payload: dict[str, object], name: str) -> str:
