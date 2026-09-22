@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["charger", "reported_at", "received_at"],
-                        name="ocpp_meterre_charger_86a134_idx",
+                        name="ocpp_meter_batch_time_idx",
                     )
                 ],
             },
