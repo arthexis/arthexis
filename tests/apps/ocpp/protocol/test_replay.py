@@ -137,7 +137,7 @@ class ReplayIdentityTests(TestCase):
         self.assertNotEqual(first.logical_key(), second.logical_key())
 
     def test_domain_identity_requires_explicit_domain_key(self) -> None:
-        with self.assertRaisesMessage(ValueError, "Domain replay identity is required."):
+        with self.assertRaisesRegex(ValueError, "Domain replay identity is required\\."):
             replay_identity(
                 version=ProtocolVersion.OCPP_201,
                 action="TransactionEvent",
