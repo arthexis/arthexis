@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.utils import timezone
 
 from apps.ocpp.domain.sessions import reconcile_connector_status
@@ -44,7 +45,7 @@ class SessionActions:
         _required_text(payload, "chargePointVendor")
         _required_text(payload, "chargePointModel")
         await self._record_connection()
-        interval = 300
+        interval = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS
         await sync_to_async(configure_heartbeat)(
             charger=self.charger,
             interval_seconds=interval,
