@@ -4,8 +4,8 @@ from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
 
-from apps.ocpp.domain.notifications import record_monitoring, record_notification
 from apps.ocpp.models import Charger
+from apps.ocpp.services.intake import process_report_intake
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -22,25 +22,22 @@ class ReportActions:
         }
 
     async def monitoring_report(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(record_monitoring)(
+        return await sync_to_async(process_report_intake)(
             charger=self.charger,
-            event_type="NotifyMonitoringReport",
+            action="NotifyMonitoringReport",
             payload=payload,
         )
-        return {}
 
     async def report(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(record_monitoring)(
+        return await sync_to_async(process_report_intake)(
             charger=self.charger,
-            event_type="NotifyReport",
+            action="NotifyReport",
             payload=payload,
         )
-        return {}
 
     async def charging_profiles(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(record_notification)(
+        return await sync_to_async(process_report_intake)(
             charger=self.charger,
             action="ReportChargingProfiles",
             payload=payload,
         )
-        return {}
