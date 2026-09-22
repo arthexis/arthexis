@@ -140,7 +140,7 @@ class FrameDispatcherReplayTests(TestCase):
             charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
-            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
+            handler_resolver=lambda action: handler if action == "DataTransfer" else None,
         )
 
         response = await dispatcher.dispatch(frame)
