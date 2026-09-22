@@ -25,7 +25,8 @@ def current_transaction(charger: Charger) -> OcppTransaction | None:
                 transaction
                 for transaction in prefetched
                 if (
-                    transaction.recovery_state
+                    not transaction.historical
+                    and transaction.recovery_state
                     == OcppTransaction.RecoveryState.ACTIVE
                     and transaction.stopped_at is None
                 )
@@ -56,6 +57,12 @@ def last_completed_transaction(charger: Charger) -> OcppTransaction | None:
             None,
         )
     return charger.transactions.completed().recent().first()
+
+
+def is_historical_evidence(charger: Charger, occurred_at: datetime) -> bool:
+    """Return whether charger-reported evidence predates Arthexis authority."""
+    cutover = charger.authority_cutover_at
+    return cutover is not None and occurred_at < cutover
 
 
 def start_transaction(
@@ -386,7 +393,10 @@ def _touch_transaction_activity(
         return
     update_fields = ["last_activity_at"]
     transaction.last_activity_at = occurred_at
-    if transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED:
+    if (
+        not transaction.historical
+        and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+    ):
         transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
         update_fields.append("recovery_state")
     transaction.save(update_fields=tuple(update_fields))
