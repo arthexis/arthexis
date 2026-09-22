@@ -3,7 +3,9 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
+from apps.ocpp.domain.matrix import support_matrix, unimplemented_actions
 from apps.ocpp.models import Charger
+from apps.ocpp.protocol.registry import ALL_ACTIONS
 from apps.ocpp.protocol.v16.inbound import InboundActions as V16InboundActions
 from apps.ocpp.protocol.v16.outbound import VALIDATORS as V16_VALIDATORS
 from apps.ocpp.protocol.v201.inbound import InboundActions as V201InboundActions
@@ -14,6 +16,14 @@ SPEC_DIR = Path("tests/ocpp/spec")
 
 def _load(name: str) -> dict[str, object]:
     return json.loads((SPEC_DIR / name).read_text(encoding="utf-8"))
+
+
+class SupportMatrixTests(SimpleTestCase):
+    def test_every_frozen_contract_has_an_executable_handler_or_validator(self) -> None:
+        entries = support_matrix()
+
+        self.assertEqual(len(entries), len(ALL_ACTIONS))
+        self.assertFalse(unimplemented_actions())
 
 
 class OfficialOcppSurfaceTests(SimpleTestCase):
