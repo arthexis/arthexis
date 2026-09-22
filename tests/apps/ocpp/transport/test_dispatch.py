@@ -30,12 +30,12 @@ class FrameDispatcherReplayTests(TestCase):
             charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
-            handler_resolver=lambda action: handler if action == "DataTransfer" else None,
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
         )
         frame = Call(
             unique_id="call-1",
-            action="DataTransfer",
-            payload={"vendorId": "vendor"},
+            action="Heartbeat",
+            payload={},
         )
 
         first = await dispatcher.dispatch(frame)
@@ -60,21 +60,21 @@ class FrameDispatcherReplayTests(TestCase):
             charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
-            handler_resolver=lambda action: handler if action == "DataTransfer" else None,
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
         )
 
         first = await dispatcher.dispatch(
             Call(
                 unique_id="reused",
-                action="DataTransfer",
-                payload={"vendorId": "vendor", "data": "one"},
+                action="Heartbeat",
+                payload={"data": "one"},
             )
         )
         second = await dispatcher.dispatch(
             Call(
                 unique_id="reused",
-                action="DataTransfer",
-                payload={"vendorId": "vendor", "data": "two"},
+                action="Heartbeat",
+                payload={"data": "two"},
             )
         )
 
@@ -94,12 +94,12 @@ class FrameDispatcherReplayTests(TestCase):
             charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
-            handler_resolver=lambda action: handler if action == "DataTransfer" else None,
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
         )
         frame = Call(
             unique_id="call-error",
-            action="DataTransfer",
-            payload={"vendorId": "vendor"},
+            action="Heartbeat",
+            payload={},
         )
 
         first = await dispatcher.dispatch(frame)
@@ -140,7 +140,7 @@ class FrameDispatcherReplayTests(TestCase):
             charger=self.charger,
             version=ProtocolVersion.OCPP_16,
             pending_calls=PendingCalls(),
-            handler_resolver=lambda action: handler if action == "DataTransfer" else None,
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
         )
 
         response = await dispatcher.dispatch(frame)
