@@ -75,3 +75,22 @@ def test_extract_request_actions_recurses_into_nested_zip() -> None:
     )
 
     assert extract_request_actions(outer) == {"Authorize", "Heartbeat"}
+
+
+def test_extract_request_actions_rejects_excessive_archive_nesting() -> None:
+    payload = _zip_bytes(
+        {
+            "schemas/AuthorizeRequest.json": json.dumps(
+                {"title": "AuthorizeRequest", "type": "object"}
+            )
+        }
+    )
+    for depth in range(6):
+        payload = _zip_bytes({f"nested-{depth}.zip": payload})
+
+    try:
+        extract_request_actions(payload)
+    except RuntimeError as error:
+        assert "nesting exceeds" in str(error)
+    else:
+        raise AssertionError("excessively nested OCPP package should be rejected")
