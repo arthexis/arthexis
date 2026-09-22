@@ -70,6 +70,22 @@ class ChargerModelTests(TestCase):
         self.assertQuerySetEqual(Charger.objects.unresolved(), [connected_unresolved])
         self.assertQuerySetEqual(Charger.objects.idle(), [connected_idle])
 
+    def test_historical_open_transactions_do_not_affect_fleet_state(self) -> None:
+        historical_only = charger("historical-only")
+        connection(historical_only, channel_name="historical-channel")
+        historical = transaction(
+            historical_only,
+            "historical-open",
+            started_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            historical=True,
+        )
+        historical.recovery_state = historical.RecoveryState.UNRESOLVED
+        historical.save(update_fields=("recovery_state",))
+
+        self.assertNotIn(historical_only, Charger.objects.charging())
+        self.assertNotIn(historical_only, Charger.objects.unresolved())
+        self.assertIn(historical_only, Charger.objects.idle())
+
     def test_charging_requires_an_actual_active_transaction(self) -> None:
         connected_without_transactions = charger("charger-idle")
         connection(connected_without_transactions, channel_name="idle-channel")
@@ -129,6 +145,17 @@ class ChargerModelTests(TestCase):
         self.assertEqual(
             request.await_args.kwargs["payload"], {"transactionId": active.remote_id}
         )
+
+    def test_stop_ignores_historical_open_transactions(self) -> None:
+        transaction(
+            self.charger,
+            "historical-open",
+            started_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            historical=True,
+        )
+
+        with self.assertRaisesMessage(ValueError, "no active transaction"):
+            async_to_sync(Charger.stop)(self.charger)
 
     def test_start_and_stop_reject_invalid_model_state(self) -> None:
         with self.assertRaisesMessage(ValueError, "non-empty id_token"):
