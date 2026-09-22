@@ -4,12 +4,9 @@ from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
 
-from apps.ocpp.domain.notifications import (
-    record_notification,
-    record_operational_status,
-)
-from apps.ocpp.models import Charger, OperationalStatusRecord
-from apps.ocpp.services.intake import process_data_transfer
+from apps.ocpp.domain.notifications import record_notification
+from apps.ocpp.models import Charger
+from apps.ocpp.services.intake import process_data_transfer, process_operational_status
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -33,7 +30,7 @@ class NotificationActions:
                 "NotifyEVChargingSchedule"
             ),
             "NotifyEvent": self._acknowledge("NotifyEvent"),
-            "PublishFirmwareStatusNotification": self.firmware_status,
+            "PublishFirmwareStatusNotification": self.publish_firmware_status,
             "ReservationStatusUpdate": self._acknowledge("ReservationStatusUpdate"),
             "SecurityEventNotification": self._acknowledge("SecurityEventNotification"),
         }
@@ -45,24 +42,27 @@ class NotificationActions:
         )
 
     async def firmware_status(self, payload: dict[str, object]) -> dict[str, object]:
-        status = _required_text(payload, "status")
-        await sync_to_async(record_operational_status)(
+        return await sync_to_async(process_operational_status)(
             charger=self.charger,
-            kind=OperationalStatusRecord.Kind.FIRMWARE,
-            status=status,
+            action="FirmwareStatusNotification",
             payload=payload,
         )
-        return {}
+
+    async def publish_firmware_status(
+        self, payload: dict[str, object]
+    ) -> dict[str, object]:
+        return await sync_to_async(process_operational_status)(
+            charger=self.charger,
+            action="PublishFirmwareStatusNotification",
+            payload=payload,
+        )
 
     async def log_status(self, payload: dict[str, object]) -> dict[str, object]:
-        status = _required_text(payload, "status")
-        await sync_to_async(record_operational_status)(
+        return await sync_to_async(process_operational_status)(
             charger=self.charger,
-            kind=OperationalStatusRecord.Kind.LOG,
-            status=status,
+            action="LogStatusNotification",
             payload=payload,
         )
-        return {}
 
     def _acknowledge(self, action: str) -> Handler:
         async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
