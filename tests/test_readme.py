@@ -32,3 +32,32 @@ class ReadmeContractTests(SimpleTestCase):
         ):
             with self.subTest(heading=heading):
                 self.assertIn(heading, readme)
+
+
+    def test_readme_documents_operational_capabilities(self) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+
+        for capability in (
+            "## Operational Capabilities",
+            "**Fleet inspection**",
+            "**Charger enrollment**",
+            "**Authorization policy**",
+            "**Explicit charger control**",
+            "**Operation correlation**",
+            "**Structured events**",
+            "**Legacy reconciliation**",
+        ):
+            with self.subTest(capability=capability):
+                self.assertIn(capability, readme)
+
+    def test_readme_documents_typed_charger_controls(self) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+
+        for operation in (
+            "`RemoteStartTransaction`",
+            "`RequestStartTransaction`",
+            "`RemoteStopTransaction`",
+            "`RequestStopTransaction`",
+        ):
+            with self.subTest(operation=operation):
+                self.assertIn(operation, readme)
