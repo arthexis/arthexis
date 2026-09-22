@@ -49,6 +49,16 @@ class OfficialSchemaConformanceTests(TransactionTestCase):
         charger: Charger,
         payload: dict[str, object],
     ) -> None:
+        if action == "MeterValues":
+            for meter_value in payload.get("meterValue", []):
+                if not isinstance(meter_value, dict):
+                    continue
+                for sampled_value in meter_value.get("sampledValue", []):
+                    if isinstance(sampled_value, dict) and isinstance(
+                        sampled_value.get("value"), str
+                    ):
+                        sampled_value["value"] = "0"
+
         if version == "ocpp16" and action in {"MeterValues", "StopTransaction"}:
             transaction = OcppTransaction.objects.create(
                 charger=charger,
