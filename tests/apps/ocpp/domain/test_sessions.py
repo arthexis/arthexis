@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from django.test import TestCase
 
 from apps.ocpp.domain.sessions import (
+    reconcile_connector_status,
     record_meter_values,
     record_v201_transaction_event,
     start_transaction,
@@ -124,3 +125,165 @@ class TransactionRecoveryLifecycleTests(TestCase):
         )
         self.assertEqual(selected.last_activity_at, ended_at)
         self.assertEqual(selected.stopped_at, ended_at)
+
+
+    def test_available_status_marks_matching_active_transaction_unresolved(self) -> None:
+        started_at = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
+        observed_at = datetime(2026, 9, 22, 10, 20, tzinfo=timezone.utc)
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp=started_at.isoformat(),
+        )
+
+        reconcile_connector_status(
+            charger=self.charger,
+            connector_number=1,
+            status="Available",
+            observed_at=observed_at.isoformat(),
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+        self.assertIsNone(selected.stopped_at)
+        self.assertEqual(selected.last_activity_at, observed_at)
+
+    def test_non_available_status_does_not_force_transaction_unresolved(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+
+        reconcile_connector_status(
+            charger=self.charger,
+            connector_number=1,
+            status="Faulted",
+            observed_at="2026-09-22T10:20:00Z",
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+        self.assertIsNone(selected.stopped_at)
+
+    def test_buffered_meter_before_available_evidence_does_not_reactivate(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+        reconcile_connector_status(
+            charger=self.charger,
+            connector_number=1,
+            status="Available",
+            observed_at="2026-09-22T10:20:00Z",
+        )
+
+        record_meter_values(
+            transaction_id=selected.pk,
+            charger=self.charger,
+            meter_values=[
+                {
+                    "timestamp": "2026-09-22T10:10:00Z",
+                    "sampledValue": [{"value": "120"}],
+                }
+            ],
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 22, 10, 20, tzinfo=timezone.utc),
+        )
+
+    def test_newer_meter_evidence_reactivates_unresolved_transaction(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+        reconcile_connector_status(
+            charger=self.charger,
+            connector_number=1,
+            status="Available",
+            observed_at="2026-09-22T10:20:00Z",
+        )
+
+        record_meter_values(
+            transaction_id=selected.pk,
+            charger=self.charger,
+            meter_values=[
+                {
+                    "timestamp": "2026-09-22T10:25:00Z",
+                    "sampledValue": [{"value": "125"}],
+                }
+            ],
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 22, 10, 25, tzinfo=timezone.utc),
+        )
+
+    def test_offline_transaction_event_remains_unresolved_until_newer_live_event(
+        self,
+    ) -> None:
+        selected = record_v201_transaction_event(
+            charger=self.charger,
+            event_type="Started",
+            transaction_id="remote-offline",
+            id_token="card",
+            evse_id=1,
+            connector_id=1,
+            timestamp="2026-09-22T10:00:00Z",
+            live_evidence=False,
+        )
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+
+        record_v201_transaction_event(
+            charger=self.charger,
+            event_type="Updated",
+            transaction_id="remote-offline",
+            id_token="",
+            evse_id=1,
+            connector_id=1,
+            timestamp="2026-09-22T10:05:00Z",
+            live_evidence=True,
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
