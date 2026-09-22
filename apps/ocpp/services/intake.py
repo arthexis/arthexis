@@ -6,7 +6,10 @@ from datetime import datetime
 from django.db import transaction
 
 from apps.events.services import publish_safely
-from apps.ocpp.domain.notifications import record_notification, record_operational_status
+from apps.ocpp.domain.notifications import (
+    record_notification,
+    record_operational_status,
+)
 from apps.ocpp.models import (
     Charger,
     InboundProtocolRequest,
