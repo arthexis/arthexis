@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from apps.ocpp.models import Charger, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
+from apps.ocpp.protocol.recovery import recovery_policy_for
 from apps.ocpp.protocol.registry import resolve_action
 
 
@@ -25,6 +26,7 @@ def create_operation(
         direction=direction,
         action=action,
         request_payload=request_payload,
+        recovery_policy=recovery_policy_for(version=version, action=action),
     )
 
 
@@ -111,4 +113,19 @@ def require_operation_recovery(
         current.save(
             update_fields=("status", "last_delivery_error", "completed_at")
         )
+    return current
+
+
+
+@transaction.atomic
+def prepare_safe_retry(operation: ProtocolOperation) -> ProtocolOperation | None:
+    """Return an ambiguous SAFE_RETRY operation to pending for a new attempt."""
+    current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return None
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.SAFE_RETRY:
+        return None
+    current.status = ProtocolOperation.Status.PENDING
+    current.completed_at = None
+    current.save(update_fields=("status", "completed_at"))
     return current
