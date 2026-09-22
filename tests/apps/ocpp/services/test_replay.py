@@ -1,4 +1,7 @@
-from django.test import TestCase
+from datetime import timedelta
+
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.ocpp.models import InboundProtocolRequest
 from apps.ocpp.protocol.contracts import ProtocolVersion
@@ -165,3 +168,18 @@ class ReplayPersistenceTests(TestCase):
 
         with self.assertRaisesMessage(ValueError, "Inbound request has not completed."):
             stored_response(acquired.request)
+
+
+    @override_settings(OCPP_REPLAY_STALE_SECONDS=60)
+    def test_old_processing_request_becomes_stale_on_reacquisition(self) -> None:
+        first = self.acquire()
+        InboundProtocolRequest.objects.filter(pk=first.request.pk).update(
+            received_at=timezone.now() - timedelta(minutes=2)
+        )
+
+        second = self.acquire()
+
+        self.assertFalse(second.created)
+        self.assertTrue(second.stale)
+        self.assertEqual(second.request.status, InboundProtocolRequest.Status.STALE)
+        self.assertIsNotNone(second.request.stale_at)
