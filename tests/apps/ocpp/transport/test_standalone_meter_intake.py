@@ -65,7 +65,10 @@ class StandaloneMeterIntakeTests(TransactionTestCase):
             batch.reported_at.isoformat(),
             "2026-09-22T18:00:00+00:00",
         )
-        self.assertEqual(batch.payload["meterValue"][0]["sampledValue"][0]["value"], 10)
+        self.assertEqual(
+            batch.payload["meterValue"][0]["sampledValue"][0]["value"],
+            10,
+        )
 
         replay = InboundProtocolRequest.objects.get(
             charger=self.charger,
@@ -156,7 +159,10 @@ class StandaloneMeterIntakeTests(TransactionTestCase):
                 )
             )
 
-        self.assertEqual(response, CallResult(unique_id="meter-secondary", payload={}))
+        self.assertEqual(
+            response,
+            CallResult(unique_id="meter-secondary", payload={}),
+        )
         self.assertEqual(MeterReadingBatch.objects.count(), 1)
         self.assertFalse(EventEnvelope.objects.exists())
         replay = InboundProtocolRequest.objects.get(
@@ -197,7 +203,10 @@ class StandaloneMeterIntakeTests(TransactionTestCase):
 
         recovered = async_to_sync(self._dispatcher().dispatch)(frame)
 
-        self.assertEqual(recovered, CallResult(unique_id="meter-restart", payload={}))
+        self.assertEqual(
+            recovered,
+            CallResult(unique_id="meter-restart", payload={}),
+        )
         self.assertEqual(MeterReadingBatch.objects.count(), 1)
         self.assertEqual(EventEnvelope.objects.count(), 1)
         replay.refresh_from_db()
