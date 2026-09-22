@@ -95,6 +95,16 @@ jobs:
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
           echo "service=active"
 
+      - name: Apply Watchtower MCP logging scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scope_file="/var/lib/gway/projects/arthexis/deploy/mcp-scopes.toml"
+          sudo -n test -f "${scope_file}"
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway security scope apply deploy/mcp-scopes.toml' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway security scope show chatgpt-logs' >/dev/null 2>&1
+          echo "mcp_scope=applied"
+
       - name: Install and start Gway MCP systemd service
         shell: bash
         run: |
