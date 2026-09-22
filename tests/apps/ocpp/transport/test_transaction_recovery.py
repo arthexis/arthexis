@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
@@ -8,8 +9,10 @@ from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallResult
+from apps.ocpp.protocol.replay import replay_context_for_action
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
+from apps.ocpp.services.replay import acquire_inbound_request
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from tests.apps.ocpp.builders import charger
 
@@ -220,11 +223,12 @@ class V201TransactionEventRecoveryTests(TestCase):
 class MeterValueRecoveryTests(TestCase):
     def setUp(self) -> None:
         self.charger = charger("meter-recovery")
+        started_at = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
         self.transaction = OcppTransaction.objects.create(
             charger=self.charger,
             remote_id="remote-meter",
-            started_at="2026-09-22T10:00:00Z",
-            last_activity_at="2026-09-22T10:00:00Z",
+            started_at=started_at,
+            last_activity_at=started_at,
         )
 
     def _v16_dispatcher(self) -> FrameDispatcher:
@@ -238,19 +242,38 @@ class MeterValueRecoveryTests(TestCase):
     def _v16_payload(self) -> dict[str, object]:
         return {
             "transactionId": self.transaction.pk,
-            "meterValue": [
-                {
-                    "timestamp": "2026-09-22T10:05:00Z",
-                    "sampledValue": [
-                        {
-                            "value": "125.0",
-                            "measurand": "Energy.Active.Import.Register",
-                            "unit": "Wh",
-                        }
-                    ],
-                }
-            ],
+            "meterValue": self._meter_values(),
         }
+
+    def _v201_dispatcher(self) -> FrameDispatcher:
+        return FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_201,
+            pending_calls=PendingCalls(),
+            handler_resolver=Inbound201Actions(self.charger).resolve,
+        )
+
+    def _v201_payload(self) -> dict[str, object]:
+        return {
+            "evseId": 1,
+            "meterValue": self._meter_values(),
+            "transactionInfo": {"transactionId": self.transaction.remote_id},
+        }
+
+    @staticmethod
+    def _meter_values() -> list[dict[str, object]]:
+        return [
+            {
+                "timestamp": "2026-09-22T10:05:00Z",
+                "sampledValue": [
+                    {
+                        "value": "125.0",
+                        "measurand": "Energy.Active.Import.Register",
+                        "unit": "Wh",
+                    }
+                ],
+            }
+        ]
 
     def test_same_sample_with_different_call_id_is_not_duplicated(self) -> None:
         first = async_to_sync(self._v16_dispatcher().dispatch)(
@@ -273,6 +296,26 @@ class MeterValueRecoveryTests(TestCase):
         self.assertEqual(MeterValue.objects.count(), 1)
         sample = MeterValue.objects.get()
         self.assertTrue(sample.source_fingerprint)
+
+    def test_v201_same_sample_with_different_call_id_is_not_duplicated(self) -> None:
+        first = async_to_sync(self._v201_dispatcher().dispatch)(
+            Call(
+                unique_id="meter-201-1",
+                action="MeterValues",
+                payload=self._v201_payload(),
+            )
+        )
+        second = async_to_sync(self._v201_dispatcher().dispatch)(
+            Call(
+                unique_id="meter-201-2",
+                action="MeterValues",
+                payload=self._v201_payload(),
+            )
+        )
+
+        self.assertIsInstance(first, CallResult)
+        self.assertIsInstance(second, CallResult)
+        self.assertEqual(MeterValue.objects.count(), 1)
 
     def test_meter_completion_failure_rolls_back_samples_and_activity(self) -> None:
         original_activity = self.transaction.last_activity_at
@@ -301,28 +344,34 @@ class MeterValueRecoveryTests(TestCase):
         self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
 
     def test_stale_meter_request_can_be_reopened_and_completed(self) -> None:
-        request = InboundProtocolRequest.objects.create(
+        payload = self._v16_payload()
+        policy, domain_identity = replay_context_for_action("MeterValues", payload)
+        acquired = acquire_inbound_request(
             charger=self.charger,
-            version=ProtocolVersion.OCPP_16.value,
+            version=ProtocolVersion.OCPP_16,
             action="MeterValues",
-            unique_id="meter-stale",
-            fingerprint="f" * 64,
-            identity_key="i" * 64,
-            request_payload=self._v16_payload(),
+            call_id="meter-stale",
+            payload=payload,
+            policy=policy,
+            domain_identity=domain_identity,
         )
-        InboundProtocolRequest.objects.filter(pk=request.pk).update(
-            received_at="2026-09-22T00:00:00Z",
+        InboundProtocolRequest.objects.filter(pk=acquired.request.pk).update(
+            received_at=datetime(2026, 9, 22, 0, tzinfo=timezone.utc),
         )
 
         response = async_to_sync(self._v16_dispatcher().dispatch)(
             Call(
                 unique_id="meter-stale",
                 action="MeterValues",
-                payload=self._v16_payload(),
+                payload=payload,
             )
         )
 
         self.assertIsInstance(response, CallResult)
         self.assertEqual(MeterValue.objects.count(), 1)
-        request.refresh_from_db()
-        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+        acquired.request.refresh_from_db()
+        self.assertEqual(
+            acquired.request.status,
+            InboundProtocolRequest.Status.COMPLETED,
+        )
+        self.assertIsNone(acquired.request.stale_at)
