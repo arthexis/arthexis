@@ -1,0 +1,8 @@
+[scopes.chatgpt-logs]
+operations = [
+  "log.sources",
+  "log.read",
+  "log.tail",
+  "log.search",
+]
+environment = []
