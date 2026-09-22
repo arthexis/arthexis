@@ -64,10 +64,12 @@ def load_or_enroll_charger(
         return None
     try:
         with transaction.atomic():
+            enrolled_at = timezone.now()
             return Charger.objects.create(
                 identity=identity,
                 connection_token_hash=make_password(credentials[1]),
-                enrolled_at=timezone.now(),
+                enrolled_at=enrolled_at,
+                authority_cutover_at=enrolled_at,
             )
     except IntegrityError:
         charger = Charger.objects.filter(identity=identity, active=True).first()
