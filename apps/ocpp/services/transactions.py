@@ -1,6 +1,10 @@
 """Crash-safe transaction-family protocol services."""
 
+import logging
+
 from django.db import transaction
+
+from apps.events.services import publish_safely
 
 from apps.ocpp.domain.sessions import (
     record_meter_values,
@@ -12,6 +16,8 @@ from apps.ocpp.domain.sessions import (
 from apps.ocpp.models import Charger, InboundProtocolRequest, OcppTransaction
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.services.replay import complete_with_result
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -148,6 +154,12 @@ def process_v16_meter_values(
     response: dict[str, object] = {}
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
+    transaction.on_commit(
+        lambda: _publish_transaction_meter_event(
+            charger_id=charger.pk,
+            transaction_id=transaction_id,
+        )
+    )
     return response
 
 
@@ -166,9 +178,19 @@ def process_v201_meter_values(
         transaction_id=transaction_id,
         meter_values=meter_values,
     )
+    local_transaction_id = OcppTransaction.objects.only("pk").get(
+        charger=charger,
+        remote_id=transaction_id,
+    ).pk
     response: dict[str, object] = {}
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
+    transaction.on_commit(
+        lambda: _publish_transaction_meter_event(
+            charger_id=charger.pk,
+            transaction_id=local_transaction_id,
+        )
+    )
     return response
 
 
@@ -192,3 +214,23 @@ def process_v16_stop_transaction(
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
     return response
+
+
+
+def _publish_transaction_meter_event(*, charger_id: int, transaction_id: int) -> None:
+    try:
+        publish_safely(
+            event_type="ocpp.meter_values.received",
+            producer="ocpp",
+            payload={
+                "meter_batch_id": None,
+                "charger_id": charger_id,
+                "transaction_id": transaction_id,
+                "evse_id": None,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Could not enqueue secondary meter processing for transaction %s",
+            transaction_id,
+        )
