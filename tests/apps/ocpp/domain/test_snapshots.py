@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone as django_timezone
 
 from apps.ocpp.domain.snapshots import snapshot_charger, snapshot_chargers
 from tests.apps.ocpp.builders import (
@@ -121,3 +122,25 @@ class ChargerSnapshotTests(TestCase):
 
         self.assertEqual(len(snapshots), 3)
         self.assertTrue(all(snapshot.state == "charging" for snapshot in snapshots))
+
+
+    @override_settings(OCPP_PRESENCE_LEASE_SECONDS=60)
+    def test_expired_connection_reports_offline_even_with_open_transaction(self) -> None:
+        selected = charger("stale-presence")
+        live = connection(selected, channel_name="stale-channel")
+        transaction(
+            selected,
+            "still-open-in-sql",
+            started_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
+        )
+        type(live).objects.filter(pk=live.pk).update(
+            last_seen_at=django_timezone.now() - timedelta(minutes=2)
+        )
+        selected = type(selected).objects.select_related("connection").get(pk=selected.pk)
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.connection_state, "disconnected")
+        self.assertEqual(snapshot.state, "offline")
+        self.assertEqual(snapshot.active_transactions, 1)
+        self.assertEqual(snapshot.current_transaction_id, "still-open-in-sql")
