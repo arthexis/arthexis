@@ -6,6 +6,7 @@ from django.db import transaction
 
 from apps.events.services import publish_safely
 from apps.ocpp.domain.sessions import (
+    classify_transaction_evidence,
     record_meter_values,
     record_v201_meter_values,
     record_v201_transaction_event,
@@ -28,23 +29,40 @@ def process_v16_start_transaction(
     """Authorize and persist one OCPP 1.6 start before its replay ACK is durable."""
     id_tag = _required_text(payload, "idTag")
     connector_id = _required_int(payload, "connectorId")
+    timestamp = payload.get("timestamp")
+    _, historical = classify_transaction_evidence(charger, timestamp)
 
-    authorization = authorize_id_tag(charger=charger, id_tag=id_tag)
-    if not authorization.accepted:
-        response = {"idTagInfo": {"status": "Invalid"}}
-    else:
+    if historical:
         selected = start_transaction(
             charger=charger,
             connector_id=connector_id,
             id_tag=id_tag,
-            account=authorization.account,
+            account=None,
             meter_start=payload.get("meterStart"),
-            timestamp=payload.get("timestamp"),
+            timestamp=timestamp,
+            historical=True,
         )
         response = {
             "idTagInfo": {"status": "Accepted"},
             "transactionId": selected.pk,
         }
+    else:
+        authorization = authorize_id_tag(charger=charger, id_tag=id_tag)
+        if not authorization.accepted:
+            response = {"idTagInfo": {"status": "Invalid"}}
+        else:
+            selected = start_transaction(
+                charger=charger,
+                connector_id=connector_id,
+                id_tag=id_tag,
+                account=authorization.account,
+                meter_start=payload.get("meterStart"),
+                timestamp=timestamp,
+            )
+            response = {
+                "idTagInfo": {"status": "Accepted"},
+                "transactionId": selected.pk,
+            }
 
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
