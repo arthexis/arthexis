@@ -22,3 +22,42 @@ class WatchtowerWorkflowTests(TestCase):
             "grep -F '<h1 id=\"constellation\">Constellation</h1>'",
             workflow,
         )
+
+    def test_public_watchtower_logs_are_minimal(self) -> None:
+        workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
+            workflow,
+        )
+        self.assertNotIn(
+            "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}",
+            workflow,
+        )
+
+        for forbidden in (
+            "systemctl status",
+            "journalctl",
+            "managed_path=",
+            "data_path=",
+            "python --version",
+            "pip check 2>&1",
+            "Capture deployment evidence",
+            "Upload deployment evidence",
+            "actions/upload-artifact",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflow)
+
+        for status in (
+            'echo "service=active"',
+            'echo "public_exposure=ok"',
+            'echo "public_root=ok"',
+            'echo "django_check=ok"',
+            'echo "migration_drift=none"',
+            'echo "ocpp_matrix=ok"',
+        ):
+            with self.subTest(status=status):
+                self.assertIn(status, workflow)
