@@ -113,6 +113,51 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.active_transactions, 0)
         self.assertEqual(snapshot.unresolved_sessions, 0)
         self.assertIsNone(snapshot.current_transaction_id)
+        self.assertEqual(snapshot.historical_sessions, 2)
+        self.assertEqual(snapshot.historical_open_sessions, 2)
+        self.assertEqual(
+            snapshot.historical_oldest_started,
+            datetime(2023, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            snapshot.historical_latest_activity,
+            datetime(2023, 1, 2, tzinfo=timezone.utc),
+        )
+
+    def test_historical_visibility_preserves_cutover_and_completed_history(self) -> None:
+        cutover = datetime(2026, 9, 22, 12, tzinfo=timezone.utc)
+        selected = charger("historical-visibility", authority_cutover_at=cutover)
+        transaction(
+            selected,
+            "historical-complete",
+            started_at=datetime(2022, 6, 1, 8, tzinfo=timezone.utc),
+            stopped_at=datetime(2022, 6, 1, 9, tzinfo=timezone.utc),
+            historical=True,
+        )
+        open_historical = transaction(
+            selected,
+            "historical-open",
+            started_at=datetime(2023, 7, 1, 8, tzinfo=timezone.utc),
+            historical=True,
+        )
+        open_historical.last_activity_at = datetime(
+            2023, 7, 1, 8, 30, tzinfo=timezone.utc
+        )
+        open_historical.save(update_fields=("last_activity_at",))
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.authority_cutover_at, cutover)
+        self.assertEqual(snapshot.historical_sessions, 2)
+        self.assertEqual(snapshot.historical_open_sessions, 1)
+        self.assertEqual(
+            snapshot.historical_oldest_started,
+            datetime(2022, 6, 1, 8, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            snapshot.historical_latest_activity,
+            datetime(2023, 7, 1, 8, 30, tzinfo=timezone.utc),
+        )
 
     def test_snapshot_reports_unknown_energy_as_none(self) -> None:
         selected = charger("charger-1")
