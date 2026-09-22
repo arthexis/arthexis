@@ -11,6 +11,7 @@ class NotificationRecord(models.Model):
     )
     action = models.CharField(max_length=80)
     payload = models.JSONField(default=dict)
+    reported_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
