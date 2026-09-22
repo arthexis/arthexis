@@ -19,6 +19,7 @@ class OcppSimulator:
             else V201InboundActions(charger)
         )
         self._dispatcher = FrameDispatcher(
+            charger=charger,
             version=version,
             pending_calls=PendingCalls(),
             handler_resolver=handlers.resolve,
