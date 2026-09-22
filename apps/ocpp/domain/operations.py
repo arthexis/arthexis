@@ -129,3 +129,59 @@ def prepare_safe_retry(operation: ProtocolOperation) -> ProtocolOperation | None
     current.completed_at = None
     current.save(update_fields=("status", "completed_at"))
     return current
+
+
+
+@transaction.atomic
+def prepare_reconnect_operations(
+    *,
+    charger: Charger,
+    version: ProtocolVersion,
+) -> tuple[int, ...]:
+    """Return durable operation ids that a fresh owning consumer may send.
+
+    A row left DELIVERING by a dead consumer is ambiguous. Convert it to
+    RECOVERY_REQUIRED first, then automatically reopen it only when its
+    persisted policy is SAFE_RETRY. Existing PENDING work is known-unsent and
+    remains eligible regardless of recovery policy.
+    """
+    operations = list(
+        ProtocolOperation.objects.select_for_update()
+        .filter(
+            charger=charger,
+            version=version.value,
+            direction=Direction.CSMS_TO_CHARGE_POINT.value,
+            status__in=(
+                ProtocolOperation.Status.PENDING,
+                ProtocolOperation.Status.DELIVERING,
+                ProtocolOperation.Status.RECOVERY_REQUIRED,
+            ),
+        )
+        .order_by("created_at", "pk")
+    )
+
+    pending_ids: list[int] = []
+    for operation in operations:
+        if operation.status == ProtocolOperation.Status.DELIVERING:
+            operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
+            operation.last_delivery_error = (
+                "Previous consumer ended before the outbound outcome was durable."
+            )
+            operation.completed_at = None
+            operation.save(
+                update_fields=("status", "last_delivery_error", "completed_at")
+            )
+
+        if (
+            operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+            and operation.recovery_policy
+            == ProtocolOperation.RecoveryPolicy.SAFE_RETRY
+        ):
+            operation.status = ProtocolOperation.Status.PENDING
+            operation.completed_at = None
+            operation.save(update_fields=("status", "completed_at"))
+
+        if operation.status == ProtocolOperation.Status.PENDING:
+            pending_ids.append(operation.pk)
+
+    return tuple(pending_ids)
