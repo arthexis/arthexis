@@ -122,6 +122,25 @@ def _iter_archive_json(
                 )
 
 
+def identify_schema(path: str, payload: object) -> tuple[str, str] | None:
+    """Identify an OCPP action schema by JSON title, then filename fallback."""
+    if isinstance(payload, dict):
+        title = payload.get("title")
+        if isinstance(title, str):
+            for suffix, kind in (("Request", "request"), ("Response", "response")):
+                if title.endswith(suffix):
+                    action = title[: -len(suffix)]
+                    if action:
+                        return action, kind
+
+    filename = Path(path.split("!/")[-1]).stem
+    for suffix, kind in (("Request", "request"), ("Response", "response")):
+        match = re.fullmatch(rf"(.+){suffix}", filename)
+        if match:
+            return match.group(1), kind
+    return None
+
+
 def extract_request_actions(archive: bytes) -> set[str]:
     """Extract action names from JSON schemas at any ZIP nesting depth."""
     actions: set[str] = set()
@@ -133,17 +152,11 @@ def extract_request_actions(archive: bytes) -> set[str]:
         if not isinstance(payload, dict):
             continue
 
-        title = payload.get("title")
-        if isinstance(title, str) and title.endswith("Request"):
-            action = title[: -len("Request")]
-            if action:
+        identified = identify_schema(path, payload)
+        if identified is not None:
+            action, kind = identified
+            if kind == "request":
                 actions.add(action)
-                continue
-
-        filename = Path(path.split("!/")[-1]).stem
-        match = re.fullmatch(r"(.+)Request", filename)
-        if match:
-            actions.add(match.group(1))
 
     if not actions:
         raise RuntimeError("No OCPP request schemas found in downloaded package")
