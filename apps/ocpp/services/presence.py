@@ -36,7 +36,11 @@ def connection_is_live(charger: Charger) -> bool:
 
 def configure_heartbeat(*, charger: Charger, interval_seconds: int) -> bool:
     """Persist the negotiated heartbeat cadence for the current connection."""
-    if isinstance(interval_seconds, bool) or interval_seconds <= 0:
+    if (
+        isinstance(interval_seconds, bool)
+        or not isinstance(interval_seconds, int)
+        or interval_seconds <= 0
+    ):
         raise ValueError("heartbeat interval must be a positive integer")
     now = timezone.now()
     updated = ChargerConnection.objects.filter(charger=charger).update(
@@ -57,15 +61,20 @@ def touch_connection(*, charger: Charger, channel_name: str) -> bool:
     connection = ChargerConnection.objects.filter(
         charger=charger,
         channel_name=channel_name,
-    ).first()
+    ).only("pk", "heartbeat_interval_seconds").first()
     if connection is None:
         return False
     now = timezone.now()
-    connection.last_seen_at = now
-    connection.lease_expires_at = lease_expiry(
-        observed_at=now,
-        heartbeat_interval_seconds=connection.heartbeat_interval_seconds,
+    updated = ChargerConnection.objects.filter(
+        pk=connection.pk,
+        channel_name=channel_name,
+    ).update(
+        last_seen_at=now,
+        lease_expires_at=lease_expiry(
+            observed_at=now,
+            heartbeat_interval_seconds=connection.heartbeat_interval_seconds,
+        ),
     )
-    connection.save(update_fields=("last_seen_at", "lease_expires_at"))
-    Charger.objects.filter(pk=charger.pk).update(connected_at=now)
-    return True
+    if updated:
+        Charger.objects.filter(pk=charger.pk).update(connected_at=now)
+    return bool(updated)
