@@ -130,7 +130,6 @@ def record_meter_values(
         transaction=transaction,
         meter_values=meter_values,
     )
-    _refresh_meter_value_energy(transaction)
     _touch_transaction_activity(transaction, last_activity)
     return count
 
@@ -199,7 +198,6 @@ def record_v201_meter_values(
         transaction=transaction,
         meter_values=meter_values,
     )
-    _refresh_meter_value_energy(transaction)
     _touch_transaction_activity(transaction, last_activity)
     return count
 
@@ -271,12 +269,15 @@ def _record_meter_values(
     return len(persisted - existing), latest_activity
 
 
-def _refresh_meter_value_energy(transaction: OcppTransaction) -> None:
+def recompute_transaction_energy(transaction_id: int) -> OcppTransaction:
+    """Recompute derived transaction energy from authoritative retained samples."""
+    transaction = OcppTransaction.objects.get(pk=transaction_id)
     energy_kwh = _meter_value_delta_kwh(transaction)
-    if energy_kwh is None or transaction.energy_kwh == energy_kwh:
-        return
+    if transaction.energy_kwh == energy_kwh:
+        return transaction
     transaction.energy_kwh = energy_kwh
     transaction.save(update_fields=("energy_kwh",))
+    return transaction
 
 
 def _meter_delta_kwh(
