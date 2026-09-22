@@ -33,6 +33,11 @@ class ChargerSnapshot:
     energy_kwh: Decimal | None
     unresolved_sessions: int
     unresolved_energy_sessions: int
+    authority_cutover_at: datetime | None
+    historical_sessions: int
+    historical_open_sessions: int
+    historical_oldest_started: datetime | None
+    historical_latest_activity: datetime | None
     last_contact: datetime | None
 
 
@@ -73,6 +78,9 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
             == OcppTransaction.RecoveryState.UNRESOLVED
             and transaction.stopped_at is None
         )
+    ]
+    historical = [
+        transaction for transaction in transactions if transaction.historical
     ]
     completed = [
         transaction
@@ -115,6 +123,21 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         unresolved_sessions=len(unresolved),
         unresolved_energy_sessions=sum(
             transaction.energy_kwh is None for transaction in completed
+        ),
+        authority_cutover_at=charger.authority_cutover_at,
+        historical_sessions=len(historical),
+        historical_open_sessions=sum(
+            transaction.stopped_at is None for transaction in historical
+        ),
+        historical_oldest_started=(
+            min(transaction.started_at for transaction in historical)
+            if historical
+            else None
+        ),
+        historical_latest_activity=(
+            max(transaction.last_activity_at for transaction in historical)
+            if historical
+            else None
         ),
         last_contact=charger.connected_at,
     )
