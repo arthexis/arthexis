@@ -108,7 +108,7 @@ def stop_transaction(
     meter_stop: object | None,
     timestamp: object | None,
 ) -> OcppTransaction:
-    """Persist a transaction stop only for the connected charger."""
+    """Persist a transaction stop, preserving any historical provenance."""
     transaction = OcppTransaction.objects.get(
         pk=transaction_id,
         charger=charger,
@@ -140,7 +140,7 @@ def stop_transaction(
 def record_meter_values(
     *, transaction_id: int, charger: Charger, meter_values: object
 ) -> int:
-    """Persist all sampled OCPP 1.6 meter values for one live transaction."""
+    """Persist OCPP 1.6 meter values under the transaction's retained provenance."""
     if not isinstance(meter_values, list):
         raise ValueError("meterValue must be a list")
     transaction = OcppTransaction.objects.get(pk=transaction_id, charger=charger)

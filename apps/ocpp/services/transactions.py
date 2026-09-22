@@ -157,7 +157,7 @@ def process_v16_meter_values(
     payload: dict[str, object],
     replay_request: InboundProtocolRequest | None = None,
 ) -> dict[str, object]:
-    """Persist OCPP 1.6 meter samples before their replay ACK is durable."""
+    """Persist OCPP 1.6 meter samples without reclassifying transaction provenance."""
     transaction_id = _required_int(payload, "transactionId")
     meter_values = payload.get("meterValue")
     record_meter_values(
@@ -214,7 +214,7 @@ def process_v16_stop_transaction(
     payload: dict[str, object],
     replay_request: InboundProtocolRequest | None = None,
 ) -> dict[str, object]:
-    """Persist one OCPP 1.6 stop before its replay ACK is durable."""
+    """Close one OCPP 1.6 transaction without changing historical provenance."""
     transaction_id = _required_int(payload, "transactionId")
     stop_transaction(
         transaction_id=transaction_id,

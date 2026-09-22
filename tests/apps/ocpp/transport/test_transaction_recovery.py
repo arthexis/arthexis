@@ -499,6 +499,242 @@ class MeterValueRecoveryTests(TestCase):
 
 
 
+class HistoricalV16ContinuationTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger(
+            "historical-continuation",
+            authority_cutover_at=datetime(2026, 9, 22, 12, tzinfo=timezone.utc),
+        )
+        self.dispatcher = FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            pending_calls=PendingCalls(),
+            handler_resolver=InboundActions(self.charger).resolve,
+        )
+
+    def _start(self, *, call_id: str = "historical-start") -> CallResult:
+        response = async_to_sync(self.dispatcher.dispatch)(
+            Call(
+                unique_id=call_id,
+                action="StartTransaction",
+                payload={
+                    "connectorId": 1,
+                    "idTag": "legacy-card",
+                    "meterStart": 100,
+                    "timestamp": "2023-04-11T10:00:00Z",
+                },
+            )
+        )
+        self.assertIsInstance(response, CallResult)
+        return response
+
+    def test_historical_meter_and_stop_preserve_source_timestamps(self) -> None:
+        started = self._start()
+        transaction_id = started.payload["transactionId"]
+
+        metered = async_to_sync(self.dispatcher.dispatch)(
+            Call(
+                unique_id="historical-meter",
+                action="MeterValues",
+                payload={
+                    "transactionId": transaction_id,
+                    "meterValue": [
+                        {
+                            "timestamp": "2023-04-11T10:05:00Z",
+                            "sampledValue": [
+                                {
+                                    "value": "125",
+                                    "measurand": "Energy.Active.Import.Register",
+                                    "unit": "Wh",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+        )
+        self.assertEqual(metered, CallResult(unique_id="historical-meter", payload={}))
+
+        selected = OcppTransaction.objects.get(pk=transaction_id)
+        self.assertTrue(selected.historical)
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            MeterValue.objects.get(transaction=selected).sampled_at,
+            datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
+        )
+        self.assertFalse(OcppTransaction.objects.active().filter(pk=selected.pk).exists())
+        self.assertFalse(OcppTransaction.objects.unresolved().filter(pk=selected.pk).exists())
+
+        stopped = async_to_sync(self.dispatcher.dispatch)(
+            Call(
+                unique_id="historical-stop",
+                action="StopTransaction",
+                payload={
+                    "transactionId": transaction_id,
+                    "meterStop": 150,
+                    "timestamp": "2023-04-11T10:10:00Z",
+                },
+            )
+        )
+        self.assertEqual(
+            stopped,
+            CallResult(
+                unique_id="historical-stop",
+                payload={"idTagInfo": {"status": "Accepted"}},
+            ),
+        )
+
+        selected.refresh_from_db()
+        self.assertTrue(selected.historical)
+        self.assertEqual(
+            selected.stopped_at,
+            datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.COMPLETED,
+        )
+        self.assertEqual(str(selected.energy_kwh), "0.0500")
+
+    def test_historical_transaction_provenance_is_inherited_by_later_meter_evidence(
+        self,
+    ) -> None:
+        started = self._start()
+        transaction_id = started.payload["transactionId"]
+
+        response = async_to_sync(self.dispatcher.dispatch)(
+            Call(
+                unique_id="clock-drift-meter",
+                action="MeterValues",
+                payload={
+                    "transactionId": transaction_id,
+                    "meterValue": [
+                        {
+                            "timestamp": "2026-09-23T12:00:00Z",
+                            "sampledValue": [{"value": "125"}],
+                        }
+                    ],
+                },
+            )
+        )
+
+        self.assertEqual(response, CallResult(unique_id="clock-drift-meter", payload={}))
+        selected = OcppTransaction.objects.get(pk=transaction_id)
+        self.assertTrue(selected.historical)
+        self.assertFalse(OcppTransaction.objects.active().filter(pk=selected.pk).exists())
+        self.assertFalse(OcppTransaction.objects.open().filter(pk=selected.pk).exists())
+
+    def test_exact_historical_meter_and_stop_replay_do_not_duplicate_state(self) -> None:
+        started = self._start()
+        transaction_id = started.payload["transactionId"]
+        meter = Call(
+            unique_id="historical-meter-replay",
+            action="MeterValues",
+            payload={
+                "transactionId": transaction_id,
+                "meterValue": [
+                    {
+                        "timestamp": "2023-04-11T10:05:00Z",
+                        "sampledValue": [{"value": "125"}],
+                    }
+                ],
+            },
+        )
+        stop = Call(
+            unique_id="historical-stop-replay",
+            action="StopTransaction",
+            payload={
+                "transactionId": transaction_id,
+                "meterStop": 150,
+                "timestamp": "2023-04-11T10:10:00Z",
+            },
+        )
+
+        first_meter = async_to_sync(self.dispatcher.dispatch)(meter)
+        replay_meter = async_to_sync(self.dispatcher.dispatch)(meter)
+        first_stop = async_to_sync(self.dispatcher.dispatch)(stop)
+        replay_stop = async_to_sync(self.dispatcher.dispatch)(stop)
+
+        self.assertEqual(replay_meter, first_meter)
+        self.assertEqual(replay_stop, first_stop)
+        self.assertEqual(MeterValue.objects.filter(transaction_id=transaction_id).count(), 1)
+        self.assertEqual(OcppTransaction.objects.filter(pk=transaction_id).count(), 1)
+        self.assertTrue(OcppTransaction.objects.get(pk=transaction_id).historical)
+
+    def test_historical_meter_completion_failure_rolls_back_samples_and_activity(self) -> None:
+        started = self._start()
+        selected = OcppTransaction.objects.get(pk=started.payload["transactionId"])
+        original_activity = selected.last_activity_at
+
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("historical meter replay completion failed"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "historical meter replay completion failed",
+            ):
+                async_to_sync(self.dispatcher.dispatch)(
+                    Call(
+                        unique_id="historical-meter-failure",
+                        action="MeterValues",
+                        payload={
+                            "transactionId": selected.pk,
+                            "meterValue": [
+                                {
+                                    "timestamp": "2023-04-11T10:05:00Z",
+                                    "sampledValue": [{"value": "125"}],
+                                }
+                            ],
+                        },
+                    )
+                )
+
+        self.assertFalse(MeterValue.objects.filter(transaction=selected).exists())
+        selected.refresh_from_db()
+        self.assertTrue(selected.historical)
+        self.assertEqual(selected.last_activity_at, original_activity)
+
+    def test_historical_stop_completion_failure_rolls_back_closeout(self) -> None:
+        started = self._start()
+        selected = OcppTransaction.objects.get(pk=started.payload["transactionId"])
+
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("historical stop replay completion failed"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "historical stop replay completion failed",
+            ):
+                async_to_sync(self.dispatcher.dispatch)(
+                    Call(
+                        unique_id="historical-stop-failure",
+                        action="StopTransaction",
+                        payload={
+                            "transactionId": selected.pk,
+                            "meterStop": 150,
+                            "timestamp": "2023-04-11T10:10:00Z",
+                        },
+                    )
+                )
+
+        selected.refresh_from_db()
+        self.assertTrue(selected.historical)
+        self.assertIsNone(selected.stopped_at)
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+
+
 class ReconnectReconciliationTests(TestCase):
     def setUp(self) -> None:
         self.charger = charger("reconnect-recovery")
