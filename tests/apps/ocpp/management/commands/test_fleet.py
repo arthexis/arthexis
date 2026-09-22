@@ -70,6 +70,8 @@ class FleetCommandTests(TestCase):
             call_command("fleet", "--connected", "--disconnected")
         with self.assertRaisesMessage(CommandError, "not allowed with argument"):
             call_command("fleet", "--charging", "--idle")
+        with self.assertRaisesMessage(CommandError, "not allowed with argument"):
+            call_command("fleet", "--charging", "--unresolved")
 
     def test_detail_flag_requests_the_richer_view(self) -> None:
         output = StringIO()
@@ -81,4 +83,21 @@ class FleetCommandTests(TestCase):
         self.assertIn("Active since", rendered)
         self.assertIn("Last stopped", rendered)
         self.assertIn("Energy total", rendered)
-        self.assertIn("Unresolved", rendered)
+        self.assertIn("Recovery unresolved", rendered)
+        self.assertIn("Energy unresolved", rendered)
+
+
+    def test_unresolved_filter_and_state_are_visible_to_operators(self) -> None:
+        uncertain = Charger.objects.get(pk=self.charger.pk).transactions.get(
+            remote_id="transaction-active"
+        )
+        uncertain.recovery_state = uncertain.RecoveryState.UNRESOLVED
+        uncertain.save(update_fields=("recovery_state",))
+        output = StringIO()
+
+        call_command("fleet", "--unresolved", stdout=output)
+
+        rendered = output.getvalue()
+        self.assertIn("charger-1", rendered)
+        self.assertIn("unresolved", rendered)
+        self.assertNotIn("charging", rendered)
