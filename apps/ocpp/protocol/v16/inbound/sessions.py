@@ -5,13 +5,10 @@ from collections.abc import Awaitable, Callable
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.domain.sessions import (
-    record_meter_values,
-    start_transaction,
-    stop_transaction,
-)
+from apps.ocpp.domain.sessions import record_meter_values, stop_transaction
 from apps.ocpp.models import Charger, Connector
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.transactions import process_v16_start_transaction
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -61,22 +58,10 @@ class SessionActions:
         return {}
 
     async def start_transaction(self, payload: dict[str, object]) -> dict[str, object]:
-        id_tag = _required_text(payload, "idTag")
-        authorization = await sync_to_async(authorize_id_tag)(
+        return await sync_to_async(process_v16_start_transaction)(
             charger=self.charger,
-            id_tag=id_tag,
+            payload=payload,
         )
-        if not authorization.accepted:
-            return {"idTagInfo": {"status": "Invalid"}}
-        transaction = await sync_to_async(start_transaction)(
-            charger=self.charger,
-            connector_id=int(payload["connectorId"]),
-            id_tag=id_tag,
-            account=authorization.account,
-            meter_start=payload.get("meterStart"),
-            timestamp=payload.get("timestamp"),
-        )
-        return {"idTagInfo": {"status": "Accepted"}, "transactionId": transaction.pk}
 
     async def status_notification(
         self, payload: dict[str, object]
