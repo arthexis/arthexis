@@ -2,7 +2,12 @@
 
 from django.db import transaction
 
-from apps.ocpp.domain.sessions import record_v201_transaction_event, start_transaction
+from apps.ocpp.domain.sessions import (
+    record_meter_values,
+    record_v201_meter_values,
+    record_v201_transaction_event,
+    start_transaction,
+)
 from apps.ocpp.models import Charger, InboundProtocolRequest, OcppTransaction
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.services.replay import complete_with_result
@@ -121,3 +126,45 @@ def _optional_int(payload: object, name: str) -> int | None:
         return None
     value = payload.get(name)
     return value if isinstance(value, int) else None
+
+
+@transaction.atomic
+def process_v16_meter_values(
+    *,
+    charger: Charger,
+    payload: dict[str, object],
+    replay_request: InboundProtocolRequest | None = None,
+) -> dict[str, object]:
+    """Persist OCPP 1.6 meter samples before their replay ACK is durable."""
+    transaction_id = _required_int(payload, "transactionId")
+    meter_values = payload.get("meterValue")
+    record_meter_values(
+        transaction_id=transaction_id,
+        charger=charger,
+        meter_values=meter_values,
+    )
+    response: dict[str, object] = {}
+    if replay_request is not None:
+        complete_with_result(replay_request, payload=response)
+    return response
+
+
+@transaction.atomic
+def process_v201_meter_values(
+    *,
+    charger: Charger,
+    payload: dict[str, object],
+    replay_request: InboundProtocolRequest | None = None,
+) -> dict[str, object]:
+    """Persist transaction-bound OCPP 2.0.1 meter samples before ACK."""
+    transaction_id = _transaction_id(payload)
+    meter_values = payload.get("meterValue")
+    record_v201_meter_values(
+        charger=charger,
+        transaction_id=transaction_id,
+        meter_values=meter_values,
+    )
+    response: dict[str, object] = {}
+    if replay_request is not None:
+        complete_with_result(replay_request, payload=response)
+    return response
