@@ -24,7 +24,6 @@ jobs:
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
       ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
-      ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean privileged Python bytecode from runner workspace
@@ -63,8 +62,8 @@ jobs:
           gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
           test -n "${gway_sha}"
           python3 -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}" >/dev/null 2>&1
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
           echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
 
@@ -72,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force
+          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
           sudo -n test -f /var/lib/gway/projects/arthexis/pyproject.toml
           sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
 
@@ -81,86 +80,54 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
 
       - name: Install and start Arthexis systemd service
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/retire_legacy_web_service.py
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com'
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx'
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
+          echo "service=active"
 
       - name: Expose Arthexis publicly through Gway recipe
-        if: env.ARTHEXIS_CERTBOT_EMAIL != ''
         shell: bash
+        env:
+          ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
         run: |
           set -Eeuo pipefail
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'"'
+          if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
+            echo "PUBLIC_EXPOSURE_ENABLED=false" >> "${GITHUB_ENV}"
+            echo "public_exposure=skipped"
+            exit 0
+          fi
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'"' >/dev/null 2>&1
+          echo "PUBLIC_EXPOSURE_ENABLED=true" >> "${GITHUB_ENV}"
+          echo "public_exposure=ok"
 
       - name: Verify public Markdown root
-        if: env.ARTHEXIS_CERTBOT_EMAIL != ''
+        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
           root_html="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors https://arthexis.com/)"
           grep -F '<h1 id="constellation">Constellation</h1>' <<<"${root_html}" >/dev/null
           grep -F '<h2 id="operational-capabilities">Operational Capabilities</h2>' <<<"${root_html}" >/dev/null
-
-      - name: Record public exposure prerequisite
-        if: env.ARTHEXIS_CERTBOT_EMAIL == ''
-        shell: bash
-        run: |
-          echo "::notice::ARTHEXIS_CERTBOT_EMAIL is not configured; local service health was verified but public Nginx/TLS exposure was not attempted."
+          echo "public_root=ok"
 
       - name: Verify deployed Arthexis
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1
+          echo "django_check=ok"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1
+          echo "migration_drift=none"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
+          echo "ocpp_matrix=ok"
 
-      - name: Capture deployment evidence
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          evidence="${RUNNER_TEMP}/watchtower-deploy-${GITHUB_SHA}.txt"
-          {
-            echo "arthexis_sha=${GITHUB_SHA}"
-            echo "gway_sha=${GWAY_EXPECTED_SHA:-unknown}"
-            echo "runner=${RUNNER_NAME}"
-            echo "managed_path=/var/lib/gway/projects/arthexis"
-            echo "data_path=${ARTHEXIS_DATA_DIR}"
-            echo "=== managed project ==="
-            sudo -n ls -ld /var/lib/gway /var/lib/gway/projects /var/lib/gway/projects/arthexis 2>&1
-            sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1
-            echo "=== package/runtime ==="
-            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python --version 2>&1
-            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1
-            echo "=== systemd ==="
-            sudo -n systemctl status arthexis-arthexis.com.service --no-pager 2>&1
-            echo "=== local health ==="
-            curl --fail --silent --show-error --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ 2>&1
-            echo
-            echo "=== public health ==="
-            curl --fail --silent --show-error https://arthexis.com/health/ 2>&1 || true
-            echo
-            echo "=== django ==="
-            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR 2>&1
-          } | tee "${evidence}"
-          echo "WATCHTOWER_EVIDENCE=${evidence}" >> "${GITHUB_ENV}"
-
-      - name: Upload deployment evidence
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: watchtower-deploy-${{ github.sha }}
-          path: ${{ env.WATCHTOWER_EVIDENCE }}
-          if-no-files-found: warn
