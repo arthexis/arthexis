@@ -13,6 +13,7 @@ from apps.ocpp.domain.notifications import (
 from apps.ocpp.models import (
     Charger,
     InboundProtocolRequest,
+    MonitoringRecord,
     NotificationRecord,
     OperationalStatusRecord,
 )
