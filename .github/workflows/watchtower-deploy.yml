@@ -118,11 +118,11 @@ jobs:
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name mcp-server --environment GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" -- "'"${mcp_recipe}"'"' >/dev/null 2>&1
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name mcp-server --timeout 40 -- "'"${mcp_recipe}"'"' >/dev/null 2>&1
           sudo -n systemctl is-active --quiet gway-mcp-server.service
-          python3 - <<'PY'
+          if ! python3 - <<'PY'
           import socket
           import time
 
-          deadline = time.monotonic() + 10
+          deadline = time.monotonic() + 60
           while True:
               try:
                   with socket.create_connection(("127.0.0.1", 8000), timeout=0.5):
@@ -132,6 +132,16 @@ jobs:
                       raise SystemExit("MCP service did not open 127.0.0.1:8000")
                   time.sleep(0.25)
           PY
+          then
+            sudo -n systemctl status gway-mcp-server.service --no-pager || true
+            sudo -n journalctl -u gway-mcp-server.service -n 100 --no-pager || true
+            exit 1
+          fi
+          if ! sudo -n systemctl is-active --quiet gway-mcp-server.service; then
+            sudo -n systemctl status gway-mcp-server.service --no-pager || true
+            sudo -n journalctl -u gway-mcp-server.service -n 100 --no-pager || true
+            exit 1
+          fi
           echo "mcp_service=active"
 
       - name: Expose Arthexis publicly through Gway recipe
