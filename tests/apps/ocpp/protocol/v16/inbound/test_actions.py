@@ -2,8 +2,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.cards.models import CardCredential
-from apps.ocpp.models import Charger
-from apps.ocpp.models import Connector, OcppTransaction
+from apps.ocpp.models import Charger, Connector, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
