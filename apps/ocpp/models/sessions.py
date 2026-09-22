@@ -1,6 +1,7 @@
 """Charging-session and meter-value records."""
 
 from django.db import models
+from django.utils import timezone
 
 from apps.ocpp.models.assets import Charger, Connector
 
@@ -9,16 +10,42 @@ class OcppTransactionQuerySet(models.QuerySet):
     """Reusable retained-transaction selections."""
 
     def active(self):
-        return self.filter(stopped_at__isnull=True)
+        return self.filter(
+            recovery_state=OcppTransaction.RecoveryState.ACTIVE,
+            stopped_at__isnull=True,
+        )
+
+    def unresolved(self):
+        return self.filter(
+            recovery_state=OcppTransaction.RecoveryState.UNRESOLVED,
+            stopped_at__isnull=True,
+        )
+
+    def open(self):
+        return self.filter(
+            recovery_state__in=(
+                OcppTransaction.RecoveryState.ACTIVE,
+                OcppTransaction.RecoveryState.UNRESOLVED,
+            ),
+            stopped_at__isnull=True,
+        )
 
     def completed(self):
-        return self.filter(stopped_at__isnull=False)
+        return self.filter(
+            recovery_state=OcppTransaction.RecoveryState.COMPLETED,
+            stopped_at__isnull=False,
+        )
 
     def recent(self):
         return self.order_by("-started_at", "-pk")
 
 
 class OcppTransaction(models.Model):
+    class RecoveryState(models.TextChoices):
+        ACTIVE = "active", "Active"
+        UNRESOLVED = "unresolved", "Unresolved"
+        COMPLETED = "completed", "Completed"
+
     objects = OcppTransactionQuerySet.as_manager()
 
     charger = models.ForeignKey(
@@ -41,7 +68,14 @@ class OcppTransaction(models.Model):
     id_tag = models.CharField(max_length=20, blank=True)
     remote_id = models.CharField(max_length=80, unique=True)
     started_at = models.DateTimeField()
+    last_activity_at = models.DateTimeField(default=timezone.now)
     stopped_at = models.DateTimeField(null=True, blank=True)
+    recovery_state = models.CharField(
+        max_length=16,
+        choices=RecoveryState.choices,
+        default=RecoveryState.ACTIVE,
+        db_index=True,
+    )
     meter_start = models.DecimalField(max_digits=14, decimal_places=4, null=True)
     meter_stop = models.DecimalField(max_digits=14, decimal_places=4, null=True)
     energy_kwh = models.DecimalField(
@@ -50,6 +84,23 @@ class OcppTransaction(models.Model):
         null=True,
         blank=True,
     )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        recovery_state="completed",
+                        stopped_at__isnull=False,
+                    )
+                    | models.Q(
+                        recovery_state__in=("active", "unresolved"),
+                        stopped_at__isnull=True,
+                    )
+                ),
+                name="ocpp_transaction_recovery_state_consistent",
+            )
+        ]
 
 
 class MeterValue(models.Model):
