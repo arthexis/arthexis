@@ -32,7 +32,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           schema_root="${RUNNER_TEMP}/ocpp-official-schemas"
-          python scripts/ocpp_conformance_prepare.py --output-root "${schema_root}"
+          python -m scripts.ocpp_conformance_prepare --output-root "${schema_root}"
           echo "OCPP_CONFORMANCE_SCHEMA_ROOT=${schema_root}" >> "${GITHUB_ENV}"
 
       - name: Run official schema conformance
