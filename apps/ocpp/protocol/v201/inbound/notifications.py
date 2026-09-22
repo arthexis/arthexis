@@ -75,9 +75,3 @@ class NotificationActions:
 
         return acknowledge
 
-
-def _required_text(payload: dict[str, object], name: str) -> str:
-    value = payload.get(name)
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{name} is required")
-    return value
