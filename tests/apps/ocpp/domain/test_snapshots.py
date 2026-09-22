@@ -66,6 +66,29 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.unresolved_energy_sessions, 1)
         self.assertEqual(snapshot_chargers(), [snapshot])
 
+    def test_open_unresolved_session_is_not_counted_as_unresolved_energy(self) -> None:
+        selected = charger("separate-uncertainty")
+        connection(selected, channel_name="separate-uncertainty-channel")
+        open_unresolved = transaction(
+            selected,
+            "open-unresolved",
+            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+        open_unresolved.recovery_state = open_unresolved.RecoveryState.UNRESOLVED
+        open_unresolved.save(update_fields=("recovery_state",))
+        transaction(
+            selected,
+            "completed-energy-missing",
+            started_at=datetime(2026, 9, 22, 8, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 22, 9, tzinfo=timezone.utc),
+        )
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.state, "unresolved")
+        self.assertEqual(snapshot.unresolved_sessions, 1)
+        self.assertEqual(snapshot.unresolved_energy_sessions, 1)
+
     def test_snapshot_reports_unknown_energy_as_none(self) -> None:
         selected = charger("charger-1")
 

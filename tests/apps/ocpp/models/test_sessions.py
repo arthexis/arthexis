@@ -62,6 +62,38 @@ class OcppTransactionTests(TestCase):
         self.assertEqual(list(OcppTransaction.objects.recent()), [newer_pk, older_pk])
         self.assertEqual(current_transaction(self.charger), newer_pk)
 
+    def test_energy_resolution_querysets_are_independent_of_session_recovery(self) -> None:
+        resolved = transaction(
+            self.charger,
+            "resolved-energy",
+            started_at=datetime(2026, 9, 19, 10, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 19, 11, tzinfo=timezone.utc),
+            energy_kwh="1.2500",
+        )
+        unresolved_energy = transaction(
+            self.charger,
+            "unresolved-energy",
+            started_at=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
+        )
+        open_unresolved = transaction(
+            self.charger,
+            "open-unresolved",
+            started_at=datetime(2026, 9, 19, 14, tzinfo=timezone.utc),
+        )
+        open_unresolved.recovery_state = OcppTransaction.RecoveryState.UNRESOLVED
+        open_unresolved.save(update_fields=("recovery_state",))
+
+        self.assertQuerySetEqual(
+            OcppTransaction.objects.energy_resolved(),
+            [resolved],
+        )
+        self.assertQuerySetEqual(
+            OcppTransaction.objects.energy_unresolved(),
+            [unresolved_energy],
+        )
+        self.assertNotIn(open_unresolved, OcppTransaction.objects.energy_unresolved())
+
     def test_transaction_read_helpers_return_none_without_transactions(self) -> None:
         self.assertIsNone(current_transaction(self.charger))
         self.assertIsNone(last_transaction(self.charger))

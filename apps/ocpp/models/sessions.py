@@ -36,6 +36,14 @@ class OcppTransactionQuerySet(models.QuerySet):
             stopped_at__isnull=False,
         )
 
+    def energy_unresolved(self):
+        """Return completed sessions whose final energy remains unknown."""
+        return self.completed().filter(energy_kwh__isnull=True)
+
+    def energy_resolved(self):
+        """Return completed sessions with a retained final energy value."""
+        return self.completed().filter(energy_kwh__isnull=False)
+
     def recent(self):
         return self.order_by("-started_at", "-pk")
 
