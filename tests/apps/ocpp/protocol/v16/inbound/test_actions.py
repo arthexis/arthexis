@@ -1,5 +1,5 @@
 from asgiref.sync import async_to_sync
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.cards.models import CardCredential
 from apps.ocpp.models import Charger, Connector, OcppTransaction
@@ -8,7 +8,7 @@ from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.transport.dispatch import FrameDispatcher
-from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger, connection
 
 
 class Ocpp16InboundTests(TestCase):
@@ -182,3 +182,20 @@ class Ocpp16InboundTests(TestCase):
             "timestamp": "2026-01-01T00:10:00Z",
             "transactionId": transaction_id,
         }
+
+
+class Ocpp16HeartbeatLeaseTests(TestCase):
+    @override_settings(OCPP_HEARTBEAT_INTERVAL_SECONDS=120)
+    def test_boot_notification_persists_advertised_heartbeat_interval(self) -> None:
+        selected = charger("charger-16-heartbeat")
+        live = connection(selected, channel_name="channel-1")
+        handler = InboundActions(selected)._handlers["BootNotification"]
+
+        response = async_to_sync(handler)(
+            {"chargePointModel": "Model", "chargePointVendor": "ACME"}
+        )
+
+        self.assertEqual(response["interval"], 120)
+        live.refresh_from_db()
+        self.assertEqual(live.heartbeat_interval_seconds, 120)
+        self.assertGreater(live.lease_expires_at, live.last_seen_at)
