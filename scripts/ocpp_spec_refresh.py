@@ -11,12 +11,12 @@ It never rewrites the committed manifests.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
 import hashlib
 import json
 import re
 import urllib.request
 import zipfile
+from collections.abc import Iterator
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
