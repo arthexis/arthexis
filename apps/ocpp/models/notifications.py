@@ -27,6 +27,7 @@ class MonitoringRecord(models.Model):
     severity = models.IntegerField(null=True, blank=True)
     event_type = models.CharField(max_length=80)
     payload = models.JSONField(default=dict)
+    reported_at = models.DateTimeField(null=True, blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
