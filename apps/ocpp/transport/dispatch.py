@@ -82,6 +82,7 @@ class FrameDispatcher:
             frame.action,
             frame.payload,
         )
+        status_kind = operational_status_kind(frame.action)
         acquired = await sync_to_async(acquire_inbound_request)(
             charger=self.charger,
             version=self.version,
@@ -96,23 +97,28 @@ class FrameDispatcher:
         if acquired.stale:
             safely_retryable = (
                 frame.action == "DataTransfer"
-                or operational_status_kind(frame.action) is not None
+                or status_kind is not None
                 or (
-                self.version is ProtocolVersion.OCPP_16
-                and frame.action in {"StartTransaction", "StopTransaction"}
-            ) or (
-                frame.action == "MeterValues"
-                and (
                     self.version is ProtocolVersion.OCPP_16
-                    or (
-                        self.version is ProtocolVersion.OCPP_201
-                        and isinstance(frame.payload.get("transactionInfo"), dict)
+                    and frame.action in {"StartTransaction", "StopTransaction"}
+                )
+                or (
+                    frame.action == "MeterValues"
+                    and (
+                        self.version is ProtocolVersion.OCPP_16
+                        or (
+                            self.version is ProtocolVersion.OCPP_201
+                            and isinstance(
+                                frame.payload.get("transactionInfo"),
+                                dict,
+                            )
+                        )
                     )
                 )
-            ) or (
-                self.version is ProtocolVersion.OCPP_201
-                and frame.action == "TransactionEvent"
-            )
+                or (
+                    self.version is ProtocolVersion.OCPP_201
+                    and frame.action == "TransactionEvent"
+                )
             )
             if safely_retryable:
                 recovered = await sync_to_async(reopen_stale_request)(acquired.request)
@@ -150,7 +156,7 @@ class FrameDispatcher:
                 return response
             return CallResult(unique_id=frame.unique_id, payload=payload)
 
-        if operational_status_kind(frame.action) is not None:
+        if status_kind is not None:
             try:
                 payload = await sync_to_async(process_operational_status)(
                     charger=self.charger,
