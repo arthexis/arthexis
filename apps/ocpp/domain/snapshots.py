@@ -45,9 +45,7 @@ def _transactions(charger: Charger) -> list[OcppTransaction]:
     prefetched = getattr(charger, "_prefetched_transactions", None)
     if prefetched is not None:
         return prefetched
-    transactions = list(charger.transactions.recent())
-    charger._prefetched_transactions = transactions
-    return transactions
+    return list(charger.transactions.recent())
 
 
 def _state(
