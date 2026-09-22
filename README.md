@@ -138,7 +138,7 @@ A legacy database is never upgraded in place. When an explicit import is require
 After installation, run the ASGI application with the project environment:
 
 ```bash
-.venv/bin/python -m arthexis.server
+.venv/bin/daphne -b 127.0.0.1 -p 8888 arthexis.asgi:application
 ```
 
 The default application endpoint is `127.0.0.1:8888`.
