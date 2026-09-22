@@ -10,6 +10,7 @@ from apps.ocpp.protocol.errors import ProtocolFrameError
 from apps.ocpp.protocol.frames import CallError, parse_frame
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
+from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
     ConnectionRejected,
     basic_credentials,
@@ -22,7 +23,6 @@ from apps.ocpp.transport.operations import (
     register_connection,
     unregister_connection,
 )
-from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.sender import OutboundSender
 
 
