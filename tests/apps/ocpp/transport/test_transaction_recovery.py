@@ -8,7 +8,7 @@ from apps.cards.models import AuthorizationAttempt
 from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
-from apps.ocpp.protocol.frames import Call, CallResult
+from apps.ocpp.protocol.frames import Call, CallError, CallResult
 from apps.ocpp.protocol.replay import replay_context_for_action
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
@@ -496,3 +496,147 @@ class ReconnectReconciliationTests(TestCase):
             OcppTransaction.RecoveryState.ACTIVE,
         )
         self.assertIsNone(selected.stopped_at)
+
+
+
+class TransactionRestartAcceptanceTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("restart-acceptance")
+
+    def _v16_dispatcher(self) -> FrameDispatcher:
+        return FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            pending_calls=PendingCalls(),
+            handler_resolver=InboundActions(self.charger).resolve,
+        )
+
+    def _v201_dispatcher(self) -> FrameDispatcher:
+        return FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_201,
+            pending_calls=PendingCalls(),
+            handler_resolver=Inbound201Actions(self.charger).resolve,
+        )
+
+    def test_stale_start_transaction_recovers_after_fresh_dispatcher(self) -> None:
+        frame = Call(
+            unique_id="restart-start",
+            action="StartTransaction",
+            payload={
+                "connectorId": 1,
+                "idTag": "guest-card",
+                "meterStart": 100,
+                "timestamp": "2026-09-22T10:00:00Z",
+            },
+        )
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("crash before durable response"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+                async_to_sync(self._v16_dispatcher().dispatch)(frame)
+
+        self.assertFalse(OcppTransaction.objects.exists())
+        request = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="StartTransaction",
+            unique_id="restart-start",
+        )
+        InboundProtocolRequest.objects.filter(pk=request.pk).update(
+            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        )
+
+        recovered = async_to_sync(self._v16_dispatcher().dispatch)(frame)
+
+        self.assertIsInstance(recovered, CallResult)
+        self.assertEqual(OcppTransaction.objects.count(), 1)
+        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        request.refresh_from_db()
+        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+
+    def test_stale_transaction_event_recovers_after_fresh_dispatcher(self) -> None:
+        frame = Call(
+            unique_id="restart-event",
+            action="TransactionEvent",
+            payload={
+                "eventType": "Started",
+                "timestamp": "2026-09-22T10:00:00Z",
+                "triggerReason": "Authorized",
+                "seqNo": 1,
+                "transactionInfo": {"transactionId": "restart-201"},
+                "idToken": {"idToken": "guest-card", "type": "Central"},
+                "evse": {"id": 1, "connectorId": 1},
+            },
+        )
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("crash before durable response"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+                async_to_sync(self._v201_dispatcher().dispatch)(frame)
+
+        self.assertFalse(OcppTransaction.objects.exists())
+        request = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="TransactionEvent",
+            unique_id="restart-event",
+        )
+        InboundProtocolRequest.objects.filter(pk=request.pk).update(
+            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        )
+
+        recovered = async_to_sync(self._v201_dispatcher().dispatch)(frame)
+
+        self.assertIsInstance(recovered, CallResult)
+        self.assertEqual(OcppTransaction.objects.count(), 1)
+        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        request.refresh_from_db()
+        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+
+    def test_stale_stop_transaction_remains_blocked_without_atomic_recovery(self) -> None:
+        selected = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="stop-target",
+            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+            last_activity_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+        payload = {
+            "transactionId": selected.pk,
+            "meterStop": 150,
+            "timestamp": "2026-09-22T10:30:00Z",
+        }
+        policy, domain_identity = replay_context_for_action(
+            "StopTransaction",
+            payload,
+        )
+        acquired = acquire_inbound_request(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            action="StopTransaction",
+            call_id="stale-stop",
+            payload=payload,
+            policy=policy,
+            domain_identity=domain_identity,
+        )
+        InboundProtocolRequest.objects.filter(pk=acquired.request.pk).update(
+            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        )
+
+        response = async_to_sync(self._v16_dispatcher().dispatch)(
+            Call(
+                unique_id="stale-stop",
+                action="StopTransaction",
+                payload=payload,
+            )
+        )
+
+        self.assertIsInstance(response, CallError)
+        self.assertEqual(response.code, "InternalError")
+        self.assertEqual(response.description, "Request recovery is required.")
+        selected.refresh_from_db()
+        self.assertIsNone(selected.stopped_at)
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
