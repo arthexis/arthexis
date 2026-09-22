@@ -65,6 +65,15 @@ def is_historical_evidence(charger: Charger, occurred_at: datetime) -> bool:
     return cutover is not None and occurred_at < cutover
 
 
+def classify_transaction_evidence(
+    charger: Charger,
+    timestamp: object | None,
+) -> tuple[datetime, bool]:
+    """Parse charger-reported time and classify it against authority cutover."""
+    occurred_at = _parse_timestamp(timestamp)
+    return occurred_at, is_historical_evidence(charger, occurred_at)
+
+
 def start_transaction(
     *,
     charger: Charger,
@@ -73,6 +82,7 @@ def start_transaction(
     account: CustomerAccount | None,
     meter_start: object | None,
     timestamp: object | None,
+    historical: bool = False,
 ) -> OcppTransaction:
     """Persist an authorized OCPP 1.6 transaction start."""
     connector, _ = Connector.objects.get_or_create(charger=charger, number=connector_id)
@@ -85,6 +95,7 @@ def start_transaction(
         remote_id=f"{charger.pk}-{timezone.now().timestamp()}",
         started_at=started_at,
         last_activity_at=started_at,
+        historical=historical,
         meter_start=_parse_decimal(meter_start),
     )
     return transaction
