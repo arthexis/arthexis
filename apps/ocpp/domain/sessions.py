@@ -441,5 +441,7 @@ def reconcile_connector_status(
         .filter(charger=charger, connector=connector)
         .select_for_update()
     ):
+        if evidence_at <= selected.last_activity_at:
+            continue
         mark_transaction_unresolved(selected, observed_at=evidence_at)
     return connector
