@@ -1,7 +1,9 @@
 """Retained OCPP transaction and meter persistence services."""
 
+import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
 
 from django.utils import timezone
 
@@ -202,20 +204,44 @@ def _record_meter_values(
             if not isinstance(sampled_value, dict):
                 raise ValueError("Each sampled value must be an object")
             unit, multiplier = _unit_of_measure(sampled_value)
+            value = _parse_decimal(sampled_value.get("value"))
+            measurand = str(
+                sampled_value.get("measurand", "Energy.Active.Import.Register")
+            )
+            fingerprint = _meter_sample_fingerprint(
+                sampled_at=sampled_at,
+                value=value,
+                measurand=measurand,
+                unit=unit,
+                multiplier=multiplier,
+            )
             records.append(
                 MeterValue(
                     transaction=transaction,
                     sampled_at=sampled_at,
-                    value=_parse_decimal(sampled_value.get("value")),
-                    measurand=str(
-                        sampled_value.get("measurand", "Energy.Active.Import.Register")
-                    ),
+                    value=value,
+                    measurand=measurand,
                     unit=unit,
                     multiplier=multiplier,
+                    source_fingerprint=fingerprint,
                 )
             )
-    MeterValue.objects.bulk_create(records)
-    return len(records), latest_activity
+
+    fingerprints = {record.source_fingerprint for record in records}
+    existing = set(
+        transaction.meter_values.filter(
+            source_fingerprint__in=fingerprints
+        ).values_list("source_fingerprint", flat=True)
+    )
+    unique_records: list[MeterValue] = []
+    seen = set(existing)
+    for record in records:
+        if record.source_fingerprint in seen:
+            continue
+        seen.add(record.source_fingerprint)
+        unique_records.append(record)
+    MeterValue.objects.bulk_create(unique_records)
+    return len(unique_records), latest_activity
 
 
 def _refresh_meter_value_energy(transaction: OcppTransaction) -> None:
@@ -336,3 +362,25 @@ def _touch_transaction_activity(
 
 def _latest_activity(current: datetime, candidate: datetime) -> datetime:
     return max(current, candidate)
+
+
+def _meter_sample_fingerprint(
+    *,
+    sampled_at: datetime,
+    value: Decimal,
+    measurand: str,
+    unit: str,
+    multiplier: int,
+) -> str:
+    material = json.dumps(
+        {
+            "sampled_at": sampled_at.isoformat(),
+            "value": str(value.normalize()),
+            "measurand": measurand,
+            "unit": unit,
+            "multiplier": multiplier,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return sha256(material).hexdigest()
