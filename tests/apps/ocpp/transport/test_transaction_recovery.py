@@ -375,3 +375,124 @@ class MeterValueRecoveryTests(TestCase):
             InboundProtocolRequest.Status.COMPLETED,
         )
         self.assertIsNone(acquired.request.stale_at)
+
+
+
+class ReconnectReconciliationTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("reconnect-recovery")
+
+    def test_v16_available_status_marks_open_transaction_unresolved(self) -> None:
+        started = async_to_sync(
+            FrameDispatcher(
+                charger=self.charger,
+                version=ProtocolVersion.OCPP_16,
+                pending_calls=PendingCalls(),
+                handler_resolver=InboundActions(self.charger).resolve,
+            ).dispatch
+        )(
+            Call(
+                unique_id="start-reconcile",
+                action="StartTransaction",
+                payload={
+                    "connectorId": 1,
+                    "idTag": "guest-card",
+                    "meterStart": 100,
+                    "timestamp": "2026-09-22T10:00:00Z",
+                },
+            )
+        )
+        self.assertIsInstance(started, CallResult)
+        transaction_id = started.payload["transactionId"]
+
+        response = async_to_sync(
+            FrameDispatcher(
+                charger=self.charger,
+                version=ProtocolVersion.OCPP_16,
+                pending_calls=PendingCalls(),
+                handler_resolver=InboundActions(self.charger).resolve,
+            ).dispatch
+        )(
+            Call(
+                unique_id="status-reconcile",
+                action="StatusNotification",
+                payload={
+                    "connectorId": 1,
+                    "status": "Available",
+                    "timestamp": "2026-09-22T10:20:00Z",
+                },
+            )
+        )
+
+        self.assertIsInstance(response, CallResult)
+        selected = OcppTransaction.objects.get(pk=transaction_id)
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+        self.assertIsNone(selected.stopped_at)
+
+    def test_v201_available_then_newer_transaction_evidence_reactivates(self) -> None:
+        dispatcher = FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_201,
+            pending_calls=PendingCalls(),
+            handler_resolver=Inbound201Actions(self.charger).resolve,
+        )
+        start_payload = {
+            "eventType": "Started",
+            "timestamp": "2026-09-22T10:00:00Z",
+            "triggerReason": "Authorized",
+            "seqNo": 1,
+            "transactionInfo": {"transactionId": "reconnect-201"},
+            "idToken": {"idToken": "guest-card", "type": "Central"},
+            "evse": {"id": 1, "connectorId": 1},
+        }
+        async_to_sync(dispatcher.dispatch)(
+            Call(
+                unique_id="event-start-reconcile",
+                action="TransactionEvent",
+                payload=start_payload,
+            )
+        )
+
+        async_to_sync(dispatcher.dispatch)(
+            Call(
+                unique_id="status-available-201",
+                action="StatusNotification",
+                payload={
+                    "timestamp": "2026-09-22T10:20:00Z",
+                    "connectorStatus": "Available",
+                    "evseId": 1,
+                    "connectorId": 1,
+                },
+            )
+        )
+        selected = OcppTransaction.objects.get(
+            charger=self.charger,
+            remote_id="reconnect-201",
+        )
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+
+        async_to_sync(dispatcher.dispatch)(
+            Call(
+                unique_id="event-update-reconcile",
+                action="TransactionEvent",
+                payload={
+                    **start_payload,
+                    "eventType": "Updated",
+                    "timestamp": "2026-09-22T10:25:00Z",
+                    "seqNo": 2,
+                },
+            )
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+        self.assertIsNone(selected.stopped_at)
