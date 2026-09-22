@@ -12,10 +12,16 @@ and concise docstring; commands are for application-wide operations, not model
 API aliases.
 
 Validate the actual checkout: edit, run a focused test or direct GWAY/Django
-invocation, then run broader tests when practical. Keep tests under matching
-`tests/<area>` packages and split modules before they become compatibility
-catch-alls. Never print secrets, raw RFID identifiers, enrollment tokens,
-private certificate material, or database payloads in logs, fixtures, or notes.
+invocation, then run broader tests when practical. Tests for first-party Python
+packages mirror the production import tree beneath `tests/`, including the
+`tests/apps/` level. Use `tests/integration/` only for deliberately
+cross-package behavior and `tests/deploy/` for deployment, workflow, recipe,
+or service-transition behavior. Keep helpers at the narrowest useful common
+package and split broad modules before they become compatibility catch-alls.
+See `docs/testing.md` for the complete test-topology rules.
+
+Never print secrets, raw RFID identifiers, enrollment tokens, private
+certificate material, or database payloads in logs, fixtures, or notes.
 
 Arthexis 2.0 migrations create only fresh 2.0 schema. Legacy data enters only
 through the explicit read-only reconciliation importer; never copy a legacy
