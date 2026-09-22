@@ -95,6 +95,7 @@ def process_v201_transaction_event(
         evse_id=_optional_int(evse, "id"),
         connector_id=_optional_int(evse, "connectorId"),
         timestamp=payload.get("timestamp"),
+        live_evidence=payload.get("offline") is not True,
     )
     response = {"idTokenInfo": {"status": "Accepted"}}
     if replay_request is not None:
