@@ -62,7 +62,9 @@ class ChargerSnapshotTests(TestCase):
             datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
         )
         self.assertEqual(snapshot.energy_kwh, Decimal("1.25"))
-        self.assertEqual(snapshot.unresolved_sessions, 1)
+        self.assertEqual(snapshot.unresolved_sessions, 0)
+        self.assertEqual(snapshot.unresolved_energy_sessions, 0)
+        self.assertEqual(snapshot.unresolved_energy_sessions, 1)
         self.assertEqual(snapshot_chargers(), [snapshot])
 
     def test_snapshot_reports_unknown_energy_as_none(self) -> None:
@@ -144,3 +146,24 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.state, "offline")
         self.assertEqual(snapshot.active_transactions, 1)
         self.assertEqual(snapshot.current_transaction_id, "still-open-in-sql")
+
+
+    def test_connected_unresolved_transaction_has_explicit_operational_state(self) -> None:
+        selected = charger("recovery-uncertain")
+        connection(selected, channel_name="recovery-channel")
+        uncertain = transaction(
+            selected,
+            "unresolved-open",
+            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+        uncertain.recovery_state = uncertain.RecoveryState.UNRESOLVED
+        uncertain.save(update_fields=("recovery_state",))
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.state, "unresolved")
+        self.assertEqual(snapshot.connection_state, "connected")
+        self.assertEqual(snapshot.active_transactions, 0)
+        self.assertEqual(snapshot.unresolved_sessions, 1)
+        self.assertIsNone(snapshot.current_transaction_id)
+        self.assertIsNone(snapshot.current_transaction_started)
