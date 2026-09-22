@@ -26,11 +26,13 @@ class Command(BaseCommand):
         for first, second in (
             ("enabled", "disabled"),
             ("connected", "disconnected"),
-            ("charging", "idle"),
         ):
             group = parser.add_mutually_exclusive_group()
             group.add_argument(f"--{first}", action="store_true")
             group.add_argument(f"--{second}", action="store_true")
+        state_group = parser.add_mutually_exclusive_group()
+        for name in ("charging", "idle", "unresolved"):
+            state_group.add_argument(f"--{name}", action="store_true")
         parser.add_argument(
             "--detail",
             action="store_true",
@@ -47,6 +49,7 @@ class Command(BaseCommand):
                 "disconnected",
                 "charging",
                 "idle",
+                "unresolved",
             )
             if options[name]
         )

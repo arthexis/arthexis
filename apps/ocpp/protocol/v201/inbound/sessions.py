@@ -6,12 +6,13 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
-from apps.ocpp.domain.sessions import (
-    record_v201_meter_values,
-    record_v201_transaction_event,
-)
-from apps.ocpp.models import Charger, Connector
+from apps.ocpp.domain.sessions import reconcile_connector_status
+from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.transactions import (
+    process_v201_meter_values,
+    process_v201_transaction_event,
+)
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -57,10 +58,9 @@ class SessionActions:
         meter_values = payload["meterValue"]
         transaction_info = payload.get("transactionInfo")
         if isinstance(transaction_info, dict):
-            await sync_to_async(record_v201_meter_values)(
+            return await sync_to_async(process_v201_meter_values)(
                 charger=self.charger,
-                transaction_id=_required_text(transaction_info, "transactionId"),
-                meter_values=meter_values,
+                payload=payload,
             )
         else:
             await sync_to_async(record_notification)(
@@ -75,49 +75,23 @@ class SessionActions:
     ) -> dict[str, object]:
         evse_id = _required_int(payload, "evseId")
         connector_id = _required_int(payload, "connectorId")
-        await self._set_connector_status(
-            evse_id, connector_id, _required_text(payload, "connectorStatus")
+        await sync_to_async(reconcile_connector_status)(
+            charger=self.charger,
+            connector_number=(evse_id * 1000) + connector_id,
+            status=_required_text(payload, "connectorStatus"),
+            observed_at=payload.get("timestamp"),
         )
         return {}
 
     async def transaction_event(self, payload: dict[str, object]) -> dict[str, object]:
-        event_type = _required_text(payload, "eventType")
-        id_token = _optional_id_token(payload)
-        if event_type == "Started":
-            id_token = _id_token(payload)
-            authorization = await sync_to_async(authorize_id_tag)(
-                charger=self.charger,
-                id_tag=id_token,
-            )
-            if not authorization.accepted:
-                return {"idTokenInfo": {"status": "Invalid"}}
-        evse = payload.get("evse")
-        evse_id = _optional_int(evse, "id")
-        connector_id = _optional_int(evse, "connectorId")
-        await sync_to_async(record_v201_transaction_event)(
+        return await sync_to_async(process_v201_transaction_event)(
             charger=self.charger,
-            event_type=event_type,
-            transaction_id=_transaction_id(payload),
-            id_token=id_token,
-            evse_id=evse_id,
-            connector_id=connector_id,
-            timestamp=payload.get("timestamp"),
+            payload=payload,
         )
-        return {"idTokenInfo": {"status": "Accepted"}}
 
     @sync_to_async
     def _record_connection(self) -> None:
         Charger.objects.filter(pk=self.charger.pk).update(connected_at=timezone.now())
-
-    @sync_to_async
-    def _set_connector_status(
-        self, evse_id: int, connector_id: int, status: str
-    ) -> None:
-        Connector.objects.update_or_create(
-            charger=self.charger,
-            number=(evse_id * 1000) + connector_id,
-            defaults={"status": status},
-        )
 
 
 def _id_token(payload: dict[str, object]) -> str:

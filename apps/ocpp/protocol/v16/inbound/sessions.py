@@ -5,13 +5,14 @@ from collections.abc import Awaitable, Callable
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.domain.sessions import (
-    record_meter_values,
-    start_transaction,
-    stop_transaction,
-)
-from apps.ocpp.models import Charger, Connector
+from apps.ocpp.domain.sessions import reconcile_connector_status
+from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.transactions import (
+    process_v16_meter_values,
+    process_v16_start_transaction,
+    process_v16_stop_transaction,
+)
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -53,59 +54,37 @@ class SessionActions:
         return {"currentTime": timezone.now().isoformat()}
 
     async def meter_values(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(record_meter_values)(
-            transaction_id=int(payload["transactionId"]),
+        return await sync_to_async(process_v16_meter_values)(
             charger=self.charger,
-            meter_values=payload["meterValue"],
+            payload=payload,
         )
-        return {}
 
     async def start_transaction(self, payload: dict[str, object]) -> dict[str, object]:
-        id_tag = _required_text(payload, "idTag")
-        authorization = await sync_to_async(authorize_id_tag)(
+        return await sync_to_async(process_v16_start_transaction)(
             charger=self.charger,
-            id_tag=id_tag,
+            payload=payload,
         )
-        if not authorization.accepted:
-            return {"idTagInfo": {"status": "Invalid"}}
-        transaction = await sync_to_async(start_transaction)(
-            charger=self.charger,
-            connector_id=int(payload["connectorId"]),
-            id_tag=id_tag,
-            account=authorization.account,
-            meter_start=payload.get("meterStart"),
-            timestamp=payload.get("timestamp"),
-        )
-        return {"idTagInfo": {"status": "Accepted"}, "transactionId": transaction.pk}
 
     async def status_notification(
         self, payload: dict[str, object]
     ) -> dict[str, object]:
-        await self._set_connector_status(
-            int(payload["connectorId"]), _required_text(payload, "status")
+        await sync_to_async(reconcile_connector_status)(
+            charger=self.charger,
+            connector_number=int(payload["connectorId"]),
+            status=_required_text(payload, "status"),
+            observed_at=payload.get("timestamp"),
         )
         return {}
 
     async def stop_transaction(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(stop_transaction)(
-            transaction_id=int(payload["transactionId"]),
+        return await sync_to_async(process_v16_stop_transaction)(
             charger=self.charger,
-            meter_stop=payload.get("meterStop"),
-            timestamp=payload.get("timestamp"),
+            payload=payload,
         )
-        return {"idTagInfo": {"status": "Accepted"}}
 
     @sync_to_async
     def _record_connection(self) -> None:
         Charger.objects.filter(pk=self.charger.pk).update(connected_at=timezone.now())
-
-    @sync_to_async
-    def _set_connector_status(self, connector_id: int, status: str) -> None:
-        Connector.objects.update_or_create(
-            charger=self.charger,
-            number=connector_id,
-            defaults={"status": status},
-        )
 
 
 def _required_text(payload: dict[str, object], name: str) -> str:

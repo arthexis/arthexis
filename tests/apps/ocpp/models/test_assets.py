@@ -28,32 +28,46 @@ class ChargerModelTests(TestCase):
         disabled = charger("charger-disabled", active=False)
         connected_idle = charger("charger-idle")
         connected_charging = charger("charger-charging")
+        connected_unresolved = charger("charger-unresolved")
         connection(connected_idle, channel_name="idle-channel", protocol="ocpp1.6")
         connection(
             connected_charging,
             channel_name="charging-channel",
             protocol="ocpp2.0.1",
         )
+        connection(
+            connected_unresolved,
+            channel_name="unresolved-channel",
+            protocol="ocpp1.6",
+        )
         transaction(
             connected_charging,
             "active-transaction",
             started_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
         )
+        unresolved = transaction(
+            connected_unresolved,
+            "unresolved-transaction",
+            started_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        )
+        unresolved.recovery_state = unresolved.RecoveryState.UNRESOLVED
+        unresolved.save(update_fields=("recovery_state",))
 
         self.assertQuerySetEqual(
             Charger.objects.enabled().order_by("identity"),
-            [self.charger, connected_charging, connected_idle],
+            [self.charger, connected_charging, connected_idle, connected_unresolved],
         )
         self.assertQuerySetEqual(Charger.objects.disabled(), [disabled])
         self.assertQuerySetEqual(
             Charger.objects.connected().order_by("identity"),
-            [connected_charging, connected_idle],
+            [connected_charging, connected_idle, connected_unresolved],
         )
         self.assertQuerySetEqual(
             Charger.objects.disconnected().order_by("identity"),
             [self.charger, disabled],
         )
         self.assertQuerySetEqual(Charger.objects.charging(), [connected_charging])
+        self.assertQuerySetEqual(Charger.objects.unresolved(), [connected_unresolved])
         self.assertQuerySetEqual(Charger.objects.idle(), [connected_idle])
 
     def test_charging_requires_an_actual_active_transaction(self) -> None:

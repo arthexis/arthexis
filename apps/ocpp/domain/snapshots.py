@@ -32,6 +32,7 @@ class ChargerSnapshot:
     last_transaction_stopped: datetime | None
     energy_kwh: Decimal | None
     unresolved_sessions: int
+    unresolved_energy_sessions: int
     last_contact: datetime | None
 
 
@@ -44,11 +45,17 @@ def _transactions(charger: Charger) -> list[OcppTransaction]:
     return transactions
 
 
-def _state(charger: Charger, current: OcppTransaction | None) -> str:
+def _state(
+    charger: Charger,
+    current: OcppTransaction | None,
+    unresolved_count: int,
+) -> str:
     if not charger.active:
         return "disabled"
     if not connection_is_live(charger):
         return "offline"
+    if unresolved_count:
+        return "unresolved"
     return "charging" if current is not None else "idle"
 
 
@@ -57,6 +64,15 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
     transactions = _transactions(charger)
     current = current_transaction(charger)
     last_completed = last_completed_transaction(charger)
+    unresolved = [
+        transaction
+        for transaction in transactions
+        if (
+            transaction.recovery_state
+            == OcppTransaction.RecoveryState.UNRESOLVED
+            and transaction.stopped_at is None
+        )
+    ]
     completed = [
         transaction
         for transaction in transactions
@@ -70,7 +86,7 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
     return ChargerSnapshot(
         identity=charger.identity,
         enabled=charger.active,
-        state=_state(charger, current),
+        state=_state(charger, current, len(unresolved)),
         configured_protocol=(
             charger.station_model.preferred_protocol if charger.station_model else None
         ),
@@ -83,7 +99,9 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
             )
         ),
         active_transactions=sum(
-            transaction.stopped_at is None for transaction in transactions
+            transaction.recovery_state == OcppTransaction.RecoveryState.ACTIVE
+            and transaction.stopped_at is None
+            for transaction in transactions
         ),
         current_transaction_id=current.remote_id if current else None,
         current_transaction_started=current.started_at if current else None,
@@ -92,7 +110,8 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
             last_completed.stopped_at if last_completed else None
         ),
         energy_kwh=sum(energy_values, Decimal("0")) if energy_values else None,
-        unresolved_sessions=sum(
+        unresolved_sessions=len(unresolved),
+        unresolved_energy_sessions=sum(
             transaction.energy_kwh is None for transaction in completed
         ),
         last_contact=charger.connected_at,

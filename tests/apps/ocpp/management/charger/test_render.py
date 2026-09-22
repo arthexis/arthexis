@@ -36,6 +36,7 @@ class ChargerRenderTests(SimpleTestCase):
             last_transaction_stopped=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
             energy_kwh=Decimal("1.2500"),
             unresolved_sessions=1,
+            unresolved_energy_sessions=2,
             last_contact=datetime(2026, 1, 1, 2, 5, tzinfo=timezone.utc),
         )
 
@@ -49,7 +50,8 @@ class ChargerRenderTests(SimpleTestCase):
         self.assertNotIn("Active since", rendered)
         self.assertNotIn("Last stopped", rendered)
         self.assertNotIn("Energy total", rendered)
-        self.assertNotIn("Unresolved", rendered)
+        self.assertNotIn("Recovery unresolved", rendered)
+        self.assertNotIn("Energy unresolved", rendered)
 
     def test_detail_view_adds_richer_columns_and_values(self) -> None:
         command = RecordingCommand()
@@ -61,7 +63,8 @@ class ChargerRenderTests(SimpleTestCase):
         self.assertIn("Active since", rendered)
         self.assertIn("Last stopped", rendered)
         self.assertIn("Energy total", rendered)
-        self.assertIn("Unresolved", rendered)
+        self.assertIn("Recovery unresolved", rendered)
+        self.assertIn("Energy unresolved", rendered)
         self.assertIn("transaction-active", rendered)
         self.assertIn("transaction-last", rendered)
         self.assertIn("1.2500 kWh", rendered)

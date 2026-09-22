@@ -5,6 +5,7 @@ from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.replay import (
     ReplayPolicy,
     canonical_payload,
+    replay_context_for_action,
     replay_identity,
     replay_policy_for_action,
     request_fingerprint,
@@ -178,8 +179,36 @@ class ReplayIdentityTests(TestCase):
         )
 
     def test_transaction_actions_keep_durable_replay_policy(self) -> None:
-        for action in ("StartTransaction", "StopTransaction", "MeterValues", "TransactionEvent"):
+        for action in ("StartTransaction", "StopTransaction", "MeterValues"):
             self.assertEqual(
                 replay_policy_for_action(action),
                 ReplayPolicy.CALL_ID_AND_FINGERPRINT,
             )
+
+    def test_transaction_event_uses_protocol_domain_identity(self) -> None:
+        payload = {
+            "eventType": "Updated",
+            "seqNo": 4,
+            "transactionInfo": {"transactionId": "tx-1"},
+        }
+
+        policy, domain_identity = replay_context_for_action(
+            "TransactionEvent",
+            payload,
+        )
+
+        self.assertEqual(policy, ReplayPolicy.DOMAIN_IDENTITY)
+        self.assertEqual(domain_identity, "tx-1:4:Updated")
+        self.assertEqual(
+            replay_policy_for_action("TransactionEvent"),
+            ReplayPolicy.DOMAIN_IDENTITY,
+        )
+
+    def test_malformed_transaction_event_falls_back_to_call_identity(self) -> None:
+        policy, domain_identity = replay_context_for_action(
+            "TransactionEvent",
+            {"eventType": "Updated"},
+        )
+
+        self.assertEqual(policy, ReplayPolicy.CALL_ID_AND_FINGERPRINT)
+        self.assertEqual(domain_identity, "")

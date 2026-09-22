@@ -47,14 +47,21 @@ class ChargerQuerySet(models.QuerySet):
         return self.exclude(connection__last_seen_at__gte=cutoff)
 
     def charging(self):
+        return self.connected().filter(
+            transactions__recovery_state="active",
+            transactions__stopped_at__isnull=True,
+        ).distinct()
+
+    def unresolved(self):
         return self.filter(
-            transactions__isnull=False,
+            transactions__recovery_state="unresolved",
             transactions__stopped_at__isnull=True,
         ).distinct()
 
     def idle(self):
         charging = self.charging().values("pk")
-        return self.connected().exclude(pk__in=charging)
+        unresolved = self.unresolved().values("pk")
+        return self.connected().exclude(pk__in=charging).exclude(pk__in=unresolved)
 
 
 class ChargerManager(models.Manager.from_queryset(ChargerQuerySet)):
