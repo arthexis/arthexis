@@ -56,6 +56,10 @@ class ChargerQuerySet(models.QuerySet):
             transactions__historical=False,
         ).distinct()
 
+    def historical(self):
+        """Return chargers with retained historical transaction evidence."""
+        return self.filter(transactions__historical=True).distinct()
+
     def idle(self):
         charging = self.charging().values("pk")
         unresolved = self.unresolved().values("pk")

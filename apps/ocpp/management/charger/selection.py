@@ -14,6 +14,7 @@ FLEET_FILTERS = frozenset(
         "charging",
         "idle",
         "unresolved",
+        "historical",
     }
 )
 
