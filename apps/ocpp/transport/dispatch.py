@@ -11,6 +11,7 @@ from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
 from apps.ocpp.protocol.replay import replay_context_for_action
+from apps.ocpp.services.intake import process_data_transfer
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
@@ -89,7 +90,7 @@ class FrameDispatcher:
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
         if acquired.stale:
-            safely_retryable = (
+            safely_retryable = frame.action == "DataTransfer" or (
                 self.version is ProtocolVersion.OCPP_16
                 and frame.action in {"StartTransaction", "StopTransaction"}
             ) or (
@@ -122,6 +123,24 @@ class FrameDispatcher:
                 description="Request is already processing.",
                 details={},
             )
+
+        if frame.action == "DataTransfer":
+            try:
+                payload = await sync_to_async(process_data_transfer)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
 
         if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
             try:
