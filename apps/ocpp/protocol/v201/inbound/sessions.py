@@ -6,10 +6,10 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.utils import timezone
 
-from apps.ocpp.domain.notifications import record_notification
 from apps.ocpp.domain.sessions import reconcile_connector_status
 from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.metering import process_v201_standalone_meter_values
 from apps.ocpp.services.presence import configure_heartbeat
 from apps.ocpp.services.transactions import (
     process_v201_meter_values,
@@ -69,13 +69,10 @@ class SessionActions:
                 charger=self.charger,
                 payload=payload,
             )
-        else:
-            await sync_to_async(record_notification)(
-                charger=self.charger,
-                action="MeterValues",
-                payload=payload,
-            )
-        return {}
+        return await sync_to_async(process_v201_standalone_meter_values)(
+            charger=self.charger,
+            payload=payload,
+        )
 
     async def status_notification(
         self, payload: dict[str, object]
