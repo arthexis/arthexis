@@ -32,7 +32,10 @@ def test_watchtower_deploy_waits_for_local_mcp_listener() -> None:
     step = _mcp_step()
 
     assert 'socket.create_connection(("127.0.0.1", 8000)' in step
+    assert "time.monotonic() + 60" in step
     assert "MCP service did not open 127.0.0.1:8000" in step
+    assert "systemctl status gway-mcp-server.service --no-pager" in step
+    assert "journalctl -u gway-mcp-server.service -n 100 --no-pager" in step
 
 
 
