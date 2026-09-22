@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                     ("disconnected", "Disconnected"),
                 ],
                 default="pending",
-                max_length=16,
+                max_length=24,
             ),
         ),
     ]
