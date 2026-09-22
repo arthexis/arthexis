@@ -88,14 +88,23 @@ class FrameDispatcher:
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
         if acquired.stale:
-            transaction_meter_values = frame.action == "MeterValues" and (
+            safely_retryable = (
                 self.version is ProtocolVersion.OCPP_16
-                or (
-                    self.version is ProtocolVersion.OCPP_201
-                    and isinstance(frame.payload.get("transactionInfo"), dict)
+                and frame.action == "StartTransaction"
+            ) or (
+                frame.action == "MeterValues"
+                and (
+                    self.version is ProtocolVersion.OCPP_16
+                    or (
+                        self.version is ProtocolVersion.OCPP_201
+                        and isinstance(frame.payload.get("transactionInfo"), dict)
+                    )
                 )
+            ) or (
+                self.version is ProtocolVersion.OCPP_201
+                and frame.action == "TransactionEvent"
             )
-            if transaction_meter_values:
+            if safely_retryable:
                 recovered = await sync_to_async(reopen_stale_request)(acquired.request)
                 acquired = type(acquired)(request=recovered, created=True)
             else:
