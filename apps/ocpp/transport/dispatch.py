@@ -21,6 +21,7 @@ from apps.ocpp.services.replay import (
 from apps.ocpp.services.transactions import (
     process_v16_meter_values,
     process_v16_start_transaction,
+    process_v16_stop_transaction,
     process_v201_meter_values,
     process_v201_transaction_event,
 )
@@ -90,7 +91,7 @@ class FrameDispatcher:
         if acquired.stale:
             safely_retryable = (
                 self.version is ProtocolVersion.OCPP_16
-                and frame.action == "StartTransaction"
+                and frame.action in {"StartTransaction", "StopTransaction"}
             ) or (
                 frame.action == "MeterValues"
                 and (
@@ -125,6 +126,24 @@ class FrameDispatcher:
         if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
             try:
                 payload = await sync_to_async(process_v16_start_transaction)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if self.version is ProtocolVersion.OCPP_16 and frame.action == "StopTransaction":
+            try:
+                payload = await sync_to_async(process_v16_stop_transaction)(
                     charger=self.charger,
                     payload=frame.payload,
                     replay_request=acquired.request,
