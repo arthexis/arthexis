@@ -69,11 +69,15 @@ def record_operational_status(
     kind: str,
     status: str,
     payload: dict[str, object],
+    source_action: str = "",
+    reported_at: datetime | None = None,
 ) -> OperationalStatusRecord:
     """Persist a firmware, diagnostics, or log status notification."""
     return OperationalStatusRecord.objects.create(
         charger=charger,
         kind=kind,
         status=status,
+        source_action=source_action,
         payload=payload,
+        reported_at=reported_at,
     )
