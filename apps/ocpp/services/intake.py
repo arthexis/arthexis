@@ -7,6 +7,7 @@ from django.db import transaction
 
 from apps.events.services import publish_safely
 from apps.ocpp.domain.notifications import (
+    record_monitoring,
     record_notification,
     record_operational_status,
 )
