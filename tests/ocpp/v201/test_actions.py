@@ -128,6 +128,23 @@ class Ocpp201ActionTests(TestCase):
             if action not in {"MeterValues", "TransactionEvent"}:
                 async_to_sync(handlers[action])(payload)
 
+    def test_standalone_meter_values_are_retained_without_transaction(self) -> None:
+        response = async_to_sync(InboundActions(self.charger)._handlers["MeterValues"])(
+            {
+                "evseId": 1,
+                "meterValue": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "sampledValue": [{"value": 10}],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(response, {})
+        notification = self.charger.ocpp_notifications.get(action="MeterValues")
+        self.assertEqual(notification.payload["evseId"], 1)
+
     def test_conformance_sensitive_inbound_responses_are_complete(self) -> None:
         handlers = InboundActions(self.charger)._handlers
 
