@@ -12,8 +12,10 @@ from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
 from apps.ocpp.protocol.replay import replay_context_for_action
 from apps.ocpp.services.intake import (
+    generic_notification_response,
     operational_status_kind,
     process_data_transfer,
+    process_generic_notification,
     process_operational_status,
 )
 from apps.ocpp.services.replay import (
@@ -83,6 +85,7 @@ class FrameDispatcher:
             frame.payload,
         )
         status_kind = operational_status_kind(frame.action)
+        generic_response = generic_notification_response(frame.action)
         acquired = await sync_to_async(acquire_inbound_request)(
             charger=self.charger,
             version=self.version,
@@ -98,6 +101,7 @@ class FrameDispatcher:
             safely_retryable = (
                 frame.action == "DataTransfer"
                 or status_kind is not None
+                or generic_response is not None
                 or (
                     self.version is ProtocolVersion.OCPP_16
                     and frame.action in {"StartTransaction", "StopTransaction"}
@@ -159,6 +163,25 @@ class FrameDispatcher:
         if status_kind is not None:
             try:
                 payload = await sync_to_async(process_operational_status)(
+                    charger=self.charger,
+                    action=frame.action,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if generic_response is not None:
+            try:
+                payload = await sync_to_async(process_generic_notification)(
                     charger=self.charger,
                     action=frame.action,
                     payload=frame.payload,
