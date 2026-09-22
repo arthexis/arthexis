@@ -594,49 +594,97 @@ class TransactionRestartAcceptanceTests(TestCase):
         request.refresh_from_db()
         self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
 
-    def test_stale_stop_transaction_remains_blocked_without_atomic_recovery(self) -> None:
+    def test_stop_completion_failure_rolls_back_domain_mutation(self) -> None:
         selected = OcppTransaction.objects.create(
             charger=self.charger,
             remote_id="stop-target",
             started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
             last_activity_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+            meter_start=100,
         )
-        payload = {
-            "transactionId": selected.pk,
-            "meterStop": 150,
-            "timestamp": "2026-09-22T10:30:00Z",
-        }
-        policy, domain_identity = replay_context_for_action(
-            "StopTransaction",
-            payload,
-        )
-        acquired = acquire_inbound_request(
-            charger=self.charger,
-            version=ProtocolVersion.OCPP_16,
+        frame = Call(
+            unique_id="stop-crash",
             action="StopTransaction",
-            call_id="stale-stop",
-            payload=payload,
-            policy=policy,
-            domain_identity=domain_identity,
-        )
-        InboundProtocolRequest.objects.filter(pk=acquired.request.pk).update(
-            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            payload={
+                "transactionId": selected.pk,
+                "meterStop": 150,
+                "timestamp": "2026-09-22T10:30:00Z",
+            },
         )
 
-        response = async_to_sync(self._v16_dispatcher().dispatch)(
-            Call(
-                unique_id="stale-stop",
-                action="StopTransaction",
-                payload=payload,
-            )
-        )
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("crash before durable response"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+                async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
-        self.assertIsInstance(response, CallError)
-        self.assertEqual(response.code, "InternalError")
-        self.assertEqual(response.description, "Request recovery is required.")
         selected.refresh_from_db()
         self.assertIsNone(selected.stopped_at)
         self.assertEqual(
             selected.recovery_state,
             OcppTransaction.RecoveryState.ACTIVE,
         )
+        request = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="StopTransaction",
+            unique_id="stop-crash",
+        )
+        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+
+    def test_stale_stop_transaction_recovers_after_fresh_dispatcher(self) -> None:
+        selected = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="stop-target",
+            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+            last_activity_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+            meter_start=100,
+        )
+        frame = Call(
+            unique_id="stale-stop",
+            action="StopTransaction",
+            payload={
+                "transactionId": selected.pk,
+                "meterStop": 150,
+                "timestamp": "2026-09-22T10:30:00Z",
+            },
+        )
+
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("crash before durable response"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+                async_to_sync(self._v16_dispatcher().dispatch)(frame)
+
+        request = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="StopTransaction",
+            unique_id="stale-stop",
+        )
+        InboundProtocolRequest.objects.filter(pk=request.pk).update(
+            received_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        )
+
+        recovered = async_to_sync(self._v16_dispatcher().dispatch)(frame)
+
+        self.assertIsInstance(recovered, CallResult)
+        self.assertEqual(
+            recovered.payload,
+            {"idTagInfo": {"status": "Accepted"}},
+        )
+        selected.refresh_from_db()
+        self.assertEqual(
+            selected.stopped_at,
+            datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.COMPLETED,
+        )
+        self.assertEqual(str(selected.energy_kwh), "0.0500")
+        request.refresh_from_db()
+        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+
+        replayed = async_to_sync(self._v16_dispatcher().dispatch)(frame)
+        self.assertEqual(replayed, recovered)
