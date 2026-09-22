@@ -3,18 +3,15 @@ from unittest.mock import Mock
 from django.test import TestCase
 
 from apps.events.models import EventEnvelope
-from apps.events.registry import _handlers, dispatch_to_subscribers, subscribe
+from apps.events.registry import dispatch_to_subscribers, subscribe
 
 
 class EventRegistryTests(TestCase):
-    def tearDown(self) -> None:
-        _handlers.clear()
-
     def test_registered_subscribers_receive_matching_event(self) -> None:
         handler = Mock()
-        subscribe("test.event", handler)
+        subscribe("test.matching", handler)
         envelope = EventEnvelope.objects.create(
-            event_type="test.event",
+            event_type="test.matching",
             producer="tests",
         )
 
@@ -25,10 +22,10 @@ class EventRegistryTests(TestCase):
 
     def test_subscription_is_idempotent(self) -> None:
         handler = Mock()
-        subscribe("test.event", handler)
-        subscribe("test.event", handler)
+        subscribe("test.idempotent", handler)
+        subscribe("test.idempotent", handler)
         envelope = EventEnvelope.objects.create(
-            event_type="test.event",
+            event_type="test.idempotent",
             producer="tests",
         )
 
