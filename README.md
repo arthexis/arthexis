@@ -95,6 +95,35 @@ Every retained action below is covered by the executable support matrix and has 
 | `UnlockConnector` | ✅ | ✅ | Request release of a locked connector. |
 | `UpdateFirmware` | ✅ | ✅ | Request a charger firmware update and correlate its outcome. |
 
+## Operational Capabilities
+
+The protocol matrix describes what Arthexis can exchange with a charger. The application also provides the following operational surfaces around those protocol messages.
+
+| Capability | Current 2.0 behavior |
+| --- | --- |
+| **Fleet inspection** | Read configured chargers as a captured fleet snapshot, optionally filtering by charger identity, enabled state, connection state, or charging state. Detail mode includes connector, transaction timing, and resolvable energy information. |
+| **Charger enrollment** | Enroll an unknown charger only after successful OCPP subprotocol negotiation and presentation of the configured enrollment credential. Invalid or missing enrollment credentials do not create charger records. |
+| **Authorization policy** | Configure each charger for `open` or `restricted` authorization. Open mode accepts a non-empty protocol-valid identifier while retaining an audit record; restricted mode requires an active matching card or account. |
+| **Explicit charger control** | Request reset, remote start, or remote stop for one selected charger. Arthexis derives the correct OCPP 1.6 or 2.0.1 action from the charger's configured protocol and rejects incompatible options before delivery. |
+| **Operation correlation** | Track outbound protocol calls through pending, completed, errored, timed-out, and disconnected outcomes without treating an attempted send as a successful charger action. |
+| **Administration** | Inspect and maintain retained application records through Django admin, including chargers, sessions, operation outcomes, authorization state, certificates, reservations, profiles, and related records. |
+| **Structured events** | Publish and persist typed event envelopes with an event type, producer, JSON payload, creation time, and publication time. |
+| **Energy and account records** | Maintain customer accounts, tariffs, kWh balances, ledger entries, logical card credentials, and charging attribution data used by retained authorization and accounting flows. |
+| **Node topology** | Record Terminal, Control, Satellite, and Watchtower node identities and explicit links between nodes without dynamically changing the installed Django application set. |
+| **Legacy reconciliation** | Inspect, dry-run, and import explicitly selected retained data from a legacy SQLite source through a read-only source connection. The source database is never migrated or modified in place. |
+
+### Explicit control boundary
+
+Arthexis deliberately separates **protocol support** from **automatic orchestration**. A retained outbound OCPP action can be validated, emitted, and correlated when an administrator or integration explicitly requests it, but the application does not automatically schedule charger firmware updates, diagnostics, configuration rollouts, reservations, resets, starts, or stops.
+
+The initial high-level charger controls are intentionally narrow:
+
+| Operation | OCPP 1.6 | OCPP 2.0.1 | Behavior |
+| --- | --- | --- | --- |
+| **Reset** | `Reset` | `Reset` | Graceful by default; an explicit hard option requests the immediate reset form for the selected protocol. |
+| **Start** | `RemoteStartTransaction` | `RequestStartTransaction` | Requires an identification token and accepts only the connector/EVSE selector appropriate to the configured protocol. |
+| **Stop** | `RemoteStopTransaction` | `RequestStopTransaction` | Uses the sole active local transaction when unambiguous, or requires an explicit transaction selector when several are active. |
+
 ## Role Architecture
 
 Arthexis retains four node-role identities for topology and deployment modeling. In 2.0 they are configuration identities, not automatic bundles of legacy host features.
@@ -153,13 +182,45 @@ The fleet command is read-only:
 
 It can filter by charger identity and by enabled, connected, or charging state, and can include connector, transaction, and energy detail.
 
-### 5. Administration
+### 5. Publish a structured event
+
+Events can be published explicitly from the application command line:
+
+```bash
+.venv/bin/python manage.py event publish charger.audit --producer operator --payload '{"source":"manual"}'
+```
+
+The payload must be a JSON object. The command persists the event envelope and prints its generated event identifier.
+
+### 6. Inspect or reconcile a legacy database
+
+Inspect a legacy SQLite source without modifying it:
+
+```bash
+.venv/bin/python scripts/reconcile.py inspect --database /path/to/legacy.sqlite3
+```
+
+Run the selected-data mapping without committing destination changes:
+
+```bash
+.venv/bin/python scripts/reconcile.py dry-run --database /path/to/legacy.sqlite3
+```
+
+An actual import is explicit:
+
+```bash
+.venv/bin/python scripts/reconcile.py import --database /path/to/legacy.sqlite3
+```
+
+Reconciliation opens the source database read-only, validates SQLite integrity, and writes its results only to the 2.0 destination.
+
+### 7. Administration
 
 Django administration remains available at `/admin/` for authorized staff. It is intentionally not linked from the public site navigation.
 
 The administration surface exposes retained application records and operation outcomes; it is not a raw OCPP payload console.
 
-### 6. Operator guidance
+### 8. Operator guidance
 
 Start with the [Operator Guide](docs/operator-guide.md) for deployment-health and operating notes that are appropriate to expose through the Markdown site.
 
