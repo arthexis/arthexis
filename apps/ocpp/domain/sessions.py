@@ -62,13 +62,15 @@ def start_transaction(
 ) -> OcppTransaction:
     """Persist an authorized OCPP 1.6 transaction start."""
     connector, _ = Connector.objects.get_or_create(charger=charger, number=connector_id)
+    started_at = _parse_timestamp(timestamp)
     transaction = OcppTransaction.objects.create(
         charger=charger,
         connector=connector,
         account=account,
         id_tag=id_tag,
         remote_id=f"{charger.pk}-{timezone.now().timestamp()}",
-        started_at=_parse_timestamp(timestamp),
+        started_at=started_at,
+        last_activity_at=started_at,
         meter_start=_parse_decimal(meter_start),
     )
     return transaction
@@ -87,12 +89,26 @@ def stop_transaction(
         charger=charger,
         stopped_at__isnull=True,
     )
-    transaction.stopped_at = _parse_timestamp(timestamp)
+    stopped_at = _parse_timestamp(timestamp)
+    transaction.stopped_at = stopped_at
+    transaction.last_activity_at = _latest_activity(
+        transaction.last_activity_at,
+        stopped_at,
+    )
+    transaction.recovery_state = OcppTransaction.RecoveryState.COMPLETED
     transaction.meter_stop = _parse_decimal(meter_stop)
     transaction.energy_kwh = _meter_delta_kwh(
         transaction.meter_start, transaction.meter_stop
     )
-    transaction.save(update_fields=("stopped_at", "meter_stop", "energy_kwh"))
+    transaction.save(
+        update_fields=(
+            "stopped_at",
+            "last_activity_at",
+            "recovery_state",
+            "meter_stop",
+            "energy_kwh",
+        )
+    )
     return transaction
 
 
@@ -103,8 +119,12 @@ def record_meter_values(
     if not isinstance(meter_values, list):
         raise ValueError("meterValue must be a list")
     transaction = OcppTransaction.objects.get(pk=transaction_id, charger=charger)
-    count = _record_meter_values(transaction=transaction, meter_values=meter_values)
+    count, last_activity = _record_meter_values(
+        transaction=transaction,
+        meter_values=meter_values,
+    )
     _refresh_meter_value_energy(transaction)
+    _touch_transaction_activity(transaction, last_activity)
     return count
 
 
@@ -120,19 +140,29 @@ def record_v201_transaction_event(
 ) -> OcppTransaction:
     """Persist a retained OCPP 2.0.1 transaction lifecycle event."""
     connector = _connector(charger, evse_id, connector_id)
+    occurred_at = _parse_timestamp(timestamp)
     transaction, _ = OcppTransaction.objects.get_or_create(
         charger=charger,
         remote_id=transaction_id,
         defaults={
             "connector": connector,
             "id_tag": id_token[:20],
-            "started_at": _parse_timestamp(timestamp),
+            "started_at": occurred_at,
+            "last_activity_at": occurred_at,
         },
     )
+    update_fields: list[str] = []
+    latest_activity = _latest_activity(transaction.last_activity_at, occurred_at)
+    if latest_activity != transaction.last_activity_at:
+        transaction.last_activity_at = latest_activity
+        update_fields.append("last_activity_at")
     if event_type == "Ended" and transaction.stopped_at is None:
-        transaction.stopped_at = _parse_timestamp(timestamp)
+        transaction.stopped_at = occurred_at
+        transaction.recovery_state = OcppTransaction.RecoveryState.COMPLETED
         transaction.energy_kwh = _meter_value_delta_kwh(transaction)
-        transaction.save(update_fields=("stopped_at", "energy_kwh"))
+        update_fields.extend(("stopped_at", "recovery_state", "energy_kwh"))
+    if update_fields:
+        transaction.save(update_fields=tuple(dict.fromkeys(update_fields)))
     return transaction
 
 
@@ -141,14 +171,21 @@ def record_v201_meter_values(
 ) -> int:
     """Persist OCPP 2.0.1 meter values identified by their remote transaction ID."""
     transaction = OcppTransaction.objects.get(charger=charger, remote_id=transaction_id)
-    count = _record_meter_values(transaction=transaction, meter_values=meter_values)
+    count, last_activity = _record_meter_values(
+        transaction=transaction,
+        meter_values=meter_values,
+    )
     _refresh_meter_value_energy(transaction)
+    _touch_transaction_activity(transaction, last_activity)
     return count
 
 
-def _record_meter_values(*, transaction: OcppTransaction, meter_values: object) -> int:
-    """Create sampled-value records for either retained OCPP protocol version."""
+def _record_meter_values(
+    *, transaction: OcppTransaction, meter_values: object
+) -> tuple[int, datetime | None]:
+    """Create sampled-value records and return the newest retained activity time."""
     records: list[MeterValue] = []
+    latest_activity: datetime | None = None
     for meter_value in meter_values:
         if not isinstance(meter_value, dict):
             raise ValueError("Each meter value must be an object")
@@ -156,6 +193,11 @@ def _record_meter_values(*, transaction: OcppTransaction, meter_values: object) 
         if not isinstance(sampled_values, list):
             raise ValueError("sampledValue must be a list")
         sampled_at = _parse_timestamp(meter_value.get("timestamp"))
+        latest_activity = (
+            sampled_at
+            if latest_activity is None
+            else max(latest_activity, sampled_at)
+        )
         for sampled_value in sampled_values:
             if not isinstance(sampled_value, dict):
                 raise ValueError("Each sampled value must be an object")
@@ -173,7 +215,7 @@ def _record_meter_values(*, transaction: OcppTransaction, meter_values: object) 
                 )
             )
     MeterValue.objects.bulk_create(records)
-    return len(records)
+    return len(records), latest_activity
 
 
 def _refresh_meter_value_energy(transaction: OcppTransaction) -> None:
@@ -257,3 +299,40 @@ def _parse_timestamp(value: object | None) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("Timestamp is invalid") from error
+
+
+def mark_transaction_unresolved(
+    transaction: OcppTransaction,
+    *,
+    observed_at: datetime | None = None,
+) -> OcppTransaction:
+    """Preserve an open transaction while marking its live state as uncertain."""
+    if transaction.stopped_at is not None:
+        raise ValueError("Completed transactions cannot become unresolved.")
+    transaction.recovery_state = OcppTransaction.RecoveryState.UNRESOLVED
+    update_fields = ["recovery_state"]
+    if observed_at is not None:
+        transaction.last_activity_at = _latest_activity(
+            transaction.last_activity_at,
+            observed_at,
+        )
+        update_fields.append("last_activity_at")
+    transaction.save(update_fields=tuple(update_fields))
+    return transaction
+
+
+def _touch_transaction_activity(
+    transaction: OcppTransaction,
+    occurred_at: datetime | None,
+) -> None:
+    if occurred_at is None:
+        return
+    latest = _latest_activity(transaction.last_activity_at, occurred_at)
+    if latest == transaction.last_activity_at:
+        return
+    transaction.last_activity_at = latest
+    transaction.save(update_fields=("last_activity_at",))
+
+
+def _latest_activity(current: datetime, candidate: datetime) -> datetime:
+    return max(current, candidate)
