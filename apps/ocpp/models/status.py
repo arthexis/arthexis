@@ -16,5 +16,7 @@ class OperationalStatusRecord(models.Model):
     )
     kind = models.CharField(max_length=20, choices=Kind.choices)
     status = models.CharField(max_length=80)
+    source_action = models.CharField(max_length=80, blank=True)
     payload = models.JSONField(default=dict)
+    reported_at = models.DateTimeField(null=True, blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
