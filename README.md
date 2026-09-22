@@ -4,7 +4,6 @@
 
 Arthexis Constellation is a Django-based software suite for managing electric vehicle charging infrastructure, charger connectivity, operational state, transactions, authorization, and retained OCPP workflows.
 
-The current 2.0 runtime focuses on a small, explicit application surface: charger and station records, OCPP transport and protocol behavior, operational state, administration, reconciliation, and operator-facing guidance.
 
 ## Suite Features
 
@@ -99,7 +98,7 @@ Every retained action below is covered by the executable support matrix and has 
 
 The protocol matrix describes what Arthexis can exchange with a charger. The application also provides the following operational surfaces around those protocol messages.
 
-| Capability | Current 2.0 behavior |
+| Capability | Behavior |
 | --- | --- |
 | **Fleet inspection** | Read configured chargers as a captured fleet snapshot, optionally filtering by charger identity, enabled state, connection state, or charging state. Detail mode includes connector, transaction timing, and resolvable energy information. |
 | **Charger enrollment** | Enroll an unknown charger only after successful OCPP subprotocol negotiation and presentation of the configured enrollment credential. Invalid or missing enrollment credentials do not create charger records. |
@@ -110,7 +109,6 @@ The protocol matrix describes what Arthexis can exchange with a charger. The app
 | **Structured events** | Publish and persist typed event envelopes with an event type, producer, JSON payload, creation time, and publication time. |
 | **Energy and account records** | Maintain customer accounts, tariffs, kWh balances, ledger entries, logical card credentials, and charging attribution data used by retained authorization and accounting flows. |
 | **Node topology** | Record Terminal, Control, Satellite, and Watchtower node identities and explicit links between nodes without dynamically changing the installed Django application set. |
-| **Legacy reconciliation** | Inspect, dry-run, and import explicitly selected retained data from a legacy SQLite source through a read-only source connection. The source database is never migrated or modified in place. |
 
 ### Explicit control boundary
 
@@ -126,7 +124,7 @@ The initial high-level charger controls are intentionally narrow:
 
 ## Role Architecture
 
-Arthexis retains four node-role identities for topology and deployment modeling. In 2.0 they are configuration identities, not automatic bundles of legacy host features.
+Arthexis retains four node-role identities for topology and deployment modeling. They are configuration identities rather than automatic bundles of host features.
 
 | Role | Intended place in a constellation |
 | --- | --- |
@@ -139,30 +137,37 @@ Role-specific capabilities can be built on top of these identities without requi
 
 ## Quick Guide
 
-### 1. Clone
+### Installation
+
+Arthexis can be installed directly or through [Gway](https://github.com/arthexis/gway).
+
+#### Option 1: Manual installation
+
+Clone the repository and run the bundled installer:
 
 ```bash
 git clone https://github.com/arthexis/arthexis.git
 cd arthexis
-```
-
-### 2. Install
-
-For a fresh 2.0 data directory:
-
-```bash
 ./install.sh
 ```
 
-The installer creates the local virtual environment, installs the pinned application requirements, validates the destination database generation, applies migrations, and seeds required application state.
+The installer creates the local virtual environment, installs the pinned application requirements, prepares the database, applies migrations, and seeds required application state.
 
-A legacy database is never upgraded in place. When an explicit import is required, pass it as a separate read-only source:
+#### Option 2: Install with Gway
+
+Install [Gway](https://github.com/arthexis/gway), then let it install and prepare Arthexis:
 
 ```bash
-./install.sh --import /path/to/legacy.sqlite3
+python -m pip install gway
+gway install arthexis/arthexis
+gway arthexis migrate --noinput
+gway arthexis seed
 ```
 
-### 3. Run locally
+Gway manages the project installation while Arthexis retains its own application and protocol behavior.
+
+### Run locally
+
 
 After installation, run the ASGI application with the project environment:
 
@@ -172,7 +177,7 @@ After installation, run the ASGI application with the project environment:
 
 The default application endpoint is `127.0.0.1:8888`.
 
-### 4. Inspect the charger fleet
+### Inspect the charger fleet
 
 The fleet command is read-only:
 
@@ -182,7 +187,7 @@ The fleet command is read-only:
 
 It can filter by charger identity and by enabled, connected, or charging state, and can include connector, transaction, and energy detail.
 
-### 5. Publish a structured event
+### Publish a structured event
 
 Events can be published explicitly from the application command line:
 
@@ -192,51 +197,15 @@ Events can be published explicitly from the application command line:
 
 The payload must be a JSON object. The command persists the event envelope and prints its generated event identifier.
 
-### 6. Inspect or reconcile a legacy database
-
-Inspect a legacy SQLite source without modifying it:
-
-```bash
-.venv/bin/python scripts/reconcile.py inspect --database /path/to/legacy.sqlite3
-```
-
-Run the selected-data mapping without committing destination changes:
-
-```bash
-.venv/bin/python scripts/reconcile.py dry-run --database /path/to/legacy.sqlite3
-```
-
-An actual import is explicit:
-
-```bash
-.venv/bin/python scripts/reconcile.py import --database /path/to/legacy.sqlite3
-```
-
-Reconciliation opens the source database read-only, validates SQLite integrity, and writes its results only to the 2.0 destination.
-
-### 7. Administration
+### Administration
 
 Django administration remains available at `/admin/` for authorized staff. It is intentionally not linked from the public site navigation.
 
 The administration surface exposes retained application records and operation outcomes; it is not a raw OCPP payload console.
 
-### 8. Operator guidance
+### Operator guidance
 
 Start with the [Operator Guide](docs/operator-guide.md) for deployment-health and operating notes that are appropriate to expose through the Markdown site.
-
-## Development
-
-The 2.0 repository is a clean reimplementation. Current source, migrations, tests, and executable protocol matrices are authoritative; the frozen 1.x branch is retained only as a historical and reconciliation source.
-
-Useful validation commands include:
-
-```bash
-.venv/bin/python manage.py check --fail-level ERROR
-.venv/bin/python manage.py ocpp_matrix
-.venv/bin/python manage.py test tests
-```
-
-The `ocpp_matrix` command reports implementation status for every retained OCPP 1.6 and OCPP 2.0.1 action contract and fails if any retained action lacks an executable implementation.
 
 ## Support
 
