@@ -1,9 +1,12 @@
 """Charger, connector, and station-model records."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.ocpp.protocol.contracts import ProtocolVersion
 
@@ -36,10 +39,12 @@ class ChargerQuerySet(models.QuerySet):
         return self.filter(active=False)
 
     def connected(self):
-        return self.filter(connection__isnull=False)
+        cutoff = timezone.now() - timedelta(seconds=settings.OCPP_PRESENCE_LEASE_SECONDS)
+        return self.filter(connection__last_seen_at__gte=cutoff)
 
     def disconnected(self):
-        return self.filter(connection__isnull=True)
+        cutoff = timezone.now() - timedelta(seconds=settings.OCPP_PRESENCE_LEASE_SECONDS)
+        return self.exclude(connection__last_seen_at__gte=cutoff)
 
     def charging(self):
         return self.filter(
@@ -250,6 +255,7 @@ class ChargerConnection(models.Model):
     channel_name = models.CharField(max_length=255)
     protocol = models.CharField(max_length=12)
     connected_at = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
 
 
 class Connector(models.Model):
