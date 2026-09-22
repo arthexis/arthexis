@@ -40,6 +40,11 @@ def _render_source(source: str) -> str:
     return markdown.markdown(source, extensions=list(MARKDOWN_EXTENSIONS))
 
 
+def _render_source_with_toc(source: str) -> tuple[str, str]:
+    renderer = markdown.Markdown(extensions=list(MARKDOWN_EXTENSIONS))
+    return renderer.convert(source), renderer.toc
+
+
 def _markdown_links(document: Path, root: Path) -> set[Path]:
     parser = _LinkCollector()
     parser.feed(_render_source(document.read_text(encoding="utf-8")))
@@ -99,12 +104,14 @@ def _title_for(source: str, document: Path) -> str:
 
 def _render_document(request: HttpRequest, document: Path) -> HttpResponse:
     source = document.read_text(encoding="utf-8")
+    content, toc = _render_source_with_toc(source)
     return render(
         request,
         "base/markdown_site.html",
         {
-            "content": _render_source(source),
+            "content": content,
             "title": _title_for(source, document),
+            "toc": toc,
         },
     )
 
