@@ -13,10 +13,12 @@ from apps.ocpp.protocol.registry import resolve_action
 from apps.ocpp.protocol.replay import replay_context_for_action
 from apps.ocpp.services.intake import (
     generic_notification_response,
+    is_report_action,
     operational_status_kind,
     process_data_transfer,
     process_generic_notification,
     process_operational_status,
+    process_report_intake,
 )
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
@@ -86,6 +88,7 @@ class FrameDispatcher:
         )
         status_kind = operational_status_kind(frame.action)
         generic_response = generic_notification_response(frame.action)
+        report_action = is_report_action(frame.action)
         acquired = await sync_to_async(acquire_inbound_request)(
             charger=self.charger,
             version=self.version,
@@ -102,6 +105,7 @@ class FrameDispatcher:
                 frame.action == "DataTransfer"
                 or status_kind is not None
                 or generic_response is not None
+                or report_action
                 or (
                     self.version is ProtocolVersion.OCPP_16
                     and frame.action in {"StartTransaction", "StopTransaction"}
@@ -182,6 +186,25 @@ class FrameDispatcher:
         if generic_response is not None:
             try:
                 payload = await sync_to_async(process_generic_notification)(
+                    charger=self.charger,
+                    action=frame.action,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if report_action:
+            try:
+                payload = await sync_to_async(process_report_intake)(
                     charger=self.charger,
                     action=frame.action,
                     payload=frame.payload,
