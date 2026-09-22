@@ -34,6 +34,11 @@ class Command(BaseCommand):
         for name in ("charging", "idle", "unresolved"):
             state_group.add_argument(f"--{name}", action="store_true")
         parser.add_argument(
+            "--historical",
+            action="store_true",
+            help="Limit the report to chargers with retained historical transactions.",
+        )
+        parser.add_argument(
             "--detail",
             action="store_true",
             help="Include connector, transaction timing, and energy detail.",
@@ -50,6 +55,7 @@ class Command(BaseCommand):
                 "charging",
                 "idle",
                 "unresolved",
+                "historical",
             )
             if options[name]
         )
