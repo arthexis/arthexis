@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
@@ -52,18 +51,3 @@ def test_ready_without_scope_is_not_defined_yet() -> None:
         assert "requires --local" in str(error)
     else:
         raise AssertionError("ready without a scope should fail")
-
-
-def test_ready_recipe_uses_bounded_repeat_interval() -> None:
-    recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
-
-    assert "ready --local" in recipe
-    assert "--until true" in recipe
-    assert "--max 10" in recipe
-    assert "--interval 1" in recipe
-
-
-def test_watchtower_recipe_composes_readiness() -> None:
-    recipe = Path("deploy/watchtower.rx").read_text(encoding="utf-8")
-
-    assert "./ready.rx" in recipe

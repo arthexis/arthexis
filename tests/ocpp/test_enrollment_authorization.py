@@ -10,7 +10,7 @@ from apps.ocpp.protocol.v16.inbound import InboundActions as Inbound16Actions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.transport.connection import load_or_enroll_charger
-from tests.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger
 
 
 class ChargerEnrollmentTests(TestCase):

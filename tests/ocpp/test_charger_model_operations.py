@@ -6,7 +6,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.ocpp.models import Charger
-from tests.ocpp.builders import charger, station_model, transaction
+from tests.apps.ocpp.builders import charger, station_model, transaction
 
 
 class ChargerModelOperationTests(TestCase):

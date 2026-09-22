@@ -31,7 +31,7 @@ from apps.ocpp.models import (
     Reservation,
 )
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
-from tests.ocpp.builders import charger, connection, transaction
+from tests.apps.ocpp.builders import charger, connection, transaction
 
 
 class OcppPersistenceTests(TestCase):

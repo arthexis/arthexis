@@ -9,7 +9,7 @@ from apps.events.models import EventEnvelope
 from apps.nodes.models import Node, NodeLink, NodeRole
 from apps.ocpp.models import MeterValue
 from apps.sigils.models import SigilRoot
-from tests.ocpp.builders import charger, connector, station_model, transaction
+from tests.apps.ocpp.builders import charger, connector, station_model, transaction
 
 
 class DomainModelTests(TestCase):

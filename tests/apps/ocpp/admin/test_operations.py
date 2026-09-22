@@ -4,7 +4,7 @@ from django.test import TestCase
 from apps.ocpp.admin.operations import ProtocolOperationAdmin
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
-from tests.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger
 
 
 class ProtocolOperationAdminTests(TestCase):

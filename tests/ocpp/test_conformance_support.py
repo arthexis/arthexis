@@ -1,4 +1,4 @@
-from tests.ocpp.conformance_support import minimal_instance
+from tests.apps.ocpp.conformance_support import minimal_instance
 
 
 def test_minimal_instance_builds_required_nested_values() -> None:

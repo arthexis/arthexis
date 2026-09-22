@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.ocpp.domain.snapshots import snapshot_charger, snapshot_chargers
-from tests.ocpp.builders import (
+from tests.apps.ocpp.builders import (
     charger,
     connection,
     connector,

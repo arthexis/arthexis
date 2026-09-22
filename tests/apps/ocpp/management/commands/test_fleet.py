@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from apps.ocpp.management.charger.selection import select_chargers
 from apps.ocpp.models import Charger
-from tests.ocpp.builders import charger, connection, station_model, transaction
+from tests.apps.ocpp.builders import charger, connection, station_model, transaction
 
 
 class FleetCommandTests(TestCase):
