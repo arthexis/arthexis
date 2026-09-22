@@ -6,10 +6,12 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from apps.ocpp.domain.notifications import record_notification
-from apps.ocpp.domain.sessions import record_v201_meter_values
 from apps.ocpp.models import Charger, Connector
 from apps.ocpp.services.authorization import authorize_id_tag
-from apps.ocpp.services.transactions import process_v201_transaction_event
+from apps.ocpp.services.transactions import (
+    process_v201_meter_values,
+    process_v201_transaction_event,
+)
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -55,10 +57,9 @@ class SessionActions:
         meter_values = payload["meterValue"]
         transaction_info = payload.get("transactionInfo")
         if isinstance(transaction_info, dict):
-            await sync_to_async(record_v201_meter_values)(
+            return await sync_to_async(process_v201_meter_values)(
                 charger=self.charger,
-                transaction_id=_required_text(transaction_info, "transactionId"),
-                meter_values=meter_values,
+                payload=payload,
             )
         else:
             await sync_to_async(record_notification)(
