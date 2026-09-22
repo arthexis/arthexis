@@ -24,6 +24,7 @@ jobs:
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
       ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
+      WATCHTOWER_GWAY_CACHE_DIR: /var/lib/gway/cache
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean privileged Python bytecode from runner workspace
@@ -94,6 +95,44 @@ jobs:
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
           sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
           echo "service=active"
+
+      - name: Apply Watchtower MCP logging scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scope_file="/var/lib/gway/projects/arthexis/deploy/mcp-scopes.toml"
+          sudo -n test -f "${scope_file}"
+          sudo -n install -d -m 0700 -o root -g root "${WATCHTOWER_GWAY_CACHE_DIR}"
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec env GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" .venv/bin/python -m gway security scope apply deploy/mcp-scopes.toml' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec env GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" .venv/bin/python -m gway security scope show chatgpt-logs' >/dev/null 2>&1
+          sudo -n test -f "${WATCHTOWER_GWAY_CACHE_DIR}/security/state.sqlite"
+          echo "mcp_scope=applied"
+
+      - name: Install and start Gway MCP systemd service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          runtime_python="/var/lib/gway/projects/arthexis/.venv/bin/python"
+          mcp_recipe="$(sudo -n "${runtime_python}" -c 'from gway.sampler import root; print(root() / "mcp" / "server.rx")')"
+          sudo -n test -f "${mcp_recipe}"
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name mcp-server --environment GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" -- "'"${mcp_recipe}"'"' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name mcp-server --timeout 40 -- "'"${mcp_recipe}"'"' >/dev/null 2>&1
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          python3 - <<'PY'
+          import socket
+          import time
+
+          deadline = time.monotonic() + 10
+          while True:
+              try:
+                  with socket.create_connection(("127.0.0.1", 8000), timeout=0.5):
+                      break
+              except OSError:
+                  if time.monotonic() >= deadline:
+                      raise SystemExit("MCP service did not open 127.0.0.1:8000")
+                  time.sleep(0.25)
+          PY
+          echo "mcp_service=active"
 
       - name: Expose Arthexis publicly through Gway recipe
         shell: bash
