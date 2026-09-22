@@ -27,8 +27,10 @@ class NotificationActions:
             "NotifyChargingLimit": self._acknowledge("NotifyChargingLimit"),
             "NotifyCustomerInformation": self._acknowledge("NotifyCustomerInformation"),
             "NotifyDisplayMessages": self._acknowledge("NotifyDisplayMessages"),
-            "NotifyEVChargingNeeds": self._acknowledge("NotifyEVChargingNeeds"),
-            "NotifyEVChargingSchedule": self._acknowledge("NotifyEVChargingSchedule"),
+            "NotifyEVChargingNeeds": self._acknowledge_status("NotifyEVChargingNeeds"),
+            "NotifyEVChargingSchedule": self._acknowledge_status(
+                "NotifyEVChargingSchedule"
+            ),
             "NotifyEvent": self._acknowledge("NotifyEvent"),
             "PublishFirmwareStatusNotification": self.firmware_status,
             "ReservationStatusUpdate": self._acknowledge("ReservationStatusUpdate"),
@@ -64,6 +66,13 @@ class NotificationActions:
         async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
             await self._record(action, payload)
             return {}
+
+        return acknowledge
+
+    def _acknowledge_status(self, action: str) -> Handler:
+        async def acknowledge(payload: dict[str, object]) -> dict[str, object]:
+            await self._record(action, payload)
+            return {"status": "Accepted"}
 
         return acknowledge
 

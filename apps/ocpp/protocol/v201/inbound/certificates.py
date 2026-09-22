@@ -27,7 +27,7 @@ class CertificateActions:
         self, payload: dict[str, object]
     ) -> dict[str, object]:
         await self._record("Get15118EVCertificate", payload, "iso15118", "failed")
-        return {"status": "Failed"}
+        return {"status": "Failed", "exiResponse": ""}
 
     async def certificate_status(self, payload: dict[str, object]) -> dict[str, object]:
         await self._record("GetCertificateStatus", payload, "ocsp", "accepted")
