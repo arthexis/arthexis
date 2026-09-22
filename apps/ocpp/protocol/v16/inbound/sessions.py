@@ -5,12 +5,13 @@ from collections.abc import Awaitable, Callable
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.domain.sessions import reconcile_connector_status, stop_transaction
+from apps.ocpp.domain.sessions import reconcile_connector_status
 from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.services.transactions import (
     process_v16_meter_values,
     process_v16_start_transaction,
+    process_v16_stop_transaction,
 )
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
@@ -76,13 +77,10 @@ class SessionActions:
         return {}
 
     async def stop_transaction(self, payload: dict[str, object]) -> dict[str, object]:
-        await sync_to_async(stop_transaction)(
-            transaction_id=int(payload["transactionId"]),
+        return await sync_to_async(process_v16_stop_transaction)(
             charger=self.charger,
-            meter_stop=payload.get("meterStop"),
-            timestamp=payload.get("timestamp"),
+            payload=payload,
         )
-        return {"idTagInfo": {"status": "Accepted"}}
 
     @sync_to_async
     def _record_connection(self) -> None:
