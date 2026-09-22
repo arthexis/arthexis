@@ -50,6 +50,7 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             else Inbound201Actions(self.charger)
         )
         self.dispatcher = FrameDispatcher(
+            charger=self.charger,
             version=self.version,
             pending_calls=self.pending_calls,
             handler_resolver=inbound_actions.resolve,
