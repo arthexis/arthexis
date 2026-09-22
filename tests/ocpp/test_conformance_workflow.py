@@ -18,7 +18,8 @@ def test_ocpp_conformance_prepares_official_schemas_and_runs_heavy_suite() -> No
         encoding="utf-8"
     )
 
-    assert "scripts/ocpp_conformance_prepare.py" in workflow
+    assert "python -m scripts.ocpp_conformance_prepare" in workflow
+    assert "python scripts/ocpp_conformance_prepare.py" not in workflow
     assert "jsonschema==4.25.1" in workflow
     assert "OCPP_CONFORMANCE_SCHEMA_ROOT" in workflow
     assert "tests.ocpp.test_official_schema_conformance" in workflow
