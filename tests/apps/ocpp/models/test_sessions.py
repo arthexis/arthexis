@@ -107,3 +107,23 @@ class OcppTransactionTests(TestCase):
             "Completed transactions cannot become unresolved",
         ):
             mark_transaction_unresolved(selected)
+
+
+
+class MeterReadingBatchTests(TestCase):
+    def test_retains_standalone_meter_payload_and_timestamp(self) -> None:
+        selected = charger("meter-batch")
+        batch = selected.meter_reading_batches.create(
+            protocol="ocpp2.0.1",
+            evse_id=3,
+            reported_at=datetime(2026, 9, 22, 12, tzinfo=timezone.utc),
+            payload={"evseId": 3, "meterValue": []},
+        )
+
+        self.assertEqual(batch.charger, selected)
+        self.assertEqual(batch.protocol, "ocpp2.0.1")
+        self.assertEqual(batch.evse_id, 3)
+        self.assertEqual(
+            batch.reported_at,
+            datetime(2026, 9, 22, 12, tzinfo=timezone.utc),
+        )
