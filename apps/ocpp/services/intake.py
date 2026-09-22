@@ -20,6 +20,10 @@ from apps.ocpp.services.replay import complete_with_result
 
 logger = logging.getLogger(__name__)
 
+_REPORT_ACTIONS = frozenset(
+    {"NotifyMonitoringReport", "NotifyReport", "ReportChargingProfiles"}
+)
+
 _GENERIC_NOTIFICATION_RESPONSES: dict[str, dict[str, object]] = {
     "ClearedChargingLimit": {},
     "CostUpdated": {},
@@ -211,4 +215,91 @@ def _notification_timestamp(payload: dict[str, object]) -> datetime | None:
         timestamps = [item for item in timestamps if item is not None]
         if timestamps:
             return max(timestamps)
+    return None
+
+
+
+def is_report_action(action: str) -> bool:
+    """Return whether an inbound action belongs to the retained report family."""
+    return action in _REPORT_ACTIONS
+
+
+@transaction.atomic
+def process_report_intake(
+    *,
+    charger: Charger,
+    action: str,
+    payload: dict[str, object],
+    replay_request: InboundProtocolRequest | None = None,
+) -> dict[str, object]:
+    """Persist one report chunk and its empty ACK atomically."""
+    if not is_report_action(action):
+        raise ValueError(f"Unsupported report action: {action}")
+
+    reported_at = _report_timestamp(payload)
+    if action in {"NotifyMonitoringReport", "NotifyReport"}:
+        retained = record_monitoring(
+            charger=charger,
+            event_type=action,
+            payload=payload,
+            reported_at=reported_at,
+        )
+        record_type = "monitoring"
+    else:
+        retained = record_notification(
+            charger=charger,
+            action=action,
+            payload=payload,
+            reported_at=reported_at,
+        )
+        record_type = "notification"
+
+    response: dict[str, object] = {}
+    if replay_request is not None:
+        complete_with_result(replay_request, payload=response)
+
+    transaction.on_commit(
+        lambda: _publish_report_intake(
+            retained=retained,
+            action=action,
+            record_type=record_type,
+            payload=payload,
+        )
+    )
+    return response
+
+
+def _publish_report_intake(
+    *,
+    retained: MonitoringRecord | NotificationRecord,
+    action: str,
+    record_type: str,
+    payload: dict[str, object],
+) -> None:
+    try:
+        publish_safely(
+            event_type="ocpp.report.received",
+            producer="ocpp",
+            payload={
+                "record_id": retained.pk,
+                "record_type": record_type,
+                "charger_id": retained.charger_id,
+                "action": action,
+                "request_id": payload.get("requestId"),
+                "seq_no": payload.get("seqNo"),
+                "tbc": payload.get("tbc"),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Could not enqueue secondary processing for report %s:%s",
+            record_type,
+            retained.pk,
+        )
+
+
+def _report_timestamp(payload: dict[str, object]) -> datetime | None:
+    for name in ("generatedAt", "timestamp"):
+        if payload.get(name) is not None:
+            return _optional_timestamp(payload[name])
     return None
