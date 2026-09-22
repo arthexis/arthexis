@@ -98,12 +98,46 @@ def identity_key(identity: ReplayIdentity) -> str:
 
 
 _TRANSACTION_REPLAY_ACTIONS = frozenset(
-    {"StartTransaction", "StopTransaction", "MeterValues", "TransactionEvent"}
+    {"StartTransaction", "StopTransaction", "MeterValues"}
 )
 
 
 def replay_policy_for_action(action: str) -> ReplayPolicy:
-    """Select bounded replay for repeatable actions pending domain-aware recovery."""
+    """Select the default replay policy for one inbound action."""
+    if action == "TransactionEvent":
+        return ReplayPolicy.DOMAIN_IDENTITY
     if action in _TRANSACTION_REPLAY_ACTIONS:
         return ReplayPolicy.CALL_ID_AND_FINGERPRINT
     return ReplayPolicy.NO_CROSS_CALL_DEDUP
+
+
+def replay_context_for_action(
+    action: str,
+    payload: Mapping[str, object],
+) -> tuple[ReplayPolicy, str]:
+    """Return policy and optional domain identity for one inbound request."""
+    policy = replay_policy_for_action(action)
+    if policy is not ReplayPolicy.DOMAIN_IDENTITY:
+        return policy, ""
+    domain_identity = _transaction_event_identity(payload)
+    if not domain_identity:
+        return ReplayPolicy.CALL_ID_AND_FINGERPRINT, ""
+    return policy, domain_identity
+
+
+def _transaction_event_identity(payload: Mapping[str, object]) -> str:
+    info = payload.get("transactionInfo")
+    event_type = payload.get("eventType")
+    seq_no = payload.get("seqNo")
+    if not isinstance(info, Mapping):
+        return ""
+    transaction_id = info.get("transactionId")
+    if (
+        not isinstance(transaction_id, str)
+        or not transaction_id
+        or not isinstance(event_type, str)
+        or not event_type
+        or not isinstance(seq_no, int)
+    ):
+        return ""
+    return f"{transaction_id}:{seq_no}:{event_type}"
