@@ -36,7 +36,8 @@ def render_snapshots(
                 "current_started": "Active since",
                 "last_stopped": "Last stopped",
                 "energy": "Energy total",
-                "unresolved": "Unresolved",
+                "unresolved": "Recovery unresolved",
+                "energy_unresolved": "Energy unresolved",
             }
         )
     widths = {
@@ -68,6 +69,7 @@ def _row(snapshot: ChargerSnapshot, *, detail: bool = False) -> dict[str, str]:
                 "last_stopped": _timestamp(snapshot.last_transaction_stopped),
                 "energy": _energy(snapshot),
                 "unresolved": str(snapshot.unresolved_sessions),
+                "energy_unresolved": str(snapshot.unresolved_energy_sessions),
             }
         )
     return row
