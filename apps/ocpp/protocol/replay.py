@@ -116,6 +116,10 @@ def replay_context_for_action(
     payload: Mapping[str, object],
 ) -> tuple[ReplayPolicy, str]:
     """Return policy and optional domain identity for one inbound request."""
+    report_identity = _report_chunk_identity(action, payload)
+    if report_identity:
+        return ReplayPolicy.DOMAIN_IDENTITY, report_identity
+
     policy = replay_policy_for_action(action)
     if policy is not ReplayPolicy.DOMAIN_IDENTITY:
         return policy, ""
@@ -141,3 +145,18 @@ def _transaction_event_identity(payload: Mapping[str, object]) -> str:
     ):
         return ""
     return f"{transaction_id}:{seq_no}:{event_type}"
+
+
+
+def _report_chunk_identity(action: str, payload: Mapping[str, object]) -> str:
+    if action not in {"NotifyReport", "NotifyMonitoringReport", "ReportChargingProfiles"}:
+        return ""
+    request_id = payload.get("requestId")
+    seq_no = payload.get("seqNo")
+    if isinstance(request_id, bool) or isinstance(seq_no, bool):
+        return ""
+    if not isinstance(request_id, (int, str)) or not isinstance(seq_no, int):
+        return ""
+    if isinstance(request_id, str) and not request_id:
+        return ""
+    return f"{action}:{request_id}:{seq_no}"
