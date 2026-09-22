@@ -10,6 +10,7 @@ from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
+from apps.ocpp.protocol.replay import replay_policy_for_action
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
@@ -70,6 +71,7 @@ class FrameDispatcher:
             action=frame.action,
             call_id=frame.unique_id,
             payload=frame.payload,
+            policy=replay_policy_for_action(frame.action),
         )
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
