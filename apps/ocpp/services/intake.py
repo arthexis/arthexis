@@ -65,7 +65,6 @@ def process_data_transfer(
     transaction.on_commit(lambda: _publish_data_transfer(retained))
     return response
 
-
 def _publish_data_transfer(record: NotificationRecord) -> None:
     try:
         publish_safely(
@@ -82,7 +81,6 @@ def _publish_data_transfer(record: NotificationRecord) -> None:
             "Could not enqueue secondary processing for DataTransfer %s",
             record.pk,
         )
-
 
 
 def operational_status_kind(action: str) -> str | None:
@@ -121,7 +119,6 @@ def process_operational_status(
     transaction.on_commit(lambda: _publish_operational_status(retained))
     return response
 
-
 def _publish_operational_status(record: OperationalStatusRecord) -> None:
     try:
         publish_safely(
@@ -140,7 +137,6 @@ def _publish_operational_status(record: OperationalStatusRecord) -> None:
             record.pk,
         )
 
-
 def _optional_timestamp(value: object | None) -> datetime | None:
     if value is None:
         return None
@@ -150,7 +146,6 @@ def _optional_timestamp(value: object | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("timestamp is invalid") from error
-
 
 
 def generic_notification_response(action: str) -> dict[str, object] | None:
@@ -184,7 +179,6 @@ def process_generic_notification(
     transaction.on_commit(lambda: _publish_generic_notification(retained))
     return response
 
-
 def _publish_generic_notification(record: NotificationRecord) -> None:
     try:
         publish_safely(
@@ -201,7 +195,6 @@ def _publish_generic_notification(record: NotificationRecord) -> None:
             "Could not enqueue secondary processing for notification %s",
             record.pk,
         )
-
 
 def _notification_timestamp(payload: dict[str, object]) -> datetime | None:
     direct = payload.get("timestamp")
