@@ -40,10 +40,16 @@ def process_v201_standalone_meter_values(
                 raise ValueError("sampled value is required")
         timestamp = _optional_timestamp(meter_value.get("timestamp"))
         if timestamp is not None:
-            reported_at = timestamp if reported_at is None else max(reported_at, timestamp)
+            reported_at = (
+                timestamp
+                if reported_at is None
+                else max(reported_at, timestamp)
+            )
 
     evse_id = payload.get("evseId")
-    if isinstance(evse_id, bool) or (evse_id is not None and not isinstance(evse_id, int)):
+    if isinstance(evse_id, bool) or (
+        evse_id is not None and not isinstance(evse_id, int)
+    ):
         raise ValueError("evseId must be an integer")
 
     retained = MeterReadingBatch.objects.create(
