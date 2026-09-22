@@ -15,10 +15,13 @@ from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
     complete_with_result,
+    reopen_stale_request,
     stored_response,
 )
 from apps.ocpp.services.transactions import (
+    process_v16_meter_values,
     process_v16_start_transaction,
+    process_v201_meter_values,
     process_v201_transaction_event,
 )
 
@@ -85,12 +88,16 @@ class FrameDispatcher:
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
         if acquired.stale:
-            return CallError(
-                unique_id=frame.unique_id,
-                code="InternalError",
-                description="Request recovery is required.",
-                details={},
-            )
+            if frame.action == "MeterValues":
+                recovered = await sync_to_async(reopen_stale_request)(acquired.request)
+                acquired = type(acquired)(request=recovered, created=True)
+            else:
+                return CallError(
+                    unique_id=frame.unique_id,
+                    code="InternalError",
+                    description="Request recovery is required.",
+                    details={},
+                )
         if not acquired.created:
             return CallError(
                 unique_id=frame.unique_id,
@@ -102,6 +109,46 @@ class FrameDispatcher:
         if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
             try:
                 payload = await sync_to_async(process_v16_start_transaction)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if self.version is ProtocolVersion.OCPP_16 and frame.action == "MeterValues":
+            try:
+                payload = await sync_to_async(process_v16_meter_values)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if (
+            self.version is ProtocolVersion.OCPP_201
+            and frame.action == "MeterValues"
+            and isinstance(frame.payload.get("transactionInfo"), dict)
+        ):
+            try:
+                payload = await sync_to_async(process_v201_meter_values)(
                     charger=self.charger,
                     payload=frame.payload,
                     replay_request=acquired.request,
