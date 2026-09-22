@@ -4,11 +4,8 @@ from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
 
-from apps.ocpp.domain.notifications import (
-    record_notification,
-    record_operational_status,
-)
-from apps.ocpp.models import Charger, OperationalStatusRecord
+from apps.ocpp.models import Charger
+from apps.ocpp.services.intake import process_data_transfer, process_operational_status
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -25,31 +22,21 @@ class NotificationActions:
         }
 
     async def data_transfer(self, payload: dict[str, object]) -> dict[str, object]:
-        vendor_id = payload.get("vendorId")
-        if not isinstance(vendor_id, str) or not vendor_id:
-            raise ValueError("vendorId is required")
-        await sync_to_async(record_notification)(
+        return await sync_to_async(process_data_transfer)(
             charger=self.charger,
-            action="DataTransfer",
             payload=payload,
         )
-        return {"status": "Accepted"}
 
     async def diagnostics_status(self, payload: dict[str, object]) -> dict[str, object]:
-        await self._record_status(OperationalStatusRecord.Kind.DIAGNOSTICS, payload)
-        return {}
+        return await sync_to_async(process_operational_status)(
+            charger=self.charger,
+            action="DiagnosticsStatusNotification",
+            payload=payload,
+        )
 
     async def firmware_status(self, payload: dict[str, object]) -> dict[str, object]:
-        await self._record_status(OperationalStatusRecord.Kind.FIRMWARE, payload)
-        return {}
-
-    async def _record_status(self, kind: str, payload: dict[str, object]) -> None:
-        status = payload.get("status")
-        if not isinstance(status, str) or not status:
-            raise ValueError("status is required")
-        await sync_to_async(record_operational_status)(
+        return await sync_to_async(process_operational_status)(
             charger=self.charger,
-            kind=kind,
-            status=status,
+            action="FirmwareStatusNotification",
             payload=payload,
         )

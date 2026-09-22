@@ -3,7 +3,12 @@ from django.test import TestCase
 
 from apps.ocpp.models import InboundProtocolRequest
 from apps.ocpp.protocol.contracts import ProtocolVersion
-from apps.ocpp.protocol.replay import ReplayPolicy, identity_key, replay_identity
+from apps.ocpp.protocol.replay import (
+    ReplayPolicy,
+    identity_key,
+    replay_context_for_action,
+    replay_identity,
+)
 from tests.apps.ocpp.builders import charger
 
 
@@ -116,3 +121,36 @@ class InboundProtocolRequestModelTests(TestCase):
         )
 
         self.assertNotEqual(first.pk, second.pk)
+
+
+
+class ReportReplayIdentityTests(TestCase):
+    def test_sequenced_report_chunk_uses_domain_identity(self) -> None:
+        policy, domain_identity = replay_context_for_action(
+            "NotifyReport",
+            {"requestId": 42, "seqNo": 3, "tbc": True},
+        )
+
+        self.assertEqual(policy, ReplayPolicy.DOMAIN_IDENTITY)
+        self.assertEqual(domain_identity, "NotifyReport:42:3")
+
+    def test_monitoring_report_sequence_is_part_of_identity(self) -> None:
+        first = replay_context_for_action(
+            "NotifyMonitoringReport",
+            {"requestId": 9, "seqNo": 1},
+        )
+        second = replay_context_for_action(
+            "NotifyMonitoringReport",
+            {"requestId": 9, "seqNo": 2},
+        )
+
+        self.assertNotEqual(first[1], second[1])
+
+    def test_unsequenced_charging_profile_report_remains_bounded(self) -> None:
+        policy, domain_identity = replay_context_for_action(
+            "ReportChargingProfiles",
+            {"requestId": 7, "evseId": 1},
+        )
+
+        self.assertEqual(policy, ReplayPolicy.NO_CROSS_CALL_DEDUP)
+        self.assertEqual(domain_identity, "")

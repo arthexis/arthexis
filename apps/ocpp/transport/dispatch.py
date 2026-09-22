@@ -11,6 +11,15 @@ from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
 from apps.ocpp.protocol.replay import replay_context_for_action
+from apps.ocpp.services.intake import (
+    generic_notification_response,
+    is_report_action,
+    operational_status_kind,
+    process_data_transfer,
+    process_generic_notification,
+    process_operational_status,
+    process_report_intake,
+)
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
@@ -77,6 +86,9 @@ class FrameDispatcher:
             frame.action,
             frame.payload,
         )
+        status_kind = operational_status_kind(frame.action)
+        generic_response = generic_notification_response(frame.action)
+        report_action = is_report_action(frame.action)
         acquired = await sync_to_async(acquire_inbound_request)(
             charger=self.charger,
             version=self.version,
@@ -90,20 +102,31 @@ class FrameDispatcher:
             return stored_response(acquired.request, call_id=frame.unique_id)
         if acquired.stale:
             safely_retryable = (
-                self.version is ProtocolVersion.OCPP_16
-                and frame.action in {"StartTransaction", "StopTransaction"}
-            ) or (
-                frame.action == "MeterValues"
-                and (
+                frame.action == "DataTransfer"
+                or status_kind is not None
+                or generic_response is not None
+                or report_action
+                or (
                     self.version is ProtocolVersion.OCPP_16
-                    or (
-                        self.version is ProtocolVersion.OCPP_201
-                        and isinstance(frame.payload.get("transactionInfo"), dict)
+                    and frame.action in {"StartTransaction", "StopTransaction"}
+                )
+                or (
+                    frame.action == "MeterValues"
+                    and (
+                        self.version is ProtocolVersion.OCPP_16
+                        or (
+                            self.version is ProtocolVersion.OCPP_201
+                            and isinstance(
+                                frame.payload.get("transactionInfo"),
+                                dict,
+                            )
+                        )
                     )
                 )
-            ) or (
-                self.version is ProtocolVersion.OCPP_201
-                and frame.action == "TransactionEvent"
+                or (
+                    self.version is ProtocolVersion.OCPP_201
+                    and frame.action == "TransactionEvent"
+                )
             )
             if safely_retryable:
                 recovered = await sync_to_async(reopen_stale_request)(acquired.request)
@@ -122,6 +145,81 @@ class FrameDispatcher:
                 description="Request is already processing.",
                 details={},
             )
+
+        if frame.action == "DataTransfer":
+            try:
+                payload = await sync_to_async(process_data_transfer)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if status_kind is not None:
+            try:
+                payload = await sync_to_async(process_operational_status)(
+                    charger=self.charger,
+                    action=frame.action,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if generic_response is not None:
+            try:
+                payload = await sync_to_async(process_generic_notification)(
+                    charger=self.charger,
+                    action=frame.action,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if report_action:
+            try:
+                payload = await sync_to_async(process_report_intake)(
+                    charger=self.charger,
+                    action=frame.action,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
 
         if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
             try:

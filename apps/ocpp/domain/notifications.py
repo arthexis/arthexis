@@ -12,13 +12,18 @@ from apps.ocpp.models import (
 
 
 def record_notification(
-    *, charger: Charger, action: str, payload: dict[str, object]
+    *,
+    charger: Charger,
+    action: str,
+    payload: dict[str, object],
+    reported_at: datetime | None = None,
 ) -> NotificationRecord:
     """Persist one retained OCPP notification payload."""
     return NotificationRecord.objects.create(
         charger=charger,
         action=action,
         payload=payload,
+        reported_at=reported_at,
     )
 
 
@@ -30,6 +35,7 @@ def record_monitoring(
     component: str = "",
     variable: str = "",
     severity: int | None = None,
+    reported_at: datetime | None = None,
 ) -> MonitoringRecord:
     """Persist one monitoring or report record."""
     return MonitoringRecord.objects.create(
@@ -39,6 +45,7 @@ def record_monitoring(
         severity=severity,
         event_type=event_type,
         payload=payload,
+        reported_at=reported_at,
     )
 
 
@@ -69,11 +76,15 @@ def record_operational_status(
     kind: str,
     status: str,
     payload: dict[str, object],
+    source_action: str = "",
+    reported_at: datetime | None = None,
 ) -> OperationalStatusRecord:
     """Persist a firmware, diagnostics, or log status notification."""
     return OperationalStatusRecord.objects.create(
         charger=charger,
         kind=kind,
         status=status,
+        source_action=source_action,
         payload=payload,
+        reported_at=reported_at,
     )
