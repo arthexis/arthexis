@@ -240,8 +240,13 @@ def _record_meter_values(
             continue
         seen.add(record.source_fingerprint)
         unique_records.append(record)
-    MeterValue.objects.bulk_create(unique_records)
-    return len(unique_records), latest_activity
+    MeterValue.objects.bulk_create(unique_records, ignore_conflicts=True)
+    persisted = set(
+        transaction.meter_values.filter(
+            source_fingerprint__in=fingerprints
+        ).values_list("source_fingerprint", flat=True)
+    )
+    return len(persisted - existing), latest_activity
 
 
 def _refresh_meter_value_energy(transaction: OcppTransaction) -> None:
