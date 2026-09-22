@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.ocpp.domain.sessions import reconcile_connector_status
 from apps.ocpp.models import Charger
 from apps.ocpp.services.authorization import authorize_id_tag
+from apps.ocpp.services.presence import configure_heartbeat
 from apps.ocpp.services.transactions import (
     process_v16_meter_values,
     process_v16_start_transaction,
@@ -43,9 +44,14 @@ class SessionActions:
         _required_text(payload, "chargePointVendor")
         _required_text(payload, "chargePointModel")
         await self._record_connection()
+        interval = 300
+        await sync_to_async(configure_heartbeat)(
+            charger=self.charger,
+            interval_seconds=interval,
+        )
         return {
             "currentTime": timezone.now().isoformat(),
-            "interval": 300,
+            "interval": interval,
             "status": "Accepted",
         }
 
