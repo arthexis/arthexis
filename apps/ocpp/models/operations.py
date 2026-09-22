@@ -31,7 +31,7 @@ class ProtocolOperation(models.Model):
     request_payload = models.JSONField(default=dict)
     response_payload = models.JSONField(null=True, blank=True)
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.PENDING
+        max_length=24, choices=Status.choices, default=Status.PENDING
     )
     error_code = models.CharField(max_length=80, blank=True)
     error_description = models.CharField(max_length=240, blank=True)
