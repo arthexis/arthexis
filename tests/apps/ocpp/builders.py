@@ -73,6 +73,15 @@ def transaction(
     stopped_at: datetime | None = None,
     **values,
 ) -> OcppTransaction:
+    values.setdefault("last_activity_at", stopped_at or started_at)
+    values.setdefault(
+        "recovery_state",
+        (
+            OcppTransaction.RecoveryState.COMPLETED
+            if stopped_at is not None
+            else OcppTransaction.RecoveryState.ACTIVE
+        ),
+    )
     return OcppTransaction.objects.create(
         charger=charger,
         remote_id=remote_id,
