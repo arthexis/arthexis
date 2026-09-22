@@ -12,13 +12,18 @@ from apps.ocpp.models import (
 
 
 def record_notification(
-    *, charger: Charger, action: str, payload: dict[str, object]
+    *,
+    charger: Charger,
+    action: str,
+    payload: dict[str, object],
+    reported_at: datetime | None = None,
 ) -> NotificationRecord:
     """Persist one retained OCPP notification payload."""
     return NotificationRecord.objects.create(
         charger=charger,
         action=action,
         payload=payload,
+        reported_at=reported_at,
     )
 
 
