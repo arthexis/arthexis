@@ -17,6 +17,7 @@ from apps.ocpp.protocol.errors import (
 )
 from apps.ocpp.protocol.v16.outbound import validate_outbound
 from apps.ocpp.protocol.v201.outbound import validate_outbound as validate_v201_outbound
+from apps.ocpp.services.presence import presence_cutoff
 
 
 class Sender(Protocol):
@@ -87,6 +88,7 @@ def _record_connection(
         defaults={
             "channel_name": channel_name,
             "protocol": version,
+            "last_seen_at": now,
         },
     )
 
@@ -168,7 +170,10 @@ async def deliver_queued_operation(
 
 
 def _load_connection(charger: Charger) -> ChargerConnection | None:
-    return ChargerConnection.objects.filter(charger=charger).first()
+    return ChargerConnection.objects.filter(
+        charger=charger,
+        last_seen_at__gte=presence_cutoff(),
+    ).first()
 
 
 def _load_operation(operation_id: int, charger: Charger) -> ProtocolOperation | None:

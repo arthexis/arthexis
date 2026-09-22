@@ -81,6 +81,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CHANNEL_REDIS_URL = os.environ.get("ARTHEXIS_CHANNEL_REDIS_URL", "")
 OCPP_ENROLLMENT_TOKEN_HASH = os.environ.get("ARTHEXIS_OCPP_ENROLLMENT_TOKEN_HASH", "")
+OCPP_PRESENCE_LEASE_SECONDS = int(os.environ.get("ARTHEXIS_OCPP_PRESENCE_LEASE_SECONDS", "900"))
+OCPP_REPLAY_STALE_SECONDS = int(os.environ.get("ARTHEXIS_OCPP_REPLAY_STALE_SECONDS", "300"))
+OCPP_REPLAY_WINDOW_SECONDS = int(os.environ.get("ARTHEXIS_OCPP_REPLAY_WINDOW_SECONDS", "900"))
 CHANNEL_LAYERS = {
     "default": (
         {
@@ -97,6 +100,10 @@ CELERY_RESULT_BACKEND = os.environ.get(
     "ARTHEXIS_CELERY_RESULT_BACKEND", "cache+memory://"
 )
 CELERY_BEAT_SCHEDULE = {
+    "events-dispatch-pending": {
+        "task": "events.dispatch_pending",
+        "schedule": 30,
+    },
     "ocpp-refresh-stale-connections": {
         "task": "ocpp.maintenance.refresh_stale_connections",
         "schedule": 3600,

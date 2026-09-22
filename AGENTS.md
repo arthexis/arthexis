@@ -29,6 +29,8 @@ mirrored `tests/apps/<app>/` package. External OCPP conformance/spec tooling
 lives in `tests/ocpp/`, not in a parallel protocol implementation tree. See
 `docs/testing.md` for the complete test-topology and quality rules.
 
+For live protocol paths, keep secondary work out of the response-critical path. Event persistence may be local and durable, but broker, Celery, email, analytics, and external integration failures must not invalidate an otherwise valid charger response. Treat SQL as authoritative and Redis/Celery as recoverable secondary infrastructure; see `docs/events.md`.
+
 Never print secrets, raw RFID identifiers, enrollment tokens, private
 certificate material, or database payloads in logs, fixtures, or notes.
 

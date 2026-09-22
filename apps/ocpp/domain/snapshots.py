@@ -12,6 +12,7 @@ from apps.ocpp.domain.sessions import (
     last_completed_transaction,
 )
 from apps.ocpp.models import Charger, OcppTransaction
+from apps.ocpp.services.presence import connection_is_live
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ def _transactions(charger: Charger) -> list[OcppTransaction]:
 def _state(charger: Charger, current: OcppTransaction | None) -> str:
     if not charger.active:
         return "disabled"
-    if not hasattr(charger, "connection"):
+    if not connection_is_live(charger):
         return "offline"
     return "charging" if current is not None else "idle"
 
@@ -73,9 +74,7 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         configured_protocol=(
             charger.station_model.preferred_protocol if charger.station_model else None
         ),
-        connection_state="connected"
-        if hasattr(charger, "connection")
-        else "disconnected",
+        connection_state="connected" if connection_is_live(charger) else "disconnected",
         connector_states=tuple(
             f"{connector.number}:{connector.status}"
             for connector in sorted(
