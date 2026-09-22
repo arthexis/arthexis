@@ -273,7 +273,7 @@ def recompute_transaction_energy(transaction_id: int) -> OcppTransaction:
     """Recompute derived transaction energy from authoritative retained samples."""
     transaction = OcppTransaction.objects.get(pk=transaction_id)
     energy_kwh = _meter_value_delta_kwh(transaction)
-    if transaction.energy_kwh == energy_kwh:
+    if energy_kwh is None or transaction.energy_kwh == energy_kwh:
         return transaction
     transaction.energy_kwh = energy_kwh
     transaction.save(update_fields=("energy_kwh",))
@@ -416,7 +416,6 @@ def _meter_sample_fingerprint(
         sort_keys=True,
     ).encode()
     return sha256(material).hexdigest()
-
 
 
 @db_transaction.atomic
