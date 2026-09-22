@@ -130,6 +130,48 @@ with them.
 6. Keep helpers at the narrowest useful common ancestor.
 7. Enforce package topology, not artificial file parity.
 
+## Test-quality guidance
+
+The topology is stable enough for feature development. Future test work should
+improve behavior coverage incrementally rather than starting another broad
+structural cleanup.
+
+Some overlap is deliberate. OCPP registry, version-matrix, support-matrix,
+schema-conformance, and integration tests exercise different contracts even
+when they touch the same actions. Keep overlapping coverage when each layer
+would catch a meaningfully different regression. Avoid adding another copy of
+the same assertion merely because a higher-level scenario reaches the same
+code.
+
+Prefer public test seams over implementation details. In particular, new tests
+should not depend on private registries such as `_handlers` when a public
+introspection surface can express the contract. Existing private-internal
+assertions may be migrated when the relevant production API is touched rather
+than forcing an unrelated cleanup.
+
+Integration tests should prove that boundaries compose correctly, not repeat
+the exhaustive behavior already owned by package tests. Keep a representative
+end-to-end path for important workflows, while detailed action, validation,
+persistence, and error cases remain with their source-package tests.
+
+Conformance tests should turn external metadata into assertions whenever
+practical. If a conformance workflow reads an official index or manifest, use
+that data to verify completeness rather than loading it without checking it.
+
+Coverage depth may differ by app because complexity differs. Small apps do not
+need artificial tests just to match OCPP's volume, but whenever `base`,
+`cards`, `celery`, `energy`, `events`, `nodes`, `sigils`, or another
+app gains substantive behavior, add direct source-owned tests with the feature
+instead of relying on incidental integration coverage.
+
+When reviewing new tests, ask:
+
+1. What production package owns the behavior?
+2. Is this assertion already proved at the same layer?
+3. Does an integration test verify composition rather than re-test internals?
+4. Is the test coupled to a private implementation detail unnecessarily?
+5. Does new application behavior have direct tests at its source owner?
+
 ## Refactor history
 
 The topology refactor began from `main` commit
