@@ -4,7 +4,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.cards.models import AuthorizationAttempt
-from apps.ocpp.models import InboundProtocolRequest, OcppTransaction
+from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallResult
@@ -213,4 +213,116 @@ class V201TransactionEventRecoveryTests(TestCase):
             action="TransactionEvent",
             unique_id="event-failure",
         )
+        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+
+
+
+class MeterValueRecoveryTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("meter-recovery")
+        self.transaction = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="remote-meter",
+            started_at="2026-09-22T10:00:00Z",
+            last_activity_at="2026-09-22T10:00:00Z",
+        )
+
+    def _v16_dispatcher(self) -> FrameDispatcher:
+        return FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            pending_calls=PendingCalls(),
+            handler_resolver=InboundActions(self.charger).resolve,
+        )
+
+    def _v16_payload(self) -> dict[str, object]:
+        return {
+            "transactionId": self.transaction.pk,
+            "meterValue": [
+                {
+                    "timestamp": "2026-09-22T10:05:00Z",
+                    "sampledValue": [
+                        {
+                            "value": "125.0",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "Wh",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_same_sample_with_different_call_id_is_not_duplicated(self) -> None:
+        first = async_to_sync(self._v16_dispatcher().dispatch)(
+            Call(
+                unique_id="meter-call-1",
+                action="MeterValues",
+                payload=self._v16_payload(),
+            )
+        )
+        second = async_to_sync(self._v16_dispatcher().dispatch)(
+            Call(
+                unique_id="meter-call-2",
+                action="MeterValues",
+                payload=self._v16_payload(),
+            )
+        )
+
+        self.assertIsInstance(first, CallResult)
+        self.assertIsInstance(second, CallResult)
+        self.assertEqual(MeterValue.objects.count(), 1)
+        sample = MeterValue.objects.get()
+        self.assertTrue(sample.source_fingerprint)
+
+    def test_meter_completion_failure_rolls_back_samples_and_activity(self) -> None:
+        original_activity = self.transaction.last_activity_at
+
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("database completion failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+                async_to_sync(self._v16_dispatcher().dispatch)(
+                    Call(
+                        unique_id="meter-failure",
+                        action="MeterValues",
+                        payload=self._v16_payload(),
+                    )
+                )
+
+        self.assertFalse(MeterValue.objects.exists())
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.last_activity_at, original_activity)
+        request = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="MeterValues",
+            unique_id="meter-failure",
+        )
+        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+
+    def test_stale_meter_request_can_be_reopened_and_completed(self) -> None:
+        request = InboundProtocolRequest.objects.create(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16.value,
+            action="MeterValues",
+            unique_id="meter-stale",
+            fingerprint="f" * 64,
+            identity_key="i" * 64,
+            request_payload=self._v16_payload(),
+        )
+        InboundProtocolRequest.objects.filter(pk=request.pk).update(
+            received_at="2026-09-22T00:00:00Z",
+        )
+
+        response = async_to_sync(self._v16_dispatcher().dispatch)(
+            Call(
+                unique_id="meter-stale",
+                action="MeterValues",
+                payload=self._v16_payload(),
+            )
+        )
+
+        self.assertIsInstance(response, CallResult)
+        self.assertEqual(MeterValue.objects.count(), 1)
+        request.refresh_from_db()
         self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
