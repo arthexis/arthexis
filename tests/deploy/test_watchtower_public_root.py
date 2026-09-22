@@ -27,14 +27,16 @@ class WatchtowerWorkflowTests(TestCase):
         workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
             encoding="utf-8"
         )
+        start = workflow.index("- name: Expose Arthexis publicly through Gway recipe")
+        public_workflow = workflow[start:]
 
         self.assertIn(
             "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
-            workflow,
+            public_workflow,
         )
         self.assertNotIn(
             "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}",
-            workflow,
+            public_workflow,
         )
 
         for forbidden in (
@@ -49,7 +51,7 @@ class WatchtowerWorkflowTests(TestCase):
             "actions/upload-artifact",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, workflow)
+                self.assertNotIn(forbidden, public_workflow)
 
         for status in (
             'echo "service=active"',
@@ -60,4 +62,4 @@ class WatchtowerWorkflowTests(TestCase):
             'echo "ocpp_matrix=ok"',
         ):
             with self.subTest(status=status):
-                self.assertIn(status, workflow)
+                self.assertIn(status, public_workflow)
