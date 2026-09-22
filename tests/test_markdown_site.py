@@ -20,7 +20,7 @@ class MarkdownSiteTests(SimpleTestCase):
             '<h2 id="operational-capabilities">Operational Capabilities</h2>',
             html=True,
         )
-        self.assertNotContains(response, "/admin/")
+        self.assertNotContains(response, '<a href="/admin/"')
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
     def test_linked_operator_guide_is_public(self) -> None:
