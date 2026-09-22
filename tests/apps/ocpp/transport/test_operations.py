@@ -2,9 +2,9 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
+from channels.exceptions import ChannelFull
 from django.test import TestCase
 from django.utils import timezone
-from channels.exceptions import ChannelFull
 
 from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import ChargerConnection, ProtocolOperation
