@@ -53,12 +53,29 @@ def acquire_inbound_request(
         policy=policy,
         domain_identity=domain_identity,
     )
+    key = identity_key(identity)
+    generation = ""
+    if policy is ReplayPolicy.NO_CROSS_CALL_DEDUP:
+        recent = _recent_bounded_request(
+            charger=charger,
+            version=version,
+            action=action,
+            identity=identity,
+        )
+        if recent is not None:
+            return ReplayAcquisition(
+                request=_mark_stale_if_needed(recent),
+                created=False,
+            )
+        generation = _replay_generation()
+
     request, created = InboundProtocolRequest.objects.get_or_create(
         charger=charger,
         version=version.value,
         direction=Direction.CHARGE_POINT_TO_CSMS.value,
         action=action,
-        identity_key=identity_key(identity),
+        identity_key=key,
+        replay_generation=generation,
         defaults={
             "unique_id": call_id,
             "fingerprint": identity.fingerprint,
@@ -213,3 +230,34 @@ def _mark_stale_if_needed(
     current.stale_at = timezone.now()
     current.save(update_fields=("status", "stale_at"))
     return current
+
+
+def _recent_bounded_request(
+    *,
+    charger: Charger,
+    version: ProtocolVersion,
+    action: str,
+    identity: ReplayIdentity,
+) -> InboundProtocolRequest | None:
+    cutoff = timezone.now() - timedelta(seconds=settings.OCPP_REPLAY_WINDOW_SECONDS)
+    return (
+        InboundProtocolRequest.objects.filter(
+            charger=charger,
+            version=version.value,
+            direction=Direction.CHARGE_POINT_TO_CSMS.value,
+            action=action,
+            unique_id=identity.call_id,
+            fingerprint=identity.fingerprint,
+            replay_policy=ReplayPolicy.NO_CROSS_CALL_DEDUP.value,
+            received_at__gte=cutoff,
+        )
+        .order_by("-received_at", "-pk")
+        .first()
+    )
+
+
+def _replay_generation() -> str:
+    window = settings.OCPP_REPLAY_WINDOW_SECONDS
+    if window <= 0:
+        raise ValueError("OCPP_REPLAY_WINDOW_SECONDS must be positive.")
+    return str(int(timezone.now().timestamp()) // window)
