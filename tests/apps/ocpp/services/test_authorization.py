@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from apps.cards.models import AuthorizationAttempt, CardCredential
@@ -68,3 +70,19 @@ class AuthorizationEventTests(TestCase):
             EventEnvelope.objects.get(event_type="ocpp.authorization").producer,
             "ocpp",
         )
+
+    @patch(
+        "apps.events.tasks.process_event.delay",
+        side_effect=ConnectionError("broker unavailable"),
+    )
+    def test_authorization_hot_path_does_not_require_event_broker(self, delay) -> None:
+        selected = charger("charger-broker-independent")
+
+        result = authorize_id_tag(charger=selected, id_tag="guest-card")
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(
+            EventEnvelope.objects.get(event_type="ocpp.authorization").delivery_status,
+            EventEnvelope.DeliveryStatus.PENDING,
+        )
+        delay.assert_not_called()
