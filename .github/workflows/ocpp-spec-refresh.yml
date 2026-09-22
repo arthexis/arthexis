@@ -1,0 +1,55 @@
+name: OCPP Spec Refresh
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Refresh official OCPP surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Compare current OCA packages
+        id: refresh
+        shell: bash
+        run: |
+          set +e
+          output_dir="${RUNNER_TEMP}/ocpp-spec-refresh"
+          python scripts/ocpp_spec_refresh.py --output-dir "${output_dir}"
+          status=$?
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "report=${output_dir}/report.md" >> "${GITHUB_OUTPUT}"
+          echo "output_dir=${output_dir}" >> "${GITHUB_OUTPUT}"
+          exit 0
+
+      - name: Publish refresh summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "${{ steps.refresh.outputs.report }}" ]]; then
+            cat "${{ steps.refresh.outputs.report }}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "OCPP refresh did not produce a report." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload compact refresh evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ocpp-spec-refresh-${{ github.run_id }}
+          path: ${{ steps.refresh.outputs.output_dir }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce reviewed official surface
+        shell: bash
+        run: |
+          test "${{ steps.refresh.outputs.status }}" = "0"
