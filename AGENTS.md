@@ -18,7 +18,7 @@ packages mirror the production import tree beneath `tests/`, including the
 cross-package behavior and `tests/deploy/` for deployment, workflow, recipe,
 or service-transition behavior. Keep helpers at the narrowest useful common
 package and split broad modules before they become compatibility catch-alls.
-Repository-wide tests at `tests/` root are exceptional and guarded by the architecture test. External OCPP conformance/spec tooling lives in `tests/ocpp/`, not in a parallel protocol implementation tree. See `docs/testing.md` for the complete test-topology rules.
+Repository-wide tests at `tests/` root are exceptional and guarded by the architecture test. Every first-party app package under `apps/` must have a mirrored `tests/apps/<app>/` package. External OCPP conformance/spec tooling lives in `tests/ocpp/`, not in a parallel protocol implementation tree. See `docs/testing.md` for the complete test-topology rules.
 
 Never print secrets, raw RFID identifiers, enrollment tokens, private
 certificate material, or database payloads in logs, fixtures, or notes.
