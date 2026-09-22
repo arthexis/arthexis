@@ -14,6 +14,8 @@ class ProtocolOperation(models.Model):
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
+        DELIVERING = "delivering", "Delivering"
+        RECOVERY_REQUIRED = "recovery_required", "Recovery required"
         COMPLETED = "completed", "Completed"
         ERRORED = "errored", "Errored"
         TIMED_OUT = "timed_out", "Timed out"
@@ -29,10 +31,14 @@ class ProtocolOperation(models.Model):
     request_payload = models.JSONField(default=dict)
     response_payload = models.JSONField(null=True, blank=True)
     status = models.CharField(
-        max_length=16, choices=Status.choices, default=Status.PENDING
+        max_length=24, choices=Status.choices, default=Status.PENDING
     )
     error_code = models.CharField(max_length=80, blank=True)
     error_description = models.CharField(max_length=240, blank=True)
+    last_delivery_error = models.CharField(max_length=240, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    first_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
