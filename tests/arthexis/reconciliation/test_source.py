@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase
 
-from arthexis.reconciliation.source import inspect_source, resolve_source
+from arthexis.reconciliation.source import classify_database, inspect_source, resolve_source
 
 
 class ReconciliationSourceTests(SimpleTestCase):
@@ -75,3 +75,33 @@ class ReconciliationSourceTests(SimpleTestCase):
 
         with self.assertRaisesMessage(ValueError, "not readable as SQLite"):
             inspect_source(corrupt)
+
+
+class LegacyDatabaseGuardTests(SimpleTestCase):
+    def test_missing_database_is_fresh(self) -> None:
+        with TemporaryDirectory() as directory:
+            self.assertEqual(
+                classify_database(Path(directory) / "db.sqlite3"),
+                "fresh",
+            )
+
+    def test_django_database_without_v2_marker_is_legacy(self) -> None:
+        with TemporaryDirectory() as directory:
+            database_path = Path(directory) / "db.sqlite3"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    "CREATE TABLE django_migrations (id integer primary key)"
+                )
+
+            self.assertEqual(classify_database(database_path), "legacy")
+
+    def test_database_with_v2_marker_is_accepted(self) -> None:
+        with TemporaryDirectory() as directory:
+            database_path = Path(directory) / "db.sqlite3"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    "CREATE TABLE base_schemageneration (generation integer not null)"
+                )
+                connection.execute("INSERT INTO base_schemageneration VALUES (2)")
+
+            self.assertEqual(classify_database(database_path), "v2")
