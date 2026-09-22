@@ -8,6 +8,9 @@ from tests.apps.ocpp.builders import charger
 
 
 class InboundProtocolRequestModelTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("charger-replay")
+
     def create_request(
         self,
         *,
@@ -16,7 +19,7 @@ class InboundProtocolRequestModelTests(TestCase):
         policy: ReplayPolicy = ReplayPolicy.CALL_ID_AND_FINGERPRINT,
         domain_identity: str = "",
     ) -> InboundProtocolRequest:
-        selected = charger("charger-replay")
+        selected = self.charger
         payload = payload or {"vendorId": "vendor"}
         identity = replay_identity(
             version=ProtocolVersion.OCPP_16,
