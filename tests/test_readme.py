@@ -63,7 +63,6 @@ class ReadmeContractTests(SimpleTestCase):
             with self.subTest(operation=operation):
                 self.assertIn(operation, readme)
 
-
     def test_readme_avoids_product_version_migration_framing(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8").lower()
 
