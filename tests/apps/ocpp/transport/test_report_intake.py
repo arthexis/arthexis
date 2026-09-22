@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
@@ -168,13 +168,13 @@ class ReportPersistAndAckTests(TransactionTestCase):
         self.assertEqual(EventEnvelope.objects.count(), 2)
 
     def test_generated_at_is_preserved_as_reported_at(self) -> None:
-        expected = timezone.datetime(
+        expected = datetime(
             2026,
             9,
             22,
             18,
             3,
-            tzinfo=timezone.utc,
+            tzinfo=dt_timezone.utc,
         )
 
         async_to_sync(self._dispatcher().dispatch)(
