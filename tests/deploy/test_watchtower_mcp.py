@@ -59,3 +59,13 @@ def test_watchtower_deploy_applies_checked_in_mcp_policy() -> None:
     assert "security scope apply deploy/mcp-scopes.toml" in step
     assert "security scope show chatgpt-logs" in step
     assert "security token create" not in step
+
+
+def test_watchtower_mcp_uses_durable_gway_cache_root() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "WATCHTOWER_GWAY_CACHE_DIR: /var/lib/gway/cache" in workflow
+    assert 'install -d -m 0700 -o root -g root "${WATCHTOWER_GWAY_CACHE_DIR}"' in workflow
+    assert 'GWAY_CACHE_DIR="\'"${WATCHTOWER_GWAY_CACHE_DIR}"\'"' in workflow
+    assert '--environment GWAY_CACHE_DIR="\'"${WATCHTOWER_GWAY_CACHE_DIR}"\'"' in workflow
+    assert '${WATCHTOWER_GWAY_CACHE_DIR}/security/state.sqlite' in workflow
