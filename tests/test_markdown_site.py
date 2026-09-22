@@ -12,7 +12,14 @@ class MarkdownSiteTests(SimpleTestCase):
         response = Client().get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h1 id="arthexis">Arthexis</h1>', html=True)
+        self.assertContains(
+            response, '<h1 id="constellation">Constellation</h1>', html=True
+        )
+        self.assertContains(
+            response,
+            '<h2 id="operational-capabilities">Operational Capabilities</h2>',
+            html=True,
+        )
         self.assertNotContains(response, "/admin/")
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
