@@ -125,7 +125,6 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(len(snapshots), 3)
         self.assertTrue(all(snapshot.state == "charging" for snapshot in snapshots))
 
-
     @override_settings(OCPP_PRESENCE_LEASE_SECONDS=60)
     def test_expired_connection_reports_offline_even_with_open_transaction(self) -> None:
         selected = charger("stale-presence")
@@ -136,7 +135,8 @@ class ChargerSnapshotTests(TestCase):
             started_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
         )
         type(live).objects.filter(pk=live.pk).update(
-            last_seen_at=django_timezone.now() - timedelta(minutes=2)
+            last_seen_at=django_timezone.now() - timedelta(minutes=2),
+            lease_expires_at=django_timezone.now() - timedelta(minutes=1),
         )
         selected = type(selected).objects.select_related("connection").get(pk=selected.pk)
 
@@ -146,7 +146,6 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.state, "offline")
         self.assertEqual(snapshot.active_transactions, 1)
         self.assertEqual(snapshot.current_transaction_id, "still-open-in-sql")
-
 
     def test_connected_unresolved_transaction_has_explicit_operational_state(self) -> None:
         selected = charger("recovery-uncertain")
