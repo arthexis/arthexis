@@ -11,6 +11,7 @@ It never rewrites the committed manifests.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
 import hashlib
 import json
 import re
@@ -67,7 +68,7 @@ def iter_archive_json(
     *,
     archive_name: str = "package.zip",
     max_depth: int = 4,
-) -> tuple[str, bytes]:
+) -> Iterator[tuple[str, bytes]]:
     """Yield JSON files from a ZIP and any nested ZIP bundles.
 
     OCA "all files" downloads may wrap the machine-readable schema archive inside
@@ -88,7 +89,7 @@ def _iter_archive_json(
     archive_name: str,
     depth: int,
     max_depth: int,
-):
+) -> Iterator[tuple[str, bytes]]:
     if depth > max_depth:
         raise RuntimeError(
             f"OCPP package nesting exceeds {max_depth} levels at {archive_name}"
