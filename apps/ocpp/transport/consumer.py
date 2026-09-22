@@ -2,9 +2,8 @@
 
 import asyncio
 
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-
 from asgiref.sync import sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.errors import ProtocolFrameError
@@ -23,8 +22,8 @@ from apps.ocpp.transport.operations import (
     register_connection,
     unregister_connection,
 )
-from apps.ocpp.transport.sender import OutboundSender
 from apps.ocpp.services.presence import touch_connection
+from apps.ocpp.transport.sender import OutboundSender
 
 
 class CSMSConsumer(AsyncJsonWebsocketConsumer):
