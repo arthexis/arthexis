@@ -12,6 +12,7 @@ class InboundProtocolRequest(models.Model):
 
     class Status(models.TextChoices):
         PROCESSING = "processing", "Processing"
+        STALE = "stale", "Stale"
         COMPLETED = "completed", "Completed"
 
     class ResponseKind(models.TextChoices):
@@ -60,6 +61,7 @@ class InboundProtocolRequest(models.Model):
     error_details = models.JSONField(null=True, blank=True)
 
     received_at = models.DateTimeField(auto_now_add=True)
+    stale_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
