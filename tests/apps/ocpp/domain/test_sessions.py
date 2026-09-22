@@ -63,6 +63,28 @@ class TransactionRecoveryLifecycleTests(TestCase):
         self.assertEqual(selected.last_activity_at, stopped_at)
         self.assertEqual(selected.stopped_at, stopped_at)
 
+    def test_absence_of_new_meter_evidence_does_not_end_or_unresolve_session(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+        self.assertIsNone(selected.stopped_at)
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+
     def test_older_meter_sample_does_not_move_activity_backwards(self) -> None:
         started_at = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
         selected = start_transaction(
