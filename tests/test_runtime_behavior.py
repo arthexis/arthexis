@@ -24,7 +24,7 @@ from apps.ocpp.models import (
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.tasks import refresh_stale_connections
 from arthexis.asgi import application
-from tests.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger
 
 
 class RuntimeBehaviorTests(TestCase):

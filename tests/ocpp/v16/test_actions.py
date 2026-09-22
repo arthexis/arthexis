@@ -11,8 +11,8 @@ from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v16.outbound import VALIDATORS, validate_outbound
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.operations import active_connections, emit_v16_operation
-from tests.ocpp.builders import charger
-from tests.ocpp.fakes import RecordingSender
+from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.fakes import RecordingSender
 
 VALID_PAYLOADS = {
     "CancelReservation": {"reservationId": 1},

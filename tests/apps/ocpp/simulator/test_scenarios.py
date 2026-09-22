@@ -4,7 +4,7 @@ from django.test import TestCase
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ALL_ACTIONS
 from apps.ocpp.simulator import run_v16_scenario, run_v201_scenario
-from tests.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger
 
 
 class OcppSimulatorTests(TestCase):

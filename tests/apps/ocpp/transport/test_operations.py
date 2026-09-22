@@ -18,7 +18,7 @@ from apps.ocpp.transport.operations import (
     request_explicit_operation,
     unregister_connection,
 )
-from tests.ocpp.builders import charger, connection
+from tests.apps.ocpp.builders import charger, connection
 
 
 class SuccessfulSender:
