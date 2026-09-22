@@ -1,9 +1,10 @@
-from asgiref.sync import sync_to_async
 from datetime import timedelta
 
+from asgiref.sync import sync_to_async
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from apps.ocpp.models import InboundProtocolRequest
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
@@ -153,7 +154,6 @@ class FrameDispatcherReplayTests(TestCase):
             ),
         )
 
-
     @override_settings(OCPP_REPLAY_WINDOW_SECONDS=60)
     async def test_repeatable_action_replays_within_window(self) -> None:
         calls = 0
@@ -194,7 +194,6 @@ class FrameDispatcherReplayTests(TestCase):
         )
         frame = Call(unique_id="heartbeat-1", action="Heartbeat", payload={})
         first = await dispatcher.dispatch(frame)
-        from apps.ocpp.models import InboundProtocolRequest
 
         await sync_to_async(
             InboundProtocolRequest.objects.filter(
