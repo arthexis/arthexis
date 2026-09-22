@@ -6,8 +6,8 @@ from apps.ocpp.protocol.replay import (
     ReplayPolicy,
     canonical_payload,
     replay_identity,
-    request_fingerprint,
     replay_policy_for_action,
+    request_fingerprint,
 )
 
 
@@ -166,7 +166,6 @@ class ReplayIdentityTests(TestCase):
         )
 
         self.assertEqual(first.logical_key(), second.logical_key())
-
 
     def test_repeatable_action_uses_bounded_replay_policy(self) -> None:
         self.assertEqual(
