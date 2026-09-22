@@ -18,11 +18,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    timeout-minutes: 20
-    env:
-      ARTHEXIS_DATA_DIR: /var/lib/arthexis
-      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
-      PYTHONDONTWRITEBYTECODE: '1'
+    timeout-minutes: 10
     steps:
       - name: Checkout trusted main revision
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -41,84 +37,71 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           sudo -n true
 
-      - name: Install exact canonical Gway
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
-          test -n "${gway_sha}"
-          python3 -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}"
-          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
-          echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
-
-      - name: Capture Watchtower diagnostics
+      - name: Run sanitized diagnostics
         shell: bash
         run: |
           set +e
-          evidence="${RUNNER_TEMP}/watchtower-recovery.txt"
-          {
-            echo "arthexis_sha=${GITHUB_SHA}"
-            echo "gway_sha=${GWAY_EXPECTED_SHA:-unknown}"
-            echo "runner=${RUNNER_NAME}"
-            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-            echo "=== managed installation ==="
-            sudo -n ls -ld /var/lib/gway /var/lib/gway/projects /var/lib/gway/projects/arthexis 2>&1 || true
-            sudo -n ls -l /var/lib/gway/state.sqlite 2>&1 || true
-            sudo -n find /var/lib/gway/projects/arthexis -maxdepth 1 -type f -printf '%f\n' 2>&1 | sort || true
+          report() {
+            if "$@" >/dev/null 2>&1; then
+              echo "$1=ok"
+            else
+              echo "$1=failed"
+            fi
+          }
 
-            echo "=== durable Arthexis data ==="
-            sudo -n ls -ld "${ARTHEXIS_DATA_DIR}" 2>&1 || true
-            sudo -n find "${ARTHEXIS_DATA_DIR}" -maxdepth 1 -type f -printf '%f %s bytes\n' 2>&1 | sort || true
+          if sudo -n systemctl is-active --quiet arthexis-arthexis.com.service; then
+            echo "service=active"
+          else
+            echo "service=inactive"
+          fi
 
-            echo "=== runtime/package ==="
-            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python --version 2>&1 || true
-            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip check 2>&1 || true
-            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR 2>&1 || true
-            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run 2>&1 || true
-            sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix 2>&1 || true
+          if curl --fail --silent --show-error --max-time 5 --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ >/dev/null 2>&1; then
+            echo "local_health=ok"
+          else
+            echo "local_health=failed"
+          fi
 
-            echo "=== systemd service ==="
-            sudo -n systemctl is-enabled arthexis-arthexis.com.service 2>&1 || true
-            sudo -n systemctl is-active arthexis-arthexis.com.service 2>&1 || true
-            sudo -n systemctl status arthexis-arthexis.com.service --no-pager 2>&1 || true
+          if curl --fail --silent --show-error --max-time 10 https://arthexis.com/health/ >/dev/null 2>&1; then
+            echo "public_health=ok"
+          else
+            echo "public_health=failed"
+          fi
 
-            echo "=== recent service journal ==="
-            sudo -n journalctl -u arthexis-arthexis.com.service -n 100 --no-pager 2>&1 || true
+          root_html="$(curl --fail --silent --show-error --max-time 10 https://arthexis.com/ 2>/dev/null)"
+          if grep -F '<h1 id="constellation">Constellation</h1>' <<<"${root_html}" >/dev/null &&
+             grep -F '<h2 id="operational-capabilities">Operational Capabilities</h2>' <<<"${root_html}" >/dev/null; then
+            echo "public_root=ok"
+          else
+            echo "public_root=failed"
+          fi
 
-            echo "=== listening sockets ==="
-            sudo -n ss -ltnp 2>&1 | grep -E '(:80|:443|:8888)\b' || true
+          if sudo -n nginx -t >/dev/null 2>&1; then
+            echo "nginx_config=ok"
+          else
+            echo "nginx_config=failed"
+          fi
 
-            echo "=== local health ==="
-            curl --fail --silent --show-error --max-time 5 --header 'Host: arthexis.com' http://127.0.0.1:8888/health/ 2>&1 || true
-            echo
+          if sudo -n systemctl is-active --quiet nginx; then
+            echo "nginx_service=active"
+          else
+            echo "nginx_service=inactive"
+          fi
 
-            echo "=== local root ==="
-            curl --fail --silent --show-error --max-time 5 --header 'Host: arthexis.com' http://127.0.0.1:8888/ 2>&1 || true
-            echo
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1; then
+            echo "django_check=ok"
+          else
+            echo "django_check=failed"
+          fi
 
-            echo "=== public health ==="
-            curl --fail --silent --show-error --max-time 10 https://arthexis.com/health/ 2>&1 || true
-            echo
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
+            echo "migration_drift=none"
+          else
+            echo "migration_drift=detected"
+          fi
 
-            echo "=== public root ==="
-            curl --fail --silent --show-error --max-time 10 https://arthexis.com/ 2>&1 || true
-            echo
-
-            echo "=== nginx ==="
-            sudo -n nginx -t 2>&1 || true
-            sudo -n systemctl is-active nginx 2>&1 || true
-            sudo -n systemctl status nginx --no-pager 2>&1 || true
-          } | tee "${evidence}"
-          echo "WATCHTOWER_RECOVERY_EVIDENCE=${evidence}" >> "${GITHUB_ENV}"
-
-      - name: Upload recovery evidence
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: watchtower-recovery-${{ github.run_id }}
-          path: ${{ env.WATCHTOWER_RECOVERY_EVIDENCE }}
-          if-no-files-found: warn
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1; then
+            echo "ocpp_matrix=ok"
+          else
+            echo "ocpp_matrix=failed"
+          fi
