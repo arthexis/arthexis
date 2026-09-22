@@ -41,6 +41,127 @@ class V16StartTransactionRecoveryTests(TestCase):
             },
         )
 
+
+    def test_pre_cutover_start_is_accepted_without_live_authorization(self) -> None:
+        self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
+        self.charger.authority_cutover_at = datetime(
+            2026, 9, 22, 12, tzinfo=timezone.utc
+        )
+        self.charger.save(
+            update_fields=("authorization_mode", "authority_cutover_at")
+        )
+
+        response = async_to_sync(self._dispatcher().dispatch)(
+            Call(
+                unique_id="historical-start",
+                action="StartTransaction",
+                payload={
+                    "connectorId": 1,
+                    "idTag": "expired-three-years-ago",
+                    "meterStart": 100,
+                    "timestamp": "2023-04-11T10:00:00Z",
+                },
+            )
+        )
+
+        self.assertEqual(
+            response.payload["idTagInfo"],
+            {"status": "Accepted"},
+        )
+        selected = OcppTransaction.objects.get(
+            pk=response.payload["transactionId"]
+        )
+        self.assertTrue(selected.historical)
+        self.assertEqual(
+            selected.started_at,
+            datetime(2023, 4, 11, 10, tzinfo=timezone.utc),
+        )
+        self.assertEqual(selected.id_tag, "expired-three-years-ago")
+        self.assertIsNone(selected.account)
+        self.assertFalse(AuthorizationAttempt.objects.exists())
+
+    def test_start_at_cutover_still_uses_live_authorization_policy(self) -> None:
+        self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
+        self.charger.authority_cutover_at = datetime(
+            2026, 9, 22, 12, tzinfo=timezone.utc
+        )
+        self.charger.save(
+            update_fields=("authorization_mode", "authority_cutover_at")
+        )
+
+        response = async_to_sync(self._dispatcher().dispatch)(
+            Call(
+                unique_id="cutover-start",
+                action="StartTransaction",
+                payload={
+                    "connectorId": 1,
+                    "idTag": "unknown-live-card",
+                    "meterStart": 100,
+                    "timestamp": "2026-09-22T12:00:00Z",
+                },
+            )
+        )
+
+        self.assertEqual(
+            response.payload,
+            {"idTagInfo": {"status": "Invalid"}},
+        )
+        self.assertFalse(OcppTransaction.objects.exists())
+        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+
+    def test_historical_start_replay_does_not_duplicate_or_authorize(self) -> None:
+        self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
+        self.charger.authority_cutover_at = datetime(
+            2026, 9, 22, 12, tzinfo=timezone.utc
+        )
+        self.charger.save(
+            update_fields=("authorization_mode", "authority_cutover_at")
+        )
+        frame = Call(
+            unique_id="historical-replay",
+            action="StartTransaction",
+            payload={
+                "connectorId": 1,
+                "idTag": "old-card",
+                "meterStart": 10,
+                "timestamp": "2023-01-01T00:00:00Z",
+            },
+        )
+
+        first = async_to_sync(self._dispatcher().dispatch)(frame)
+        replayed = async_to_sync(self._dispatcher().dispatch)(frame)
+
+        self.assertEqual(replayed, first)
+        self.assertEqual(OcppTransaction.objects.count(), 1)
+        self.assertTrue(OcppTransaction.objects.get().historical)
+        self.assertFalse(AuthorizationAttempt.objects.exists())
+
+    def test_historical_start_completion_failure_rolls_back_transaction(self) -> None:
+        self.charger.authority_cutover_at = datetime(
+            2026, 9, 22, 12, tzinfo=timezone.utc
+        )
+        self.charger.save(update_fields=("authority_cutover_at",))
+        frame = Call(
+            unique_id="historical-crash",
+            action="StartTransaction",
+            payload={
+                "connectorId": 1,
+                "idTag": "old-card",
+                "meterStart": 10,
+                "timestamp": "2023-01-01T00:00:00Z",
+            },
+        )
+
+        with patch(
+            "apps.ocpp.services.transactions.complete_with_result",
+            side_effect=RuntimeError("crash before durable response"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+                async_to_sync(self._dispatcher().dispatch)(frame)
+
+        self.assertFalse(OcppTransaction.objects.exists())
+        self.assertFalse(AuthorizationAttempt.objects.exists())
+
     def test_lost_response_replay_returns_same_transaction_without_side_effects(
         self,
     ) -> None:
