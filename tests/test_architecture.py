@@ -11,8 +11,8 @@ ROOT_TEST_ALLOWLIST = {
 class TestTopologyTests(SimpleTestCase):
     def test_every_first_party_app_has_a_mirrored_test_package(self) -> None:
         app_names = {
-            manifest.parent.name
-            for manifest in Path("apps").glob("*/manifest.py")
+            initializer.parent.name
+            for initializer in Path("apps").glob("*/__init__.py")
         }
 
         for app_name in sorted(app_names):
@@ -49,7 +49,10 @@ class TestTopologyTests(SimpleTestCase):
     def test_explicit_non_mirror_buckets_exist(self) -> None:
         for bucket in ("deploy", "integration", "ocpp"):
             with self.subTest(bucket=bucket):
-                self.assertTrue((Path("tests") / bucket).is_dir())
+                self.assertTrue(
+                    (Path("tests") / bucket / "__init__.py").is_file(),
+                    msg=f"tests/{bucket}/ must remain an explicit test package",
+                )
 
     def test_conformance_suite_does_not_recreate_protocol_version_packages(
         self,
