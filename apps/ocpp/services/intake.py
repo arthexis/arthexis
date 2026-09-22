@@ -20,6 +20,19 @@ from apps.ocpp.services.replay import complete_with_result
 
 logger = logging.getLogger(__name__)
 
+_GENERIC_NOTIFICATION_RESPONSES: dict[str, dict[str, object]] = {
+    "ClearedChargingLimit": {},
+    "CostUpdated": {},
+    "NotifyChargingLimit": {},
+    "NotifyCustomerInformation": {},
+    "NotifyDisplayMessages": {},
+    "NotifyEVChargingNeeds": {"status": "Accepted"},
+    "NotifyEVChargingSchedule": {"status": "Accepted"},
+    "NotifyEvent": {},
+    "ReservationStatusUpdate": {},
+    "SecurityEventNotification": {},
+}
+
 _OPERATIONAL_STATUS_ACTIONS = {
     "DiagnosticsStatusNotification": OperationalStatusRecord.Kind.DIAGNOSTICS,
     "FirmwareStatusNotification": OperationalStatusRecord.Kind.FIRMWARE,
@@ -137,3 +150,72 @@ def _optional_timestamp(value: object | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("timestamp is invalid") from error
+
+
+
+def generic_notification_response(action: str) -> dict[str, object] | None:
+    """Return the protocol ACK shape for one generic notification action."""
+    response = _GENERIC_NOTIFICATION_RESPONSES.get(action)
+    return dict(response) if response is not None else None
+
+
+@transaction.atomic
+def process_generic_notification(
+    *,
+    charger: Charger,
+    action: str,
+    payload: dict[str, object],
+    replay_request: InboundProtocolRequest | None = None,
+) -> dict[str, object]:
+    """Persist one generic OCPP notification and its exact ACK atomically."""
+    response = generic_notification_response(action)
+    if response is None:
+        raise ValueError(f"Unsupported generic notification action: {action}")
+
+    retained = record_notification(
+        charger=charger,
+        action=action,
+        payload=payload,
+        reported_at=_notification_timestamp(payload),
+    )
+    if replay_request is not None:
+        complete_with_result(replay_request, payload=response)
+
+    transaction.on_commit(lambda: _publish_generic_notification(retained))
+    return response
+
+
+def _publish_generic_notification(record: NotificationRecord) -> None:
+    try:
+        publish_safely(
+            event_type="ocpp.notification.received",
+            producer="ocpp",
+            payload={
+                "notification_id": record.pk,
+                "charger_id": record.charger_id,
+                "action": record.action,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Could not enqueue secondary processing for notification %s",
+            record.pk,
+        )
+
+
+def _notification_timestamp(payload: dict[str, object]) -> datetime | None:
+    direct = payload.get("timestamp")
+    if direct is not None:
+        return _optional_timestamp(direct)
+
+    event_data = payload.get("eventData")
+    if isinstance(event_data, list):
+        timestamps = [
+            _optional_timestamp(item.get("timestamp"))
+            for item in event_data
+            if isinstance(item, dict) and item.get("timestamp") is not None
+        ]
+        timestamps = [item for item in timestamps if item is not None]
+        if timestamps:
+            return max(timestamps)
+    return None
