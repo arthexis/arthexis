@@ -12,6 +12,11 @@ class ProtocolOperation(models.Model):
         CHARGE_POINT_TO_CSMS = "charge_point_to_csms", "Charge point to CSMS"
         CSMS_TO_CHARGE_POINT = "csms_to_charge_point", "CSMS to charge point"
 
+    class RecoveryPolicy(models.TextChoices):
+        SAFE_RETRY = "safe_retry", "Safe retry"
+        RECONCILE = "reconcile", "Reconcile"
+        MANUAL = "manual", "Manual"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         DELIVERING = "delivering", "Delivering"
@@ -32,6 +37,11 @@ class ProtocolOperation(models.Model):
     response_payload = models.JSONField(null=True, blank=True)
     status = models.CharField(
         max_length=24, choices=Status.choices, default=Status.PENDING
+    )
+    recovery_policy = models.CharField(
+        max_length=16,
+        choices=RecoveryPolicy.choices,
+        default=RecoveryPolicy.MANUAL,
     )
     error_code = models.CharField(max_length=80, blank=True)
     error_description = models.CharField(max_length=240, blank=True)
