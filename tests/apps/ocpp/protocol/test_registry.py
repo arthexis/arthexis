@@ -102,7 +102,7 @@ EXPECTED_ACTIONS = {
 }
 
 
-class ActionMatrixTests(SimpleTestCase):
+class ActionRegistryTests(SimpleTestCase):
     def test_registry_matches_the_frozen_action_matrix(self) -> None:
         for key, expected_actions in EXPECTED_ACTIONS.items():
             version, direction = key

@@ -6,14 +6,63 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.ocpp.models import Charger
-from tests.apps.ocpp.builders import charger, station_model, transaction
+from tests.apps.ocpp.builders import charger, connection, station_model, transaction
 
 
-class ChargerModelOperationTests(TestCase):
+class ChargerModelTests(TestCase):
     def setUp(self) -> None:
         self.v16 = station_model(model="One", protocol="ocpp1.6")
         self.v201 = station_model(model="Two", protocol="ocpp2.0.1")
         self.charger = charger("charger-1", station=self.v16)
+
+    def test_charger_uses_identity_as_its_natural_key(self) -> None:
+        self.assertEqual(self.charger.natural_key(), ("charger-1",))
+        self.assertEqual(
+            Charger.objects.get_by_natural_key("charger-1"),
+            self.charger,
+        )
+
+    def test_charger_queryset_separates_enabled_connected_and_charging_state(
+        self,
+    ) -> None:
+        disabled = charger("charger-disabled", active=False)
+        connected_idle = charger("charger-idle")
+        connected_charging = charger("charger-charging")
+        connection(connected_idle, channel_name="idle-channel", protocol="ocpp1.6")
+        connection(
+            connected_charging,
+            channel_name="charging-channel",
+            protocol="ocpp2.0.1",
+        )
+        transaction(
+            connected_charging,
+            "active-transaction",
+            started_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        )
+
+        self.assertQuerySetEqual(
+            Charger.objects.enabled().order_by("identity"),
+            [self.charger, connected_charging, connected_idle],
+        )
+        self.assertQuerySetEqual(Charger.objects.disabled(), [disabled])
+        self.assertQuerySetEqual(
+            Charger.objects.connected().order_by("identity"),
+            [connected_charging, connected_idle],
+        )
+        self.assertQuerySetEqual(
+            Charger.objects.disconnected().order_by("identity"),
+            [self.charger, disabled],
+        )
+        self.assertQuerySetEqual(Charger.objects.charging(), [connected_charging])
+        self.assertQuerySetEqual(Charger.objects.idle(), [connected_idle])
+
+    def test_charging_requires_an_actual_active_transaction(self) -> None:
+        connected_without_transactions = charger("charger-idle")
+        connection(connected_without_transactions, channel_name="idle-channel")
+
+        self.assertNotIn(self.charger, Charger.objects.charging())
+        self.assertNotIn(connected_without_transactions, Charger.objects.charging())
+        self.assertIn(connected_without_transactions, Charger.objects.idle())
 
     @patch(
         "apps.ocpp.transport.operations.request_explicit_operation",
