@@ -8,6 +8,7 @@ from apps.ocpp.models import InboundProtocolRequest
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
+from apps.ocpp.protocol.replay import replay_policy_for_action
 from apps.ocpp.services.replay import acquire_inbound_request
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from tests.apps.ocpp.builders import charger
@@ -133,6 +134,7 @@ class FrameDispatcherReplayTests(TestCase):
             action=frame.action,
             call_id=frame.unique_id,
             payload=frame.payload,
+            policy=replay_policy_for_action(frame.action),
         )
         dispatcher = FrameDispatcher(
             charger=self.charger,
