@@ -35,6 +35,7 @@ def record_monitoring(
     component: str = "",
     variable: str = "",
     severity: int | None = None,
+    reported_at: datetime | None = None,
 ) -> MonitoringRecord:
     """Persist one monitoring or report record."""
     return MonitoringRecord.objects.create(
@@ -44,6 +45,7 @@ def record_monitoring(
         severity=severity,
         event_type=event_type,
         payload=payload,
+        reported_at=reported_at,
     )
 
 
