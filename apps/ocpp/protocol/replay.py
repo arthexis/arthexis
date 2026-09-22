@@ -35,6 +35,7 @@ class ReplayIdentity:
         return (self.policy.value, self.call_id, self.fingerprint)
 
 
+
 def canonical_payload(payload: Mapping[str, object]) -> str:
     """Serialize one JSON object deterministically for replay identity hashing."""
     return json.dumps(
@@ -44,6 +45,7 @@ def canonical_payload(payload: Mapping[str, object]) -> str:
         separators=(",", ":"),
         sort_keys=True,
     )
+
 
 
 def request_fingerprint(
@@ -62,6 +64,7 @@ def request_fingerprint(
     canonical = canonical_payload(payload)
     material = f"{version_value}\n{action}\n{canonical}".encode()
     return sha256(material).hexdigest()
+
 
 
 def replay_identity(
@@ -91,6 +94,7 @@ def replay_identity(
     return identity
 
 
+
 def identity_key(identity: ReplayIdentity) -> str:
     """Hash one policy-specific logical replay identity for SQL uniqueness."""
     material = "\n".join(identity.logical_key()).encode()
@@ -102,6 +106,7 @@ _TRANSACTION_REPLAY_ACTIONS = frozenset(
 )
 
 
+
 def replay_policy_for_action(action: str) -> ReplayPolicy:
     """Select the default replay policy for one inbound action."""
     if action == "TransactionEvent":
@@ -109,6 +114,7 @@ def replay_policy_for_action(action: str) -> ReplayPolicy:
     if action in _TRANSACTION_REPLAY_ACTIONS:
         return ReplayPolicy.CALL_ID_AND_FINGERPRINT
     return ReplayPolicy.NO_CROSS_CALL_DEDUP
+
 
 
 def replay_context_for_action(
@@ -127,6 +133,7 @@ def replay_context_for_action(
     if not domain_identity:
         return ReplayPolicy.CALL_ID_AND_FINGERPRINT, ""
     return policy, domain_identity
+
 
 
 def _transaction_event_identity(payload: Mapping[str, object]) -> str:
@@ -148,8 +155,13 @@ def _transaction_event_identity(payload: Mapping[str, object]) -> str:
 
 
 
+
 def _report_chunk_identity(action: str, payload: Mapping[str, object]) -> str:
-    if action not in {"NotifyReport", "NotifyMonitoringReport", "ReportChargingProfiles"}:
+    if action not in {
+        "NotifyReport",
+        "NotifyMonitoringReport",
+        "ReportChargingProfiles",
+    }:
         return ""
     request_id = payload.get("requestId")
     seq_no = payload.get("seqNo")
