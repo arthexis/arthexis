@@ -13,7 +13,7 @@ from apps.ocpp.protocol.frames import Call, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions as V16InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as V201InboundActions
 from apps.ocpp.transport.dispatch import FrameDispatcher
-from tests.apps.ocpp.conformance_support import load_schema, minimal_instance
+from tests.ocpp.support import load_schema, minimal_instance
 
 
 class OfficialSchemaConformanceTests(TransactionTestCase):
