@@ -20,6 +20,7 @@ class NotificationModelTests(TestCase):
             event_type="Threshold",
             payload={"value": 3},
             severity=2,
+            reported_at=datetime(2026, 9, 22, 18, 5, tzinfo=timezone.utc),
         )
 
         self.assertEqual(notification.action, "NotifyEvent")
@@ -28,3 +29,7 @@ class NotificationModelTests(TestCase):
             datetime(2026, 9, 22, 18, tzinfo=timezone.utc),
         )
         self.assertEqual(monitoring.severity, 2)
+        self.assertEqual(
+            monitoring.reported_at,
+            datetime(2026, 9, 22, 18, 5, tzinfo=timezone.utc),
+        )
