@@ -10,14 +10,17 @@ from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
-from apps.ocpp.protocol.replay import replay_policy_for_action
+from apps.ocpp.protocol.replay import replay_context_for_action
 from apps.ocpp.services.replay import (
     acquire_inbound_request,
     complete_with_error,
     complete_with_result,
     stored_response,
 )
-from apps.ocpp.services.transactions import process_v16_start_transaction
+from apps.ocpp.services.transactions import (
+    process_v16_start_transaction,
+    process_v201_transaction_event,
+)
 
 ActionHandler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 HandlerResolver = Callable[[str], ActionHandler | None]
@@ -66,13 +69,18 @@ class FrameDispatcher:
                 details={},
             )
 
+        replay_policy, domain_identity = replay_context_for_action(
+            frame.action,
+            frame.payload,
+        )
         acquired = await sync_to_async(acquire_inbound_request)(
             charger=self.charger,
             version=self.version,
             action=frame.action,
             call_id=frame.unique_id,
             payload=frame.payload,
-            policy=replay_policy_for_action(frame.action),
+            policy=replay_policy,
+            domain_identity=domain_identity,
         )
         if acquired.completed:
             return stored_response(acquired.request, call_id=frame.unique_id)
@@ -94,6 +102,24 @@ class FrameDispatcher:
         if self.version is ProtocolVersion.OCPP_16 and frame.action == "StartTransaction":
             try:
                 payload = await sync_to_async(process_v16_start_transaction)(
+                    charger=self.charger,
+                    payload=frame.payload,
+                    replay_request=acquired.request,
+                )
+            except (KeyError, ObjectDoesNotExist, TypeError, ValueError):
+                response = CallError(
+                    unique_id=frame.unique_id,
+                    code="FormationViolation",
+                    description="Invalid payload.",
+                    details={},
+                )
+                await self._complete(acquired.request, response)
+                return response
+            return CallResult(unique_id=frame.unique_id, payload=payload)
+
+        if self.version is ProtocolVersion.OCPP_201 and frame.action == "TransactionEvent":
+            try:
+                payload = await sync_to_async(process_v201_transaction_event)(
                     charger=self.charger,
                     payload=frame.payload,
                     replay_request=acquired.request,
