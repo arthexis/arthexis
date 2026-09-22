@@ -128,6 +128,22 @@ class Ocpp201ActionTests(TestCase):
             if action not in {"MeterValues", "TransactionEvent"}:
                 async_to_sync(handlers[action])(payload)
 
+    def test_conformance_sensitive_inbound_responses_are_complete(self) -> None:
+        handlers = InboundActions(self.charger)._handlers
+
+        self.assertEqual(
+            async_to_sync(handlers["Get15118EVCertificate"])({}),
+            {"status": "Failed", "exiResponse": ""},
+        )
+        self.assertEqual(
+            async_to_sync(handlers["NotifyEVChargingNeeds"])({}),
+            {"status": "Accepted"},
+        )
+        self.assertEqual(
+            async_to_sync(handlers["NotifyEVChargingSchedule"])({}),
+            {"status": "Accepted"},
+        )
+
     def test_explicit_outbound_operation_records_its_correlated_result(self) -> None:
         sender = RecordingSender()
         active_connections.register(self.charger, sender)
