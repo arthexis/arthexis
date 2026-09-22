@@ -89,6 +89,31 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.unresolved_sessions, 1)
         self.assertEqual(snapshot.unresolved_energy_sessions, 1)
 
+    def test_historical_open_backlog_does_not_change_live_snapshot_state(self) -> None:
+        selected = charger("historical-backlog")
+        connection(selected, channel_name="historical-backlog-channel")
+        transaction(
+            selected,
+            "historical-active-shape",
+            started_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            historical=True,
+        )
+        historical_unresolved = transaction(
+            selected,
+            "historical-unresolved-shape",
+            started_at=datetime(2023, 1, 2, tzinfo=timezone.utc),
+            historical=True,
+        )
+        historical_unresolved.recovery_state = historical_unresolved.RecoveryState.UNRESOLVED
+        historical_unresolved.save(update_fields=("recovery_state",))
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.state, "idle")
+        self.assertEqual(snapshot.active_transactions, 0)
+        self.assertEqual(snapshot.unresolved_sessions, 0)
+        self.assertIsNone(snapshot.current_transaction_id)
+
     def test_snapshot_reports_unknown_energy_as_none(self) -> None:
         selected = charger("charger-1")
 
