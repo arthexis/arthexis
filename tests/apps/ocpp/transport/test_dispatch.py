@@ -1,5 +1,8 @@
 from asgiref.sync import sync_to_async
-from django.test import TestCase
+from datetime import timedelta
+
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
@@ -149,3 +152,59 @@ class FrameDispatcherReplayTests(TestCase):
                 details={},
             ),
         )
+
+
+    @override_settings(OCPP_REPLAY_WINDOW_SECONDS=60)
+    async def test_repeatable_action_replays_within_window(self) -> None:
+        calls = 0
+
+        async def handler(payload: dict[str, object]) -> dict[str, object]:
+            nonlocal calls
+            calls += 1
+            return {"currentTime": f"value-{calls}"}
+
+        dispatcher = FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            pending_calls=PendingCalls(),
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
+        )
+        frame = Call(unique_id="heartbeat-1", action="Heartbeat", payload={})
+
+        first = await dispatcher.dispatch(frame)
+        second = await dispatcher.dispatch(frame)
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(second, first)
+
+    @override_settings(OCPP_REPLAY_WINDOW_SECONDS=60)
+    async def test_repeatable_action_same_call_and_payload_is_new_after_window(self) -> None:
+        calls = 0
+
+        async def handler(payload: dict[str, object]) -> dict[str, object]:
+            nonlocal calls
+            calls += 1
+            return {"currentTime": f"value-{calls}"}
+
+        dispatcher = FrameDispatcher(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            pending_calls=PendingCalls(),
+            handler_resolver=lambda action: handler if action == "Heartbeat" else None,
+        )
+        frame = Call(unique_id="heartbeat-1", action="Heartbeat", payload={})
+        first = await dispatcher.dispatch(frame)
+        from apps.ocpp.models import InboundProtocolRequest
+
+        await sync_to_async(
+            InboundProtocolRequest.objects.filter(
+                charger=self.charger,
+                action="Heartbeat",
+                unique_id="heartbeat-1",
+            ).update
+        )(received_at=timezone.now() - timedelta(minutes=2))
+
+        second = await dispatcher.dispatch(frame)
+
+        self.assertEqual(calls, 2)
+        self.assertNotEqual(second, first)
