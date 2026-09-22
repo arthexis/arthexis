@@ -2,6 +2,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.cards.models import CardCredential
+from apps.ocpp.models import Charger
 from apps.ocpp.models import Connector, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
@@ -17,6 +18,10 @@ class Ocpp16InboundTests(TestCase):
         self.card = CardCredential.objects.create(
             external_id="card-1",
             ocpp_id_tag="card-tag",
+        )
+        self.restricted_charger = charger(
+            "charger-restricted",
+            authorization_mode=Charger.AuthorizationMode.RESTRICTED,
         )
         self.dispatcher = FrameDispatcher(
             version=ProtocolVersion.OCPP_16,
@@ -90,6 +95,29 @@ class Ocpp16InboundTests(TestCase):
             "DataTransfer",
         )
         self.assertEqual(self.charger.operational_statuses.count(), 2)
+
+    def test_authorize_and_start_follow_the_configured_policy(self) -> None:
+        open_actions = InboundActions(self.charger)._handlers
+        restricted_actions = InboundActions(self.restricted_charger)._handlers
+
+        self.assertEqual(
+            async_to_sync(open_actions["Authorize"])({"idTag": "guest-card"}),
+            {"idTagInfo": {"status": "Accepted"}},
+        )
+        started = async_to_sync(open_actions["StartTransaction"])(
+            {"connectorId": 1, "idTag": "guest-card"}
+        )
+        self.assertEqual(started["idTagInfo"], {"status": "Accepted"})
+        self.assertEqual(
+            async_to_sync(restricted_actions["Authorize"])({"idTag": "guest-card"}),
+            {"idTagInfo": {"status": "Invalid"}},
+        )
+        self.assertEqual(
+            async_to_sync(restricted_actions["StartTransaction"])(
+                {"connectorId": 1, "idTag": "guest-card"}
+            ),
+            {"idTagInfo": {"status": "Invalid"}},
+        )
 
     def test_invalid_and_unknown_calls_return_correlated_call_errors(self) -> None:
         invalid = self._response("invalid-boot", "BootNotification", {})
