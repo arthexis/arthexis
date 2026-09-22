@@ -7,7 +7,13 @@ from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from apps.ocpp.domain.operations import complete_operation, create_operation
+from apps.ocpp.domain.operations import (
+    claim_operation,
+    complete_operation,
+    create_operation,
+    require_operation_recovery,
+    retain_pending_operation,
+)
 from apps.ocpp.models import Charger, ChargerConnection, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.errors import (
@@ -113,18 +119,6 @@ async def request_explicit_operation(
 ) -> ProtocolOperation:
     """Queue one validated operator-requested operation for its live consumer."""
     request_payload = _validate_outbound(version, action, payload)
-    connection = await sync_to_async(_load_connection)(charger)
-    if connection is None:
-        raise ExplicitDeliveryUnavailable("Charger is not connected.")
-    if connection.protocol != version:
-        raise ProtocolVersionMismatch(
-            "Charger configuration does not match its live OCPP connection."
-        )
-    channel_layer = get_channel_layer()
-    if channel_layer is None or not _is_shared_channel_layer(channel_layer):
-        raise ExplicitDeliveryUnavailable(
-            "A shared channel layer is required for explicit charger delivery."
-        )
     operation = await sync_to_async(create_operation)(
         charger=charger,
         version=version,
@@ -132,6 +126,33 @@ async def request_explicit_operation(
         action=action,
         request_payload=request_payload,
     )
+    connection = await sync_to_async(_load_connection)(charger)
+    if connection is None:
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="Charger is not connected.",
+        )
+        raise ExplicitDeliveryUnavailable("Charger is not connected.")
+    if connection.protocol != version:
+        await sync_to_async(complete_operation)(
+            operation,
+            error_code="ProtocolVersionMismatch",
+            error_description=(
+                "Charger configuration does not match its live OCPP connection."
+            ),
+        )
+        raise ProtocolVersionMismatch(
+            "Charger configuration does not match its live OCPP connection."
+        )
+    channel_layer = get_channel_layer()
+    if channel_layer is None or not _is_shared_channel_layer(channel_layer):
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="A shared channel layer is required for explicit charger delivery.",
+        )
+        raise ExplicitDeliveryUnavailable(
+            "A shared channel layer is required for explicit charger delivery."
+        )
     try:
         await channel_layer.send(
             connection.channel_name,
@@ -142,7 +163,10 @@ async def request_explicit_operation(
             },
         )
     except (ChannelFull, OSError, TimeoutError) as error:
-        await sync_to_async(operation.delete)()
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="Could not confirm delivery to the live charger consumer.",
+        )
         raise ExplicitDeliveryUnavailable(
             "Could not reach the live charger consumer."
         ) from error
@@ -161,6 +185,8 @@ async def deliver_queued_operation(
     operation = await sync_to_async(_load_operation)(operation_id, charger)
     if operation is None:
         return
+    if operation.status != ProtocolOperation.Status.PENDING:
+        return
     if operation.version != version:
         await _finish_error(
             operation,
@@ -168,7 +194,10 @@ async def deliver_queued_operation(
             "Queued operation version does not match this connection.",
         )
         return
-    await _send_operation(operation, sender, timeout)
+    claimed = await sync_to_async(claim_operation)(operation)
+    if claimed is None:
+        return
+    await _send_operation(claimed, sender, timeout)
 
 
 def _load_connection(charger: Charger) -> ChargerConnection | None:
@@ -237,12 +266,14 @@ async def _emit_operation(
     )
     sender = active_connections.get(charger)
     if sender is None:
-        return await _finish_status(
+        return await sync_to_async(retain_pending_operation)(
             operation,
-            ProtocolOperation.Status.DISCONNECTED,
-            "Charger is not connected.",
+            description="Charger is not connected.",
         )
-    return await _send_operation(operation, sender, timeout)
+    claimed = await sync_to_async(claim_operation)(operation)
+    if claimed is None:
+        return operation
+    return await _send_operation(claimed, sender, timeout)
 
 
 async def _send_operation(
@@ -259,12 +290,14 @@ async def _send_operation(
     except OutboundCallError as error:
         return await _finish_error(operation, error.code, error.description)
     except OutboundCallTimeout as error:
-        return await _finish_status(
-            operation, ProtocolOperation.Status.TIMED_OUT, str(error)
+        return await sync_to_async(require_operation_recovery)(
+            operation,
+            description=str(error),
         )
     except ConnectionClosed as error:
-        return await _finish_status(
-            operation, ProtocolOperation.Status.DISCONNECTED, str(error)
+        return await sync_to_async(require_operation_recovery)(
+            operation,
+            description=str(error),
         )
     return await sync_to_async(complete_operation)(operation, response_payload=response)
 
