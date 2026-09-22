@@ -1,5 +1,8 @@
 # Constellation
 
+[![OCA · OCPP 1.6](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ocpp-spec-refresh.yml?branch=main&style=flat-square&label=OCA%20%C2%B7%20OCPP%201.6)](https://github.com/arthexis/arthexis/actions/workflows/ocpp-spec-refresh.yml)
+[![OCA · OCPP 2.0.1](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ocpp-spec-refresh.yml?branch=main&style=flat-square&label=OCA%20%C2%B7%20OCPP%202.0.1)](https://github.com/arthexis/arthexis/actions/workflows/ocpp-spec-refresh.yml)
+
 ## Purpose
 
 Arthexis Constellation is a Django-based software suite for managing electric vehicle charging infrastructure, charger connectivity, operational state, transactions, authorization, and retained OCPP workflows.
