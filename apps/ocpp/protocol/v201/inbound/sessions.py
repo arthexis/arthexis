@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
+from apps.ocpp.domain.notifications import record_notification
 from apps.ocpp.domain.sessions import (
     record_v201_meter_values,
     record_v201_transaction_event,
@@ -53,12 +54,20 @@ class SessionActions:
         return {"currentTime": timezone.now().isoformat()}
 
     async def meter_values(self, payload: dict[str, object]) -> dict[str, object]:
-        transaction = _transaction_id(payload)
-        await sync_to_async(record_v201_meter_values)(
-            charger=self.charger,
-            transaction_id=transaction,
-            meter_values=payload["meterValue"],
-        )
+        meter_values = payload["meterValue"]
+        transaction_info = payload.get("transactionInfo")
+        if isinstance(transaction_info, dict):
+            await sync_to_async(record_v201_meter_values)(
+                charger=self.charger,
+                transaction_id=_required_text(transaction_info, "transactionId"),
+                meter_values=meter_values,
+            )
+        else:
+            await sync_to_async(record_notification)(
+                charger=self.charger,
+                action="MeterValues",
+                payload=payload,
+            )
         return {}
 
     async def status_notification(
