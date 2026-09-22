@@ -7,7 +7,11 @@ from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase
 
-from arthexis.reconciliation.source import classify_database, inspect_source, resolve_source
+from arthexis.reconciliation.source import (
+    classify_database,
+    inspect_source,
+    resolve_source,
+)
 
 
 class ReconciliationSourceTests(SimpleTestCase):
