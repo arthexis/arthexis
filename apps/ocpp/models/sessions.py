@@ -9,20 +9,28 @@ from apps.ocpp.models.assets import Charger, Connector
 class OcppTransactionQuerySet(models.QuerySet):
     """Reusable retained-transaction selections."""
 
+    def live(self):
+        """Return transactions that belong to the Arthexis-authoritative era."""
+        return self.filter(historical=False)
+
+    def historical(self):
+        """Return retained pre-cutover transaction history."""
+        return self.filter(historical=True)
+
     def active(self):
-        return self.filter(
+        return self.live().filter(
             recovery_state=OcppTransaction.RecoveryState.ACTIVE,
             stopped_at__isnull=True,
         )
 
     def unresolved(self):
-        return self.filter(
+        return self.live().filter(
             recovery_state=OcppTransaction.RecoveryState.UNRESOLVED,
             stopped_at__isnull=True,
         )
 
     def open(self):
-        return self.filter(
+        return self.live().filter(
             recovery_state__in=(
                 OcppTransaction.RecoveryState.ACTIVE,
                 OcppTransaction.RecoveryState.UNRESOLVED,
@@ -78,6 +86,7 @@ class OcppTransaction(models.Model):
     started_at = models.DateTimeField()
     last_activity_at = models.DateTimeField(default=timezone.now)
     stopped_at = models.DateTimeField(null=True, blank=True)
+    historical = models.BooleanField(default=False, db_index=True)
     recovery_state = models.CharField(
         max_length=16,
         choices=RecoveryState.choices,
