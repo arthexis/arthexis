@@ -3,7 +3,7 @@
   "publication": "OCPP 1.6 (all files & errata)",
   "source_page": "https://openchargealliance.org/my-oca/ocpp/",
   "download_label": "OCPP 1.6 (all files & errata)",
-  "archive_sha256": null,
+  "archive_sha256": "2a1d80284ca60449e85951fc55bc0538b5d45bd6f97c6d9228745acacb52c11b",
   "directions": {
     "charge_point_to_csms": [
       "Authorize",
