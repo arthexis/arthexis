@@ -6,6 +6,7 @@ from apps.ocpp.domain.sessions import (
     current_transaction,
     last_completed_transaction,
     last_transaction,
+    mark_transaction_unresolved,
 )
 from apps.ocpp.models import OcppTransaction
 from tests.apps.ocpp.builders import charger, transaction
@@ -65,3 +66,44 @@ class OcppTransactionTests(TestCase):
         self.assertIsNone(current_transaction(self.charger))
         self.assertIsNone(last_transaction(self.charger))
         self.assertIsNone(last_completed_transaction(self.charger))
+
+
+    def test_unresolved_transaction_is_open_but_not_current(self) -> None:
+        selected = transaction(
+            self.charger,
+            "recovery-gap",
+            started_at=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
+        )
+
+        mark_transaction_unresolved(
+            selected,
+            observed_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
+        )
+        self.assertQuerySetEqual(OcppTransaction.objects.active(), [])
+        self.assertQuerySetEqual(OcppTransaction.objects.unresolved(), [selected])
+        self.assertQuerySetEqual(OcppTransaction.objects.open(), [selected])
+        self.assertIsNone(current_transaction(self.charger))
+
+    def test_completed_transaction_cannot_be_marked_unresolved(self) -> None:
+        selected = transaction(
+            self.charger,
+            "done",
+            started_at=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
+            stopped_at=datetime(2026, 9, 19, 13, tzinfo=timezone.utc),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Completed transactions cannot become unresolved",
+        ):
+            mark_transaction_unresolved(selected)
