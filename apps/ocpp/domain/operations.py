@@ -1,5 +1,6 @@
 """Protocol-operation lifecycle services."""
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.ocpp.models import Charger, ProtocolOperation
@@ -54,3 +55,60 @@ def complete_operation(
         )
     )
     return operation
+
+
+
+@transaction.atomic
+def claim_operation(operation: ProtocolOperation) -> ProtocolOperation | None:
+    """Claim one pending operation immediately before an actual charger send."""
+    current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
+    if current.status != ProtocolOperation.Status.PENDING:
+        return None
+    now = timezone.now()
+    current.status = ProtocolOperation.Status.DELIVERING
+    current.attempt_count += 1
+    current.first_attempt_at = current.first_attempt_at or now
+    current.last_attempt_at = now
+    current.last_delivery_error = ""
+    current.save(
+        update_fields=(
+            "status",
+            "attempt_count",
+            "first_attempt_at",
+            "last_attempt_at",
+            "last_delivery_error",
+        )
+    )
+    return current
+
+
+@transaction.atomic
+def retain_pending_operation(
+    operation: ProtocolOperation,
+    *,
+    description: str,
+) -> ProtocolOperation:
+    """Retain known-unsent intent without overwriting a concurrent delivery claim."""
+    current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
+    if current.status == ProtocolOperation.Status.PENDING:
+        current.last_delivery_error = description[:240]
+        current.save(update_fields=("last_delivery_error",))
+    return current
+
+
+@transaction.atomic
+def require_operation_recovery(
+    operation: ProtocolOperation,
+    *,
+    description: str,
+) -> ProtocolOperation:
+    """Preserve an ambiguous charger send for later action-specific reconciliation."""
+    current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
+    if current.status == ProtocolOperation.Status.DELIVERING:
+        current.status = ProtocolOperation.Status.RECOVERY_REQUIRED
+        current.last_delivery_error = description[:240]
+        current.completed_at = None
+        current.save(
+            update_fields=("status", "last_delivery_error", "completed_at")
+        )
+    return current
