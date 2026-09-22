@@ -2,7 +2,11 @@ import json
 import zipfile
 from io import BytesIO
 
-from scripts.ocpp_spec_refresh import discover_download_url, extract_request_actions
+from scripts.ocpp_spec_refresh import (
+    discover_download_url,
+    extract_request_actions,
+    identify_schema,
+)
 
 
 def test_discover_download_url_matches_exact_oca_label() -> None:
@@ -94,3 +98,17 @@ def test_extract_request_actions_rejects_excessive_archive_nesting() -> None:
         assert "nesting exceeds" in str(error)
     else:
         raise AssertionError("excessively nested OCPP package should be rejected")
+
+
+def test_identify_schema_prefers_title_over_filename() -> None:
+    assert identify_schema(
+        "package.zip!/schemas/ocpp16-message.json",
+        {"title": "BootNotificationRequest", "type": "object"},
+    ) == ("BootNotification", "request")
+
+
+def test_identify_schema_falls_back_to_filename() -> None:
+    assert identify_schema(
+        "package.zip!/schemas/HeartbeatResponse.json",
+        {"type": "object"},
+    ) == ("Heartbeat", "response")
