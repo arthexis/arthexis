@@ -9,6 +9,7 @@ from apps.ocpp.domain.notifications import (
     record_operational_status,
 )
 from apps.ocpp.models import Charger, OperationalStatusRecord
+from apps.ocpp.services.intake import process_data_transfer
 
 Handler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
 
@@ -38,9 +39,10 @@ class NotificationActions:
         }
 
     async def data_transfer(self, payload: dict[str, object]) -> dict[str, object]:
-        _required_text(payload, "vendorId")
-        await self._record("DataTransfer", payload)
-        return {"status": "Accepted"}
+        return await sync_to_async(process_data_transfer)(
+            charger=self.charger,
+            payload=payload,
+        )
 
     async def firmware_status(self, payload: dict[str, object]) -> dict[str, object]:
         status = _required_text(payload, "status")
