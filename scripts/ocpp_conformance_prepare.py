@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import zipfile
-from io import BytesIO
 from pathlib import Path
 
 from scripts.ocpp_spec_refresh import (
     _get,
     _load_manifest,
     discover_download_url,
+    iter_archive_json,
 )
 
 
@@ -41,26 +40,23 @@ def prepare_manifest(
     version_root.mkdir(parents=True, exist_ok=True)
     index: dict[str, dict[str, str]] = {}
 
-    with zipfile.ZipFile(BytesIO(archive)) as bundle:
-        for member in bundle.infolist():
-            if member.is_dir() or not member.filename.lower().endswith(".json"):
-                continue
-            identified = _schema_kind(member.filename)
-            if identified is None:
-                continue
-            action, kind = identified
-            target = version_root / f"{action}{kind.title()}.json"
-            payload = bundle.read(member)
-            try:
-                json.loads(payload)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if target.exists() and target.read_bytes() != payload:
-                raise RuntimeError(
-                    f"Conflicting official schemas for {action} {kind} in {label}"
-                )
-            target.write_bytes(payload)
-            index.setdefault(action, {})[kind] = str(target.relative_to(output_root))
+    for source_path, payload in iter_archive_json(archive):
+        identified = _schema_kind(source_path)
+        if identified is None:
+            continue
+        action, kind = identified
+        target = version_root / f"{action}{kind.title()}.json"
+        try:
+            json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if target.exists() and target.read_bytes() != payload:
+            raise RuntimeError(
+                f"Conflicting official schemas for {action} {kind} in {label}: "
+                f"{source_path}"
+            )
+        target.write_bytes(payload)
+        index.setdefault(action, {})[kind] = str(target.relative_to(output_root))
 
     official_actions = set(manifest["directions"]["charge_point_to_csms"]) | set(
         manifest["directions"]["csms_to_charge_point"]

@@ -16,6 +16,7 @@ import json
 import re
 import urllib.request
 import zipfile
+from collections.abc import Iterator
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
@@ -62,32 +63,90 @@ def discover_download_url(html: str, *, label: str, base_url: str) -> str:
     return urljoin(base_url, matches[0])
 
 
-def extract_request_actions(archive: bytes) -> set[str]:
-    """Extract action names from JSON schemas whose titles end in Request."""
-    actions: set[str] = set()
-    with zipfile.ZipFile(BytesIO(archive)) as bundle:
-        for member in bundle.infolist():
-            if member.is_dir() or not member.filename.lower().endswith(".json"):
-                continue
-            try:
-                payload = json.loads(bundle.read(member))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if not isinstance(payload, dict):
-                continue
-            title = payload.get("title")
-            if isinstance(title, str) and title.endswith("Request"):
-                action = title[: -len("Request")]
-                if action:
-                    actions.add(action)
-                    continue
+def iter_archive_json(
+    archive: bytes,
+    *,
+    archive_name: str = "package.zip",
+    max_depth: int = 4,
+) -> Iterator[tuple[str, bytes]]:
+    """Yield JSON files from a ZIP and any nested ZIP bundles.
 
-            filename = Path(member.filename).stem
-            match = re.fullmatch(r"(.+)Request", filename)
-            if match:
-                actions.add(match.group(1))
+    OCA "all files" downloads may wrap the machine-readable schema archive inside
+    another ZIP. Only JSON and ZIP members are read so PDFs and other publication
+    assets do not need to be loaded into memory.
+    """
+    yield from _iter_archive_json(
+        archive,
+        archive_name=archive_name,
+        depth=0,
+        max_depth=max_depth,
+    )
+
+
+def _iter_archive_json(
+    archive: bytes,
+    *,
+    archive_name: str,
+    depth: int,
+    max_depth: int,
+) -> Iterator[tuple[str, bytes]]:
+    if depth > max_depth:
+        raise RuntimeError(
+            f"OCPP package nesting exceeds {max_depth} levels at {archive_name}"
+        )
+
+    try:
+        bundle = zipfile.ZipFile(BytesIO(archive))
+    except zipfile.BadZipFile as error:
+        raise RuntimeError(f"Invalid ZIP archive: {archive_name}") from error
+
+    with bundle:
+        for member in bundle.infolist():
+            if member.is_dir():
+                continue
+
+            lower_name = member.filename.lower()
+            virtual_path = f"{archive_name}!/{member.filename}"
+
+            if lower_name.endswith(".json"):
+                yield virtual_path, bundle.read(member)
+                continue
+
+            if lower_name.endswith(".zip"):
+                nested = bundle.read(member)
+                yield from _iter_archive_json(
+                    nested,
+                    archive_name=virtual_path,
+                    depth=depth + 1,
+                    max_depth=max_depth,
+                )
+
+
+def extract_request_actions(archive: bytes) -> set[str]:
+    """Extract action names from JSON schemas at any ZIP nesting depth."""
+    actions: set[str] = set()
+    for path, raw_payload in iter_archive_json(archive):
+        try:
+            payload = json.loads(raw_payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        title = payload.get("title")
+        if isinstance(title, str) and title.endswith("Request"):
+            action = title[: -len("Request")]
+            if action:
+                actions.add(action)
+                continue
+
+        filename = Path(path.split("!/")[-1]).stem
+        match = re.fullmatch(r"(.+)Request", filename)
+        if match:
+            actions.add(match.group(1))
+
     if not actions:
-        raise RuntimeError("No OCPP request schemas found in downloaded archive")
+        raise RuntimeError("No OCPP request schemas found in downloaded package")
     return actions
 
 
