@@ -7,6 +7,7 @@ from apps.ocpp.domain.sessions import (
     record_v201_meter_values,
     record_v201_transaction_event,
     start_transaction,
+    stop_transaction,
 )
 from apps.ocpp.models import Charger, InboundProtocolRequest, OcppTransaction
 from apps.ocpp.services.authorization import authorize_id_tag
@@ -166,6 +167,28 @@ def process_v201_meter_values(
         meter_values=meter_values,
     )
     response: dict[str, object] = {}
+    if replay_request is not None:
+        complete_with_result(replay_request, payload=response)
+    return response
+
+
+
+@transaction.atomic
+def process_v16_stop_transaction(
+    *,
+    charger: Charger,
+    payload: dict[str, object],
+    replay_request: InboundProtocolRequest | None = None,
+) -> dict[str, object]:
+    """Persist one OCPP 1.6 stop before its replay ACK is durable."""
+    transaction_id = _required_int(payload, "transactionId")
+    stop_transaction(
+        transaction_id=transaction_id,
+        charger=charger,
+        meter_stop=payload.get("meterStop"),
+        timestamp=payload.get("timestamp"),
+    )
+    response = {"idTagInfo": {"status": "Accepted"}}
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
     return response
