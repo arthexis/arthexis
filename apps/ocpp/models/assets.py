@@ -46,12 +46,14 @@ class ChargerQuerySet(models.QuerySet):
         return self.connected().filter(
             transactions__recovery_state="active",
             transactions__stopped_at__isnull=True,
+            transactions__historical=False,
         ).distinct()
 
     def unresolved(self):
         return self.filter(
             transactions__recovery_state="unresolved",
             transactions__stopped_at__isnull=True,
+            transactions__historical=False,
         ).distinct()
 
     def idle(self):
@@ -77,6 +79,7 @@ class Charger(models.Model):
     identity = models.CharField(max_length=120, unique=True)
     connection_token_hash = models.CharField(max_length=128, blank=True)
     enrolled_at = models.DateTimeField(null=True, blank=True)
+    authority_cutover_at = models.DateTimeField(null=True, blank=True)
     authorization_mode = models.CharField(
         choices=AuthorizationMode.choices,
         default=AuthorizationMode.OPEN,
@@ -209,7 +212,10 @@ class Charger(models.Model):
         cls, charger: "Charger", transaction: str | None
     ) -> tuple[ProtocolVersion, object]:
         version = cls._configured_protocol(charger)
-        active = charger.transactions.filter(stopped_at__isnull=True)
+        active = charger.transactions.filter(
+            stopped_at__isnull=True,
+            historical=False,
+        )
         if transaction:
             selected = active.filter(remote_id=transaction).first()
             if selected is None:
