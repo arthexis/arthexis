@@ -53,8 +53,9 @@ class WatchtowerWorkflowTests(TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, public_workflow)
 
+        self.assertIn('echo "service=active"', workflow)
+
         for status in (
-            'echo "service=active"',
             'echo "public_exposure=ok"',
             'echo "public_root=ok"',
             'echo "django_check=ok"',
