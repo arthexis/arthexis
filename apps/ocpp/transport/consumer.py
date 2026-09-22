@@ -2,6 +2,7 @@
 
 import asyncio
 
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from apps.ocpp.protocol.correlation import PendingCalls
@@ -9,6 +10,7 @@ from apps.ocpp.protocol.errors import ProtocolFrameError
 from apps.ocpp.protocol.frames import CallError, parse_frame
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
+from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
     ConnectionRejected,
     basic_credentials,
@@ -50,6 +52,7 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             else Inbound201Actions(self.charger)
         )
         self.dispatcher = FrameDispatcher(
+            charger=self.charger,
             version=self.version,
             pending_calls=self.pending_calls,
             handler_resolver=inbound_actions.resolve,
@@ -93,7 +96,18 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
 
     async def receive_json(self, content, **kwargs) -> None:
         try:
-            response = await self.dispatcher.dispatch(parse_frame(content))
+            frame = parse_frame(content)
+        except ProtocolFrameError as error:
+            await self.send_json(
+                CallError("", error.code, error.description, {}).to_wire()
+            )
+            return
+        await sync_to_async(touch_connection)(
+            charger=self.charger,
+            channel_name=self.channel_name,
+        )
+        try:
+            response = await self.dispatcher.dispatch(frame)
         except ProtocolFrameError as error:
             await self.send_json(
                 CallError("", error.code, error.description, {}).to_wire()
