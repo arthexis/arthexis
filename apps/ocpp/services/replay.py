@@ -278,3 +278,18 @@ def _acquire_bounded_request(
     if not created:
         request = _mark_stale_if_needed(request)
     return ReplayAcquisition(request=request, created=created)
+
+
+
+@transaction.atomic
+def reopen_stale_request(
+    request: InboundProtocolRequest,
+) -> InboundProtocolRequest:
+    """Return one known-idempotent stale request to PROCESSING for safe retry."""
+    current = InboundProtocolRequest.objects.select_for_update().get(pk=request.pk)
+    if current.status != InboundProtocolRequest.Status.STALE:
+        return current
+    current.status = InboundProtocolRequest.Status.PROCESSING
+    current.stale_at = None
+    current.save(update_fields=("status", "stale_at"))
+    return current
