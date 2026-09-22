@@ -1,6 +1,7 @@
 from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
+POLICY = Path("deploy/mcp-scopes.toml")
 
 
 def _mcp_step() -> str:
@@ -32,3 +33,29 @@ def test_watchtower_deploy_waits_for_local_mcp_listener() -> None:
 
     assert 'socket.create_connection(("127.0.0.1", 8000)' in step
     assert "MCP service did not open 127.0.0.1:8000" in step
+
+
+
+def test_watchtower_mcp_policy_is_read_only_logs_scope() -> None:
+    policy = POLICY.read_text(encoding="utf-8")
+
+    assert "[scopes.chatgpt-logs]" in policy
+    assert '"log.sources"' in policy
+    assert '"log.read"' in policy
+    assert '"log.tail"' in policy
+    assert '"log.search"' in policy
+    assert "environment = []" in policy
+    for forbidden in ("clear", "service.", "security.", "__all__"):
+        assert forbidden not in policy
+
+
+def test_watchtower_deploy_applies_checked_in_mcp_policy() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    start = workflow.index("- name: Apply Watchtower MCP logging scope")
+    end = workflow.index("- name: Install and start Gway MCP systemd service", start)
+    step = workflow[start:end]
+
+    assert 'scope_file="/var/lib/gway/projects/arthexis/deploy/mcp-scopes.toml"' in step
+    assert "security scope apply deploy/mcp-scopes.toml" in step
+    assert "security scope show chatgpt-logs" in step
+    assert "security token create" not in step
