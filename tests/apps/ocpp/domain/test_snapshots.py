@@ -57,6 +57,15 @@ class ChargerSnapshotTests(TestCase):
             snapshot.current_transaction_started,
             datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+        self.assertEqual(
+            snapshot.current_transaction_last_activity,
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertIn("active session active", snapshot.state_reason)
+        self.assertEqual(
+            snapshot.waiting_for,
+            "transaction end or newer charger evidence",
+        )
         self.assertEqual(snapshot.last_transaction_id, "unresolved")
         self.assertEqual(
             snapshot.last_transaction_stopped,
@@ -240,6 +249,10 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.state, "offline")
         self.assertEqual(snapshot.active_transactions, 1)
         self.assertEqual(snapshot.current_transaction_id, "still-open-in-sql")
+        self.assertIn("presence lease expired", snapshot.state_reason)
+        self.assertIn("fresh charger connection", snapshot.waiting_for or "")
+        self.assertIsNotNone(snapshot.connection_last_seen_at)
+        self.assertIsNotNone(snapshot.connection_lease_expires_at)
 
     def test_connected_unresolved_transaction_has_explicit_operational_state(self) -> None:
         selected = charger("recovery-uncertain")
@@ -260,6 +273,16 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.unresolved_sessions, 1)
         self.assertIsNone(snapshot.current_transaction_id)
         self.assertIsNone(snapshot.current_transaction_started)
+        self.assertEqual(
+            snapshot.latest_unresolved_transaction_id,
+            "unresolved-open",
+        )
+        self.assertEqual(
+            snapshot.latest_unresolved_activity,
+            datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+        self.assertIn("conflicting or incomplete", snapshot.state_reason)
+        self.assertIn("fresh charger evidence", snapshot.waiting_for or "")
 
 
     def test_operator_cleared_session_no_longer_forces_charging_state(self) -> None:
