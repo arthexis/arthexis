@@ -1,4 +1,6 @@
-# O8A production preflight. Safe metadata only: no bearer issuance.
+# O8A production checkpoint. Safe metadata only: no bearer issuance.
+set env GWAY_CACHE_DIR /var/lib/gway/cache
+
 security scope show chatgpt-logs
 security token list
 
