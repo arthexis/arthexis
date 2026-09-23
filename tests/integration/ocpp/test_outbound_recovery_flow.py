@@ -50,7 +50,7 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
         self.assertEqual(operation.attempt_count, 1)
         self.assertEqual(operation.response_payload, {"status": "Accepted"})
-        self.assertEqual(operation.delivery_owner, "" if False else operation.delivery_owner)
+        self.assertTrue(operation.delivery_owner)
         self.assertIsNotNone(operation.attempt_token)
 
     def test_restart_after_possible_send_retries_safe_query(self) -> None:
