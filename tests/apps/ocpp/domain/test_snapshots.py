@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 from django.utils import timezone as django_timezone
 
+from apps.ocpp.domain.sessions import clear_stale_charger_state
 from apps.ocpp.domain.snapshots import snapshot_charger, snapshot_chargers
 from tests.apps.ocpp.builders import (
     charger,
@@ -259,3 +260,37 @@ class ChargerSnapshotTests(TestCase):
         self.assertEqual(snapshot.unresolved_sessions, 1)
         self.assertIsNone(snapshot.current_transaction_id)
         self.assertIsNone(snapshot.current_transaction_started)
+
+
+    def test_operator_cleared_session_no_longer_forces_charging_state(self) -> None:
+        selected = charger("field-recovery")
+        connection(selected, channel_name="field-recovery-channel")
+        connector(selected, number=1, status="Charging")
+        stale = transaction(
+            selected,
+            "stale-session",
+            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        )
+        cleared_at = datetime(2026, 9, 22, 11, tzinfo=timezone.utc)
+
+        clear_stale_charger_state(
+            selected,
+            reason="verified idle at charger",
+            cleared_at=cleared_at,
+        )
+
+        snapshot = snapshot_charger(selected)
+
+        self.assertEqual(snapshot.state, "idle")
+        self.assertEqual(snapshot.connector_states, ("1:Charging",))
+        self.assertEqual(snapshot.active_transactions, 0)
+        self.assertEqual(snapshot.unresolved_sessions, 0)
+        self.assertEqual(snapshot.cleared_sessions, 1)
+        self.assertEqual(snapshot.last_cleared_transaction_id, stale.remote_id)
+        self.assertEqual(snapshot.last_recovery_cleared_at, cleared_at)
+        self.assertEqual(
+            snapshot.last_recovery_clear_reason,
+            "verified idle at charger",
+        )
+        stale.refresh_from_db()
+        self.assertIsNone(stale.stopped_at)
