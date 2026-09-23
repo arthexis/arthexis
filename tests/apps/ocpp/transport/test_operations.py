@@ -19,6 +19,7 @@ from apps.ocpp.transport.operations import (
     ProtocolVersionMismatch,
     active_connections,
     deliver_queued_operation,
+    recover_connected_operations,
     register_connection,
     request_explicit_operation,
     unregister_connection,
@@ -360,3 +361,164 @@ class DeliveryBoundaryTests(TestCase):
             timeout=30,
         )
         self.assertEqual(sender.calls, 0)
+
+
+
+class ReconnectOutboundRecoveryTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("reconnect-recovery")
+
+    def _operation(
+        self,
+        *,
+        action: str,
+        status: str = ProtocolOperation.Status.PENDING,
+    ) -> ProtocolOperation:
+        operation = create_operation(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action=action,
+            request_payload={},
+        )
+        if status != ProtocolOperation.Status.PENDING:
+            operation.status = status
+            operation.save(update_fields=("status",))
+        return operation
+
+    def test_reconnect_delivers_known_unsent_pending_work(self) -> None:
+        operation = self._operation(action="Reset")
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 1)
+        self.assertEqual(operation.attempt_count, 1)
+        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+
+    def test_reconnect_retries_safe_ambiguous_query(self) -> None:
+        operation = self._operation(
+            action="GetConfiguration",
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        operation.attempt_count = 1
+        operation.save(update_fields=("attempt_count",))
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 1)
+        self.assertEqual(operation.attempt_count, 2)
+        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+
+    def test_reconnect_does_not_retry_reconcile_or_manual_ambiguity(self) -> None:
+        reconcile = self._operation(
+            action="RemoteStopTransaction",
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        manual = self._operation(
+            action="Reset",
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+
+        self.assertEqual(sender.calls, 0)
+        reconcile.refresh_from_db()
+        manual.refresh_from_db()
+        self.assertEqual(
+            reconcile.status,
+            ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        self.assertEqual(
+            manual.status,
+            ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+
+    def test_interrupted_delivery_becomes_ambiguous_then_safe_retry_only(self) -> None:
+        safe = self._operation(
+            action="GetConfiguration",
+            status=ProtocolOperation.Status.DELIVERING,
+        )
+        reconcile = self._operation(
+            action="RemoteStopTransaction",
+            status=ProtocolOperation.Status.DELIVERING,
+        )
+        safe.attempt_count = 1
+        reconcile.attempt_count = 1
+        safe.save(update_fields=("attempt_count",))
+        reconcile.save(update_fields=("attempt_count",))
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+
+        safe.refresh_from_db()
+        reconcile.refresh_from_db()
+        self.assertEqual(sender.calls, 1)
+        self.assertEqual(safe.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(safe.attempt_count, 2)
+        self.assertEqual(
+            reconcile.status,
+            ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        self.assertEqual(reconcile.attempt_count, 1)
+        self.assertIn("Previous consumer ended", reconcile.last_delivery_error)
+
+    def test_repeated_reconnect_does_not_repeat_completed_recovery(self) -> None:
+        operation = self._operation(
+            action="GetConfiguration",
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        operation.attempt_count = 1
+        operation.save(update_fields=("attempt_count",))
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 1)
+        self.assertEqual(operation.attempt_count, 2)
+        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+
+    def test_reconnect_recovers_only_matching_protocol_version(self) -> None:
+        operation = self._operation(action="GetConfiguration")
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_201,
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 0)
+        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
+        self.assertEqual(operation.attempt_count, 0)

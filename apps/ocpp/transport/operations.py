@@ -11,6 +11,7 @@ from apps.ocpp.domain.operations import (
     claim_operation,
     complete_operation,
     create_operation,
+    prepare_reconnect_operations,
     require_operation_recovery,
     retain_pending_operation,
 )
@@ -322,3 +323,26 @@ async def _finish_status(
         update_fields=("status", "error_description", "completed_at")
     )
     return operation
+
+
+
+async def recover_connected_operations(
+    *,
+    charger: Charger,
+    sender: Sender,
+    version: ProtocolVersion,
+    timeout: float = 30,
+) -> None:
+    """Recover durable outbound work through a freshly owning consumer."""
+    operation_ids = await sync_to_async(prepare_reconnect_operations)(
+        charger=charger,
+        version=version,
+    )
+    for operation_id in operation_ids:
+        await deliver_queued_operation(
+            charger=charger,
+            sender=sender,
+            version=version,
+            operation_id=operation_id,
+            timeout=timeout,
+        )
