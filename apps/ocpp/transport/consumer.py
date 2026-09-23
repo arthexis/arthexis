@@ -75,6 +75,7 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
                 charger=self.charger,
                 sender=self.outbound,
                 version=self.version,
+                delivery_owner=self.channel_name,
             )
         )
 
@@ -99,6 +100,7 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
                 version=self.version,
                 operation_id=operation_id,
                 timeout=float(timeout),
+                delivery_owner=self.channel_name,
             )
         )
 
