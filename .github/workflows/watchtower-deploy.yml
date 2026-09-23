@@ -121,7 +121,7 @@ jobs:
           set -Eeuo pipefail
           if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
             echo "public_exposure=failed"
-            echo "ARTHEXIS_CERTBOT_EMAIL repository variable is required to converge the public HTTPS surface." >&2
+            echo "ARTHEXIS_CERTBOT_EMAIL Actions secret is required to converge the public HTTPS surface." >&2
             exit 1
           fi
 
