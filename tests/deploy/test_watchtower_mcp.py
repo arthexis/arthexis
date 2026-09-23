@@ -67,9 +67,9 @@ def test_remote_recipe_installs_mcp_service_from_stable_project_recipe() -> None
     assert "--backend systemd" in install
     assert "--system" in install
     assert "--environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]" in install
-    assert "-- ./deploy/mcp-server.rx" in install
+    assert "-- ./mcp-server.rx" in install
     assert "--timeout 40" in restart
-    assert "-- ./deploy/mcp-server.rx" in restart
+    assert "-- ./mcp-server.rx" in restart
 
 
 def test_watchtower_mcp_service_wrapper_delegates_to_gway_sampler() -> None:
@@ -159,7 +159,7 @@ def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
         if line.strip() and not line.lstrip().startswith("#")
     ]
     targets = {
-        "./deploy/mcp-server.rx": 2,
+        "./mcp-server.rx": 2,
         (
             "remote serve 127.0.0.1 8001 --public-origin "
             "https://remote.arthexis.com --resource-path /mcp"
@@ -171,7 +171,7 @@ def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
         assert len(indexes) == expected_count
         assert all(lines[index - 1] == "--" for index in indexes)
 
-    assert "-- ./deploy/mcp-server.rx" not in lines
+    assert "-- ./mcp-server.rx" not in lines
 
 
 def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -> None:
@@ -182,7 +182,7 @@ def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -
         if line.strip() and not line.lstrip().startswith("#")
     ]
 
-    mcp = lines.index("./deploy/mcp-server.rx")
+    mcp = lines.index("./mcp-server.rx")
     auth = lines.index(
         "remote serve 127.0.0.1 8001 --public-origin "
         "https://remote.arthexis.com --resource-path /mcp"
@@ -190,3 +190,12 @@ def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -
 
     assert lines[mcp - 1] == "--"
     assert lines[auth - 1] == "--"
+
+
+
+def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() -> None:
+    for path in (Path("deploy/remote.rx"), Path("deploy/remote-preflight.rx")):
+        recipe = path.read_text(encoding="utf-8")
+
+        assert "./mcp-server.rx" in recipe
+        assert "./deploy/mcp-server.rx" not in recipe
