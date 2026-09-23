@@ -26,6 +26,9 @@ serve = "arthexis.server:main"
 [project.urls]
 Repository = "https://github.com/arthexis/arthexis"
 
+[tool.gway.variables]
+cache_dir = "/var/lib/gway/cache"
+
 [tool.setuptools]
 include-package-data = true
 py-modules = ["manage"]
