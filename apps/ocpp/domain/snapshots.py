@@ -54,6 +54,17 @@ class ChargerSnapshot:
     last_contact: datetime | None
 
 
+def _recovery_operations(charger: Charger) -> list[ProtocolOperation]:
+    prefetched = getattr(charger, "_prefetched_recovery_operations", None)
+    if prefetched is not None:
+        return prefetched
+    return list(
+        charger.protocol_operations.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED
+        ).order_by("-created_at", "-pk")
+    )
+
+
 def _transactions(charger: Charger) -> list[OcppTransaction]:
     prefetched = getattr(charger, "_prefetched_transactions", None)
     if prefetched is not None:
@@ -174,11 +185,7 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         current=current,
         unresolved=unresolved,
     )
-    recovery_operations = list(
-        charger.protocol_operations.filter(
-            status=ProtocolOperation.Status.RECOVERY_REQUIRED
-        ).order_by("-created_at", "-pk")
-    )
+    recovery_operations = _recovery_operations(charger)
     historical = [
         transaction for transaction in transactions if transaction.historical
     ]
@@ -277,7 +284,13 @@ def snapshot_chargers(
         .select_related("station_model", "connection")
         .prefetch_related(
             "connectors",
-            "protocol_operations",
+            Prefetch(
+                "protocol_operations",
+                queryset=ProtocolOperation.objects.filter(
+                    status=ProtocolOperation.Status.RECOVERY_REQUIRED
+                ).order_by("-created_at", "-pk"),
+                to_attr="_prefetched_recovery_operations",
+            ),
             Prefetch(
                 "transactions",
                 queryset=OcppTransaction.objects.recent(),
