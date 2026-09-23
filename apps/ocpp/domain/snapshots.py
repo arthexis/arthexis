@@ -32,6 +32,10 @@ class ChargerSnapshot:
     last_transaction_stopped: datetime | None
     energy_kwh: Decimal | None
     unresolved_sessions: int
+    cleared_sessions: int
+    last_cleared_transaction_id: str | null
+    last_recovery_cleared_at: datetime | null
+    last_recovery_clear_reason: str
     unresolved_energy_sessions: int
     authority_cutover_at: datetime | None
     historical_sessions: int
@@ -77,6 +81,24 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
             and transaction.stopped_at is None
         )
     ]
+    cleared = [
+        transaction
+        for transaction in transactions
+        if (
+            not transaction.historical
+            and transaction.recovery_state
+            == OcppTransaction.RecoveryState.CLEARED
+            and transaction.stopped_at is None
+        )
+    ]
+    latest_cleared = max(
+        cleared,
+        key=lambda transaction: (
+            transaction.recovery_cleared_at or transaction.last_activity_at,
+            transaction.pk,
+        ),
+        default=None,
+    )
     historical = [
         transaction for transaction in transactions if transaction.historical
     ]
@@ -119,6 +141,16 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         ),
         energy_kwh=sum(energy_values, Decimal("0")) if energy_values else None,
         unresolved_sessions=len(unresolved),
+        cleared_sessions=len(cleared),
+        last_cleared_transaction_id=(
+            latest_cleared.remote_id if latest_cleared is not None else None
+        ),
+        last_recovery_cleared_at=(
+            latest_cleared.recovery_cleared_at if latest_cleared is not None else None
+        ),
+        last_recovery_clear_reason=(
+            latest_cleared.recovery_clear_reason if latest_cleared is not None else ""
+        ),
         unresolved_energy_sessions=sum(
             transaction.energy_kwh is None for transaction in completed
         ),
