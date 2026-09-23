@@ -32,6 +32,9 @@ python manage.py ocpp_recovery --charger CP-0042
 The recovery view explains why Arthexis selected the current state, including
 connection presence freshness, current or unresolved session evidence, and what
 new evidence or operator verification is required before the state can change.
+It also summarizes any recent RECOVERY_REQUIRED outbound operations by action,
+recovery policy, attempt count, and delivery error without exposing their request
+payloads or requiring the operator to repair those rows.
 
 If the physical charger is known to be idle but Arthexis is still stuck in a
 charging or unresolved state, clear the stale current interpretation with:
