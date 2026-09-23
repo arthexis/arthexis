@@ -3,9 +3,10 @@
 import uuid
 
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
-from apps.ocpp.models import Charger, ProtocolOperation
+from apps.ocpp.models import Charger, OcppTransaction, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.recovery import recovery_policy_for
 from apps.ocpp.protocol.registry import resolve_action
@@ -129,6 +130,181 @@ def require_operation_recovery(
         )
     return current
 
+
+
+SESSION_RECONCILE_ACTIONS = frozenset(
+    {
+        "RemoteStartTransaction",
+        "RequestStartTransaction",
+        "RemoteStopTransaction",
+        "RequestStopTransaction",
+    }
+)
+
+
+def _matching_remote_start_transaction(
+    operation: ProtocolOperation,
+) -> OcppTransaction | None:
+    attempt_at = operation.last_attempt_at or operation.first_attempt_at
+    if attempt_at is None:
+        return None
+
+    queryset = OcppTransaction.objects.filter(
+        charger=operation.charger,
+        historical=False,
+        started_at__gte=attempt_at,
+    )
+
+    payload = operation.request_payload
+    if operation.action == "RemoteStartTransaction":
+        id_tag = payload.get("idTag")
+        if not isinstance(id_tag, str) or not id_tag:
+            return None
+        queryset = queryset.filter(id_tag=id_tag)
+        connector_id = payload.get("connectorId")
+        if connector_id is not None:
+            if not isinstance(connector_id, int):
+                return None
+            queryset = queryset.filter(connector__number=connector_id)
+    else:
+        id_token = payload.get("idToken")
+        if not isinstance(id_token, dict):
+            return None
+        token = id_token.get("idToken")
+        if not isinstance(token, str) or not token or len(token) > 20:
+            return None
+        queryset = queryset.filter(id_tag=token)
+        evse_id = payload.get("evseId")
+        if evse_id is not None:
+            if not isinstance(evse_id, int):
+                return None
+            queryset = queryset.filter(
+                connector__number__gte=evse_id * 1000,
+                connector__number__lt=(evse_id + 1) * 1000,
+            )
+
+    return queryset.order_by("started_at", "pk").first()
+
+
+def _remote_stop_transaction(operation: ProtocolOperation) -> OcppTransaction | None:
+    transaction_id = operation.request_payload.get("transactionId")
+    if operation.action == "RemoteStopTransaction":
+        if isinstance(transaction_id, int):
+            return OcppTransaction.objects.filter(
+                charger=operation.charger,
+                historical=False,
+                pk=transaction_id,
+            ).first()
+        if isinstance(transaction_id, str):
+            return OcppTransaction.objects.filter(
+                charger=operation.charger,
+                historical=False,
+                remote_id=transaction_id,
+            ).first()
+        return None
+
+    if not isinstance(transaction_id, str) or not transaction_id:
+        return None
+    return OcppTransaction.objects.filter(
+        charger=operation.charger,
+        historical=False,
+        remote_id=transaction_id,
+    ).first()
+
+
+def _settle_reconciled_operation(
+    operation: ProtocolOperation,
+    *,
+    basis: str,
+) -> ProtocolOperation:
+    now = timezone.now()
+    operation.status = ProtocolOperation.Status.COMPLETED
+    operation.completed_at = now
+    operation.reconciliation_checked_at = now
+    operation.reconciled_at = now
+    operation.reconciliation_resolution = (
+        ProtocolOperation.ReconciliationResolution.ACHIEVED
+    )
+    operation.reconciliation_basis = basis[:240]
+    operation.save(
+        update_fields=(
+            "status",
+            "completed_at",
+            "reconciliation_checked_at",
+            "reconciled_at",
+            "reconciliation_resolution",
+            "reconciliation_basis",
+        )
+    )
+    return operation
+
+
+@transaction.atomic
+def reconcile_session_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Resolve ambiguous remote start/stop work from positive retained session evidence."""
+    current = ProtocolOperation.objects.select_for_update().select_related("charger").get(
+        pk=operation.pk
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in SESSION_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    if current.action in {"RemoteStartTransaction", "RequestStartTransaction"}:
+        matched = _matching_remote_start_transaction(current)
+        if matched is None:
+            return current
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"Retained transaction {matched.remote_id} started after the ambiguous "
+                f"{current.action} attempt with matching requested session identity."
+            ),
+        )
+
+    target = _remote_stop_transaction(current)
+    if target is None or target.stopped_at is None:
+        return current
+    return _settle_reconciled_operation(
+        current,
+        basis=(
+            f"Retained transaction {target.remote_id} is durably completed "
+            f"after ambiguous {current.action} intent."
+        ),
+    )
+
+
+def reconcile_session_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of ambiguous remote start/stop operations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=SESSION_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        before = ProtocolOperation.objects.only("status").get(pk=operation_id).status
+        current = reconcile_session_operation(
+            ProtocolOperation.objects.only("pk").get(pk=operation_id)
+        )
+        if (
+            before == ProtocolOperation.Status.RECOVERY_REQUIRED
+            and current.status == ProtocolOperation.Status.COMPLETED
+        ):
+            resolved += 1
+    return resolved
 
 
 @transaction.atomic
