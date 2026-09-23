@@ -18,7 +18,14 @@ A successful response is:
 
 ## OCPP
 
-OCPP application routes are served beneath `/ocpp/`. Device-specific commissioning and recovery procedures can be added here as they are migrated into the 2.0 operator documentation set.
+OCPP application routes are served beneath `/ocpp/`.
+
+Outbound charger commands are durable. If a process or live WebSocket is lost,
+operators should use the persisted operation state rather than assuming a
+command either succeeded or failed. See the
+[OCPP recovery architecture](ocpp-recovery.md) for the meanings of PENDING,
+DELIVERING, RECOVERY_REQUIRED, COMPLETED, and ERRORED and for automatic-retry
+boundaries.
 
 ## Documentation navigation
 

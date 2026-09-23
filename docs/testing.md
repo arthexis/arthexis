@@ -154,6 +154,12 @@ the exhaustive behavior already owned by package tests. Keep a representative
 end-to-end path for important workflows, while detailed action, validation,
 persistence, and error cases remain with their source-package tests.
 
+OCPP outbound recovery follows this rule explicitly:
+`tests/integration/ocpp/test_outbound_recovery_flow.py` exercises the fresh
+WebSocket reconnect boundary and durable SQL outcomes, while detailed policy,
+state-transition, and race assertions remain under
+`tests/apps/ocpp/transport/` and `tests/apps/ocpp/protocol/`.
+
 Conformance tests should turn external metadata into assertions whenever
 practical. If a conformance workflow reads an official index or manifest, use
 that data to verify completeness rather than loading it without checking it.
