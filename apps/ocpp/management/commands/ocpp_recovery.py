@@ -67,6 +67,14 @@ class Command(BaseCommand):
         self.stdout.write(f"Charger: {snapshot.identity}")
         self.stdout.write(f"State: {snapshot.state}")
         self.stdout.write(f"Connection: {snapshot.connection_state}")
+        if snapshot.connection_last_seen_at:
+            self.stdout.write(
+                f"Last seen: {snapshot.connection_last_seen_at.isoformat()}"
+            )
+        if snapshot.connection_lease_expires_at:
+            self.stdout.write(
+                f"Presence lease expires: {snapshot.connection_lease_expires_at.isoformat()}"
+            )
         self.stdout.write(
             "Connectors: "
             + (", ".join(snapshot.connector_states) if snapshot.connector_states else "none")
@@ -74,11 +82,34 @@ class Command(BaseCommand):
         self.stdout.write(f"Active sessions: {snapshot.active_transactions}")
         self.stdout.write(f"Unresolved sessions: {snapshot.unresolved_sessions}")
         self.stdout.write(f"Operator-cleared sessions: {snapshot.cleared_sessions}")
+        self.stdout.write(f"Why: {snapshot.state_reason}")
+        if snapshot.waiting_for:
+            self.stdout.write(f"Waiting for: {snapshot.waiting_for}")
 
         if snapshot.current_transaction_id:
             self.stdout.write(
                 f"Current session: {snapshot.current_transaction_id}"
             )
+            if snapshot.current_transaction_started:
+                self.stdout.write(
+                    "Session started: "
+                    f"{snapshot.current_transaction_started.isoformat()}"
+                )
+            if snapshot.current_transaction_last_activity:
+                self.stdout.write(
+                    "Session last evidence: "
+                    f"{snapshot.current_transaction_last_activity.isoformat()}"
+                )
+        elif snapshot.latest_unresolved_transaction_id:
+            self.stdout.write(
+                "Unresolved session: "
+                f"{snapshot.latest_unresolved_transaction_id}"
+            )
+            if snapshot.latest_unresolved_activity:
+                self.stdout.write(
+                    "Unresolved last evidence: "
+                    f"{snapshot.latest_unresolved_activity.isoformat()}"
+                )
         if snapshot.last_cleared_transaction_id:
             self.stdout.write(
                 "Last cleared session: "
