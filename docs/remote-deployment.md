@@ -145,3 +145,20 @@ The normal operator path is the **Watchtower Recovery** workflow. Choose
 `diagnose` for the existing sanitized host report, or `checkpoint` to run
 that report and then perform the remote preflight plus local/public OAuth/MCP
 acceptance. Checkpoint is safe to run repeatedly and never issues credentials.
+
+
+## DNS credentials
+
+Watchtower does not require GoDaddy credentials to be copied into GitHub
+Actions. The DNS bootstrap runs as root and Gway reads the existing persistent
+host secret store:
+
+```text
+/etc/gway/secrets/dns/godaddy/pat
+/etc/gway/secrets/dns/godaddy/key
+/etc/gway/secrets/dns/godaddy/secret
+```
+
+A PAT is preferred when present; otherwise the key/secret pair is used.
+`GWAY_SECRETS_DIR` may override the secret-store root. These files are host
+configuration and survive normal Arthexis/Watchtower redeployments.
