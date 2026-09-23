@@ -121,11 +121,10 @@ durable production security state:
 
 ```bash
 cd /var/lib/gway/projects/arthexis
-sudo env GWAY_CACHE_DIR=/var/lib/gway/cache \
-  .venv/bin/python -m gway ./deploy/remote-preflight.rx
+sudo .venv/bin/python -m gway ./deploy/remote-preflight.rx
 ```
 
-The preflight emits only safe metadata. It must show the `chatgpt-logs` scope,
+The preflight sets its durable cache location inside the recipe with scoped `set env`; callers do not need to supply `GWAY_CACHE_DIR`. It emits only safe metadata. It must show the `chatgpt-logs` scope,
 the current safe token list, and healthy status for both `mcp-server` and
 `remote-auth`. It never creates or prints a bearer secret.
 
@@ -139,3 +138,9 @@ https://remote.arthexis.com
 ```
 
 Arthexis does not copy or own the FastMCP companion implementation.
+
+
+The normal operator path is the **Watchtower Recovery** workflow. Choose
+`diagnose` for the existing sanitized host report, or `checkpoint` to run
+that report and then perform the remote preflight plus local/public OAuth/MCP
+acceptance. Checkpoint is safe to run repeatedly and never issues credentials.
