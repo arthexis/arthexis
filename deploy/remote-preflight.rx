@@ -7,12 +7,10 @@ security token list
 service status
 --system
 --name mcp-server
--- ./deploy/mcp-server.rx
+--
+./deploy/mcp-server.rx
 
 service status
 --system
-remote serve
-127.0.0.1
-8001
---public-origin https://remote.arthexis.com
---resource-path /mcp
+--
+remote serve 127.0.0.1 8001 --public-origin https://remote.arthexis.com --resource-path /mcp

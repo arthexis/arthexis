@@ -149,3 +149,44 @@ def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
     assert "--name mcp-server" in recipe
     assert "remote serve" in recipe
     assert "security token create" not in recipe
+
+
+
+def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
+    lines = [
+        line.strip()
+        for line in REMOTE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    targets = {
+        "./deploy/mcp-server.rx": 2,
+        (
+            "remote serve 127.0.0.1 8001 --public-origin "
+            "https://remote.arthexis.com --resource-path /mcp"
+        ): 2,
+    }
+
+    for target, expected_count in targets.items():
+        indexes = [index for index, line in enumerate(lines) if line == target]
+        assert len(indexes) == expected_count
+        assert all(lines[index - 1] == "--" for index in indexes)
+
+    assert "-- ./deploy/mcp-server.rx" not in lines
+
+
+def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -> None:
+    path = Path("deploy/remote-preflight.rx")
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    mcp = lines.index("./deploy/mcp-server.rx")
+    auth = lines.index(
+        "remote serve 127.0.0.1 8001 --public-origin "
+        "https://remote.arthexis.com --resource-path /mcp"
+    )
+
+    assert lines[mcp - 1] == "--"
+    assert lines[auth - 1] == "--"

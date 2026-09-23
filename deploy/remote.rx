@@ -11,30 +11,26 @@ service install
 --system
 --name mcp-server
 --environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]
--- ./deploy/mcp-server.rx
+--
+./deploy/mcp-server.rx
 
 service restart
 --system
 --name mcp-server
 --timeout 40
--- ./deploy/mcp-server.rx
+--
+./deploy/mcp-server.rx
 
 # remote.serve carries the built-in stable service identity "remote-auth".
 service install
 --backend systemd
 --system
 --environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]
-remote serve
-127.0.0.1
-8001
---public-origin https://remote.arthexis.com
---resource-path /mcp
+--
+remote serve 127.0.0.1 8001 --public-origin https://remote.arthexis.com --resource-path /mcp
 
 service restart
 --system
 --timeout 40
-remote serve
-127.0.0.1
-8001
---public-origin https://remote.arthexis.com
---resource-path /mcp
+--
+remote serve 127.0.0.1 8001 --public-origin https://remote.arthexis.com --resource-path /mcp
