@@ -11,7 +11,7 @@ from apps.ocpp.domain.sessions import (
     current_transaction,
     last_completed_transaction,
 )
-from apps.ocpp.models import Charger, OcppTransaction
+from apps.ocpp.models import Charger, OcppTransaction, ProtocolOperation
 from apps.ocpp.services.presence import connection_is_live
 
 
@@ -43,6 +43,8 @@ class ChargerSnapshot:
     last_cleared_transaction_id: str | None
     last_recovery_cleared_at: datetime | None
     last_recovery_clear_reason: str
+    recovery_required_operations: int
+    recovery_operation_summaries: tuple[str, ...]
     unresolved_energy_sessions: int
     authority_cutover_at: datetime | None
     historical_sessions: int
@@ -118,6 +120,16 @@ def _diagnostics(
     return "live charger presence with no active or unresolved session", None
 
 
+def _operation_summary(operation: ProtocolOperation) -> str:
+    summary = (
+        f"{operation.action} [{operation.recovery_policy}] "
+        f"attempts={operation.attempt_count}"
+    )
+    if operation.last_delivery_error:
+        summary += f" error={operation.last_delivery_error}"
+    return summary
+
+
 def snapshot_charger(charger: Charger) -> ChargerSnapshot:
     """Summarize one charger from persisted, retained OCPP records."""
     transactions = _transactions(charger)
@@ -161,6 +173,11 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         charger=charger,
         current=current,
         unresolved=unresolved,
+    )
+    recovery_operations = list(
+        charger.protocol_operations.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED
+        ).order_by("-created_at", "-pk")
     )
     historical = [
         transaction for transaction in transactions if transaction.historical
@@ -225,6 +242,10 @@ def snapshot_charger(charger: Charger) -> ChargerSnapshot:
         last_recovery_clear_reason=(
             latest_cleared.recovery_clear_reason if latest_cleared is not None else ""
         ),
+        recovery_required_operations=len(recovery_operations),
+        recovery_operation_summaries=tuple(
+            _operation_summary(operation) for operation in recovery_operations[:5]
+        ),
         unresolved_energy_sessions=sum(
             transaction.energy_kwh is None for transaction in completed
         ),
@@ -256,6 +277,7 @@ def snapshot_chargers(
         .select_related("station_model", "connection")
         .prefetch_related(
             "connectors",
+            "protocol_operations",
             Prefetch(
                 "transactions",
                 queryset=OcppTransaction.objects.recent(),
