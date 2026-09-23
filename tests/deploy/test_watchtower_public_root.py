@@ -97,12 +97,20 @@ def test_watchtower_dns_bootstrap_preserves_legacy_godaddy_credentials() -> None
         encoding="utf-8"
     )
 
-    assert "ACTIONS_GODADDY_PAT: ${{ secrets.GODADDY_PAT }}" in workflow
+    assert (
+        "ACTIONS_GODADDY_PAT: "
+        "${{ secrets.GODADDY_PAT || vars.GODADDY_PAT }}"
+    ) in workflow
     assert (
         "ACTIONS_GODADDY_API_KEY: "
-        "${{ secrets.GODADDY_API_KEY || vars.GODADDY_API_KEY }}"
+        "${{ secrets.GODADDY_API_KEY || secrets.GODADDY_KEY || "
+        "vars.GODADDY_API_KEY || vars.GODADDY_KEY }}"
     ) in workflow
-    assert "ACTIONS_GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET }}" in workflow
+    assert (
+        "ACTIONS_GODADDY_API_SECRET: "
+        "${{ secrets.GODADDY_API_SECRET || secrets.GODADDY_SECRET || "
+        "vars.GODADDY_API_SECRET || vars.GODADDY_SECRET }}"
+    ) in workflow
     assert 'godaddy_pat="${ACTIONS_GODADDY_PAT:-${GODADDY_PAT:-}}"' in workflow
     assert 'godaddy_key="${ACTIONS_GODADDY_API_KEY:-${GODADDY_API_KEY:-}}"' in workflow
     assert (
