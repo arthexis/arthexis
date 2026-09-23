@@ -101,6 +101,8 @@ class OcppTransaction(models.Model):
         null=True,
         blank=True,
     )
+    meter_evidence_revision = models.PositiveBigIntegerField(default=0)
+    energy_derived_revision = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         constraints = [
