@@ -78,11 +78,12 @@ def test_watchtower_mcp_service_wrapper_delegates_to_gway_sampler() -> None:
     assert "recipe mcp/server" in recipe
     assert "--host 127.0.0.1" in recipe
     assert "--port 8000" in recipe
-    assert "--path /mcp" in recipe
+    assert "--route /mcp" in recipe
     assert "--endpoint https://remote.arthexis.com/mcp" in recipe
     assert "--mcp-host" not in recipe
     assert "--mcp-port" not in recipe
     assert "--mcp-public-origin" not in recipe
+    assert "--path /mcp" not in recipe
     assert "server serve" not in recipe
     assert "fastmcp" not in recipe.lower()
     assert "0.0.0.0" not in recipe
