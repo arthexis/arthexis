@@ -8,7 +8,7 @@ service status
 --system
 --name mcp-server
 --
-./deploy/mcp-server.rx
+./mcp-server.rx
 
 service status
 --system
