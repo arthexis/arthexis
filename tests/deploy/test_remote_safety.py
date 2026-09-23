@@ -2,7 +2,6 @@ from pathlib import Path
 
 from gway.recipe import load_recipe
 
-
 DEPLOY_FILES = (
     Path("deploy/watchtower.rx"),
     Path("deploy/arthexis.rx"),
