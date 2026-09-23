@@ -6,7 +6,10 @@ from asgiref.sync import async_to_sync
 from django.test import TransactionTestCase
 
 from apps.events.models import EventEnvelope
-from apps.ocpp.domain.sessions import record_meter_values
+from apps.ocpp.domain.sessions import (
+    reconcile_pending_transaction_energy,
+    record_meter_values,
+)
 from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
@@ -14,6 +17,7 @@ from apps.ocpp.protocol.frames import Call, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
 from apps.ocpp.subscribers import process_meter_values_received
+from apps.ocpp.tasks import reconcile_meter_energy
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from tests.apps.ocpp.builders import charger
 
@@ -247,6 +251,106 @@ class AsyncMeterDerivationTests(TransactionTestCase):
             self.transaction.last_activity_at,
             datetime(2026, 9, 22, 10, 10, tzinfo=timezone.utc),
         )
+
+    def test_reconciler_repairs_dirty_energy_without_event(self) -> None:
+        record_meter_values(
+            transaction_id=self.transaction.pk,
+            charger=self.charger,
+            meter_values=self._meter_values(),
+        )
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.meter_evidence_revision, 1)
+        self.assertEqual(self.transaction.energy_derived_revision, 0)
+        self.assertIsNone(self.transaction.energy_kwh)
+
+        reconciled = reconcile_pending_transaction_energy()
+
+        self.assertEqual(reconciled, 1)
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
+        self.assertEqual(self.transaction.energy_derived_revision, 1)
+
+    def test_reconciler_is_idempotent_after_watermark_catches_up(self) -> None:
+        record_meter_values(
+            transaction_id=self.transaction.pk,
+            charger=self.charger,
+            meter_values=self._meter_values(),
+        )
+
+        self.assertEqual(reconcile_pending_transaction_energy(), 1)
+        self.assertEqual(reconcile_pending_transaction_energy(), 0)
+
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
+        self.assertEqual(
+            self.transaction.energy_derived_revision,
+            self.transaction.meter_evidence_revision,
+        )
+
+    def test_reconciler_marks_insufficient_evidence_as_considered(self) -> None:
+        record_meter_values(
+            transaction_id=self.transaction.pk,
+            charger=self.charger,
+            meter_values=[
+                {
+                    "timestamp": "2026-09-22T10:05:00Z",
+                    "sampledValue": [
+                        {
+                            "value": "100",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "Wh",
+                        }
+                    ],
+                }
+            ],
+        )
+
+        self.assertEqual(reconcile_pending_transaction_energy(), 1)
+
+        self.transaction.refresh_from_db()
+        self.assertIsNone(self.transaction.energy_kwh)
+        self.assertEqual(self.transaction.meter_evidence_revision, 1)
+        self.assertEqual(self.transaction.energy_derived_revision, 1)
+        self.assertEqual(reconcile_pending_transaction_energy(), 0)
+
+    def test_reconciler_respects_batch_limit(self) -> None:
+        record_meter_values(
+            transaction_id=self.transaction.pk,
+            charger=self.charger,
+            meter_values=self._meter_values(),
+        )
+        second = OcppTransaction.objects.create(
+            charger=self.charger,
+            remote_id="async-meter-second",
+            started_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+            last_activity_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+        )
+        record_meter_values(
+            transaction_id=second.pk,
+            charger=self.charger,
+            meter_values=self._meter_values(),
+        )
+
+        self.assertEqual(reconcile_pending_transaction_energy(limit=1), 1)
+        self.assertEqual(
+            OcppTransaction.objects.energy_derivation_pending().count(),
+            1,
+        )
+        self.assertEqual(reconcile_pending_transaction_energy(limit=1), 1)
+        self.assertFalse(OcppTransaction.objects.energy_derivation_pending().exists())
+
+    def test_periodic_task_uses_sql_reconciler(self) -> None:
+        record_meter_values(
+            transaction_id=self.transaction.pk,
+            charger=self.charger,
+            meter_values=self._meter_values(),
+        )
+
+        self.assertEqual(reconcile_meter_energy(), 1)
+
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
+        self.assertEqual(self.transaction.energy_derived_revision, 1)
 
     def test_secondary_meter_event_failure_does_not_change_ack(self) -> None:
         with patch(
