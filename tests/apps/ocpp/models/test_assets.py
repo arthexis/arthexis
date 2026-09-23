@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, OcppTransaction
 from tests.apps.ocpp.builders import charger, connection, station_model, transaction
 
 
@@ -164,6 +164,35 @@ class ChargerModelTests(TestCase):
         async_to_sync(Charger.stop)(selected)
 
         self.assertEqual(request.await_args.kwargs["action"], "RequestStopTransaction")
+        self.assertEqual(
+            request.await_args.kwargs["payload"],
+            {"transactionId": active.remote_id},
+        )
+
+    def test_stop_ignores_operator_cleared_open_transactions(self) -> None:
+        cleared = transaction(
+            self.charger,
+            "cleared-open",
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        cleared.recovery_state = OcppTransaction.RecoveryState.CLEARED
+        cleared.save(update_fields=("recovery_state",))
+        active = transaction(
+            self.charger,
+            "actual-active",
+            started_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        )
+
+        with patch(
+            "apps.ocpp.transport.operations.request_explicit_operation",
+            new_callable=AsyncMock,
+        ) as request:
+            request.return_value = SimpleNamespace(
+                action="RemoteStopTransaction",
+                unique_id="operation-cleared",
+            )
+            async_to_sync(Charger.stop)(self.charger)
+
         self.assertEqual(
             request.await_args.kwargs["payload"],
             {"transactionId": active.remote_id},

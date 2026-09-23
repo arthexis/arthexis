@@ -29,6 +29,13 @@ class OcppTransactionQuerySet(models.QuerySet):
             stopped_at__isnull=True,
         )
 
+    def cleared(self):
+        """Return sessions deliberately removed from current operational state."""
+        return self.live().filter(
+            recovery_state=OcppTransaction.RecoveryState.CLEARED,
+            stopped_at__isnull=True,
+        )
+
     def open(self):
         return self.live().filter(
             recovery_state__in=(
@@ -66,6 +73,7 @@ class OcppTransaction(models.Model):
     class RecoveryState(models.TextChoices):
         ACTIVE = "active", "Active"
         UNRESOLVED = "unresolved", "Unresolved"
+        CLEARED = "cleared", "Operator cleared"
         COMPLETED = "completed", "Completed"
 
     objects = OcppTransactionQuerySet.as_manager()
@@ -109,6 +117,8 @@ class OcppTransaction(models.Model):
     )
     meter_evidence_revision = models.PositiveBigIntegerField(default=0)
     energy_derived_revision = models.PositiveBigIntegerField(default=0)
+    recovery_cleared_at = models.DateTimeField(null=True, blank=True)
+    recovery_clear_reason = models.CharField(max_length=240, blank=True)
 
     class Meta:
         constraints = [
@@ -119,7 +129,7 @@ class OcppTransaction(models.Model):
                         stopped_at__isnull=False,
                     )
                     | models.Q(
-                        recovery_state__in=("active", "unresolved"),
+                        recovery_state__in=("active", "unresolved", "cleared"),
                         stopped_at__isnull=True,
                     )
                 ),
