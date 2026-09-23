@@ -166,7 +166,7 @@ class ChargerModelTests(TestCase):
         self.assertEqual(request.await_args.kwargs["action"], "RequestStopTransaction")
         self.assertEqual(
             request.await_args.kwargs["payload"],
-            {"transactionId": active.pk},
+            {"transactionId": active.remote_id},
         )
 
     def test_stop_ignores_operator_cleared_open_transactions(self) -> None:
@@ -195,7 +195,7 @@ class ChargerModelTests(TestCase):
 
         self.assertEqual(
             request.await_args.kwargs["payload"],
-            {"transactionId": active.remote_id},
+            {"transactionId": active.pk},
         )
 
     def test_stop_ignores_historical_open_transactions(self) -> None:
