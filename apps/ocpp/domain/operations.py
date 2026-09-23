@@ -1,5 +1,7 @@
 """Protocol-operation lifecycle services."""
 
+import uuid
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -61,13 +63,19 @@ def complete_operation(
 
 
 @transaction.atomic
-def claim_operation(operation: ProtocolOperation) -> ProtocolOperation | None:
+def claim_operation(
+    operation: ProtocolOperation,
+    *,
+    delivery_owner: str = "",
+) -> ProtocolOperation | None:
     """Claim one pending operation immediately before an actual charger send."""
     current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
     if current.status != ProtocolOperation.Status.PENDING:
         return None
     now = timezone.now()
     current.status = ProtocolOperation.Status.DELIVERING
+    current.attempt_token = uuid.uuid4()
+    current.delivery_owner = delivery_owner
     current.attempt_count += 1
     current.first_attempt_at = current.first_attempt_at or now
     current.last_attempt_at = now
@@ -75,6 +83,8 @@ def claim_operation(operation: ProtocolOperation) -> ProtocolOperation | None:
     current.save(
         update_fields=(
             "status",
+            "attempt_token",
+            "delivery_owner",
             "attempt_count",
             "first_attempt_at",
             "last_attempt_at",
@@ -103,10 +113,14 @@ def require_operation_recovery(
     operation: ProtocolOperation,
     *,
     description: str,
+    attempt_token: uuid.UUID | None = None,
 ) -> ProtocolOperation:
     """Preserve an ambiguous charger send for later action-specific reconciliation."""
     current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
-    if current.status == ProtocolOperation.Status.DELIVERING:
+    if (
+        current.status == ProtocolOperation.Status.DELIVERING
+        and (attempt_token is None or current.attempt_token == attempt_token)
+    ):
         current.status = ProtocolOperation.Status.RECOVERY_REQUIRED
         current.last_delivery_error = description[:240]
         current.completed_at = None
@@ -137,6 +151,7 @@ def prepare_reconnect_operations(
     *,
     charger: Charger,
     version: ProtocolVersion,
+    delivery_owner: str,
 ) -> tuple[int, ...]:
     """Return durable operation ids that a fresh owning consumer may send.
 
@@ -162,7 +177,10 @@ def prepare_reconnect_operations(
 
     pending_ids: list[int] = []
     for operation in operations:
-        if operation.status == ProtocolOperation.Status.DELIVERING:
+        if (
+            operation.status == ProtocolOperation.Status.DELIVERING
+            and operation.delivery_owner != delivery_owner
+        ):
             operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
             operation.last_delivery_error = (
                 "Previous consumer ended before the outbound outcome was durable."
@@ -185,3 +203,43 @@ def prepare_reconnect_operations(
             pending_ids.append(operation.pk)
 
     return tuple(pending_ids)
+
+
+@transaction.atomic
+def settle_operation_attempt(
+    operation: ProtocolOperation,
+    *,
+    attempt_token: uuid.UUID,
+    response_payload: dict[str, object] | None = None,
+    error_code: str = "",
+    error_description: str = "",
+) -> ProtocolOperation:
+    """Settle only the currently owning delivery attempt.
+
+    Late outcomes from superseded attempts are ignored and cannot overwrite a
+    newer retry or a terminal result.
+    """
+    current = ProtocolOperation.objects.select_for_update().get(pk=operation.pk)
+    if current.status != ProtocolOperation.Status.DELIVERING:
+        return current
+    if current.attempt_token != attempt_token:
+        return current
+    current.response_payload = response_payload
+    current.error_code = error_code
+    current.error_description = error_description
+    current.status = (
+        ProtocolOperation.Status.ERRORED
+        if error_code
+        else ProtocolOperation.Status.COMPLETED
+    )
+    current.completed_at = timezone.now()
+    current.save(
+        update_fields=(
+            "response_payload",
+            "error_code",
+            "error_description",
+            "status",
+            "completed_at",
+        )
+    )
+    return current
