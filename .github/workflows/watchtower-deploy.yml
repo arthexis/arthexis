@@ -118,9 +118,9 @@ jobs:
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}
-          ACTIONS_GODADDY_PAT: ${{ secrets.GODADDY_PAT }}
-          ACTIONS_GODADDY_API_KEY: ${{ secrets.GODADDY_API_KEY || vars.GODADDY_API_KEY }}
-          ACTIONS_GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET }}
+          ACTIONS_GODADDY_PAT: ${{ secrets.GODADDY_PAT || vars.GODADDY_PAT }}
+          ACTIONS_GODADDY_API_KEY: ${{ secrets.GODADDY_API_KEY || secrets.GODADDY_KEY || vars.GODADDY_API_KEY || vars.GODADDY_KEY }}
+          ACTIONS_GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET || secrets.GODADDY_SECRET || vars.GODADDY_API_SECRET || vars.GODADDY_SECRET }}
         run: |
           set -Eeuo pipefail
           if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
