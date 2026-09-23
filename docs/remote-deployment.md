@@ -36,14 +36,17 @@ mcp-server   127.0.0.1:8000
 remote-auth  127.0.0.1:8001
 ```
 
-Both services use:
+Both services resolve the project semantic value:
 
 ```text
-GWAY_CACHE_DIR=/var/lib/gway/cache
+cache_dir = /var/lib/gway/cache
 ```
 
-so named scopes, OAuth grants, token verifier state, and remote account state
-survive application upgrades and service reinstalls.
+from `[tool.gway.variables]` in `pyproject.toml`. The service definitions do
+not transport a literal Gway environment variable. Because both fresh Gway
+processes bootstrap the same project semantic configuration, named scopes,
+OAuth grants, token verifier state, and remote account state survive
+application upgrades and service reinstalls.
 
 ## Public edge
 
@@ -124,7 +127,9 @@ cd /var/lib/gway/projects/arthexis
 sudo .venv/bin/python -m gway ./deploy/remote-preflight.rx
 ```
 
-The preflight sets its durable cache location inside the recipe with scoped `set env`; callers do not need to supply `GWAY_CACHE_DIR`. It emits only safe metadata. It must show the `chatgpt-logs` scope,
+The preflight uses the same project-level semantic `cache_dir`; it does not set
+or require a literal cache environment variable. It emits only safe metadata.
+It must show the `chatgpt-logs` scope,
 the current safe token list, and healthy status for both `mcp-server` and
 `remote-auth`. It never creates or prints a bearer secret.
 
@@ -150,8 +155,9 @@ acceptance. Checkpoint is safe to run repeatedly and never issues credentials.
 ## DNS credentials
 
 Watchtower does not require GoDaddy credentials to be copied into GitHub
-Actions. The DNS bootstrap runs as root and Gway reads the existing persistent
-host secret store:
+Actions. The DNS recipe remains credential-free: Gway resolves semantic
+`pat`, `api_key`, and `api_secret` values through its configured bindings.
+The production host uses the persistent secret backend:
 
 ```text
 /etc/gway/secrets/dns/godaddy/pat
@@ -159,6 +165,7 @@ host secret store:
 /etc/gway/secrets/dns/godaddy/secret
 ```
 
-A PAT is preferred when present; otherwise the key/secret pair is used.
-`GWAY_SECRETS_DIR` may override the secret-store root. These files are host
-configuration and survive normal Arthexis/Watchtower redeployments.
+A PAT is preferred when present; otherwise the key/secret pair is used. The
+secret-store root and file layout are physical backend details rather than part
+of the DNS recipe API. These host secrets survive normal Arthexis/Watchtower
+redeployments.

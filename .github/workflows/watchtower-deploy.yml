@@ -24,7 +24,6 @@ jobs:
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
       ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
-      WATCHTOWER_GWAY_CACHE_DIR: /var/lib/gway/cache
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean privileged Python bytecode from runner workspace
@@ -100,8 +99,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n install -d -m 0700 -o root -g root "${WATCHTOWER_GWAY_CACHE_DIR}"
-          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec env GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
+          sudo -n install -d -m 0700 -o root -g root /var/lib/gway/cache
+          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
             echo "remote_provision=failed"
             sudo -n systemctl status gway-mcp-server.service --no-pager || true
             sudo -n systemctl status gway-remote-auth.service --no-pager || true
@@ -109,7 +108,7 @@ jobs:
             sudo -n journalctl -u gway-remote-auth.service -n 50 --no-pager || true
             exit 1
           fi
-          sudo -n test -f "${WATCHTOWER_GWAY_CACHE_DIR}/security/state.sqlite"
+          sudo -n test -f /var/lib/gway/cache/security/state.sqlite
           sudo -n systemctl is-active --quiet gway-mcp-server.service
           sudo -n systemctl is-active --quiet gway-remote-auth.service
           sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py local
