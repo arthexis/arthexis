@@ -101,7 +101,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n install -d -m 0700 -o root -g root "${WATCHTOWER_GWAY_CACHE_DIR}"
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec env GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null 2>&1
+          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec env GWAY_CACHE_DIR="'"${WATCHTOWER_GWAY_CACHE_DIR}"'" .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
+            echo "remote_provision=failed"
+            sudo -n systemctl status gway-mcp-server.service --no-pager || true
+            sudo -n systemctl status gway-remote-auth.service --no-pager || true
+            sudo -n journalctl -u gway-mcp-server.service -n 50 --no-pager || true
+            sudo -n journalctl -u gway-remote-auth.service -n 50 --no-pager || true
+            exit 1
+          fi
           sudo -n test -f "${WATCHTOWER_GWAY_CACHE_DIR}/security/state.sqlite"
           sudo -n systemctl is-active --quiet gway-mcp-server.service
           sudo -n systemctl is-active --quiet gway-remote-auth.service
