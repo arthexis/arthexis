@@ -31,11 +31,11 @@ class WatchtowerWorkflowTests(TestCase):
         public_workflow = workflow[start:]
 
         self.assertIn(
-            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
+            "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}",
             public_workflow,
         )
         self.assertNotIn(
-            "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}",
+            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
             public_workflow,
         )
 
