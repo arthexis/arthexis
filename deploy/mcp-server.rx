@@ -1,7 +1,7 @@
 # Watchtower MCP service entrypoint.
 # Gway owns the MCP implementation; Arthexis owns only production deployment values.
 recipe mcp/server
---mcp-host 127.0.0.1
---mcp-port 8000
---mcp-path /mcp
---mcp-public-origin https://remote.arthexis.com
+--host 127.0.0.1
+--port 8000
+--path /mcp
+--endpoint https://remote.arthexis.com/mcp
