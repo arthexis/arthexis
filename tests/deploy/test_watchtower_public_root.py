@@ -34,11 +34,6 @@ class WatchtowerWorkflowTests(TestCase):
             "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
             public_workflow,
         )
-        self.assertNotIn(
-            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
-            public_workflow,
-        )
-
         for forbidden in (
             "systemctl status",
             "journalctl",
