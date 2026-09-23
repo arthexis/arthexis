@@ -52,6 +52,12 @@ class OcppTransactionQuerySet(models.QuerySet):
         """Return completed sessions with a retained final energy value."""
         return self.completed().filter(energy_kwh__isnull=False)
 
+    def energy_derivation_pending(self):
+        """Return sessions whose retained meter evidence has not been derived."""
+        return self.filter(
+            meter_evidence_revision__gt=models.F("energy_derived_revision")
+        )
+
     def recent(self):
         return self.order_by("-started_at", "-pk")
 
@@ -101,6 +107,8 @@ class OcppTransaction(models.Model):
         null=True,
         blank=True,
     )
+    meter_evidence_revision = models.PositiveBigIntegerField(default=0)
+    energy_derived_revision = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         constraints = [

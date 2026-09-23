@@ -5,6 +5,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
+from apps.ocpp.domain.sessions import reconcile_pending_transaction_energy
 from apps.ocpp.models import Charger, ChargerConnection
 
 
@@ -15,3 +16,9 @@ def refresh_stale_connections() -> int:
     stale_chargers = Charger.objects.filter(connected_at__lt=cutoff)
     ChargerConnection.objects.filter(charger__in=stale_chargers).delete()
     return stale_chargers.update(connected_at=None)
+
+
+@shared_task(name="ocpp.maintenance.reconcile_meter_energy")
+def reconcile_meter_energy() -> int:
+    """Repair stale transaction energy from authoritative retained meter evidence."""
+    return reconcile_pending_transaction_energy()
