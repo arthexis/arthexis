@@ -131,7 +131,6 @@ def require_operation_recovery(
     return current
 
 
-
 SESSION_RECONCILE_ACTIONS = frozenset(
     {
         "RemoteStartTransaction",
@@ -165,7 +164,8 @@ def _matching_remote_start_transaction(
         if connector_id is not None:
             if not isinstance(connector_id, int):
                 return None
-            queryset = queryset.filter(connector__number=connector_id)
+            if connector_id > 0:
+                queryset = queryset.filter(connector__number=connector_id)
     else:
         id_token = payload.get("idToken")
         if not isinstance(id_token, dict):
@@ -242,8 +242,10 @@ def _settle_reconciled_operation(
 @transaction.atomic
 def reconcile_session_operation(operation: ProtocolOperation) -> ProtocolOperation:
     """Resolve ambiguous remote start/stop work from positive retained session evidence."""
-    current = ProtocolOperation.objects.select_for_update().select_related("charger").get(
-        pk=operation.pk
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
     )
     if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
         return current
@@ -316,7 +318,6 @@ def prepare_safe_retry(operation: ProtocolOperation) -> ProtocolOperation | None
     current.completed_at = None
     current.save(update_fields=("status", "completed_at"))
     return current
-
 
 
 @transaction.atomic
