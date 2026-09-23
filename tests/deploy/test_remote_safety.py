@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from gway.recipe import load_recipe
-
 DEPLOY_FILES = (
     Path("deploy/watchtower.rx"),
     Path("deploy/arthexis.rx"),
@@ -13,9 +11,20 @@ DEPLOY_FILES = (
 )
 
 
-def _commands(path: Path) -> list[str]:
-    commands, _ = load_recipe(path)
-    return [" ".join(str(token) for token in command["tokens"]) for command in commands]
+def _blocks(path: Path) -> list[str]:
+    blocks = []
+    current = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            if current:
+                blocks.append(" ".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append(" ".join(current))
+    return blocks
 
 
 def test_recurring_remote_deployment_contains_no_credential_issuance() -> None:
@@ -31,14 +40,14 @@ def test_recurring_remote_deployment_contains_no_credential_issuance() -> None:
 
 
 def test_remote_policy_application_is_convergent_and_singular() -> None:
-    commands = _commands(Path("deploy/remote.rx"))
+    commands = _blocks(Path("deploy/remote.rx"))
 
     assert commands.count("security scope apply deploy/mcp-scopes.toml") == 1
     assert commands.count("security scope show chatgpt-logs") == 1
 
 
 def test_remote_service_reconciliation_uses_stable_install_restart_pairs() -> None:
-    commands = _commands(Path("deploy/remote.rx"))
+    commands = _blocks(Path("deploy/remote.rx"))
 
     mcp = [command for command in commands if "mcp-server" in command]
     auth = [command for command in commands if "remote serve" in command]
@@ -53,14 +62,14 @@ def test_remote_service_reconciliation_uses_stable_install_restart_pairs() -> No
 
 
 def test_recurring_public_deployment_never_recreates_dns() -> None:
-    commands = _commands(Path("deploy/remote-expose.rx"))
+    commands = _blocks(Path("deploy/remote-expose.rx"))
 
     assert not any(command.startswith("dns create") for command in commands)
     assert commands[0].startswith("dns ready remote.arthexis.com")
 
 
 def test_dns_bootstrap_is_one_time_and_separate() -> None:
-    commands = _commands(Path("deploy/remote-dns.rx"))
+    commands = _blocks(Path("deploy/remote-dns.rx"))
 
     assert len(commands) == 1
     assert commands[0].startswith("dns create remote.arthexis.com")
