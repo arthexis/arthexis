@@ -71,3 +71,21 @@ def test_checkpoint_does_not_issue_credentials_or_supply_cache_env() -> None:
 
     assert "security token create" not in workflow
     assert "GWAY_CACHE_DIR=/var/lib/gway/cache" not in workflow
+
+
+
+def test_recovery_cleans_privileged_bytecode_before_checkout() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    cleanup = workflow.index(
+        "- name: Clean privileged Python bytecode from runner workspace"
+    )
+    checkout = workflow.index("- name: Checkout trusted main revision")
+
+    assert cleanup < checkout
+    assert (
+        'sudo -n find "${GITHUB_WORKSPACE}" -type d -name __pycache__ '
+        "-prune -exec rm -rf {} +"
+    ) in workflow
+    assert "*.pyc" in workflow
+    assert "*.pyo" in workflow
