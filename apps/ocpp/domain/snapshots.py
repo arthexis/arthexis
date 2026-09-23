@@ -40,8 +40,8 @@ class ChargerSnapshot:
     latest_unresolved_transaction_id: str | None
     latest_unresolved_activity: datetime | None
     cleared_sessions: int
-    last_cleared_transaction_id: str | null
-    last_recovery_cleared_at: datetime | null
+    last_cleared_transaction_id: str | None
+    last_recovery_cleared_at: datetime | None
     last_recovery_clear_reason: str
     unresolved_energy_sessions: int
     authority_cutover_at: datetime | None
