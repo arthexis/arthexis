@@ -352,14 +352,14 @@ class AsyncMeterDerivationTests(TransactionTestCase):
         self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
         self.assertEqual(self.transaction.energy_derived_revision, 1)
 
-    def test_secondary_meter_event_failure_does_not_change_ack(self) -> None:
+    def test_v16_lost_post_commit_event_is_repaired_from_sql(self) -> None:
         with patch(
             "apps.ocpp.services.transactions.publish_safely",
             side_effect=RuntimeError("event unavailable"),
         ):
             response = async_to_sync(self._v16_dispatcher().dispatch)(
                 Call(
-                    unique_id="meter-event-failure",
+                    unique_id="meter-event-failure-v16",
                     action="MeterValues",
                     payload={
                         "transactionId": self.transaction.pk,
@@ -370,11 +370,73 @@ class AsyncMeterDerivationTests(TransactionTestCase):
 
         self.assertEqual(
             response,
-            CallResult(unique_id="meter-event-failure", payload={}),
+            CallResult(unique_id="meter-event-failure-v16", payload={}),
         )
         self.assertEqual(MeterValue.objects.count(), 2)
         self.assertFalse(EventEnvelope.objects.exists())
+
+        replay = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="MeterValues",
+            unique_id="meter-event-failure-v16",
+        )
+        self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
+        self.assertEqual(replay.response_payload, {})
+
         self.transaction.refresh_from_db()
         self.assertIsNone(self.transaction.energy_kwh)
         self.assertEqual(self.transaction.meter_evidence_revision, 1)
         self.assertEqual(self.transaction.energy_derived_revision, 0)
+
+        self.assertEqual(reconcile_pending_transaction_energy(), 1)
+
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
+        self.assertEqual(self.transaction.energy_derived_revision, 1)
+        self.assertFalse(EventEnvelope.objects.exists())
+
+    def test_v201_lost_post_commit_event_is_repaired_from_sql(self) -> None:
+        with patch(
+            "apps.ocpp.services.transactions.publish_safely",
+            side_effect=RuntimeError("event unavailable"),
+        ):
+            response = async_to_sync(self._v201_dispatcher().dispatch)(
+                Call(
+                    unique_id="meter-event-failure-v201",
+                    action="MeterValues",
+                    payload={
+                        "evseId": 1,
+                        "meterValue": self._meter_values(),
+                        "transactionInfo": {
+                            "transactionId": self.transaction.remote_id,
+                        },
+                    },
+                )
+            )
+
+        self.assertEqual(
+            response,
+            CallResult(unique_id="meter-event-failure-v201", payload={}),
+        )
+        self.assertEqual(MeterValue.objects.count(), 2)
+        self.assertFalse(EventEnvelope.objects.exists())
+
+        replay = InboundProtocolRequest.objects.get(
+            charger=self.charger,
+            action="MeterValues",
+            unique_id="meter-event-failure-v201",
+        )
+        self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
+        self.assertEqual(replay.response_payload, {})
+
+        self.transaction.refresh_from_db()
+        self.assertIsNone(self.transaction.energy_kwh)
+        self.assertEqual(self.transaction.meter_evidence_revision, 1)
+        self.assertEqual(self.transaction.energy_derived_revision, 0)
+
+        self.assertEqual(reconcile_pending_transaction_energy(), 1)
+
+        self.transaction.refresh_from_db()
+        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
+        self.assertEqual(self.transaction.energy_derived_revision, 1)
+        self.assertFalse(EventEnvelope.objects.exists())
