@@ -122,4 +122,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ocpp.maintenance.refresh_stale_connections",
         "schedule": 3600,
     },
+    "ocpp-reconcile-meter-energy": {
+        "task": "ocpp.maintenance.reconcile_meter_energy",
+        "schedule": 60,
+    },
 }

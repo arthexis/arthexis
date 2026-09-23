@@ -199,3 +199,11 @@ def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() ->
 
         assert "./mcp-server.rx" in recipe
         assert "./deploy/mcp-server.rx" not in recipe
+
+
+
+def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
+    assert "secrets.ARTHEXIS_CERTBOT_EMAIL" not in workflow
