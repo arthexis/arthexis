@@ -12,7 +12,7 @@ repeat
 --interval 10
 --max 60
 
-recipe web/remote
+recipe web/remote/expose
 --site remote.arthexis.com
 --domain remote.arthexis.com
 --mcp-host 127.0.0.1
