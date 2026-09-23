@@ -82,6 +82,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Active sessions: {snapshot.active_transactions}")
         self.stdout.write(f"Unresolved sessions: {snapshot.unresolved_sessions}")
         self.stdout.write(f"Operator-cleared sessions: {snapshot.cleared_sessions}")
+        self.stdout.write(
+            f"Ambiguous outbound operations: {snapshot.recovery_required_operations}"
+        )
+        for summary in snapshot.recovery_operation_summaries:
+            self.stdout.write(f"  - {summary}")
         self.stdout.write(f"Why: {snapshot.state_reason}")
         if snapshot.waiting_for:
             self.stdout.write(f"Waiting for: {snapshot.waiting_for}")
