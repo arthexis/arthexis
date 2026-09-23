@@ -10,6 +10,7 @@ ORIGIN = "https://remote.arthexis.com"
 RESOURCE = f"{ORIGIN}/mcp"
 PROTECTED = f"{ORIGIN}/.well-known/oauth-protected-resource/mcp"
 AUTH_SERVER = f"{ORIGIN}/.well-known/oauth-authorization-server"
+ACCEPTANCE_CLIENT = f"{ORIGIN}/.well-known/gway-acceptance-client"
 
 
 def _wait_listener(host: str, port: int, *, attempts: int = 40) -> None:
@@ -68,6 +69,14 @@ def verify_public() -> None:
     for key, value in expected.items():
         if authorization.get(key) != value:
             raise RuntimeError(f"authorization metadata mismatch for {key}")
+
+    client = _json(ACCEPTANCE_CLIENT)
+    if client.get("client_id") != ACCEPTANCE_CLIENT:
+        raise RuntimeError("acceptance-client metadata has wrong client_id")
+    if "http://127.0.0.1:8765/callback" not in client.get("redirect_uris", []):
+        raise RuntimeError("acceptance-client metadata has wrong redirect URI")
+    if "none" not in client.get("token_endpoint_auth_methods", []):
+        raise RuntimeError("acceptance-client metadata is not a public OAuth client")
 
     authorize = _expect_http_error(
         Request(f"{ORIGIN}/oauth/authorize", method="GET"),
