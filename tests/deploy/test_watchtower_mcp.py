@@ -76,10 +76,13 @@ def test_watchtower_mcp_service_wrapper_delegates_to_gway_sampler() -> None:
     recipe = MCP_SERVER.read_text(encoding="utf-8")
 
     assert "recipe mcp/server" in recipe
-    assert "--mcp-host 127.0.0.1" in recipe
-    assert "--mcp-port 8000" in recipe
-    assert "--mcp-path /mcp" in recipe
-    assert "--mcp-public-origin https://remote.arthexis.com" in recipe
+    assert "--host 127.0.0.1" in recipe
+    assert "--port 8000" in recipe
+    assert "--path /mcp" in recipe
+    assert "--endpoint https://remote.arthexis.com/mcp" in recipe
+    assert "--mcp-host" not in recipe
+    assert "--mcp-port" not in recipe
+    assert "--mcp-public-origin" not in recipe
     assert "server serve" not in recipe
     assert "fastmcp" not in recipe.lower()
     assert "0.0.0.0" not in recipe
@@ -139,6 +142,7 @@ def test_watchtower_remote_uses_durable_gway_cache_root() -> None:
 def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
     recipe = Path("deploy/remote-preflight.rx").read_text(encoding="utf-8")
 
+    assert "set env GWAY_CACHE_DIR /var/lib/gway/cache" in recipe
     assert "security scope show chatgpt-logs" in recipe
     assert "security token list" in recipe
     assert "--name mcp-server" in recipe
