@@ -66,7 +66,7 @@ def test_remote_recipe_installs_mcp_service_from_stable_project_recipe() -> None
 
     assert "--backend systemd" in install
     assert "--system" in install
-    assert "--environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]" in install
+    assert "--environment GWAY_CACHE_DIR" not in install
     assert "-- ./mcp-server.rx" in install
     assert "--timeout 40" in restart
     assert "-- ./mcp-server.rx" in restart
@@ -110,7 +110,7 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 
     assert "--backend systemd" in install
     assert "--system" in install
-    assert "--environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]" in install
+    assert "--environment GWAY_CACHE_DIR" not in install
     assert "--timeout 40" in restart
 
 
@@ -118,8 +118,9 @@ def test_watchtower_workflow_delegates_remote_provisioning_to_recipe() -> None:
     step = _remote_step()
 
     assert ".venv/bin/python -m gway ./deploy/remote.rx" in step
-    assert 'install -d -m 0700 -o root -g root "${WATCHTOWER_GWAY_CACHE_DIR}"' in step
-    assert '${WATCHTOWER_GWAY_CACHE_DIR}/security/state.sqlite' in step
+    assert "install -d -m 0700 -o root -g root /var/lib/gway/cache" in step
+    assert "/var/lib/gway/cache/security/state.sqlite" in step
+    assert "GWAY_CACHE_DIR" not in step
     assert "systemctl is-active --quiet gway-mcp-server.service" in step
     assert "systemctl is-active --quiet gway-remote-auth.service" in step
 
@@ -133,17 +134,38 @@ def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
     assert "security token create" not in workflow
 
 
-def test_watchtower_remote_uses_durable_gway_cache_root() -> None:
+def test_watchtower_remote_uses_semantic_gway_cache_root() -> None:
+    project = Path("pyproject.toml").read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
+    remote = REMOTE.read_text(encoding="utf-8")
 
-    assert "WATCHTOWER_GWAY_CACHE_DIR: /var/lib/gway/cache" in workflow
-    assert 'GWAY_CACHE_DIR="\'"${WATCHTOWER_GWAY_CACHE_DIR}"\'"' in workflow
+    assert "[tool.gway.variables]" in project
+    assert 'cache_dir = "/var/lib/gway/cache"' in project
+    assert "GWAY_CACHE_DIR" not in workflow
+    assert "GWAY_CACHE_DIR" not in remote
+
+def test_remote_dns_recipe_stays_credential_free() -> None:
+    recipe = Path("deploy/remote-dns.rx").read_text(encoding="utf-8")
+
+    assert "dns create remote.arthexis.com" in recipe
+    for forbidden in (
+        "GODADDY_",
+        "GWAY_SECRETS_DIR",
+        "/etc/gway/secrets",
+        "api_key",
+        "api_secret",
+        "pat",
+        "env ",
+        "set env",
+    ):
+        assert forbidden not in recipe
 
 
 def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
     recipe = Path("deploy/remote-preflight.rx").read_text(encoding="utf-8")
 
-    assert "set env GWAY_CACHE_DIR /var/lib/gway/cache" in recipe
+    assert "GWAY_CACHE_DIR" not in recipe
+    assert "set env " not in recipe
     assert "security scope show chatgpt-logs" in recipe
     assert "security token list" in recipe
     assert "--name mcp-server" in recipe
