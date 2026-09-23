@@ -137,18 +137,23 @@ def stop_transaction(
     return transaction
 
 
+@db_transaction.atomic
 def record_meter_values(
     *, transaction_id: int, charger: Charger, meter_values: object
 ) -> int:
     """Persist OCPP 1.6 meter values under the transaction's retained provenance."""
     if not isinstance(meter_values, list):
         raise ValueError("meterValue must be a list")
-    transaction = OcppTransaction.objects.get(pk=transaction_id, charger=charger)
+    transaction = OcppTransaction.objects.select_for_update().get(
+        pk=transaction_id,
+        charger=charger,
+    )
     count, last_activity = _record_meter_values(
         transaction=transaction,
         meter_values=meter_values,
     )
     _touch_transaction_activity(transaction, last_activity)
+    _advance_meter_evidence_revision(transaction, count)
     return count
 
 
@@ -213,16 +218,21 @@ def record_v201_transaction_event(
     return transaction
 
 
+@db_transaction.atomic
 def record_v201_meter_values(
     *, charger: Charger, transaction_id: str, meter_values: object
 ) -> int:
     """Persist OCPP 2.0.1 meter values identified by their remote transaction ID."""
-    transaction = OcppTransaction.objects.get(charger=charger, remote_id=transaction_id)
+    transaction = OcppTransaction.objects.select_for_update().get(
+        charger=charger,
+        remote_id=transaction_id,
+    )
     count, last_activity = _record_meter_values(
         transaction=transaction,
         meter_values=meter_values,
     )
     _touch_transaction_activity(transaction, last_activity)
+    _advance_meter_evidence_revision(transaction, count)
     return count
 
 
@@ -293,15 +303,51 @@ def _record_meter_values(
     return len(persisted - existing), latest_activity
 
 
+@db_transaction.atomic
 def recompute_transaction_energy(transaction_id: int) -> OcppTransaction:
-    """Recompute derived transaction energy from authoritative retained samples."""
-    transaction = OcppTransaction.objects.get(pk=transaction_id)
+    """Recompute derived energy and record the retained evidence revision considered."""
+    transaction = OcppTransaction.objects.select_for_update().get(pk=transaction_id)
+    evidence_revision = transaction.meter_evidence_revision
     energy_kwh = _meter_value_delta_kwh(transaction)
-    if energy_kwh is None or transaction.energy_kwh == energy_kwh:
-        return transaction
-    transaction.energy_kwh = energy_kwh
-    transaction.save(update_fields=("energy_kwh",))
+    update_fields: list[str] = []
+
+    if energy_kwh is not None and transaction.energy_kwh != energy_kwh:
+        transaction.energy_kwh = energy_kwh
+        update_fields.append("energy_kwh")
+
+    if transaction.energy_derived_revision != evidence_revision:
+        transaction.energy_derived_revision = evidence_revision
+        update_fields.append("energy_derived_revision")
+
+    if update_fields:
+        transaction.save(update_fields=tuple(update_fields))
     return transaction
+
+
+def reconcile_pending_transaction_energy(*, limit: int = 100) -> int:
+    """Recompute one bounded batch of transactions with stale derived energy."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    transaction_ids = tuple(
+        OcppTransaction.objects.energy_derivation_pending()
+        .order_by("pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    for transaction_id in transaction_ids:
+        recompute_transaction_energy(transaction_id)
+    return len(transaction_ids)
+
+
+def _advance_meter_evidence_revision(
+    transaction: OcppTransaction,
+    retained_count: int,
+) -> None:
+    """Advance the derivation watermark only when new meter evidence was retained."""
+    if retained_count <= 0:
+        return
+    transaction.meter_evidence_revision += 1
+    transaction.save(update_fields=("meter_evidence_revision",))
 
 
 def _meter_delta_kwh(
