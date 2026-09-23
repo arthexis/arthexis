@@ -5,12 +5,11 @@
 security scope apply deploy/mcp-scopes.toml
 security scope show chatgpt-logs
 
-# Keep both remote services on the shared durable security registry.
+# Both services resolve the project semantic cache_dir and share its durable security registry.
 service install
 --backend systemd
 --system
 --name mcp-server
---environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]
 --
 ./mcp-server.rx
 
@@ -25,7 +24,6 @@ service restart
 service install
 --backend systemd
 --system
---environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]
 --
 remote serve 127.0.0.1 8001 --public-origin https://remote.arthexis.com --resource-path /mcp
 
