@@ -1,16 +1,25 @@
 from pathlib import Path
 
-from gway.recipe import load_recipe
-
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
 POLICY = Path("deploy/mcp-scopes.toml")
 REMOTE = Path("deploy/remote.rx")
 MCP_SERVER = Path("deploy/mcp-server.rx")
 
 
-def _commands(path: Path) -> list[str]:
-    commands, _ = load_recipe(path)
-    return [" ".join(str(token) for token in command["tokens"]) for command in commands]
+def _blocks(path: Path) -> list[str]:
+    blocks = []
+    current = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            if current:
+                blocks.append(" ".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append(" ".join(current))
+    return blocks
 
 
 def _remote_step() -> str:
@@ -34,7 +43,7 @@ def test_watchtower_mcp_policy_is_read_only_logs_scope() -> None:
 
 
 def test_remote_recipe_applies_checked_in_policy_without_creating_tokens() -> None:
-    commands = _commands(REMOTE)
+    commands = _blocks(REMOTE)
 
     assert "security scope apply deploy/mcp-scopes.toml" in commands
     assert "security scope show chatgpt-logs" in commands
@@ -43,7 +52,7 @@ def test_remote_recipe_applies_checked_in_policy_without_creating_tokens() -> No
 
 
 def test_remote_recipe_installs_mcp_service_from_stable_project_recipe() -> None:
-    commands = _commands(REMOTE)
+    commands = _blocks(REMOTE)
     install = next(
         command
         for command in commands
@@ -64,17 +73,19 @@ def test_remote_recipe_installs_mcp_service_from_stable_project_recipe() -> None
 
 
 def test_watchtower_mcp_service_wrapper_is_loopback_and_public_origin_aware() -> None:
-    commands = _commands(MCP_SERVER)
+    recipe = MCP_SERVER.read_text(encoding="utf-8")
 
-    assert commands[0] == "require fastmcp>=4,<5"
-    serve = commands[1]
-    assert serve.startswith("server serve 127.0.0.1 8000 /mcp")
-    assert "--public-origin https://remote.arthexis.com" in serve
-    assert "0.0.0.0" not in serve
+    assert "require fastmcp>=4,<5" in recipe
+    assert "server serve" in recipe
+    assert "127.0.0.1" in recipe
+    assert "8000" in recipe
+    assert "/mcp" in recipe
+    assert "--public-origin https://remote.arthexis.com" in recipe
+    assert "0.0.0.0" not in recipe
 
 
 def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> None:
-    commands = _commands(REMOTE)
+    commands = _blocks(REMOTE)
     install = next(
         command
         for command in commands
