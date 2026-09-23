@@ -47,7 +47,13 @@ class ActiveConnections:
     def __init__(self) -> None:
         self._senders: dict[int, tuple[str, Sender]] = {}
 
-    def register(self, charger: Charger, sender: Sender, *, owner: str) -> None:
+    def register(
+        self,
+        charger: Charger,
+        sender: Sender,
+        *,
+        owner: str = "in-process",
+    ) -> None:
         self._senders[charger.pk] = (owner, sender)
 
     def unregister(self, charger: Charger, *, owner: str | None = None) -> None:
