@@ -1,0 +1,18 @@
+# O8A production checkpoint. Safe metadata only: no bearer issuance.
+set env GWAY_CACHE_DIR /var/lib/gway/cache
+
+security scope show chatgpt-logs
+security token list
+
+service status
+--system
+--name mcp-server
+-- ./deploy/mcp-server.rx
+
+service status
+--system
+remote serve
+127.0.0.1
+8001
+--public-origin https://remote.arthexis.com
+--resource-path /mcp

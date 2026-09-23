@@ -7,6 +7,7 @@ DEPLOY_FILES = (
     Path("deploy/remote-dns.rx"),
     Path("deploy/remote-expose.rx"),
     Path("deploy/mcp-server.rx"),
+    Path("deploy/remote-preflight.rx"),
     Path(".github/workflows/watchtower-deploy.yml"),
 )
 

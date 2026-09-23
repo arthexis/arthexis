@@ -112,3 +112,36 @@ The recurring path is intentionally convergent:
 - nginx changes use Gway's transactional rollback journals;
 - certificate renewal uses the existing Gway/Certbot exposure lifecycle;
 - no recurring step issues production credentials.
+
+
+## O8A production preflight
+
+Before issuing the one-time linking bearer, run the safe preflight against the
+durable production security state:
+
+```bash
+cd /var/lib/gway/projects/arthexis
+sudo .venv/bin/python -m gway ./deploy/remote-preflight.rx
+```
+
+The preflight sets its durable cache location inside the recipe with scoped `set env`; callers do not need to supply `GWAY_CACHE_DIR`. It emits only safe metadata. It must show the `chatgpt-logs` scope,
+the current safe token list, and healthy status for both `mcp-server` and
+`remote-auth`. It never creates or prints a bearer secret.
+
+The production MCP wrapper deliberately delegates to Gway's maintained
+`mcp/server` sampler and supplies only deployment context:
+
+```text
+host: 127.0.0.1
+port: 8000
+route: /mcp
+endpoint: https://remote.arthexis.com/mcp
+```
+
+Arthexis does not copy or own the FastMCP companion implementation.
+
+
+The normal operator path is the **Watchtower Recovery** workflow. Choose
+`diagnose` for the existing sanitized host report, or `checkpoint` to run
+that report and then perform the remote preflight plus local/public OAuth/MCP
+acceptance. Checkpoint is safe to run repeatedly and never issues credentials.
