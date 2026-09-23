@@ -188,11 +188,14 @@ class Charger(models.Model):
             if version == ProtocolVersion.OCPP_16
             else "RequestStopTransaction"
         )
+        transaction_id: object = (
+            selected.pk if version == ProtocolVersion.OCPP_16 else selected.remote_id
+        )
         return await cls._request_operation(
             charger=charger,
             version=version,
             action=action,
-            payload={"transactionId": selected.remote_id},
+            payload={"transactionId": transaction_id},
             timeout=timeout,
         )
 
