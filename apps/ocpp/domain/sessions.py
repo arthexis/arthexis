@@ -297,9 +297,10 @@ def _record_meter_values(
     return len(persisted - existing), latest_activity
 
 
+@db_transaction.atomic
 def recompute_transaction_energy(transaction_id: int) -> OcppTransaction:
     """Recompute derived energy and record the retained evidence revision considered."""
-    transaction = OcppTransaction.objects.get(pk=transaction_id)
+    transaction = OcppTransaction.objects.select_for_update().get(pk=transaction_id)
     evidence_revision = transaction.meter_evidence_revision
     energy_kwh = _meter_value_delta_kwh(transaction)
     update_fields: list[str] = []
@@ -315,6 +316,21 @@ def recompute_transaction_energy(transaction_id: int) -> OcppTransaction:
     if update_fields:
         transaction.save(update_fields=tuple(update_fields))
     return transaction
+
+
+def reconcile_pending_transaction_energy(*, limit: int = 100) -> int:
+    """Recompute one bounded batch of transactions with stale derived energy."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    transaction_ids = tuple(
+        OcppTransaction.objects.energy_derivation_pending()
+        .order_by("pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    for transaction_id in transaction_ids:
+        recompute_transaction_energy(transaction_id)
+    return len(transaction_ids)
 
 
 def _advance_meter_evidence_revision(
