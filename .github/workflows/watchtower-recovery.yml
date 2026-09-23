@@ -2,6 +2,15 @@ name: Watchtower Recovery
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: Recovery action
+        required: true
+        default: diagnose
+        type: choice
+        options:
+          - diagnose
+          - checkpoint
 
 concurrency:
   group: watchtower-recovery
@@ -105,3 +114,17 @@ jobs:
           else
             echo "ocpp_matrix=failed"
           fi
+
+      - name: Run remote checkpoint
+        if: inputs.action == 'checkpoint'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          project=/var/lib/gway/projects/arthexis
+          sudo -n "${project}/.venv/bin/python" -m gway \
+            "${project}/deploy/remote-preflight.rx"
+          sudo -n "${project}/.venv/bin/python" \
+            "${project}/scripts/verify_remote_deployment.py" local
+          "${project}/.venv/bin/python" \
+            "${project}/scripts/verify_remote_deployment.py" public
+          echo "remote_checkpoint=ok"
