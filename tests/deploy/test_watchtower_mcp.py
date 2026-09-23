@@ -72,15 +72,20 @@ def test_remote_recipe_installs_mcp_service_from_stable_project_recipe() -> None
     assert "-- ./deploy/mcp-server.rx" in restart
 
 
-def test_watchtower_mcp_service_wrapper_is_loopback_and_public_origin_aware() -> None:
+def test_watchtower_mcp_service_wrapper_delegates_to_gway_sampler() -> None:
     recipe = MCP_SERVER.read_text(encoding="utf-8")
 
-    assert "require fastmcp>=4,<5" in recipe
-    assert "server serve" in recipe
-    assert "127.0.0.1" in recipe
-    assert "8000" in recipe
-    assert "/mcp" in recipe
-    assert "--public-origin https://remote.arthexis.com" in recipe
+    assert "recipe mcp/server" in recipe
+    assert "--host 127.0.0.1" in recipe
+    assert "--port 8000" in recipe
+    assert "--route /mcp" in recipe
+    assert "--endpoint https://remote.arthexis.com/mcp" in recipe
+    assert "--mcp-host" not in recipe
+    assert "--mcp-port" not in recipe
+    assert "--mcp-public-origin" not in recipe
+    assert "--path /mcp" not in recipe
+    assert "server serve" not in recipe
+    assert "fastmcp" not in recipe.lower()
     assert "0.0.0.0" not in recipe
 
 
@@ -133,3 +138,55 @@ def test_watchtower_remote_uses_durable_gway_cache_root() -> None:
 
     assert "WATCHTOWER_GWAY_CACHE_DIR: /var/lib/gway/cache" in workflow
     assert 'GWAY_CACHE_DIR="\'"${WATCHTOWER_GWAY_CACHE_DIR}"\'"' in workflow
+
+
+def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
+    recipe = Path("deploy/remote-preflight.rx").read_text(encoding="utf-8")
+
+    assert "set env GWAY_CACHE_DIR /var/lib/gway/cache" in recipe
+    assert "security scope show chatgpt-logs" in recipe
+    assert "security token list" in recipe
+    assert "--name mcp-server" in recipe
+    assert "remote serve" in recipe
+    assert "security token create" not in recipe
+
+
+
+def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
+    lines = [
+        line.strip()
+        for line in REMOTE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    targets = {
+        "./deploy/mcp-server.rx": 2,
+        (
+            "remote serve 127.0.0.1 8001 --public-origin "
+            "https://remote.arthexis.com --resource-path /mcp"
+        ): 2,
+    }
+
+    for target, expected_count in targets.items():
+        indexes = [index for index, line in enumerate(lines) if line == target]
+        assert len(indexes) == expected_count
+        assert all(lines[index - 1] == "--" for index in indexes)
+
+    assert "-- ./deploy/mcp-server.rx" not in lines
+
+
+def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -> None:
+    path = Path("deploy/remote-preflight.rx")
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    mcp = lines.index("./deploy/mcp-server.rx")
+    auth = lines.index(
+        "remote serve 127.0.0.1 8001 --public-origin "
+        "https://remote.arthexis.com --resource-path /mcp"
+    )
+
+    assert lines[mcp - 1] == "--"
+    assert lines[auth - 1] == "--"

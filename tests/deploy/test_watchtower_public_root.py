@@ -76,3 +76,16 @@ def test_watchtower_public_exposure_reuses_primary_edge_ipv4_for_remote_dns() ->
     assert "getent ahostsv4 remote.arthexis.com" in workflow
     assert "./deploy/remote-dns.rx" in workflow
     assert "--public-ipv4 " in workflow
+
+
+
+def test_watchtower_remote_provision_failure_keeps_safe_diagnostics() -> None:
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'echo "remote_provision=failed"' in workflow
+    assert "systemctl status gway-mcp-server.service --no-pager" in workflow
+    assert "systemctl status gway-remote-auth.service --no-pager" in workflow
+    assert "journalctl -u gway-mcp-server.service -n 50 --no-pager" in workflow
+    assert "journalctl -u gway-remote-auth.service -n 50 --no-pager" in workflow
