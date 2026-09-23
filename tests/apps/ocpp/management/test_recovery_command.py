@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from io import StringIO
 
 from django.core.management import call_command
@@ -16,6 +17,7 @@ class OcppRecoveryCommandTests(TestCase):
         self.session = transaction(
             self.charger,
             "stale-session",
+            started_at=datetime(2026, 9, 23, 12, tzinfo=timezone.utc),
         )
 
     def test_inspection_is_charger_centric_and_read_only(self) -> None:
