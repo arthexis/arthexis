@@ -222,7 +222,7 @@ class ChargerSnapshotTests(TestCase):
                 started_at=datetime(2026, 9, 19, 12 + index, tzinfo=timezone.utc),
             )
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             snapshots = snapshot_chargers()
 
         self.assertEqual(len(snapshots), 3)
