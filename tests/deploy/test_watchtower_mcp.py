@@ -158,17 +158,18 @@ def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
         for line in REMOTE.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
+    targets = {
+        "./deploy/mcp-server.rx": 2,
+        (
+            "remote serve 127.0.0.1 8001 --public-origin "
+            "https://remote.arthexis.com --resource-path /mcp"
+        ): 2,
+    }
 
-    for target in (
-        "./deploy/mcp-server.rx",
-        "./deploy/mcp-server.rx",
-        "remote serve 127.0.0.1 8001 --public-origin "
-        "https://remote.arthexis.com --resource-path /mcp",
-        "remote serve 127.0.0.1 8001 --public-origin "
-        "https://remote.arthexis.com --resource-path /mcp",
-    ):
-        index = lines.index(target)
-        assert lines[index - 1] == "--"
+    for target, expected_count in targets.items():
+        indexes = [index for index, line in enumerate(lines) if line == target]
+        assert len(indexes) == expected_count
+        assert all(lines[index - 1] == "--" for index in indexes)
 
     assert "-- ./deploy/mcp-server.rx" not in lines
 
