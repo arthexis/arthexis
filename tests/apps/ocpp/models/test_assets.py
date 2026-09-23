@@ -143,7 +143,30 @@ class ChargerModelTests(TestCase):
 
         self.assertEqual(request.await_args.kwargs["action"], "RemoteStopTransaction")
         self.assertEqual(
-            request.await_args.kwargs["payload"], {"transactionId": active.remote_id}
+            request.await_args.kwargs["payload"], {"transactionId": active.pk}
+        )
+
+    @patch(
+        "apps.ocpp.transport.operations.request_explicit_operation",
+        new_callable=AsyncMock,
+    )
+    def test_v201_stop_uses_remote_transaction_identity(self, request) -> None:
+        request.return_value = SimpleNamespace(
+            action="RequestStopTransaction", unique_id="operation-201-stop"
+        )
+        selected = charger("charger-stop-201", station=self.v201)
+        active = transaction(
+            selected,
+            "remote-transaction-201",
+            started_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        )
+
+        async_to_sync(Charger.stop)(selected)
+
+        self.assertEqual(request.await_args.kwargs["action"], "RequestStopTransaction")
+        self.assertEqual(
+            request.await_args.kwargs["payload"],
+            {"transactionId": active.remote_id},
         )
 
     def test_stop_ignores_operator_cleared_open_transactions(self) -> None:
@@ -172,7 +195,7 @@ class ChargerModelTests(TestCase):
 
         self.assertEqual(
             request.await_args.kwargs["payload"],
-            {"transactionId": active.remote_id},
+            {"transactionId": active.pk},
         )
 
     def test_stop_ignores_historical_open_transactions(self) -> None:

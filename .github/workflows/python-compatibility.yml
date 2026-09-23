@@ -28,12 +28,47 @@ jobs:
           cache: pip
       - name: Install test runtime
         run: python -m pip install --requirement requirements.txt
+
       - name: Compile rebuilt source
+        id: compile
+        continue-on-error: true
         run: python -m compileall -q apps arthexis scripts tests manage.py
+
       - name: Django startup check
+        id: django_check
+        continue-on-error: true
         run: python manage.py check --fail-level ERROR
+
       - name: Run complete test suite
+        id: tests
+        continue-on-error: true
         run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
+
+      - name: Require all validation checks
+        if: always()
+        env:
+          COMPILE_OUTCOME: ${{ steps.compile.outcome }}
+          DJANGO_CHECK_OUTCOME: ${{ steps.django_check.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          failed=0
+
+          if [[ "$COMPILE_OUTCOME" != "success" ]]; then
+            echo "::error::Compile rebuilt source: $COMPILE_OUTCOME"
+            failed=1
+          fi
+
+          if [[ "$DJANGO_CHECK_OUTCOME" != "success" ]]; then
+            echo "::error::Django startup check: $DJANGO_CHECK_OUTCOME"
+            failed=1
+          fi
+
+          if [[ "$TEST_OUTCOME" != "success" ]]; then
+            echo "::error::Complete test suite: $TEST_OUTCOME"
+            failed=1
+          fi
+
+          exit "$failed"
 
   compatibility:
     name: python / Python compatibility

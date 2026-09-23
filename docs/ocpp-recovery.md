@@ -66,6 +66,21 @@ domain evidence before deciding whether another command is appropriate.
 These operations remain `RECOVERY_REQUIRED` until reconciliation explicitly
 resolves them.
 
+
+For remote start and remote stop commands, Arthexis performs a bounded periodic
+SQL reconciliation pass. It settles an ambiguous remote start only when a
+matching retained transaction began after the ambiguous attempt, and settles an
+ambiguous remote stop only when the targeted retained transaction is durably
+completed. Missing evidence never means failure and never triggers an automatic
+resend.
+
+A reconciled operation records `reconciled_at`,
+`reconciliation_resolution`, and `reconciliation_basis`. Its
+`response_payload` remains empty, so a state-derived resolution cannot be
+mistaken for the original charger CallResult. `reconciliation_checked_at`
+also records unsuccessful reconciliation passes and is used to rotate bounded
+recovery work fairly.
+
 ### MANUAL
 
 Used for opaque or externally consequential commands such as reset, unlock,

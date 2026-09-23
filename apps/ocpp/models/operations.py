@@ -17,6 +17,11 @@ class ProtocolOperation(models.Model):
         RECONCILE = "reconcile", "Reconcile"
         MANUAL = "manual", "Manual"
 
+    class ReconciliationResolution(models.TextChoices):
+        ACHIEVED = "achieved", "Desired state achieved"
+        NOT_ACHIEVED = "not_achieved", "Desired state not achieved"
+        IRRELEVANT = "irrelevant", "No longer operationally relevant"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         DELIVERING = "delivering", "Delivering"
@@ -53,6 +58,14 @@ class ProtocolOperation(models.Model):
     last_attempt_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    reconciliation_checked_at = models.DateTimeField(null=True, blank=True)
+    reconciled_at = models.DateTimeField(null=True, blank=True)
+    reconciliation_resolution = models.CharField(
+        max_length=24,
+        choices=ReconciliationResolution.choices,
+        blank=True,
+    )
+    reconciliation_basis = models.CharField(max_length=240, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=("charger", "status", "created_at"))]

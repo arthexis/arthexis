@@ -126,4 +126,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ocpp.maintenance.reconcile_meter_energy",
         "schedule": 60,
     },
+    "ocpp-reconcile-session-operations": {
+        "task": "ocpp.maintenance.reconcile_session_operations",
+        "schedule": 60,
+    },
 }
