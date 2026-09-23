@@ -116,13 +116,13 @@ jobs:
       - name: Expose Arthexis publicly through Gway recipe
         shell: bash
         env:
-          ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}
+          ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
         run: |
           set -Eeuo pipefail
           if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
-            echo "PUBLIC_EXPOSURE_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "public_exposure=skipped"
-            exit 0
+            echo "public_exposure=failed"
+            echo "ARTHEXIS_CERTBOT_EMAIL Actions secret is required to converge the public HTTPS surface." >&2
+            exit 1
           fi
 
           public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
