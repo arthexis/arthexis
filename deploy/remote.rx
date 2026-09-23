@@ -12,14 +12,14 @@ service install
 --name mcp-server
 --environment GWAY_CACHE_DIR=[GWAY_CACHE_DIR|/var/lib/gway/cache]
 --
-./deploy/mcp-server.rx
+./mcp-server.rx
 
 service restart
 --system
 --name mcp-server
 --timeout 40
 --
-./deploy/mcp-server.rx
+./mcp-server.rx
 
 # remote.serve carries the built-in stable service identity "remote-auth".
 service install
