@@ -132,9 +132,10 @@ The production MCP wrapper deliberately delegates to Gway's maintained
 `mcp/server` sampler and supplies only deployment context:
 
 ```text
-127.0.0.1:8000
-/mcp
-https://remote.arthexis.com
+host: 127.0.0.1
+port: 8000
+route: /mcp
+endpoint: https://remote.arthexis.com/mcp
 ```
 
 Arthexis does not copy or own the FastMCP companion implementation.
