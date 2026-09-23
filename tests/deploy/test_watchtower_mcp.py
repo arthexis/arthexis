@@ -190,3 +190,12 @@ def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -
 
     assert lines[mcp - 1] == "--"
     assert lines[auth - 1] == "--"
+
+
+
+def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() -> None:
+    for path in (Path("deploy/remote.rx"), Path("deploy/remote-preflight.rx")):
+        recipe = path.read_text(encoding="utf-8")
+
+        assert "./mcp-server.rx" in recipe
+        assert "./deploy/mcp-server.rx" not in recipe
