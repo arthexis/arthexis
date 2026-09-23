@@ -182,14 +182,20 @@ def record_v201_transaction_event(
     if latest_activity != previous_activity:
         transaction.last_activity_at = latest_activity
         update_fields.append("last_activity_at")
-    if (
-        live_evidence
-        and event_type != "Ended"
-        and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
-        and occurred_at > previous_activity
-    ):
-        transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
-        update_fields.append("recovery_state")
+    if live_evidence and event_type != "Ended":
+        if (
+            transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+            and occurred_at > previous_activity
+        ):
+            transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+            update_fields.append("recovery_state")
+        elif (
+            transaction.recovery_state == OcppTransaction.RecoveryState.CLEARED
+            and transaction.recovery_cleared_at is not None
+            and occurred_at > transaction.recovery_cleared_at
+        ):
+            transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+            update_fields.append("recovery_state")
     if (
         not live_evidence
         and transaction.stopped_at is None
@@ -373,6 +379,42 @@ def _parse_timestamp(value: object | None) -> datetime:
         raise ValueError("Timestamp is invalid") from error
 
 
+@db_transaction.atomic
+def clear_stale_charger_state(
+    charger: Charger,
+    *,
+    reason: str = "",
+    cleared_at: datetime | None = None,
+) -> tuple[int, ...]:
+    """Remove stale live sessions from current charger state without rewriting history."""
+    decision_at = cleared_at or timezone.now()
+    selected = list(
+        OcppTransaction.objects.select_for_update()
+        .filter(
+            charger=charger,
+            historical=False,
+            stopped_at__isnull=True,
+            recovery_state__in=(
+                OcppTransaction.RecoveryState.ACTIVE,
+                OcppTransaction.RecoveryState.UNRESOLVED,
+            ),
+        )
+        .order_by("started_at", "pk")
+    )
+    for transaction in selected:
+        transaction.recovery_state = OcppTransaction.RecoveryState.CLEARED
+        transaction.recovery_cleared_at = decision_at
+        transaction.recovery_clear_reason = reason[:240]
+        transaction.save(
+            update_fields=(
+                "recovery_state",
+                "recovery_cleared_at",
+                "recovery_clear_reason",
+            )
+        )
+    return tuple(transaction.pk for transaction in selected)
+
+
 def mark_transaction_unresolved(
     transaction: OcppTransaction,
     *,
@@ -404,12 +446,17 @@ def _touch_transaction_activity(
         return
     update_fields = ["last_activity_at"]
     transaction.last_activity_at = occurred_at
-    if (
-        not transaction.historical
-        and transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
-    ):
-        transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
-        update_fields.append("recovery_state")
+    if not transaction.historical:
+        if transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED:
+            transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+            update_fields.append("recovery_state")
+        elif (
+            transaction.recovery_state == OcppTransaction.RecoveryState.CLEARED
+            and transaction.recovery_cleared_at is not None
+            and occurred_at > transaction.recovery_cleared_at
+        ):
+            transaction.recovery_state = OcppTransaction.RecoveryState.ACTIVE
+            update_fields.append("recovery_state")
     transaction.save(update_fields=tuple(update_fields))
 
 
