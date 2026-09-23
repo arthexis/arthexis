@@ -64,3 +64,15 @@ class WatchtowerWorkflowTests(TestCase):
         ):
             with self.subTest(status=status):
                 self.assertIn(status, public_workflow)
+
+
+
+def test_watchtower_public_exposure_reuses_primary_edge_ipv4_for_remote_dns() -> None:
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "getent ahostsv4 arthexis.com" in workflow
+    assert "getent ahostsv4 remote.arthexis.com" in workflow
+    assert "./deploy/remote-dns.rx" in workflow
+    assert "--public-ipv4 " in workflow

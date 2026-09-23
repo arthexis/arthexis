@@ -1,0 +1,8 @@
+# One-time DNS bootstrap for Watchtower remote access.
+# Recurring deployments verify this record instead of recreating it.
+
+dns create remote.arthexis.com
+--type A
+--value [public_ipv4]
+--backend [dns_backend|godaddy]
+--zone arthexis.com

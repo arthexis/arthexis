@@ -1,0 +1,8 @@
+# Watchtower MCP service entrypoint.
+# Gway owns the MCP implementation; Arthexis owns only production deployment values.
+require fastmcp>=4,<5
+server serve
+127.0.0.1
+8000
+/mcp
+--public-origin https://remote.arthexis.com

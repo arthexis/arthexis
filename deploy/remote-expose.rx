@@ -1,0 +1,22 @@
+# Recurring public TLS exposure for Watchtower remote access.
+# DNS creation is a one-time bootstrap in deploy/remote-dns.rx.
+
+dns ready remote.arthexis.com
+--type A
+--value [public_ipv4]
+--backend [dns_backend|godaddy]
+--zone arthexis.com
+
+repeat
+--until true
+--interval 10
+--max 60
+
+recipe web/remote
+--site remote.arthexis.com
+--domain remote.arthexis.com
+--mcp-host 127.0.0.1
+--mcp-port 8000
+--auth-host 127.0.0.1
+--auth-port 8001
+--email [email]
