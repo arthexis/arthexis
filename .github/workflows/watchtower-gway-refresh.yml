@@ -1,0 +1,54 @@
+name: Watchtower Gway Refresh
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: watchtower-gway-refresh
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  refresh:
+    name: Watchtower Gway Refresh
+    if: github.repository == 'arthexis/arthexis'
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 5
+    steps:
+      - name: Compare deployed Gway with main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          expected="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test -n "${expected}"
+
+          deployed="$(
+            sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python - <<'PY' 2>/dev/null || true
+import importlib.metadata
+import json
+
+try:
+    direct = importlib.metadata.distribution("gway").read_text("direct_url.json")
+    data = json.loads(direct or "{}")
+    print(data.get("vcs_info", {}).get("commit_id", ""))
+except Exception:
+    pass
+PY
+          )"
+
+          if [[ -n "${deployed}" && "${deployed}" == "${expected}" ]]; then
+            echo "gway_refresh=up_to_date"
+            exit 0
+          fi
+
+          curl --fail --silent --show-error             --request POST             --header "Accept: application/vnd.github+json"             --header "Authorization: Bearer ${GH_TOKEN}"             --header "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/watchtower-deploy.yml/dispatches"             --data '{"ref":"main"}'
+
+          echo "gway_refresh=deploy_dispatched"
