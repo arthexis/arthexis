@@ -6,7 +6,13 @@ from channels.exceptions import ChannelFull
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.ocpp.domain.operations import create_operation
+from apps.ocpp.domain.operations import (
+    claim_operation,
+    create_operation,
+    prepare_reconnect_operations,
+    require_operation_recovery,
+    settle_operation_attempt,
+)
 from apps.ocpp.models import ChargerConnection, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.errors import (
@@ -460,15 +466,18 @@ class ReconnectOutboundRecoveryTests(TestCase):
             status=ProtocolOperation.Status.DELIVERING,
         )
         safe.attempt_count = 1
+        safe.delivery_owner = "old.channel"
         reconcile.attempt_count = 1
-        safe.save(update_fields=("attempt_count",))
-        reconcile.save(update_fields=("attempt_count",))
+        reconcile.delivery_owner = "old.channel"
+        safe.save(update_fields=("attempt_count", "delivery_owner"))
+        reconcile.save(update_fields=("attempt_count", "delivery_owner"))
         sender = CountingSender()
 
         async_to_sync(recover_connected_operations)(
             charger=self.charger,
             sender=sender,
             version=ProtocolVersion.OCPP_16,
+            delivery_owner="new.channel",
         )
 
         safe.refresh_from_db()
@@ -522,3 +531,149 @@ class ReconnectOutboundRecoveryTests(TestCase):
         self.assertEqual(sender.calls, 0)
         self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
         self.assertEqual(operation.attempt_count, 0)
+
+
+
+class OutboundRaceHardeningTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("race-hardening")
+
+    def tearDown(self) -> None:
+        active_connections.unregister(self.charger)
+
+    def test_old_disconnect_does_not_unregister_new_connection_sender(self) -> None:
+        old_sender = CountingSender()
+        new_sender = CountingSender()
+
+        async_to_sync(register_connection)(
+            charger=self.charger,
+            sender=old_sender,
+            channel_name="old.channel",
+            version=ProtocolVersion.OCPP_16,
+        )
+        async_to_sync(register_connection)(
+            charger=self.charger,
+            sender=new_sender,
+            channel_name="new.channel",
+            version=ProtocolVersion.OCPP_16,
+        )
+        async_to_sync(unregister_connection)(
+            charger=self.charger,
+            channel_name="old.channel",
+        )
+
+        self.assertIs(active_connections.get(self.charger), new_sender)
+        persisted = ChargerConnection.objects.get(charger=self.charger)
+        self.assertEqual(persisted.channel_name, "new.channel")
+
+    def test_same_owner_recovery_does_not_abandon_its_inflight_attempt(self) -> None:
+        operation = create_operation(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action="GetConfiguration",
+            request_payload={},
+        )
+        claimed = claim_operation(operation, delivery_owner="current.channel")
+        self.assertIsNotNone(claimed)
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+            delivery_owner="current.channel",
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 0)
+        self.assertEqual(operation.status, ProtocolOperation.Status.DELIVERING)
+        self.assertEqual(operation.delivery_owner, "current.channel")
+        self.assertEqual(operation.attempt_count, 1)
+
+    def test_new_owner_supersedes_old_safe_attempt_and_late_outcome_is_ignored(
+        self,
+    ) -> None:
+        operation = create_operation(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action="GetConfiguration",
+            request_payload={},
+        )
+        first = claim_operation(operation, delivery_owner="old.channel")
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(first.attempt_token)
+        first_token = first.attempt_token
+
+        pending = prepare_reconnect_operations(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            delivery_owner="new.channel",
+        )
+        self.assertEqual(pending, (operation.pk,))
+
+        operation.refresh_from_db()
+        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
+        second = claim_operation(operation, delivery_owner="new.channel")
+        self.assertIsNotNone(second)
+        self.assertIsNotNone(second.attempt_token)
+        second_token = second.attempt_token
+        self.assertNotEqual(first_token, second_token)
+        self.assertEqual(second.attempt_count, 2)
+
+        settle_operation_attempt(
+            first,
+            attempt_token=first_token,
+            response_payload={"status": "old-success"},
+        )
+        require_operation_recovery(
+            first,
+            attempt_token=first_token,
+            description="old timeout",
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(operation.status, ProtocolOperation.Status.DELIVERING)
+        self.assertEqual(operation.attempt_token, second_token)
+        self.assertEqual(operation.delivery_owner, "new.channel")
+        self.assertIsNone(operation.response_payload)
+
+        settle_operation_attempt(
+            second,
+            attempt_token=second_token,
+            response_payload={"status": "new-success"},
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(operation.response_payload, {"status": "new-success"})
+        self.assertEqual(operation.attempt_count, 2)
+
+    def test_new_owner_does_not_resend_reconcile_attempt_after_takeover(self) -> None:
+        operation = create_operation(
+            charger=self.charger,
+            version=ProtocolVersion.OCPP_16,
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action="RemoteStopTransaction",
+            request_payload={},
+        )
+        first = claim_operation(operation, delivery_owner="old.channel")
+        self.assertIsNotNone(first)
+        sender = CountingSender()
+
+        async_to_sync(recover_connected_operations)(
+            charger=self.charger,
+            sender=sender,
+            version=ProtocolVersion.OCPP_16,
+            delivery_owner="new.channel",
+        )
+
+        operation.refresh_from_db()
+        self.assertEqual(sender.calls, 0)
+        self.assertEqual(
+            operation.status,
+            ProtocolOperation.Status.RECOVERY_REQUIRED,
+        )
+        self.assertEqual(operation.attempt_count, 1)
+        self.assertIn("Previous consumer ended", operation.last_delivery_error)
