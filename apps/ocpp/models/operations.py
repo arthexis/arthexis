@@ -46,6 +46,8 @@ class ProtocolOperation(models.Model):
     error_code = models.CharField(max_length=80, blank=True)
     error_description = models.CharField(max_length=240, blank=True)
     last_delivery_error = models.CharField(max_length=240, blank=True)
+    delivery_owner = models.CharField(max_length=255, blank=True)
+    attempt_token = models.UUIDField(null=True, blank=True, editable=False)
     attempt_count = models.PositiveIntegerField(default=0)
     first_attempt_at = models.DateTimeField(null=True, blank=True)
     last_attempt_at = models.DateTimeField(null=True, blank=True)
