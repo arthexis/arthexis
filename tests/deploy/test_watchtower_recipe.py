@@ -1,11 +1,20 @@
 from pathlib import Path
 
-from gway.recipe import load_recipe
 
-
-def _commands(path: str) -> list[str]:
-    commands, _ = load_recipe(Path(path))
-    return [" ".join(str(token) for token in command["tokens"]) for command in commands]
+def _blocks(path: str) -> list[str]:
+    blocks = []
+    current = []
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            if current:
+                blocks.append(" ".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append(" ".join(current))
+    return blocks
 
 
 def test_watchtower_recipe_is_top_level_public_composition() -> None:
@@ -46,8 +55,8 @@ def test_remote_service_recipe_uses_loopback_and_no_production_credentials() -> 
 
 
 def test_remote_dns_bootstrap_is_separate_from_recurring_exposure() -> None:
-    dns_commands = _commands("deploy/remote-dns.rx")
-    expose_commands = _commands("deploy/remote-expose.rx")
+    dns_commands = _blocks("deploy/remote-dns.rx")
+    expose_commands = _blocks("deploy/remote-expose.rx")
 
     assert len(dns_commands) == 1
     assert dns_commands[0].startswith("dns create remote.arthexis.com")
