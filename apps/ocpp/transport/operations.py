@@ -14,6 +14,7 @@ from apps.ocpp.domain.operations import (
     prepare_reconnect_operations,
     require_operation_recovery,
     retain_pending_operation,
+    settle_operation_attempt,
 )
 from apps.ocpp.models import Charger, ChargerConnection, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
@@ -44,16 +45,22 @@ class ActiveConnections:
     """In-process map of explicit live emitters, keyed by charger identity."""
 
     def __init__(self) -> None:
-        self._senders: dict[int, Sender] = {}
+        self._senders: dict[int, tuple[str, Sender]] = {}
 
-    def register(self, charger: Charger, sender: Sender) -> None:
-        self._senders[charger.pk] = sender
+    def register(self, charger: Charger, sender: Sender, *, owner: str) -> None:
+        self._senders[charger.pk] = (owner, sender)
 
-    def unregister(self, charger: Charger) -> None:
+    def unregister(self, charger: Charger, *, owner: str | None = None) -> None:
+        current = self._senders.get(charger.pk)
+        if current is None:
+            return
+        if owner is not None and current[0] != owner:
+            return
         self._senders.pop(charger.pk, None)
 
     def get(self, charger: Charger) -> Sender | None:
-        return self._senders.get(charger.pk)
+        current = self._senders.get(charger.pk)
+        return current[1] if current is not None else None
 
 
 active_connections = ActiveConnections()
@@ -75,13 +82,13 @@ async def register_connection(
     version: ProtocolVersion,
 ) -> None:
     """Persist one authenticated consumer connection and retain its local sender."""
-    active_connections.register(charger, sender)
+    active_connections.register(charger, sender, owner=channel_name)
     await sync_to_async(_record_connection)(charger, channel_name, version)
 
 
 async def unregister_connection(*, charger: Charger, channel_name: str) -> None:
     """Clear a consumer presence record only when it still owns the channel."""
-    active_connections.unregister(charger)
+    active_connections.unregister(charger, owner=channel_name)
     await sync_to_async(_clear_connection)(charger, channel_name)
 
 
@@ -181,6 +188,7 @@ async def deliver_queued_operation(
     version: ProtocolVersion,
     operation_id: int,
     timeout: float,
+    delivery_owner: str = "",
 ) -> None:
     """Deliver one command-queued operation from its owning consumer."""
     operation = await sync_to_async(_load_operation)(operation_id, charger)
@@ -195,7 +203,10 @@ async def deliver_queued_operation(
             "Queued operation version does not match this connection.",
         )
         return
-    claimed = await sync_to_async(claim_operation)(operation)
+    claimed = await sync_to_async(claim_operation)(
+        operation,
+        delivery_owner=delivery_owner,
+    )
     if claimed is None:
         return
     await _send_operation(claimed, sender, timeout)
@@ -271,7 +282,10 @@ async def _emit_operation(
             operation,
             description="Charger is not connected.",
         )
-    claimed = await sync_to_async(claim_operation)(operation)
+    claimed = await sync_to_async(claim_operation)(
+        operation,
+        delivery_owner="in-process",
+    )
     if claimed is None:
         return operation
     return await _send_operation(claimed, sender, timeout)
@@ -289,25 +303,49 @@ async def _send_operation(
             unique_id=str(operation.unique_id),
         )
     except OutboundCallError as error:
-        return await _finish_error(operation, error.code, error.description)
+        return await _finish_error(
+            operation,
+            error.code,
+            error.description,
+            attempt_token=operation.attempt_token,
+        )
     except OutboundCallTimeout as error:
         return await sync_to_async(require_operation_recovery)(
             operation,
             description=str(error),
+            attempt_token=operation.attempt_token,
         )
     except ConnectionClosed as error:
         return await sync_to_async(require_operation_recovery)(
             operation,
             description=str(error),
+            attempt_token=operation.attempt_token,
         )
-    return await sync_to_async(complete_operation)(operation, response_payload=response)
+    if operation.attempt_token is None:
+        return operation
+    return await sync_to_async(settle_operation_attempt)(
+        operation,
+        attempt_token=operation.attempt_token,
+        response_payload=response,
+    )
 
 
 async def _finish_error(
-    operation: ProtocolOperation, code: str, description: str
+    operation: ProtocolOperation,
+    code: str,
+    description: str,
+    *,
+    attempt_token=None,
 ) -> ProtocolOperation:
-    return await sync_to_async(complete_operation)(
+    if attempt_token is None:
+        return await sync_to_async(complete_operation)(
+            operation,
+            error_code=code,
+            error_description=description,
+        )
+    return await sync_to_async(settle_operation_attempt)(
         operation,
+        attempt_token=attempt_token,
         error_code=code,
         error_description=description,
     )
@@ -332,11 +370,13 @@ async def recover_connected_operations(
     sender: Sender,
     version: ProtocolVersion,
     timeout: float = 30,
+    delivery_owner: str = "",
 ) -> None:
     """Recover durable outbound work through a freshly owning consumer."""
     operation_ids = await sync_to_async(prepare_reconnect_operations)(
         charger=charger,
         version=version,
+        delivery_owner=delivery_owner,
     )
     for operation_id in operation_ids:
         await deliver_queued_operation(
@@ -345,4 +385,5 @@ async def recover_connected_operations(
             version=version,
             operation_id=operation_id,
             timeout=timeout,
+            delivery_owner=delivery_owner,
         )
