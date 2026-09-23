@@ -295,13 +295,10 @@ def reconcile_session_operations(*, limit: int = 100) -> int:
     )
     resolved = 0
     for operation_id in operation_ids:
-        before = ProtocolOperation.objects.only("status").get(pk=operation_id).status
-        current = reconcile_session_operation(
-            ProtocolOperation.objects.only("pk").get(pk=operation_id)
-        )
+        current = reconcile_session_operation(ProtocolOperation(pk=operation_id))
         if (
-            before == ProtocolOperation.Status.RECOVERY_REQUIRED
-            and current.status == ProtocolOperation.Status.COMPLETED
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
         ):
             resolved += 1
     return resolved
