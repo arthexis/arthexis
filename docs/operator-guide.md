@@ -20,12 +20,32 @@ A successful response is:
 
 OCPP application routes are served beneath `/ocpp/`.
 
-Outbound charger commands are durable. If a process or live WebSocket is lost,
-operators should use the persisted operation state rather than assuming a
-command either succeeded or failed. See the
-[OCPP recovery architecture](ocpp-recovery.md) for the meanings of PENDING,
-DELIVERING, RECOVERY_REQUIRED, COMPLETED, and ERRORED and for automatic-retry
-boundaries.
+Outbound charger commands are durable. Protocol ambiguity is retained for audit,
+but field recovery is charger/session-centric rather than operation-centric.
+
+Inspect the current derived charger state with:
+
+```text
+python manage.py ocpp_recovery --charger CP-0042
+```
+
+If the physical charger is known to be idle but Arthexis is still stuck in a
+charging or unresolved state, clear the stale current interpretation with:
+
+```text
+python manage.py ocpp_recovery \
+    --charger CP-0042 \
+    --clear-stale-state \
+    --reason "verified idle at charger"
+```
+
+This does not fabricate a StopTransaction, invent a stop timestamp, rewrite the
+raw connector evidence, or resend ambiguous protocol commands. The affected
+session remains retained as operator-cleared forensic history. Older buffered
+meter traffic cannot reactivate it; genuinely newer charger evidence may.
+
+See the [OCPP recovery architecture](ocpp-recovery.md) for durable protocol
+operation lifecycle and automatic-retry boundaries.
 
 ## Documentation navigation
 
