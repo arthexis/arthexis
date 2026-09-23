@@ -32,6 +32,14 @@ class OcppRecoveryCommandTests(TestCase):
         self.assertIn("State: charging", text)
         self.assertIn("Connectors: 1:Charging", text)
         self.assertIn("Current session: stale-session", text)
+        self.assertIn("Why: active session stale-session", text)
+        self.assertIn(
+            "Waiting for: transaction end or newer charger evidence",
+            text,
+        )
+        self.assertIn("Last seen:", text)
+        self.assertIn("Presence lease expires:", text)
+        self.assertIn("Session last evidence:", text)
 
         self.session.refresh_from_db()
         self.assertEqual(
@@ -97,3 +105,10 @@ class OcppRecoveryCommandTests(TestCase):
         self.assertEqual(payload["last_cleared_transaction_id"], "stale-session")
         self.assertEqual(payload["last_recovery_clear_reason"], "field reset")
         self.assertEqual(payload["cleared_session_count"], 1)
+        self.assertEqual(
+            payload["state_reason"],
+            "live charger presence with no active or unresolved session",
+        )
+        self.assertIsNone(payload["waiting_for"])
+        self.assertIsNotNone(payload["connection_last_seen_at"])
+        self.assertIsNotNone(payload["connection_lease_expires_at"])
