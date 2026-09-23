@@ -120,9 +120,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
-            echo "PUBLIC_EXPOSURE_ENABLED=false" >> "${GITHUB_ENV}"
-            echo "public_exposure=skipped"
-            exit 0
+            echo "public_exposure=failed"
+            echo "ARTHEXIS_CERTBOT_EMAIL repository variable is required to converge the public HTTPS surface." >&2
+            exit 1
           fi
 
           public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
