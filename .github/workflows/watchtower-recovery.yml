@@ -134,6 +134,6 @@ jobs:
             "${project}/deploy/remote-preflight.rx"
           sudo -n "${project}/.venv/bin/python" \
             "${project}/scripts/verify_remote_deployment.py" local
-          "${project}/.venv/bin/python" \
+          sudo -n "${project}/.venv/bin/python" \
             "${project}/scripts/verify_remote_deployment.py" public
           echo "remote_checkpoint=ok"
