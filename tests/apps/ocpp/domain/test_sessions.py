@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from django.test import TestCase
 
 from apps.ocpp.domain.sessions import (
+    clear_stale_charger_state,
     reconcile_connector_status,
     record_meter_values,
     record_v201_transaction_event,
@@ -415,4 +416,120 @@ class TransactionRecoveryLifecycleTests(TestCase):
         self.assertEqual(
             selected.recovery_state,
             OcppTransaction.RecoveryState.ACTIVE,
+        )
+
+
+    def test_clear_stale_charger_state_removes_live_sessions_without_completing_them(self) -> None:
+        active = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="active",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+        unresolved = start_transaction(
+            charger=self.charger,
+            connector_id=2,
+            id_tag="unresolved",
+            account=None,
+            meter_start=200,
+            timestamp="2026-09-22T10:05:00Z",
+        )
+        unresolved.recovery_state = OcppTransaction.RecoveryState.UNRESOLVED
+        unresolved.save(update_fields=("recovery_state",))
+        cleared_at = datetime(2026, 9, 22, 11, tzinfo=timezone.utc)
+
+        cleared_ids = clear_stale_charger_state(
+            self.charger,
+            reason="charger physically idle",
+            cleared_at=cleared_at,
+        )
+
+        self.assertEqual(cleared_ids, (active.pk, unresolved.pk))
+        for selected in (active, unresolved):
+            selected.refresh_from_db()
+            self.assertEqual(
+                selected.recovery_state,
+                OcppTransaction.RecoveryState.CLEARED,
+            )
+            self.assertIsNone(selected.stopped_at)
+            self.assertEqual(selected.recovery_cleared_at, cleared_at)
+            self.assertEqual(
+                selected.recovery_clear_reason,
+                "charger physically idle",
+            )
+
+        self.assertFalse(self.charger.transactions.active().exists())
+        self.assertFalse(self.charger.transactions.unresolved().exists())
+        self.assertEqual(self.charger.transactions.cleared().count(), 2)
+
+    def test_buffered_meter_before_operator_clear_does_not_reactivate_session(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+        clear_stale_charger_state(
+            self.charger,
+            cleared_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+        )
+
+        record_meter_values(
+            transaction_id=selected.pk,
+            charger=self.charger,
+            meter_values=[
+                {
+                    "timestamp": "2026-09-22T10:30:00Z",
+                    "sampledValue": [{"value": "125"}],
+                }
+            ],
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.CLEARED,
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc),
+        )
+
+    def test_fresh_meter_after_operator_clear_can_reactivate_session(self) -> None:
+        selected = start_transaction(
+            charger=self.charger,
+            connector_id=1,
+            id_tag="card",
+            account=None,
+            meter_start=100,
+            timestamp="2026-09-22T10:00:00Z",
+        )
+        clear_stale_charger_state(
+            self.charger,
+            cleared_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+        )
+
+        record_meter_values(
+            transaction_id=selected.pk,
+            charger=self.charger,
+            meter_values=[
+                {
+                    "timestamp": "2026-09-22T11:05:00Z",
+                    "sampledValue": [{"value": "130"}],
+                }
+            ],
+        )
+        selected.refresh_from_db()
+
+        self.assertEqual(
+            selected.recovery_state,
+            OcppTransaction.RecoveryState.ACTIVE,
+        )
+        self.assertEqual(
+            selected.last_activity_at,
+            datetime(2026, 9, 22, 11, 5, tzinfo=timezone.utc),
         )

@@ -219,6 +219,7 @@ class Charger(models.Model):
         active = charger.transactions.filter(
             stopped_at__isnull=True,
             historical=False,
+            recovery_state__in=("active", "unresolved"),
         )
         if transaction:
             selected = active.filter(remote_id=transaction).first()
