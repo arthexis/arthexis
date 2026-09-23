@@ -4,7 +4,7 @@ from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
 
-from apps.ocpp.models import OcppTransaction
+from apps.ocpp.models import OcppTransaction, ProtocolOperation
 from tests.apps.ocpp.builders import charger, connection, connector, transaction
 
 
@@ -19,6 +19,17 @@ class OcppRecoveryCommandTests(TestCase):
         )
 
     def test_inspection_is_charger_centric_and_read_only(self) -> None:
+        ProtocolOperation.objects.create(
+            charger=self.charger,
+            version="ocpp1.6",
+            direction=ProtocolOperation.Direction.CSMS_TO_CHARGE_POINT,
+            action="RemoteStopTransaction",
+            request_payload={"transactionId": "stale-session"},
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            attempt_count=1,
+            last_delivery_error="connection lost before result",
+        )
         output = StringIO()
 
         call_command(
@@ -32,6 +43,10 @@ class OcppRecoveryCommandTests(TestCase):
         self.assertIn("State: charging", text)
         self.assertIn("Connectors: 1:Charging", text)
         self.assertIn("Current session: stale-session", text)
+        self.assertIn("Ambiguous outbound operations: 1", text)
+        self.assertIn("RemoteStopTransaction [reconcile] attempts=1", text)
+        self.assertIn("connection lost before result", text)
+        self.assertNotIn("transactionId", text)
         self.assertIn("Why: active session stale-session", text)
         self.assertIn(
             "Waiting for: transaction end or newer charger evidence",
