@@ -163,7 +163,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py public
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py public
           echo "remote_public=ok"
 
       - name: Verify public Markdown root
