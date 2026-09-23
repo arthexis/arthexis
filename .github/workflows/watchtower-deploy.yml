@@ -118,6 +118,9 @@ jobs:
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}
+          ACTIONS_GODADDY_PAT: ${{ secrets.GODADDY_PAT }}
+          ACTIONS_GODADDY_API_KEY: ${{ secrets.GODADDY_API_KEY || vars.GODADDY_API_KEY }}
+          ACTIONS_GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET }}
         run: |
           set -Eeuo pipefail
           if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
@@ -125,12 +128,54 @@ jobs:
             echo "public_exposure=skipped"
             exit 0
           fi
+
           public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
           test -n "${public_ipv4}"
-          if ! getent ahostsv4 remote.arthexis.com >/dev/null 2>&1; then
-            sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' >/dev/null 2>&1
+
+          godaddy_pat="${ACTIONS_GODADDY_PAT:-${GODADDY_PAT:-}}"
+          godaddy_key="${ACTIONS_GODADDY_API_KEY:-${GODADDY_API_KEY:-}}"
+          godaddy_secret="${ACTIONS_GODADDY_API_SECRET:-${GODADDY_API_SECRET:-}}"
+
+          if [[ -z "${godaddy_pat}" && ( -z "${godaddy_key}" || -z "${godaddy_secret}" ) ]]; then
+            echo "dns_credentials=missing"
+            exit 1
           fi
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' >/dev/null 2>&1
+
+          if ! getent ahostsv4 remote.arthexis.com >/dev/null 2>&1; then
+            dns_errors="$(mktemp)"
+            chmod 600 "${dns_errors}"
+            if ! sudo -n env \
+              GODADDY_PAT="${godaddy_pat}" \
+              GODADDY_API_KEY="${godaddy_key}" \
+              GODADDY_API_SECRET="${godaddy_secret}" \
+              sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' \
+              >/dev/null 2>"${dns_errors}"; then
+              echo "dns_bootstrap=failed"
+              tail -n 20 "${dns_errors}" || true
+              rm -f "${dns_errors}"
+              exit 1
+            fi
+            rm -f "${dns_errors}"
+            echo "dns_bootstrap=ok"
+          else
+            echo "dns_bootstrap=existing"
+          fi
+
+          exposure_errors="$(mktemp)"
+          chmod 600 "${exposure_errors}"
+          if ! sudo -n env \
+            GODADDY_PAT="${godaddy_pat}" \
+            GODADDY_API_KEY="${godaddy_key}" \
+            GODADDY_API_SECRET="${godaddy_secret}" \
+            sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' \
+            >/dev/null 2>"${exposure_errors}"; then
+            echo "public_exposure=failed"
+            tail -n 30 "${exposure_errors}" || true
+            rm -f "${exposure_errors}"
+            exit 1
+          fi
+          rm -f "${exposure_errors}"
+
           echo "PUBLIC_EXPOSURE_ENABLED=true" >> "${GITHUB_ENV}"
           echo "public_exposure=ok"
 

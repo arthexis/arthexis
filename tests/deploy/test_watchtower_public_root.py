@@ -89,3 +89,39 @@ def test_watchtower_remote_provision_failure_keeps_safe_diagnostics() -> None:
     assert "systemctl status gway-remote-auth.service --no-pager" in workflow
     assert "journalctl -u gway-mcp-server.service -n 50 --no-pager" in workflow
     assert "journalctl -u gway-remote-auth.service -n 50 --no-pager" in workflow
+
+
+
+def test_watchtower_dns_bootstrap_preserves_legacy_godaddy_credentials() -> None:
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ACTIONS_GODADDY_PAT: ${{ secrets.GODADDY_PAT }}" in workflow
+    assert (
+        "ACTIONS_GODADDY_API_KEY: "
+        "${{ secrets.GODADDY_API_KEY || vars.GODADDY_API_KEY }}"
+    ) in workflow
+    assert "ACTIONS_GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET }}" in workflow
+    assert 'godaddy_pat="${ACTIONS_GODADDY_PAT:-${GODADDY_PAT:-}}"' in workflow
+    assert 'godaddy_key="${ACTIONS_GODADDY_API_KEY:-${GODADDY_API_KEY:-}}"' in workflow
+    assert (
+        'godaddy_secret="${ACTIONS_GODADDY_API_SECRET:-${GODADDY_API_SECRET:-}}"'
+        in workflow
+    )
+    assert 'GODADDY_PAT="${godaddy_pat}"' in workflow
+    assert 'GODADDY_API_KEY="${godaddy_key}"' in workflow
+    assert 'GODADDY_API_SECRET="${godaddy_secret}"' in workflow
+
+
+def test_watchtower_dns_and_exposure_failures_keep_bounded_diagnostics() -> None:
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'echo "dns_bootstrap=failed"' in workflow
+    assert 'tail -n 20 "${dns_errors}"' in workflow
+    assert 'echo "public_exposure=failed"' in workflow
+    assert 'tail -n 30 "${exposure_errors}"' in workflow
+    assert 'echo "dns_credentials=missing"' in workflow
+    assert "set -x" not in workflow
