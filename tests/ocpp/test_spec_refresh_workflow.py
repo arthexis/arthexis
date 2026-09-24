@@ -18,7 +18,7 @@ def test_ocpp_spec_refresh_does_not_publish_official_archives() -> None:
         encoding="utf-8"
     )
 
-    assert "ocpp-spec-refresh.py" in workflow
+    assert "ocpp_spec_refresh.py" in workflow
     assert "Upload compact refresh evidence" in workflow
     assert "*.zip" not in workflow
     assert "archive.zip" not in workflow
