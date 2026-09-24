@@ -76,7 +76,6 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"deploy={'false' if version_only else 'true'}\n")
-
           print("version_only=" + ("true" if version_only else "false"))
           PY
 
@@ -280,195 +279,6 @@ jobs:
           sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
           echo "ocpp_matrix=ok"
 
-)
-              if pattern.search(old) and pattern.search(new):
-                  old_normalized = pattern.sub(r'\1<VERSION>\2', old, count=1)
-                  new_normalized = pattern.sub(r'\1<VERSION>\2', new, count=1)
-                  version_only = old != new and old_normalized == new_normalized
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"deploy={'false' if version_only else 'true'}\n")
-
-          print("version_only=" + ("true" if version_only else "false"))
-          PY
-
-  deploy:
-    name: Watchtower Deploy
-    needs: classify
-    if: >-
-      needs.classify.outputs.deploy == 'true' &&
-      github.repository == 'arthexis/arthexis' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    timeout-minutes: 45
-    env:
-      ARTHEXIS_DATA_DIR: /var/lib/arthexis
-      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
-      PYTHONDONTWRITEBYTECODE: '1'
-    steps:
-      - name: Clean privileged Python bytecode from runner workspace
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          if [[ -d "${GITHUB_WORKSPACE}" ]]; then
-            sudo -n find "${GITHUB_WORKSPACE}" -type d -name __pycache__ -prune -exec rm -rf {} +
-            sudo -n find "${GITHUB_WORKSPACE}" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
-          fi
-
-      - name: Checkout trusted main revision
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          ref: ${{ github.sha }}
-          clean: true
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Verify trusted invocation
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
-          test "${GITHUB_REF}" = "refs/heads/main"
-          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
-          test -n "${remote_main}"
-          test "${remote_main}" = "${GITHUB_SHA}"
-          sudo -n true
-
-      - name: Install exact canonical Gway
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
-          test -n "${gway_sha}"
-          python3 -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}" >/dev/null 2>&1
-          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
-          echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
-
-      - name: Deploy Arthexis through Gway system scope
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
-          sudo -n test -f /var/lib/gway/projects/arthexis/pyproject.toml
-          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
-
-      - name: Prepare persistent Arthexis runtime
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
-
-      - name: Install and start Arthexis systemd service
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
-          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
-          echo "service=active"
-
-      - name: Provision Watchtower remote policy and services
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n install -d -m 0700 -o root -g root /var/lib/gway/cache
-          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
-            echo "remote_provision=failed"
-            sudo -n systemctl status gway-mcp-server.service --no-pager || true
-            sudo -n systemctl status gway-remote-auth.service --no-pager || true
-            sudo -n journalctl -u gway-mcp-server.service -n 50 --no-pager || true
-            sudo -n journalctl -u gway-remote-auth.service -n 50 --no-pager || true
-            exit 1
-          fi
-          sudo -n test -f /var/lib/gway/cache/security/state.sqlite
-          sudo -n systemctl is-active --quiet gway-mcp-server.service
-          sudo -n systemctl is-active --quiet gway-remote-auth.service
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py local
-          echo "remote_services=active"
-      - name: Expose Arthexis publicly through Gway recipe
-        shell: bash
-        env:
-          ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
-        run: |
-          set -Eeuo pipefail
-          if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
-            echo "public_exposure=failed"
-            echo "ARTHEXIS_CERTBOT_EMAIL Actions secret is required to converge the public HTTPS surface." >&2
-            exit 1
-          fi
-
-          public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
-          test -n "${public_ipv4}"
-
-          if ! getent ahostsv4 remote.arthexis.com >/dev/null 2>&1; then
-            dns_errors="$(mktemp)"
-            chmod 600 "${dns_errors}"
-            if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' \
-              >/dev/null 2>"${dns_errors}"; then
-              echo "dns_bootstrap=failed"
-              tail -n 20 "${dns_errors}" || true
-              rm -f "${dns_errors}"
-              exit 1
-            fi
-            rm -f "${dns_errors}"
-            echo "dns_bootstrap=ok"
-          else
-            echo "dns_bootstrap=existing"
-          fi
-
-          exposure_errors="$(mktemp)"
-          chmod 600 "${exposure_errors}"
-          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' \
-            >/dev/null 2>"${exposure_errors}"; then
-            echo "public_exposure=failed"
-            tail -n 30 "${exposure_errors}" || true
-            rm -f "${exposure_errors}"
-            exit 1
-          fi
-          rm -f "${exposure_errors}"
-
-          echo "PUBLIC_EXPOSURE_ENABLED=true" >> "${GITHUB_ENV}"
-          echo "public_exposure=ok"
-
-      - name: Verify public remote access surface
-        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py public
-          echo "remote_public=ok"
-
-      - name: Verify public Markdown root
-        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          root_html="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors https://arthexis.com/)"
-          grep -F '<h1 id="constellation">Constellation</h1>' <<<"${root_html}" >/dev/null
-          grep -F '<h2 id="operational-capabilities">Operational Capabilities</h2>' <<<"${root_html}" >/dev/null
-          echo "public_root=ok"
-
-      - name: Verify deployed Arthexis
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1
-          echo "django_check=ok"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1
-          echo "migration_drift=none"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
-          echo "ocpp_matrix=ok"
-
-
       - name: Determine release candidates from deployment manifest
         id: release_candidates
         shell: bash
@@ -510,7 +320,6 @@ jobs:
           repo = os.environ["REPO_DIR"]
           previous = os.environ["PREVIOUS"]
           current = os.environ["CURRENT"]
-
           changed = subprocess.check_output(
               ["git", "-C", repo, "diff", "--name-only", previous, current],
               text=True,
@@ -589,18 +398,7 @@ jobs:
             local repo="$1"
             local sha="$2"
             local payload
-            payload="$(RELEASE_SHA="$sha" WATCHTOWER_RUN_URL="$WATCHTOWER_RUN_URL" python3 - <<'PY'
-          import json
-          import os
-          print(json.dumps({
-              "ref": "main",
-              "inputs": {
-                  "deployed_sha": os.environ["RELEASE_SHA"],
-                  "watchtower_run": os.environ["WATCHTOWER_RUN_URL"],
-              },
-          }))
-          PY
-            )"
+            payload="$(printf '{"ref":"main","inputs":{"deployed_sha":"%s","watchtower_run":"%s"}}' "$sha" "$WATCHTOWER_RUN_URL")"
 
             curl --fail --silent --show-error \
               --request POST \
