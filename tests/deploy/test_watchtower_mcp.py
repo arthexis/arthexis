@@ -229,3 +229,25 @@ def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
 
     assert "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
     assert "secrets.ARTHEXIS_CERTBOT_EMAIL" not in workflow
+
+
+def test_gway_trigger_reuses_last_successful_arthexis_sha() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'if [[ "$SOURCE" == "gway" ]]' in workflow
+    assert 'arthexis_sha="$previous_arthexis"' in workflow
+    assert "arthexis_source=last_successful_deployment" in workflow
+    assert (
+        "No previous Arthexis deployment manifest exists, and current Arthexis main"
+        in workflow
+    )
+    assert "is not fully validated." in workflow
+    assert "ref: ${{ steps.pair.outputs.arthexis_sha }}" in workflow
+
+
+def test_arthexis_trigger_reuses_last_successful_gway_sha() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'gway_sha="$previous_gway"' in workflow
+    assert "gway_source=last_successful_deployment" in workflow
+    assert "GWAY_EXPECTED_SHA=$gway_sha" in workflow
