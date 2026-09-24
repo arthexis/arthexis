@@ -17,6 +17,12 @@ dependencies = [
     "daphne==4.2.1",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-django>=4.8",
+]
+
 [project.scripts]
 arthexis = "manage:main"
 reconcile = "scripts.reconcile:main"
@@ -48,4 +54,5 @@ exclude = ["**/migrations/**"]
 select = ["E9", "F823", "I", "UP", "B904"]
 
 [tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "arthexis.settings"
 testpaths = ["tests"]
