@@ -229,3 +229,39 @@ def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
 
     assert "ARTHEXIS_CERTBOT_EMAIL: ${{ vars.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
     assert "secrets.ARTHEXIS_CERTBOT_EMAIL" not in workflow
+
+
+
+def test_public_remote_verifier_exercises_query_and_mcp_product_contract() -> None:
+    verifier = Path("scripts/verify_remote_deployment.py").read_text(
+        encoding="utf-8"
+    )
+
+    for marker in (
+        'urlencode({"c": "log sources"})',
+        '"Cache-Control"',
+        'urlencode({"c": "clear"})',
+        '"mutation_not_allowed"',
+        '"method": "initialize"',
+        '"method": "tools/list"',
+        'set(tools) != {"gway", "query"}',
+        'annotations.get("readOnlyHint") is not True',
+        '"name": "query"',
+        '"arguments": {"command": "log sources"}',
+    ):
+        assert marker in verifier
+
+
+def test_public_remote_verifier_uses_ephemeral_scoped_credentials() -> None:
+    verifier = Path("scripts/verify_remote_deployment.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'scopes={"chatgpt-logs"}' in verifier
+    assert 'operations={"clear"}' in verifier
+    assert 'finally:' in verifier
+    assert 'tokens.remove(read_token_name)' in verifier
+    assert 'tokens.remove(mutate_token_name)' in verifier
+    assert 'scopes.remove(mutate_scope_name)' in verifier
+    assert 'print(read_bearer)' not in verifier
+    assert 'print(mutate_bearer)' not in verifier
