@@ -1,7 +1,9 @@
 name: Watchtower Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["python / Python compatibility"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -16,40 +18,78 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   classify:
-    name: Classify Arthexis change
+    name: Validate and classify Arthexis main
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'
+      )
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.classify.outputs.deploy }}
+      arthexis_sha: ${{ steps.validated.outputs.sha }}
     steps:
+      - name: Resolve validated Arthexis main SHA
+        id: validated
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -Eeuo pipefail
+
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "$remote_main"
+
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            sha="$VALIDATED_SHA"
+            test -n "$sha"
+            if [[ "$sha" != "$remote_main" ]]; then
+              echo "Validated Arthexis SHA $sha is stale; current main is $remote_main." >&2
+              exit 1
+            fi
+          else
+            sha="$remote_main"
+            conclusion="$(
+              gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/python-compatibility.yml/runs?branch=main&event=push&head_sha=$sha&status=completed&per_page=20" \
+                --jq '.workflow_runs | map(select(.conclusion == "success")) | first | .conclusion // empty'
+            )"
+            if [[ "$conclusion" != "success" ]]; then
+              echo "Manual deploy blocked: Arthexis main $sha has no successful full Python compatibility run." >&2
+              exit 1
+            fi
+          fi
+
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "validated_arthexis_sha=$sha"
+
       - uses: actions/checkout@v7
         with:
+          ref: ${{ steps.validated.outputs.sha }}
           fetch-depth: 2
           persist-credentials: false
 
-      - name: Detect version-only push
+      - name: Detect generated version-only change
         id: classify
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          CURRENT_SHA: ${{ github.sha }}
+          CURRENT_SHA: ${{ steps.validated.outputs.sha }}
         run: |
           set -Eeuo pipefail
-          if [[ "$EVENT_NAME" != "push" ]]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+
+          before="$(git rev-parse "$CURRENT_SHA^" 2>/dev/null || true)"
+          if [[ -z "$before" ]]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git fetch --no-tags origin "$BEFORE_SHA" "$CURRENT_SHA" >/dev/null 2>&1 || true
-
-          BEFORE_SHA="$BEFORE_SHA" CURRENT_SHA="$CURRENT_SHA" python - <<'PY'
+          BEFORE_SHA="$before" CURRENT_SHA="$CURRENT_SHA" python - <<'PY'
           import os
           import re
           import subprocess
@@ -68,7 +108,356 @@ jobs:
               new = subprocess.check_output(
                   ["git", "show", f"{current}:pyproject.toml"], text=True
               )
+              pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)
+  deploy:
+    name: Watchtower Deploy
+    needs: classify
+    if: >-
+      needs.classify.outputs.deploy == 'true' &&
+      github.repository == 'arthexis/arthexis' &&
+      (github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+    timeout-minutes: 45
+    env:
+      ARTHEXIS_DATA_DIR: /var/lib/arthexis
+      ARTHEXIS_ALLOWED_HOSTS: 0.0.0.0,arthexis.com
+      PYTHONDONTWRITEBYTECODE: '1'
+      RELEASE_ORCHESTRATION_ENABLED: 'false'
+      DEPLOYMENT_MANIFEST: /var/lib/gway/cache/watchtower-deployment-manifest.json
+    steps:
+      - name: Clean privileged Python bytecode from runner workspace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -d "${GITHUB_WORKSPACE}" ]]; then
+            sudo -n find "${GITHUB_WORKSPACE}" -type d -name __pycache__ -prune -exec rm -rf {} +
+            sudo -n find "${GITHUB_WORKSPACE}" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+          fi
+
+      - name: Checkout trusted main revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.classify.outputs.arthexis_sha }}
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify trusted invocation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_REPOSITORY}" = "arthexis/arthexis"
+          expected_sha="${{ needs.classify.outputs.arthexis_sha }}"
+          test "$(git rev-parse HEAD)" = "$expected_sha"
+          remote_main="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          test -n "${remote_main}"
+          test "${remote_main}" = "$expected_sha"
+          sudo -n true
+
+      - name: Resolve exact deployment manifest
+        shell: bash
+        env:
+          REQUESTED_GWAY_SHA: ${{ inputs.gway_sha }}
+        run: |
+          set -Eeuo pipefail
+          arthexis_sha="${{ needs.classify.outputs.arthexis_sha }}"
+          gway_sha="${REQUESTED_GWAY_SHA:-}"
+          remote_gway_main="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test -n "$remote_gway_main"
+
+          if [[ -z "$gway_sha" ]]; then
+            gway_sha="$remote_gway_main"
+          fi
+          [[ "$gway_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          if [[ "$gway_sha" != "$remote_gway_main" ]]; then
+            echo "Stale Gway deployment request: requested $gway_sha but main is $remote_gway_main." >&2
+            exit 1
+          fi
+
+          echo "ARTHEXIS_EXPECTED_SHA=$arthexis_sha" >> "$GITHUB_ENV"
+          echo "GWAY_EXPECTED_SHA=$gway_sha" >> "$GITHUB_ENV"
+          echo "deployment_manifest arthexis=$arthexis_sha gway=$gway_sha"
+
+      - name: Install exact canonical Gway
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m venv "${RUNNER_TEMP}/gway-venv"
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
+          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+
+      - name: Deploy Arthexis through Gway system scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
+          sudo -n test -f /var/lib/gway/projects/arthexis/pyproject.toml
+          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
+
+      - name: Prepare persistent Arthexis runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
+
+      - name: Install and start Arthexis systemd service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts 0.0.0.0,arthexis.com' >/dev/null 2>&1
+          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
+          echo "service=active"
+
+      - name: Provision Watchtower remote policy and services
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n install -d -m 0700 -o root -g root /var/lib/gway/cache
+          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
+            echo "remote_provision=failed"
+            sudo -n systemctl status gway-mcp-server.service --no-pager || true
+            sudo -n systemctl status gway-remote-auth.service --no-pager || true
+            sudo -n journalctl -u gway-mcp-server.service -n 50 --no-pager || true
+            sudo -n journalctl -u gway-remote-auth.service -n 50 --no-pager || true
+            exit 1
+          fi
+          sudo -n test -f /var/lib/gway/cache/security/state.sqlite
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          sudo -n systemctl is-active --quiet gway-remote-auth.service
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py local
+          echo "remote_services=active"
+      - name: Expose Arthexis publicly through Gway recipe
+        shell: bash
+        env:
+          ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "${ARTHEXIS_CERTBOT_EMAIL}" ]]; then
+            echo "public_exposure=failed"
+            echo "ARTHEXIS_CERTBOT_EMAIL Actions secret is required to converge the public HTTPS surface." >&2
+            exit 1
+          fi
+
+          public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
+          test -n "${public_ipv4}"
+
+          if ! getent ahostsv4 remote.arthexis.com >/dev/null 2>&1; then
+            dns_errors="$(mktemp)"
+            chmod 600 "${dns_errors}"
+            if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' \
+              >/dev/null 2>"${dns_errors}"; then
+              echo "dns_bootstrap=failed"
+              tail -n 20 "${dns_errors}" || true
+              rm -f "${dns_errors}"
+              exit 1
+            fi
+            rm -f "${dns_errors}"
+            echo "dns_bootstrap=ok"
+          else
+            echo "dns_bootstrap=existing"
+          fi
+
+          exposure_errors="$(mktemp)"
+          chmod 600 "${exposure_errors}"
+          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' \
+            >/dev/null 2>"${exposure_errors}"; then
+            echo "public_exposure=failed"
+            tail -n 30 "${exposure_errors}" || true
+            rm -f "${exposure_errors}"
+            exit 1
+          fi
+          rm -f "${exposure_errors}"
+
+          echo "PUBLIC_EXPOSURE_ENABLED=true" >> "${GITHUB_ENV}"
+          echo "public_exposure=ok"
+
+      - name: Verify public remote access surface
+        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py public
+          echo "remote_public=ok"
+
+      - name: Verify public Markdown root
+        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root_html="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors https://arthexis.com/)"
+          grep -F '<h1 id="constellation">Constellation</h1>' <<<"${root_html}" >/dev/null
+          grep -F '<h2 id="operational-capabilities">Operational Capabilities</h2>' <<<"${root_html}" >/dev/null
+          echo "public_root=ok"
+
+      - name: Verify deployed Arthexis
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1
+          echo "django_check=ok"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1
+          echo "migration_drift=none"
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
+          echo "ocpp_matrix=ok"
+
+      - name: Determine release candidates from deployment manifest
+        id: release_candidates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          previous_arthexis=""
+          previous_gway=""
+          if sudo -n test -f "$DEPLOYMENT_MANIFEST"; then
+            previous_arthexis="$(sudo -n python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("arthexis_sha", ""))' "$DEPLOYMENT_MANIFEST")"
+            previous_gway="$(sudo -n python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("gway_sha", ""))' "$DEPLOYMENT_MANIFEST")"
+          fi
+
+          release_worthy() {
+            local repo="$1"
+            local previous="$2"
+            local current="$3"
+
+            if [[ -z "$previous" ]]; then
+              echo true
+              return
+            fi
+            if [[ "$previous" == "$current" ]]; then
+              echo false
+              return
+            fi
+
+            local work
+            work="$(mktemp -d)"
+            git -C "$work" init -q
+            git -C "$work" remote add origin "https://github.com/${repo}.git"
+            git -C "$work" fetch -q --no-tags origin "$previous" "$current"
+
+            REPO_DIR="$work" PREVIOUS="$previous" CURRENT="$current" python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+
+          repo = os.environ["REPO_DIR"]
+          previous = os.environ["PREVIOUS"]
+          current = os.environ["CURRENT"]
+          changed = subprocess.check_output(
+              ["git", "-C", repo, "diff", "--name-only", previous, current],
+              text=True,
+          ).splitlines()
+
+          version_only = False
+          if changed == ["pyproject.toml"]:
+              old = subprocess.check_output(
+                  ["git", "-C", repo, "show", f"{previous}:pyproject.toml"], text=True
+              )
+              new = subprocess.check_output(
+                  ["git", "-C", repo, "show", f"{current}:pyproject.toml"], text=True
+              )
               pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)$')
+              if pattern.search(old) and pattern.search(new):
+                  old_normalized = pattern.sub(r'\1<VERSION>\2', old, count=1)
+                  new_normalized = pattern.sub(r'\1<VERSION>\2', new, count=1)
+                  version_only = old != new and old_normalized == new_normalized
+
+          print("false" if version_only else "true")
+          PY
+            rm -rf "$work"
+          }
+
+          arthexis_changed="$(release_worthy arthexis/arthexis "$previous_arthexis" "$ARTHEXIS_EXPECTED_SHA")"
+          gway_changed="$(release_worthy arthexis/gway "$previous_gway" "$GWAY_EXPECTED_SHA")"
+
+          echo "arthexis_changed=$arthexis_changed" >> "$GITHUB_OUTPUT"
+          echo "gway_changed=$gway_changed" >> "$GITHUB_OUTPUT"
+          echo "release_candidates arthexis=$arthexis_changed gway=$gway_changed"
+
+      - name: Record successful deployment manifest
+        shell: bash
+        env:
+          WATCHTOWER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          manifest="$(mktemp)"
+          ARTHEXIS_SHA="$ARTHEXIS_EXPECTED_SHA" \
+          GWAY_SHA="$GWAY_EXPECTED_SHA" \
+          WATCHTOWER_RUN_URL="$WATCHTOWER_RUN_URL" \
+          python3 - <<'PY' > "$manifest"
+          import json
+          import os
+          from datetime import datetime, timezone
+
+          print(json.dumps({
+              "arthexis_sha": os.environ["ARTHEXIS_SHA"],
+              "gway_sha": os.environ["GWAY_SHA"],
+              "watchtower_run": os.environ["WATCHTOWER_RUN_URL"],
+              "deployed_at": datetime.now(timezone.utc).isoformat(),
+          }, indent=2, sort_keys=True))
+          PY
+
+          sudo -n install -d -m 0700 -o root -g root "$(dirname "$DEPLOYMENT_MANIFEST")"
+          sudo -n install -m 0600 -o root -g root "$manifest" "$DEPLOYMENT_MANIFEST"
+          rm -f "$manifest"
+          echo "deployment_manifest=recorded"
+
+      - name: Dispatch PyPI publishers for changed deployed packages
+        if: env.RELEASE_ORCHESTRATION_ENABLED == 'true'
+        shell: bash
+        env:
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          ARTHEXIS_CHANGED: ${{ steps.release_candidates.outputs.arthexis_changed }}
+          GWAY_CHANGED: ${{ steps.release_candidates.outputs.gway_changed }}
+          WATCHTOWER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$RELEASE_AUTOMATION_TOKEN" ]]; then
+            echo "RELEASE_AUTOMATION_TOKEN is required when release orchestration is enabled." >&2
+            exit 1
+          fi
+
+          dispatch() {
+            local repo="$1"
+            local sha="$2"
+            local payload
+            payload="$(printf '{"ref":"main","inputs":{"deployed_sha":"%s","watchtower_run":"%s"}}' "$sha" "$WATCHTOWER_RUN_URL")"
+
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $RELEASE_AUTOMATION_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$repo/actions/workflows/pypi-publish.yml/dispatches" \
+              --data "$payload"
+          }
+
+          if [[ "$ARTHEXIS_CHANGED" == "true" ]]; then
+            dispatch arthexis/arthexis "$ARTHEXIS_EXPECTED_SHA"
+            echo "arthexis_publish=dispatched"
+          fi
+          if [[ "$GWAY_CHANGED" == "true" ]]; then
+            dispatch arthexis/gway "$GWAY_EXPECTED_SHA"
+            echo "gway_publish=dispatched"
+          fi
+          if [[ "$ARTHEXIS_CHANGED" != "true" && "$GWAY_CHANGED" != "true" ]]; then
+            echo "publish_dispatch=not_needed"
+          fi
+
+      - name: Report disabled release orchestration
+        if: env.RELEASE_ORCHESTRATION_ENABLED != 'true'
+        shell: bash
+        run: |
+          echo "Release orchestration is staged but disabled."
+          echo "Arthexis candidate: ${{ steps.release_candidates.outputs.arthexis_changed }}"
+          echo "Gway candidate: ${{ steps.release_candidates.outputs.gway_changed }}"
+)
               if pattern.search(old) and pattern.search(new):
                   old_normalized = pattern.sub(r'\1<VERSION>\2', old, count=1)
                   new_normalized = pattern.sub(r'\1<VERSION>\2', new, count=1)
