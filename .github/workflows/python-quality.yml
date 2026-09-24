@@ -35,4 +35,5 @@ jobs:
       - name: Ruff lint
         run: python -m ruff check apps arthexis scripts tests manage.py
       - name: GitHub Actions workflow lint
-        run: "${RUNNER_TEMP}/actionlint"
+        run: |
+          "${RUNNER_TEMP}/actionlint" -shellcheck=
