@@ -5,6 +5,7 @@
 security scope apply deploy/mcp-scopes.toml
 
 security scope show chatgpt-logs
+
 security scope show chatgpt-actions
 
 # Both services resolve the project semantic cache_dir and share its durable security registry.
