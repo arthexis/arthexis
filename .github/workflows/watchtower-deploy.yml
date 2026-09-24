@@ -92,6 +92,7 @@ jobs:
           printf '%s\n' \
             '#!/bin/sh' \
             'set -eu' \
+            'export GWAY_CACHE_DIR=/var/lib/gway/cache' \
             'cd /var/lib/gway/projects/arthexis' \
             'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' \
             >"${launcher}"
@@ -100,6 +101,7 @@ jobs:
           rm -f "${launcher}"
           sudo -n /usr/local/bin/gway help security oauth client create >/dev/null
           sudo -n /usr/local/bin/gway security oauth client list >/dev/null
+          sudo -n test -f /var/lib/gway/cache/security/state.sqlite
           echo "canonical_gway_admin=ok"
 
       - name: Install and start Arthexis systemd service
