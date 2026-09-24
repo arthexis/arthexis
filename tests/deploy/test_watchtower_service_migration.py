@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 from scripts.retire_legacy_web_service import retire_legacy_web_service
@@ -9,20 +12,47 @@ def test_legacy_service_migration_removes_only_web_record() -> None:
             self.service = service
             self.backend = backend
 
-    state = type("State", (), {"get": lambda self, project: [
-        Record("web"),
-        Record("arthexis.com"),
-        Record("other", backend="process"),
-    ]})()
-    backend = type("Backend", (), {"uninstall_units": lambda self, *args, **kwargs: calls.append((args, kwargs))})()
+    state = type(
+        "State",
+        (),
+        {
+            "get": lambda self, project: [
+                Record("web"),
+                Record("arthexis.com"),
+                Record("other", backend="process"),
+            ]
+        },
+    )()
     calls = []
+    backend = type(
+        "Backend",
+        (),
+        {
+            "uninstall_units": lambda self, *args, **kwargs: calls.append(
+                (args, kwargs)
+            )
+        },
+    )()
 
-    with (
-        patch("gway.install.paths.install_paths") as install_paths,
-        patch("gway.install.service.ServiceInstallState", return_value=state),
-        patch("gway.install.service.get", return_value=backend),
+    gway = ModuleType("gway")
+    install = ModuleType("gway.install")
+    paths = ModuleType("gway.install.paths")
+    service = ModuleType("gway.install.service")
+    paths.install_paths = lambda system: type(
+        "Paths", (), {"root": Path("/var/lib/gway")}
+    )()
+    service.ServiceInstallState = lambda root: state
+    service.get = lambda name: backend
+
+    with patch.dict(
+        sys.modules,
+        {
+            "gway": gway,
+            "gway.install": install,
+            "gway.install.paths": paths,
+            "gway.install.service": service,
+        },
     ):
-        install_paths.return_value.root = __import__("pathlib").Path("/var/lib/gway")
         retire_legacy_web_service()
 
     assert len(calls) == 1
