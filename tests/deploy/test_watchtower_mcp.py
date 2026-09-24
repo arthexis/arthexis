@@ -29,10 +29,12 @@ def _remote_step() -> str:
     return workflow[start:end]
 
 
-def test_watchtower_mcp_policy_is_read_only_logs_scope() -> None:
+def test_watchtower_mcp_policy_has_read_only_remote_scopes() -> None:
     policy = POLICY.read_text(encoding="utf-8")
 
     assert "[scopes.chatgpt-logs]" in policy
+    assert "[scopes.chatgpt-actions]" in policy
+    assert '"help"' in policy
     assert '"log.sources"' in policy
     assert '"log.read"' in policy
     assert '"log.tail"' in policy
@@ -47,6 +49,7 @@ def test_remote_recipe_applies_checked_in_policy_without_creating_tokens() -> No
 
     assert "security scope apply deploy/mcp-scopes.toml" in commands
     assert "security scope show chatgpt-logs" in commands
+    assert "security scope show chatgpt-actions" in commands
     assert not any("security token create" in command for command in commands)
     assert not any("oauth token" in command.lower() for command in commands)
 
