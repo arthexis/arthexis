@@ -3,6 +3,7 @@
 
 # Apply the checked-in named-scope policy idempotently.
 security scope apply deploy/mcp-scopes.toml
+
 security scope show chatgpt-logs
 
 # Both services resolve the project semantic cache_dir and share its durable security registry.

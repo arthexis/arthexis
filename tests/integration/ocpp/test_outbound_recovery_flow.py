@@ -1,7 +1,7 @@
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase, tag
+from django.test import TestCase
 
 from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import ProtocolOperation
@@ -11,7 +11,6 @@ from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import basic_authorization
 
 
-@tag("main")
 class OutboundRecoveryAcceptanceTests(TestCase):
     def setUp(self) -> None:
         self.charger = charger(

@@ -1,14 +1,13 @@
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase, tag
+from django.test import TestCase
 
 from arthexis.asgi import application
 from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import basic_authorization
 
 
-@tag("main")
 class Ocpp201WebsocketFlowTests(TestCase):
     def setUp(self) -> None:
         charger(
