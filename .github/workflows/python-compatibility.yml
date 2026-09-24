@@ -51,8 +51,8 @@ jobs:
             echo "Running PR suite without main-only tests."
             PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --exclude-tag=main --verbosity 1
           else
-            echo "Running complete suite including main-only tests."
-            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
+            echo "Running main-only deferred suite."
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --tag=main --verbosity 1
           fi
 
       - name: Require all validation checks
