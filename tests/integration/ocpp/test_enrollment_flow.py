@@ -1,13 +1,14 @@
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from apps.ocpp.models import Charger
 from arthexis.asgi import application
 from tests.integration.ocpp.support import basic_authorization
 
 
+@tag("main")
 class OcppEnrollmentFlowTests(TestCase):
     def test_websocket_enrolls_new_charger(self) -> None:
         with override_settings(OCPP_ENROLLMENT_TOKEN_HASH=make_password("enroll")):
