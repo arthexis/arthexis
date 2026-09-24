@@ -83,6 +83,25 @@ jobs:
           sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
           sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
 
+      - name: Install canonical Watchtower Gway admin launcher
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n install -d -m 0755 /usr/local/bin
+          launcher="$(mktemp)"
+          cat >"${launcher}" <<'EOF'
+#!/bin/sh
+set -eu
+cd /var/lib/gway/projects/arthexis
+exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"
+EOF
+          chmod 0755 "${launcher}"
+          sudo -n install -m 0755 "${launcher}" /usr/local/bin/gway
+          rm -f "${launcher}"
+          sudo -n /usr/local/bin/gway help security oauth client create >/dev/null
+          sudo -n /usr/local/bin/gway security oauth client list >/dev/null
+          echo "canonical_gway_admin=ok"
+
       - name: Install and start Arthexis systemd service
         shell: bash
         run: |

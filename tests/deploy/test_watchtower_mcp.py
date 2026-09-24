@@ -265,3 +265,14 @@ def test_public_remote_verifier_uses_ephemeral_scoped_credentials() -> None:
     assert 'scopes.remove(mutate_scope_name)' in verifier
     assert 'print(read_bearer)' not in verifier
     assert 'print(mutate_bearer)' not in verifier
+
+
+def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "- name: Install canonical Watchtower Gway admin launcher" in workflow
+    assert "cd /var/lib/gway/projects/arthexis" in workflow
+    assert 'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' in workflow
+    assert 'install -m 0755 "${launcher}" /usr/local/bin/gway' in workflow
+    assert "/usr/local/bin/gway help security oauth client create" in workflow
+    assert "/usr/local/bin/gway security oauth client list" in workflow
