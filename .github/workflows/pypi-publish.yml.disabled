@@ -205,18 +205,15 @@ jobs:
               Path(os.environ["GITHUB_OUTPUT"]).write_text("changed=false\n", encoding="utf-8")
               raise SystemExit(0)
 
-          dev = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)\.dev(\d+)", released)
           stable = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", released)
-          if dev:
-              major, minor, patch, n = map(int, dev.groups())
-              next_version = f"{major}.{minor}.{patch}.dev{n + 1}"
-          elif stable:
-              major, minor, patch = map(int, stable.groups())
-              next_version = f"{major}.{minor}.{patch + 1}"
-          else:
+          if not stable:
               raise SystemExit(
-                  f"Unsupported automatic version form {released!r}; bump manually."
+                  f"Automatic Arthexis version advancement requires a stable X.Y.Z "
+                  f"version, got {released!r}. Normalize the release version first."
               )
+
+          major, minor, patch = map(int, stable.groups())
+          next_version = f"{major}.{minor}.{patch + 1}"
 
           updated = text[: match.start(1)] + next_version + text[match.end(1) :]
           path.write_text(updated, encoding="utf-8")
