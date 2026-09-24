@@ -3,8 +3,6 @@ name: python / Python compatibility
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -42,18 +40,7 @@ jobs:
       - name: Run test suite
         id: tests
         continue-on-error: true
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            echo "Running PR suite without main-only tests."
-            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --exclude-tag=main --verbosity 1
-          else
-            echo "Running main-only deferred suite."
-            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --tag=main --verbosity 1
-          fi
+        run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
 
       - name: Require all validation checks
         if: always()
