@@ -3,7 +3,7 @@ from decimal import Decimal
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase, tag
+from django.test import TestCase
 
 from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount
@@ -18,7 +18,6 @@ from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import basic_authorization
 
 
-@tag("main")
 class Ocpp16WebsocketFlowTests(TestCase):
     def setUp(self) -> None:
         account = CustomerAccount.objects.create(
