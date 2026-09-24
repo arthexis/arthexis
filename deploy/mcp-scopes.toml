@@ -6,3 +6,13 @@ operations = [
   "log.search",
 ]
 environment = []
+
+[scopes.chatgpt-actions]
+operations = [
+  "help",
+  "log.sources",
+  "log.read",
+  "log.tail",
+  "log.search",
+]
+environment = []
