@@ -62,11 +62,29 @@ jobs:
 
           version_only = False
           if changed == ["pyproject.toml"]:
-              old = subprocess.check_output(["git", "show", f"{before}:pyproject.toml"], text=True)
-              new = subprocess.check_output(["git", "show", f"{current}:pyproject.toml"], text=True)
-              pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)
+              old = subprocess.check_output(
+                  ["git", "show", f"{before}:pyproject.toml"], text=True
+              )
+              new = subprocess.check_output(
+                  ["git", "show", f"{current}:pyproject.toml"], text=True
+              )
+              pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)$')
+              if pattern.search(old) and pattern.search(new):
+                  old_normalized = pattern.sub(r'\1<VERSION>\2', old, count=1)
+                  new_normalized = pattern.sub(r'\1<VERSION>\2', new, count=1)
+                  version_only = old != new and old_normalized == new_normalized
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"deploy={'false' if version_only else 'true'}\n")
+
+          print("version_only=" + ("true" if version_only else "false"))
+          PY
+
+  deploy:
     name: Watchtower Deploy
+    needs: classify
     if: >-
+      needs.classify.outputs.deploy == 'true' &&
       github.repository == 'arthexis/arthexis' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
