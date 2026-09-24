@@ -89,12 +89,12 @@ jobs:
           set -Eeuo pipefail
           sudo -n install -d -m 0755 /usr/local/bin
           launcher="$(mktemp)"
-          cat >"${launcher}" <<'EOF'
-#!/bin/sh
-set -eu
-cd /var/lib/gway/projects/arthexis
-exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"
-EOF
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'set -eu' \
+            'cd /var/lib/gway/projects/arthexis' \
+            'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' \
+            >"${launcher}"
           chmod 0755 "${launcher}"
           sudo -n install -m 0755 "${launcher}" /usr/local/bin/gway
           rm -f "${launcher}"
