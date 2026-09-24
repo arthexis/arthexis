@@ -136,12 +136,12 @@ def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
 
 def test_watchtower_remote_uses_semantic_gway_cache_root() -> None:
     project = Path("pyproject.toml").read_text(encoding="utf-8")
-    workflow = WORKFLOW.read_text(encoding="utf-8")
     remote = REMOTE.read_text(encoding="utf-8")
+    step = _remote_step()
 
     assert "[tool.gway.variables]" in project
     assert 'cache_dir = "/var/lib/gway/cache"' in project
-    assert "GWAY_CACHE_DIR" not in workflow
+    assert "GWAY_CACHE_DIR" not in step
     assert "GWAY_CACHE_DIR" not in remote
 
 def test_remote_dns_recipe_stays_credential_free() -> None:
@@ -271,6 +271,7 @@ def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "- name: Install canonical Watchtower Gway admin launcher" in workflow
+    assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in workflow
     assert "cd /var/lib/gway/projects/arthexis" in workflow
     assert 'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' in workflow
     assert 'install -m 0755 "${launcher}" /usr/local/bin/gway' in workflow
