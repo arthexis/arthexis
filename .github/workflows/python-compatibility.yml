@@ -39,10 +39,21 @@ jobs:
         continue-on-error: true
         run: python manage.py check --fail-level ERROR
 
-      - name: Run complete test suite
+      - name: Run test suite
         id: tests
         continue-on-error: true
-        run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            echo "Running PR suite without main-only tests."
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --exclude-tag=main --verbosity 1
+          else
+            echo "Running complete suite including main-only tests."
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python manage.py test tests --verbosity 1
+          fi
 
       - name: Require all validation checks
         if: always()
@@ -64,7 +75,7 @@ jobs:
           fi
 
           if [[ "$TEST_OUTCOME" != "success" ]]; then
-            echo "::error::Complete test suite: $TEST_OUTCOME"
+            echo "::error::Test suite: $TEST_OUTCOME"
             failed=1
           fi
 
