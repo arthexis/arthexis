@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 import pytest
 
 from asgiref.sync import async_to_sync
@@ -16,7 +17,6 @@ from apps.ocpp.models import (
 )
 from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import connect_charger
-
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
