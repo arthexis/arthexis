@@ -10,6 +10,7 @@ from apps.ocpp.domain.operations import (
     pending_configuration_observation_ids,
     reconcile_availability_operations,
     reconcile_configuration_operations,
+    reconcile_reservation_operations,
     reconcile_session_operations,
 )
 from apps.ocpp.domain.sessions import reconcile_pending_transaction_energy
@@ -52,3 +53,9 @@ def reconcile_ambiguous_configuration_operations() -> int:
 def reconcile_ambiguous_availability_operations() -> int:
     """Resolve ambiguous connector-scoped availability writes from fresh status evidence."""
     return reconcile_availability_operations()
+
+
+@shared_task(name="ocpp.maintenance.reconcile_reservation_operations")
+def reconcile_ambiguous_reservation_operations() -> int:
+    """Resolve ambiguous reservation mutations from fresh retained domain state."""
+    return reconcile_reservation_operations()
