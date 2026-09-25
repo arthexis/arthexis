@@ -45,10 +45,10 @@ jobs:
 
           pr_json="$(gh api "repos/$REPOSITORY/pulls/$pr_number")"
           on_hold="$(
-            jq -r '[.labels[].name | ascii_downcase] | any(. == "on hold")' <<< "$pr_json"
+            jq -r '[.labels[].name | ascii_downcase] | any(. == "on-hold")' <<< "$pr_json"
           )"
           if [[ "$on_hold" == "true" ]]; then
-            echo "PR #$pr_number is on hold; CI auto-fix is disabled."
+            echo "PR #$pr_number is on-hold; CI auto-fix is disabled."
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -182,9 +182,9 @@ jobs:
           fi
 
           current_pr="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")"
-          on_hold="$(jq -r '[.labels[].name | ascii_downcase] | any(. == "on hold")' <<< "$current_pr")"
+          on_hold="$(jq -r '[.labels[].name | ascii_downcase] | any(. == "on-hold")' <<< "$current_pr")"
           if [[ "$on_hold" == "true" ]]; then
-            echo "PR #$PR_NUMBER was put on hold during CI auto-fix; refusing to push changes."
+            echo "PR #$PR_NUMBER was put on-hold during CI auto-fix; refusing to push changes."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
