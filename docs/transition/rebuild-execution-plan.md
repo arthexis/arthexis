@@ -38,9 +38,35 @@ can recheck an artifact at any time with:
     /opt/arthexis-current/var/lib/migration/captures/<capture-id>
 ```
 
-A 2.0 database is created by its own migrations. After capture/restore evidence
-is available, reconciliation may operate on an explicitly selected legacy
-SQLite snapshot rather than modifying the old checkout.
+## Database-only restore fixture
+
+Phase 2 deliberately restores only the captured SQLite database. It does not
+recreate the legacy checkout, configuration tree, virtual environment, services,
+or network behavior.
+
+```bash
+.venv/bin/python scripts/reconcile.py restore \
+    /opt/arthexis-current/var/lib/migration/captures/<capture-id>
+```
+
+The command verifies the capture first, then creates a fresh disposable fixture
+under `ARTHEXIS_DATA_DIR/migration/fixtures` containing only:
+
+```text
+<fixture-id>/
+    database.sqlite3
+    fixture.json
+```
+
+`fixture.json` records the source capture ID, source manifest/database hashes,
+creation time, and the working database hash/integrity at creation. The fixture
+database may be modified or discarded by later reconciliation work; the capture
+database remains untouched. Re-running restore creates a new fixture identity
+and never silently overwrites an existing fixture.
+
+A 2.0 database is created by its own migrations. After this fixture exists,
+reconciliation may operate on the disposable legacy SQLite working copy rather
+than modifying either the live old checkout or the immutable capture.
 
 ## Work packages
 
