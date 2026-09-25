@@ -4,13 +4,16 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
+from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import (
     Charger,
     ChargerConnection,
     Connector,
     OcppTransaction,
+    ProtocolOperation,
     StationModel,
 )
+from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 
 
 def station_model(
@@ -99,3 +102,43 @@ def transaction(
         historical=historical,
         **values,
     )
+
+
+
+def protocol_operation(
+    charger: Charger,
+    action: str,
+    *,
+    version: ProtocolVersion = ProtocolVersion.OCPP_16,
+    direction: Direction = Direction.CSMS_TO_CHARGE_POINT,
+    request_payload: dict[str, object] | None = None,
+    status: str | None = None,
+    attempts: int = 0,
+    attempt_at: datetime | None = None,
+    response_payload: dict[str, object] | None = None,
+) -> ProtocolOperation:
+    """Create one durable operation with optional recovery-test state."""
+    operation = create_operation(
+        charger=charger,
+        version=version,
+        direction=direction,
+        action=action,
+        request_payload=request_payload or {},
+    )
+    update_fields: list[str] = []
+    if status is not None:
+        operation.status = status
+        update_fields.append("status")
+    if attempts:
+        operation.attempt_count = attempts
+        update_fields.append("attempt_count")
+    if attempt_at is not None:
+        operation.first_attempt_at = attempt_at
+        operation.last_attempt_at = attempt_at
+        update_fields.extend(("first_attempt_at", "last_attempt_at"))
+    if response_payload is not None:
+        operation.response_payload = response_payload
+        update_fields.append("response_payload")
+    if update_fields:
+        operation.save(update_fields=tuple(dict.fromkeys(update_fields)))
+    return operation

@@ -1,11 +1,9 @@
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
 from django.test import TestCase
 
-from arthexis.asgi import application
 from tests.apps.ocpp.builders import charger
-from tests.integration.ocpp.support import basic_authorization
+from tests.integration.ocpp.support import connect_charger
 
 
 class Ocpp201WebsocketFlowTests(TestCase):
@@ -19,15 +17,7 @@ class Ocpp201WebsocketFlowTests(TestCase):
         async_to_sync(self._connect)()
 
     async def _connect(self) -> None:
-        communicator = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp2.0.1"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await communicator.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp2.0.1")
+        communicator = await connect_charger(subprotocol="ocpp2.0.1")
 
         await communicator.send_json_to([2, "heartbeat-1", "Heartbeat", {}])
         response = await communicator.receive_json_from()

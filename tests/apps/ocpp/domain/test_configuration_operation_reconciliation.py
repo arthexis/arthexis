@@ -12,7 +12,7 @@ from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.tasks import reconcile_ambiguous_configuration_operations
 from apps.ocpp.transport.operations import deliver_queued_operation
-from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger, protocol_operation
 
 
 class StaticResponseSender:
@@ -42,26 +42,15 @@ class ConfigurationOperationReconciliationTests(TestCase):
         action: str,
         payload: dict[str, object],
     ) -> ProtocolOperation:
-        operation = create_operation(
-            charger=self.charger,
+        return protocol_operation(
+            self.charger,
+            action,
             version=version,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action=action,
             request_payload=payload,
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            attempts=1,
+            attempt_at=self.attempt_at,
         )
-        operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
-        operation.attempt_count = 1
-        operation.first_attempt_at = self.attempt_at
-        operation.last_attempt_at = self.attempt_at
-        operation.save(
-            update_fields=(
-                "status",
-                "attempt_count",
-                "first_attempt_at",
-                "last_attempt_at",
-            )
-        )
-        return operation
 
     def _complete_observation(
         self,
@@ -71,17 +60,14 @@ class ConfigurationOperationReconciliationTests(TestCase):
         payload: dict[str, object],
         response: dict[str, object],
     ) -> ProtocolOperation:
-        observation = create_operation(
-            charger=self.charger,
+        return protocol_operation(
+            self.charger,
+            action,
             version=version,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action=action,
             request_payload=payload,
+            status=ProtocolOperation.Status.COMPLETED,
+            response_payload=response,
         )
-        observation.status = ProtocolOperation.Status.COMPLETED
-        observation.response_payload = response
-        observation.save(update_fields=("status", "response_payload"))
-        return observation
 
     def test_v16_queues_separate_get_configuration_observation(self) -> None:
         operation = self._ambiguous(

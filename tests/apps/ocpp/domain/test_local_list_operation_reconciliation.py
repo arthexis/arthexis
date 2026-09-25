@@ -9,7 +9,7 @@ from apps.ocpp.domain.operations import (
 )
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
-from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger, protocol_operation
 
 
 class LocalListOperationReconciliationTests(TestCase):
