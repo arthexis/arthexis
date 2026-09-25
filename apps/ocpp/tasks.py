@@ -6,11 +6,13 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
+    pending_configuration_observation_ids,
     reconcile_configuration_operations,
     reconcile_session_operations,
 )
 from apps.ocpp.domain.sessions import reconcile_pending_transaction_energy
-from apps.ocpp.models import Charger, ChargerConnection
+from apps.ocpp.models import Charger, ChargerConnection, ProtocolOperation
+from apps.ocpp.transport.operations import enqueue_existing_operation
 
 
 @shared_task(name="ocpp.maintenance.refresh_stale_connections")
@@ -36,5 +38,9 @@ def reconcile_ambiguous_session_operations() -> int:
 
 @shared_task(name="ocpp.maintenance.reconcile_configuration_operations")
 def reconcile_ambiguous_configuration_operations() -> int:
-    """Resolve ambiguous configuration writes through safe observational reads."""
-    return reconcile_configuration_operations()
+    """Resolve ambiguous configuration writes and dispatch their observations."""
+    resolved = reconcile_configuration_operations()
+    for operation_id in pending_configuration_observation_ids():
+        operation = ProtocolOperation.objects.select_related("charger").get(pk=operation_id)
+        async_to_sync(enqueue_existing_operation)(operation)
+    return resolved
