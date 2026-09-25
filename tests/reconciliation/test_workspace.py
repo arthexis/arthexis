@@ -108,6 +108,8 @@ def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(tmp_p
     assert receipt["status"] == "success"
     assert receipt["destination_database"]["classification"] == "v2"
     assert receipt["reconciliation"]["imported"]["card_credentials"] == 1
+    assert receipt["resource_policy"]["batch_size"] == 250
+    assert receipt["resource_usage"]["elapsed_seconds"] >= 0
 
 
 def test_reconcile_fixture_refuses_to_overwrite_output(tmp_path):
@@ -130,3 +132,34 @@ def test_fixture_verification_rejects_modified_source(tmp_path):
 
     with pytest.raises(ValueError, match="changed after restore"):
         verify_fixture_source(fixture.path)
+
+
+def test_reconcile_fixture_accepts_small_batch_for_bounded_local_memory(tmp_path):
+    fixture = _fixture(tmp_path)
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "reconcile-fixture",
+            str(fixture.path),
+            "--batch-size",
+            "1",
+            "--nice",
+            "0",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    receipt = json.loads(
+        (fixture.path / "reconciliation.json").read_text(encoding="utf-8")
+    )
+    assert receipt["resource_policy"]["batch_size"] == 1
