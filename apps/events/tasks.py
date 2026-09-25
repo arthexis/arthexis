@@ -12,7 +12,11 @@ def enqueue_event(envelope: EventEnvelope):
     return process_event.delay(str(envelope.event_id))
 
 
-@shared_task(name="events.process")
+@shared_task(
+    name="events.process",
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
 def process_event(event_id: str) -> int:
     """Load one durable event from SQL and invoke registered consumers."""
     envelope = EventEnvelope.objects.get(event_id=event_id)
