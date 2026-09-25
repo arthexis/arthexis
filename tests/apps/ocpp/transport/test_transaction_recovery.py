@@ -66,12 +66,12 @@ class V16StartTransactionRecoveryTests:
             )
         )
 
-        assert response.payload["idTagInfo"] == {"status": "Accepted"},
+        assert response.payload["idTagInfo"] == {"status": "Accepted"}
         selected = OcppTransaction.objects.get(
             pk=response.payload["transactionId"]
         )
         assert selected.historical
-        assert selected.started_at == datetime(2023, 4, 11, 10, tzinfo=timezone.utc),
+        assert selected.started_at == datetime(2023, 4, 11, 10, tzinfo=timezone.utc)
         assert selected.id_tag == "expired-three-years-ago"
         assert selected.account is None
         assert not AuthorizationAttempt.objects.exists()
@@ -98,7 +98,7 @@ class V16StartTransactionRecoveryTests:
             )
         )
 
-        assert response.payload == {"idTagInfo": {"status": "Invalid"}},
+        assert response.payload == {"idTagInfo": {"status": "Invalid"}}
         assert not OcppTransaction.objects.exists()
         assert AuthorizationAttempt.objects.count() == 1
 
@@ -257,7 +257,7 @@ class V201TransactionEventRecoveryTests:
         assert InboundProtocolRequest.objects.filter(
                 charger=self.charger,
                 action="TransactionEvent",
-            ).count() == 1,
+            ).count() == 1
 
     def test_next_sequence_is_distinct_without_reauthorizing_known_transaction(
         self,
@@ -282,7 +282,7 @@ class V201TransactionEventRecoveryTests:
         assert InboundProtocolRequest.objects.filter(
                 charger=self.charger,
                 action="TransactionEvent",
-            ).count() == 2,
+            ).count() == 2
 
     def test_offline_historical_start_persists_without_live_authorization(self) -> None:
         self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
@@ -478,7 +478,7 @@ class MeterValueRecoveryTests:
         assert isinstance(response, CallResult)
         assert MeterValue.objects.count() == 1
         acquired.request.refresh_from_db()
-        assert acquired.request.status == InboundProtocolRequest.Status.COMPLETED,
+        assert acquired.request.status == InboundProtocolRequest.Status.COMPLETED
         assert acquired.request.stale_at is None
 
 
@@ -541,8 +541,8 @@ class HistoricalV16ContinuationTests:
 
         selected = OcppTransaction.objects.get(pk=transaction_id)
         assert selected.historical
-        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
-        assert MeterValue.objects.get(transaction=selected).sampled_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
+        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc)
+        assert MeterValue.objects.get(transaction=selected).sampled_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc)
         assert not OcppTransaction.objects.active().filter(pk=selected.pk).exists()
         assert not OcppTransaction.objects.unresolved().filter(pk=selected.pk).exists()
 
@@ -560,13 +560,13 @@ class HistoricalV16ContinuationTests:
         assert stopped == CallResult(
                 unique_id="historical-stop",
                 payload={"idTagInfo": {"status": "Accepted"}},
-            ),
+            )
 
         selected.refresh_from_db()
         assert selected.historical
-        assert selected.stopped_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
-        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
-        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED,
+        assert selected.stopped_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc)
+        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED
         assert str(selected.energy_kwh) == "0.0500"
 
     def test_historical_transaction_provenance_is_inherited_by_later_meter_evidence(
@@ -695,7 +695,7 @@ class HistoricalV16ContinuationTests:
         selected.refresh_from_db()
         assert selected.historical
         assert selected.stopped_at is None
-        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE,
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
 
 
 class ReconnectReconciliationTests:
@@ -746,7 +746,7 @@ class ReconnectReconciliationTests:
 
         assert isinstance(response, CallResult)
         selected = OcppTransaction.objects.get(pk=transaction_id)
-        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED,
+        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
         assert selected.stopped_at is None
 
     def test_v201_available_then_newer_transaction_evidence_reactivates(self) -> None:
@@ -789,7 +789,7 @@ class ReconnectReconciliationTests:
             charger=self.charger,
             remote_id="reconnect-201",
         )
-        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED,
+        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
 
         async_to_sync(dispatcher.dispatch)(
             Call(
@@ -805,7 +805,7 @@ class ReconnectReconciliationTests:
         )
         selected.refresh_from_db()
 
-        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE,
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
         assert selected.stopped_at is None
 
 
@@ -932,7 +932,7 @@ class TransactionRestartAcceptanceTests:
 
         selected.refresh_from_db()
         assert selected.stopped_at is None
-        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE,
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="StopTransaction",
@@ -977,10 +977,10 @@ class TransactionRestartAcceptanceTests:
         recovered = async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         assert isinstance(recovered, CallResult)
-        assert recovered.payload == {"idTagInfo": {"status": "Accepted"}},
+        assert recovered.payload == {"idTagInfo": {"status": "Accepted"}}
         selected.refresh_from_db()
-        assert selected.stopped_at == datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc),
-        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED,
+        assert selected.stopped_at == datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED
         assert str(selected.energy_kwh) == "0.0500"
         request.refresh_from_db()
         assert request.status == InboundProtocolRequest.Status.COMPLETED
