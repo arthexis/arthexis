@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
 from asgiref.sync import async_to_sync
-from django.test import TestCase
 
 from apps.cards.models import AuthorizationAttempt
 from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
@@ -16,9 +16,11 @@ from apps.ocpp.services.replay import acquire_inbound_request
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from tests.apps.ocpp.builders import charger
 
+pytestmark = pytest.mark.django_db
 
-class V16StartTransactionRecoveryTests(TestCase):
-    def setUp(self) -> None:
+
+class V16StartTransactionRecoveryTests:
+    def setup_method(self) -> None:
         self.charger = charger("start-recovery")
 
     def _dispatcher(self) -> FrameDispatcher:
@@ -64,21 +66,15 @@ class V16StartTransactionRecoveryTests(TestCase):
             )
         )
 
-        self.assertEqual(
-            response.payload["idTagInfo"],
-            {"status": "Accepted"},
-        )
+        assert response.payload["idTagInfo"] == {"status": "Accepted"}
         selected = OcppTransaction.objects.get(
             pk=response.payload["transactionId"]
         )
-        self.assertTrue(selected.historical)
-        self.assertEqual(
-            selected.started_at,
-            datetime(2023, 4, 11, 10, tzinfo=timezone.utc),
-        )
-        self.assertEqual(selected.id_tag, "expired-three-years-ago")
-        self.assertIsNone(selected.account)
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert selected.historical
+        assert selected.started_at == datetime(2023, 4, 11, 10, tzinfo=timezone.utc)
+        assert selected.id_tag == "expired-three-years-ago"
+        assert selected.account is None
+        assert not AuthorizationAttempt.objects.exists()
 
     def test_start_at_cutover_still_uses_live_authorization_policy(self) -> None:
         self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
@@ -102,12 +98,9 @@ class V16StartTransactionRecoveryTests(TestCase):
             )
         )
 
-        self.assertEqual(
-            response.payload,
-            {"idTagInfo": {"status": "Invalid"}},
-        )
-        self.assertFalse(OcppTransaction.objects.exists())
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert response.payload == {"idTagInfo": {"status": "Invalid"}}
+        assert not OcppTransaction.objects.exists()
+        assert AuthorizationAttempt.objects.count() == 1
 
     def test_historical_start_replay_does_not_duplicate_or_authorize(self) -> None:
         self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
@@ -131,10 +124,10 @@ class V16StartTransactionRecoveryTests(TestCase):
         first = async_to_sync(self._dispatcher().dispatch)(frame)
         replayed = async_to_sync(self._dispatcher().dispatch)(frame)
 
-        self.assertEqual(replayed, first)
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertTrue(OcppTransaction.objects.get().historical)
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert replayed == first
+        assert OcppTransaction.objects.count() == 1
+        assert OcppTransaction.objects.get().historical
+        assert not AuthorizationAttempt.objects.exists()
 
     def test_historical_start_completion_failure_rolls_back_transaction(self) -> None:
         self.charger.authority_cutover_at = datetime(
@@ -156,28 +149,28 @@ class V16StartTransactionRecoveryTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._dispatcher().dispatch)(frame)
 
-        self.assertFalse(OcppTransaction.objects.exists())
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert not OcppTransaction.objects.exists()
+        assert not AuthorizationAttempt.objects.exists()
 
     def test_lost_response_replay_returns_same_transaction_without_side_effects(
         self,
     ) -> None:
         first = async_to_sync(self._dispatcher().dispatch)(self._frame())
 
-        self.assertIsInstance(first, CallResult)
+        assert isinstance(first, CallResult)
         transaction_id = first.payload["transactionId"]
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
 
         replayed = async_to_sync(self._dispatcher().dispatch)(self._frame())
 
-        self.assertEqual(replayed, first)
-        self.assertEqual(replayed.payload["transactionId"], transaction_id)
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert replayed == first
+        assert replayed.payload["transactionId"] == transaction_id
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
 
     def test_replay_completion_failure_rolls_back_transaction_and_authorization(
         self,
@@ -186,23 +179,23 @@ class V16StartTransactionRecoveryTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._dispatcher().dispatch)(self._frame())
 
-        self.assertFalse(OcppTransaction.objects.exists())
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert not OcppTransaction.objects.exists()
+        assert not AuthorizationAttempt.objects.exists()
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="StartTransaction",
             unique_id="start-1",
         )
-        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
-        self.assertIsNone(request.completed_at)
+        assert request.status == InboundProtocolRequest.Status.PROCESSING
+        assert request.completed_at is None
 
 
 
-class V201TransactionEventRecoveryTests(TestCase):
-    def setUp(self) -> None:
+class V201TransactionEventRecoveryTests:
+    def setup_method(self) -> None:
         self.charger = charger("transaction-event-recovery")
 
     def _dispatcher(self) -> FrameDispatcher:
@@ -244,9 +237,9 @@ class V201TransactionEventRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(first, CallResult)
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert isinstance(first, CallResult)
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
 
         replayed = async_to_sync(self._dispatcher().dispatch)(
             Call(
@@ -256,18 +249,15 @@ class V201TransactionEventRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(replayed, CallResult)
-        self.assertEqual(replayed.payload, first.payload)
-        self.assertEqual(replayed.unique_id, "event-call-2")
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
-        self.assertEqual(
-            InboundProtocolRequest.objects.filter(
+        assert isinstance(replayed, CallResult)
+        assert replayed.payload == first.payload
+        assert replayed.unique_id == "event-call-2"
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
+        assert InboundProtocolRequest.objects.filter(
                 charger=self.charger,
                 action="TransactionEvent",
-            ).count(),
-            1,
-        )
+            ).count() == 1
 
     def test_next_sequence_is_distinct_without_reauthorizing_known_transaction(
         self,
@@ -287,15 +277,12 @@ class V201TransactionEventRecoveryTests(TestCase):
             )
         )
 
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
-        self.assertEqual(
-            InboundProtocolRequest.objects.filter(
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
+        assert InboundProtocolRequest.objects.filter(
                 charger=self.charger,
                 action="TransactionEvent",
-            ).count(),
-            2,
-        )
+            ).count() == 2
 
     def test_offline_historical_start_persists_without_live_authorization(self) -> None:
         self.charger.authorization_mode = self.charger.AuthorizationMode.RESTRICTED
@@ -309,10 +296,10 @@ class V201TransactionEventRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(response, CallResult)
-        self.assertEqual(response.payload, {"idTokenInfo": {"status": "Accepted"}})
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert isinstance(response, CallResult)
+        assert response.payload == {"idTokenInfo": {"status": "Accepted"}}
+        assert OcppTransaction.objects.count() == 1
+        assert not AuthorizationAttempt.objects.exists()
 
     def test_completion_failure_rolls_back_transaction_event_and_authorization(
         self,
@@ -321,7 +308,7 @@ class V201TransactionEventRecoveryTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._dispatcher().dispatch)(
                     Call(
                         unique_id="event-failure",
@@ -330,19 +317,19 @@ class V201TransactionEventRecoveryTests(TestCase):
                     )
                 )
 
-        self.assertFalse(OcppTransaction.objects.exists())
-        self.assertFalse(AuthorizationAttempt.objects.exists())
+        assert not OcppTransaction.objects.exists()
+        assert not AuthorizationAttempt.objects.exists()
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="TransactionEvent",
             unique_id="event-failure",
         )
-        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+        assert request.status == InboundProtocolRequest.Status.PROCESSING
 
 
 
-class MeterValueRecoveryTests(TestCase):
-    def setUp(self) -> None:
+class MeterValueRecoveryTests:
+    def setup_method(self) -> None:
         self.charger = charger("meter-recovery")
         started_at = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
         self.transaction = OcppTransaction.objects.create(
@@ -412,11 +399,11 @@ class MeterValueRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(first, CallResult)
-        self.assertIsInstance(second, CallResult)
-        self.assertEqual(MeterValue.objects.count(), 1)
+        assert isinstance(first, CallResult)
+        assert isinstance(second, CallResult)
+        assert MeterValue.objects.count() == 1
         sample = MeterValue.objects.get()
-        self.assertTrue(sample.source_fingerprint)
+        assert sample.source_fingerprint
 
     def test_v201_same_sample_with_different_call_id_is_not_duplicated(self) -> None:
         first = async_to_sync(self._v201_dispatcher().dispatch)(
@@ -434,9 +421,9 @@ class MeterValueRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(first, CallResult)
-        self.assertIsInstance(second, CallResult)
-        self.assertEqual(MeterValue.objects.count(), 1)
+        assert isinstance(first, CallResult)
+        assert isinstance(second, CallResult)
+        assert MeterValue.objects.count() == 1
 
     def test_meter_completion_failure_rolls_back_samples_and_activity(self) -> None:
         original_activity = self.transaction.last_activity_at
@@ -445,7 +432,7 @@ class MeterValueRecoveryTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._v16_dispatcher().dispatch)(
                     Call(
                         unique_id="meter-failure",
@@ -454,15 +441,15 @@ class MeterValueRecoveryTests(TestCase):
                     )
                 )
 
-        self.assertFalse(MeterValue.objects.exists())
+        assert not MeterValue.objects.exists()
         self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.last_activity_at, original_activity)
+        assert self.transaction.last_activity_at == original_activity
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="MeterValues",
             unique_id="meter-failure",
         )
-        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+        assert request.status == InboundProtocolRequest.Status.PROCESSING
 
     def test_stale_meter_request_can_be_reopened_and_completed(self) -> None:
         payload = self._v16_payload()
@@ -488,19 +475,16 @@ class MeterValueRecoveryTests(TestCase):
             )
         )
 
-        self.assertIsInstance(response, CallResult)
-        self.assertEqual(MeterValue.objects.count(), 1)
+        assert isinstance(response, CallResult)
+        assert MeterValue.objects.count() == 1
         acquired.request.refresh_from_db()
-        self.assertEqual(
-            acquired.request.status,
-            InboundProtocolRequest.Status.COMPLETED,
-        )
-        self.assertIsNone(acquired.request.stale_at)
+        assert acquired.request.status == InboundProtocolRequest.Status.COMPLETED
+        assert acquired.request.stale_at is None
 
 
 
-class HistoricalV16ContinuationTests(TestCase):
-    def setUp(self) -> None:
+class HistoricalV16ContinuationTests:
+    def setup_method(self) -> None:
         self.charger = charger(
             "historical-continuation",
             authority_cutover_at=datetime(2026, 9, 22, 12, tzinfo=timezone.utc),
@@ -525,7 +509,7 @@ class HistoricalV16ContinuationTests(TestCase):
                 },
             )
         )
-        self.assertIsInstance(response, CallResult)
+        assert isinstance(response, CallResult)
         return response
 
     def test_historical_meter_and_stop_preserve_source_timestamps(self) -> None:
@@ -553,20 +537,14 @@ class HistoricalV16ContinuationTests(TestCase):
                 },
             )
         )
-        self.assertEqual(metered, CallResult(unique_id="historical-meter", payload={}))
+        assert metered == CallResult(unique_id="historical-meter", payload={})
 
         selected = OcppTransaction.objects.get(pk=transaction_id)
-        self.assertTrue(selected.historical)
-        self.assertEqual(
-            selected.last_activity_at,
-            datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
-        )
-        self.assertEqual(
-            MeterValue.objects.get(transaction=selected).sampled_at,
-            datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc),
-        )
-        self.assertFalse(OcppTransaction.objects.active().filter(pk=selected.pk).exists())
-        self.assertFalse(OcppTransaction.objects.unresolved().filter(pk=selected.pk).exists())
+        assert selected.historical
+        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc)
+        assert MeterValue.objects.get(transaction=selected).sampled_at == datetime(2023, 4, 11, 10, 5, tzinfo=timezone.utc)
+        assert not OcppTransaction.objects.active().filter(pk=selected.pk).exists()
+        assert not OcppTransaction.objects.unresolved().filter(pk=selected.pk).exists()
 
         stopped = async_to_sync(self.dispatcher.dispatch)(
             Call(
@@ -579,29 +557,17 @@ class HistoricalV16ContinuationTests(TestCase):
                 },
             )
         )
-        self.assertEqual(
-            stopped,
-            CallResult(
+        assert stopped == CallResult(
                 unique_id="historical-stop",
                 payload={"idTagInfo": {"status": "Accepted"}},
-            ),
-        )
+            )
 
         selected.refresh_from_db()
-        self.assertTrue(selected.historical)
-        self.assertEqual(
-            selected.stopped_at,
-            datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
-        )
-        self.assertEqual(
-            selected.last_activity_at,
-            datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc),
-        )
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.COMPLETED,
-        )
-        self.assertEqual(str(selected.energy_kwh), "0.0500")
+        assert selected.historical
+        assert selected.stopped_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc)
+        assert selected.last_activity_at == datetime(2023, 4, 11, 10, 10, tzinfo=timezone.utc)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED
+        assert str(selected.energy_kwh) == "0.0500"
 
     def test_historical_transaction_provenance_is_inherited_by_later_meter_evidence(
         self,
@@ -625,11 +591,11 @@ class HistoricalV16ContinuationTests(TestCase):
             )
         )
 
-        self.assertEqual(response, CallResult(unique_id="clock-drift-meter", payload={}))
+        assert response == CallResult(unique_id="clock-drift-meter", payload={})
         selected = OcppTransaction.objects.get(pk=transaction_id)
-        self.assertTrue(selected.historical)
-        self.assertFalse(OcppTransaction.objects.active().filter(pk=selected.pk).exists())
-        self.assertFalse(OcppTransaction.objects.open().filter(pk=selected.pk).exists())
+        assert selected.historical
+        assert not OcppTransaction.objects.active().filter(pk=selected.pk).exists()
+        assert not OcppTransaction.objects.open().filter(pk=selected.pk).exists()
 
     def test_exact_historical_meter_and_stop_replay_do_not_duplicate_state(self) -> None:
         started = self._start()
@@ -662,11 +628,11 @@ class HistoricalV16ContinuationTests(TestCase):
         first_stop = async_to_sync(self.dispatcher.dispatch)(stop)
         replay_stop = async_to_sync(self.dispatcher.dispatch)(stop)
 
-        self.assertEqual(replay_meter, first_meter)
-        self.assertEqual(replay_stop, first_stop)
-        self.assertEqual(MeterValue.objects.filter(transaction_id=transaction_id).count(), 1)
-        self.assertEqual(OcppTransaction.objects.filter(pk=transaction_id).count(), 1)
-        self.assertTrue(OcppTransaction.objects.get(pk=transaction_id).historical)
+        assert replay_meter == first_meter
+        assert replay_stop == first_stop
+        assert MeterValue.objects.filter(transaction_id=transaction_id).count() == 1
+        assert OcppTransaction.objects.filter(pk=transaction_id).count() == 1
+        assert OcppTransaction.objects.get(pk=transaction_id).historical
 
     def test_historical_meter_completion_failure_rolls_back_samples_and_activity(self) -> None:
         started = self._start()
@@ -677,9 +643,9 @@ class HistoricalV16ContinuationTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("historical meter replay completion failed"),
         ):
-            with self.assertRaisesRegex(
+            with pytest.raises(
                 RuntimeError,
-                "historical meter replay completion failed",
+                match="historical meter replay completion failed",
             ):
                 async_to_sync(self.dispatcher.dispatch)(
                     Call(
@@ -697,10 +663,10 @@ class HistoricalV16ContinuationTests(TestCase):
                     )
                 )
 
-        self.assertFalse(MeterValue.objects.filter(transaction=selected).exists())
+        assert not MeterValue.objects.filter(transaction=selected).exists()
         selected.refresh_from_db()
-        self.assertTrue(selected.historical)
-        self.assertEqual(selected.last_activity_at, original_activity)
+        assert selected.historical
+        assert selected.last_activity_at == original_activity
 
     def test_historical_stop_completion_failure_rolls_back_closeout(self) -> None:
         started = self._start()
@@ -710,9 +676,9 @@ class HistoricalV16ContinuationTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("historical stop replay completion failed"),
         ):
-            with self.assertRaisesRegex(
+            with pytest.raises(
                 RuntimeError,
-                "historical stop replay completion failed",
+                match="historical stop replay completion failed",
             ):
                 async_to_sync(self.dispatcher.dispatch)(
                     Call(
@@ -727,16 +693,13 @@ class HistoricalV16ContinuationTests(TestCase):
                 )
 
         selected.refresh_from_db()
-        self.assertTrue(selected.historical)
-        self.assertIsNone(selected.stopped_at)
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.ACTIVE,
-        )
+        assert selected.historical
+        assert selected.stopped_at is None
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
 
 
-class ReconnectReconciliationTests(TestCase):
-    def setUp(self) -> None:
+class ReconnectReconciliationTests:
+    def setup_method(self) -> None:
         self.charger = charger("reconnect-recovery")
 
     def test_v16_available_status_marks_open_transaction_unresolved(self) -> None:
@@ -759,7 +722,7 @@ class ReconnectReconciliationTests(TestCase):
                 },
             )
         )
-        self.assertIsInstance(started, CallResult)
+        assert isinstance(started, CallResult)
         transaction_id = started.payload["transactionId"]
 
         response = async_to_sync(
@@ -781,13 +744,10 @@ class ReconnectReconciliationTests(TestCase):
             )
         )
 
-        self.assertIsInstance(response, CallResult)
+        assert isinstance(response, CallResult)
         selected = OcppTransaction.objects.get(pk=transaction_id)
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.UNRESOLVED,
-        )
-        self.assertIsNone(selected.stopped_at)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+        assert selected.stopped_at is None
 
     def test_v201_available_then_newer_transaction_evidence_reactivates(self) -> None:
         dispatcher = FrameDispatcher(
@@ -829,10 +789,7 @@ class ReconnectReconciliationTests(TestCase):
             charger=self.charger,
             remote_id="reconnect-201",
         )
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.UNRESOLVED,
-        )
+        assert selected.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
 
         async_to_sync(dispatcher.dispatch)(
             Call(
@@ -848,16 +805,13 @@ class ReconnectReconciliationTests(TestCase):
         )
         selected.refresh_from_db()
 
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.ACTIVE,
-        )
-        self.assertIsNone(selected.stopped_at)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
+        assert selected.stopped_at is None
 
 
 
-class TransactionRestartAcceptanceTests(TestCase):
-    def setUp(self) -> None:
+class TransactionRestartAcceptanceTests:
+    def setup_method(self) -> None:
         self.charger = charger("restart-acceptance")
 
     def _v16_dispatcher(self) -> FrameDispatcher:
@@ -891,10 +845,10 @@ class TransactionRestartAcceptanceTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
-        self.assertFalse(OcppTransaction.objects.exists())
+        assert not OcppTransaction.objects.exists()
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="StartTransaction",
@@ -906,11 +860,11 @@ class TransactionRestartAcceptanceTests(TestCase):
 
         recovered = async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
-        self.assertIsInstance(recovered, CallResult)
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert isinstance(recovered, CallResult)
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
         request.refresh_from_db()
-        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+        assert request.status == InboundProtocolRequest.Status.COMPLETED
 
     def test_stale_transaction_event_recovers_after_fresh_dispatcher(self) -> None:
         frame = Call(
@@ -930,10 +884,10 @@ class TransactionRestartAcceptanceTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v201_dispatcher().dispatch)(frame)
 
-        self.assertFalse(OcppTransaction.objects.exists())
+        assert not OcppTransaction.objects.exists()
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="TransactionEvent",
@@ -945,11 +899,11 @@ class TransactionRestartAcceptanceTests(TestCase):
 
         recovered = async_to_sync(self._v201_dispatcher().dispatch)(frame)
 
-        self.assertIsInstance(recovered, CallResult)
-        self.assertEqual(OcppTransaction.objects.count(), 1)
-        self.assertEqual(AuthorizationAttempt.objects.count(), 1)
+        assert isinstance(recovered, CallResult)
+        assert OcppTransaction.objects.count() == 1
+        assert AuthorizationAttempt.objects.count() == 1
         request.refresh_from_db()
-        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+        assert request.status == InboundProtocolRequest.Status.COMPLETED
 
     def test_stop_completion_failure_rolls_back_domain_mutation(self) -> None:
         selected = OcppTransaction.objects.create(
@@ -973,21 +927,18 @@ class TransactionRestartAcceptanceTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         selected.refresh_from_db()
-        self.assertIsNone(selected.stopped_at)
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.ACTIVE,
-        )
+        assert selected.stopped_at is None
+        assert selected.recovery_state == OcppTransaction.RecoveryState.ACTIVE
         request = InboundProtocolRequest.objects.get(
             charger=self.charger,
             action="StopTransaction",
             unique_id="stop-crash",
         )
-        self.assertEqual(request.status, InboundProtocolRequest.Status.PROCESSING)
+        assert request.status == InboundProtocolRequest.Status.PROCESSING
 
     def test_stale_stop_transaction_recovers_after_fresh_dispatcher(self) -> None:
         selected = OcppTransaction.objects.create(
@@ -1011,7 +962,7 @@ class TransactionRestartAcceptanceTests(TestCase):
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         request = InboundProtocolRequest.objects.get(
@@ -1025,23 +976,14 @@ class TransactionRestartAcceptanceTests(TestCase):
 
         recovered = async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
-        self.assertIsInstance(recovered, CallResult)
-        self.assertEqual(
-            recovered.payload,
-            {"idTagInfo": {"status": "Accepted"}},
-        )
+        assert isinstance(recovered, CallResult)
+        assert recovered.payload == {"idTagInfo": {"status": "Accepted"}}
         selected.refresh_from_db()
-        self.assertEqual(
-            selected.stopped_at,
-            datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc),
-        )
-        self.assertEqual(
-            selected.recovery_state,
-            OcppTransaction.RecoveryState.COMPLETED,
-        )
-        self.assertEqual(str(selected.energy_kwh), "0.0500")
+        assert selected.stopped_at == datetime(2026, 9, 22, 10, 30, tzinfo=timezone.utc)
+        assert selected.recovery_state == OcppTransaction.RecoveryState.COMPLETED
+        assert str(selected.energy_kwh) == "0.0500"
         request.refresh_from_db()
-        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+        assert request.status == InboundProtocolRequest.Status.COMPLETED
 
         replayed = async_to_sync(self._v16_dispatcher().dispatch)(frame)
-        self.assertEqual(replayed, recovered)
+        assert replayed == recovered

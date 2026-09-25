@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 from pathlib import Path
 
+import pytest
 from asgiref.sync import async_to_sync
-from django.test import TestCase
 
 from apps.ocpp.simulator.database_replay import (
     ReplayPacing,
@@ -104,7 +103,7 @@ def _database(path: Path) -> Path:
     return path
 
 
-def test_database_replay_preserves_transaction_and_meter_order(tmp_path):
+def test_database_replay_preserves_transaction_and_meter_order(tmp_path) -> None:
     database = _database(tmp_path / "replay.sqlite3")
 
     events = list(
@@ -127,65 +126,51 @@ def test_database_replay_preserves_transaction_and_meter_order(tmp_path):
     assert events[0].payload["connectorId"] == 1
     assert events[0].payload["idTag"] == "tag-a"
     assert events[0].requires_runtime_transaction_id is False
-    assert all(
-        event.requires_runtime_transaction_id
-        for event in events[1:]
-    )
+    assert all(event.requires_runtime_transaction_id for event in events[1:])
 
 
-def test_database_replay_filters_charger_and_leaves_open_transaction_open(tmp_path):
+def test_database_replay_filters_charger_and_leaves_open_transaction_open(tmp_path) -> None:
     database = _database(tmp_path / "replay.sqlite3")
 
-    events = list(
-        iter_v16_transaction_replay(database, charger_identity="charger-b")
-    )
+    events = list(iter_v16_transaction_replay(database, charger_identity="charger-b"))
 
     assert [event.action for event in events] == ["StartTransaction"]
     assert events[0].source_transaction_id == 20
 
 
-def test_database_replay_requires_current_generation_database(tmp_path):
+def test_database_replay_requires_current_generation_database(tmp_path) -> None:
     database = tmp_path / "legacy.sqlite3"
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE something_old (id INTEGER PRIMARY KEY)")
 
-    try:
+    with pytest.raises(ValueError, match="current-generation"):
         list(iter_v16_transaction_replay(database))
-    except ValueError as error:
-        assert "current-generation" in str(error)
-    else:
-        raise AssertionError("legacy database should not be accepted for replay")
 
 
-class DatabaseReplayExecutionTests(TestCase):
-    def test_maximum_speed_replay_rebinds_runtime_transaction_id(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            database = _database(Path(directory) / "replay.sqlite3")
-            target = charger("replay-target", authorization_mode="open")
+@pytest.mark.django_db
+def test_maximum_speed_replay_rebinds_runtime_transaction_id(tmp_path) -> None:
+    database = _database(tmp_path / "replay.sqlite3")
+    target = charger("replay-target", authorization_mode="open")
 
-            completed = async_to_sync(run_v16_database_replay)(
-                target,
-                database,
-                source_charger_identity="charger-a",
-                batch_size=1,
-            )
+    completed = async_to_sync(run_v16_database_replay)(
+        target,
+        database,
+        source_charger_identity="charger-a",
+        batch_size=1,
+    )
 
-        self.assertEqual(
-            completed,
-            (
-                "StartTransaction",
-                "MeterValues",
-                "MeterValues",
-                "StopTransaction",
-            ),
-        )
-        transaction = target.transactions.get()
-        self.assertIsNotNone(transaction.stopped_at)
-        self.assertEqual(transaction.meter_values.count(), 2)
+    assert completed == (
+        "StartTransaction",
+        "MeterValues",
+        "MeterValues",
+        "StopTransaction",
+    )
+    transaction = target.transactions.get()
+    assert transaction.stopped_at is not None
+    assert transaction.meter_values.count() == 2
 
 
-
-def test_inbound_request_replay_only_returns_v16_charger_originated_requests(tmp_path):
+def test_inbound_request_replay_only_returns_v16_charger_originated_requests(tmp_path) -> None:
     database = _database(tmp_path / "replay.sqlite3")
 
     events = list(
@@ -200,15 +185,14 @@ def test_inbound_request_replay_only_returns_v16_charger_originated_requests(tmp
     assert events[0].payload == {"idTag": "tag-a"}
 
 
-def test_replay_pacing_rejects_invalid_configuration():
-    for pacing in (
+@pytest.mark.parametrize(
+    "pacing",
+    [
         ReplayPacing(mode="unknown"),
         ReplayPacing(mode="fixed", interval_seconds=-1),
         ReplayPacing(mode="burst", burst_size=0),
-    ):
-        try:
-            pacing.validate()
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"invalid pacing accepted: {pacing}")
+    ],
+)
+def test_replay_pacing_rejects_invalid_configuration(pacing: ReplayPacing) -> None:
+    with pytest.raises(ValueError):
+        pacing.validate()

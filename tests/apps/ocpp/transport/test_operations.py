@@ -1,9 +1,9 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+import pytest
 from asgiref.sync import async_to_sync
 from channels.exceptions import ChannelFull
-from django.test import TestCase
 from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
@@ -31,6 +31,8 @@ from apps.ocpp.transport.operations import (
     unregister_connection,
 )
 from tests.apps.ocpp.builders import charger, connection
+
+pytestmark = pytest.mark.django_db
 
 
 class SuccessfulSender:
@@ -94,11 +96,11 @@ class OutcomeSender:
         raise self.outcome
 
 
-class DeliveryBoundaryTests(TestCase):
-    def setUp(self) -> None:
+class DeliveryBoundaryTests:
+    def setup_method(self) -> None:
         self.charger = charger("charger-1")
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         active_connections.unregister(self.charger)
 
     def test_connection_presence_is_registered_and_cleared_by_channel_owner(
@@ -114,32 +116,30 @@ class DeliveryBoundaryTests(TestCase):
         )
 
         connection = ChargerConnection.objects.get(charger=self.charger)
-        self.assertEqual(connection.protocol, "ocpp1.6")
+        assert connection.protocol == "ocpp1.6"
         self.charger.refresh_from_db()
-        self.assertIsNotNone(self.charger.connected_at)
+        assert self.charger.connected_at is not None
 
         async_to_sync(unregister_connection)(
             charger=self.charger,
             channel_name="different.channel",
         )
-        self.assertTrue(ChargerConnection.objects.filter(charger=self.charger).exists())
+        assert ChargerConnection.objects.filter(charger=self.charger).exists()
 
         async_to_sync(unregister_connection)(
             charger=self.charger,
             channel_name="specific.channel",
         )
-        self.assertFalse(
-            ChargerConnection.objects.filter(charger=self.charger).exists()
-        )
+        assert not ChargerConnection.objects.filter(charger=self.charger).exists()
         self.charger.refresh_from_db()
-        self.assertIsNone(self.charger.connected_at)
+        assert self.charger.connected_at is None
 
     def test_explicit_delivery_fails_closed_without_a_shared_channel_layer(
         self,
     ) -> None:
         connection(self.charger, channel_name="specific.channel")
 
-        with self.assertRaises(ExplicitDeliveryUnavailable):
+        with pytest.raises(ExplicitDeliveryUnavailable):
             async_to_sync(request_explicit_operation)(
                 charger=self.charger,
                 version=ProtocolVersion.OCPP_16,
@@ -148,9 +148,9 @@ class DeliveryBoundaryTests(TestCase):
             )
 
         operation = ProtocolOperation.objects.get()
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(operation.attempt_count, 0)
-        self.assertIn("shared channel layer", operation.last_delivery_error)
+        assert operation.status == ProtocolOperation.Status.PENDING
+        assert operation.attempt_count == 0
+        assert "shared channel layer" in operation.last_delivery_error
 
     def test_explicit_delivery_rejects_expired_persisted_connection(self) -> None:
         live = connection(self.charger, channel_name="specific.channel")
@@ -158,7 +158,7 @@ class DeliveryBoundaryTests(TestCase):
             lease_expires_at=timezone.now() - timedelta(seconds=1),
         )
 
-        with self.assertRaises(ExplicitDeliveryUnavailable):
+        with pytest.raises(ExplicitDeliveryUnavailable):
             async_to_sync(request_explicit_operation)(
                 charger=self.charger,
                 version=ProtocolVersion.OCPP_16,
@@ -167,14 +167,14 @@ class DeliveryBoundaryTests(TestCase):
             )
 
         operation = ProtocolOperation.objects.get()
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(operation.attempt_count, 0)
-        self.assertIn("not connected", operation.last_delivery_error)
+        assert operation.status == ProtocolOperation.Status.PENDING
+        assert operation.attempt_count == 0
+        assert "not connected" in operation.last_delivery_error
 
     def test_explicit_delivery_rejects_a_live_protocol_mismatch(self) -> None:
         connection(self.charger, channel_name="specific.channel")
 
-        with self.assertRaises(ProtocolVersionMismatch):
+        with pytest.raises(ProtocolVersionMismatch):
             async_to_sync(request_explicit_operation)(
                 charger=self.charger,
                 version=ProtocolVersion.OCPP_201,
@@ -183,10 +183,10 @@ class DeliveryBoundaryTests(TestCase):
             )
 
         operation = ProtocolOperation.objects.get()
-        self.assertEqual(operation.status, ProtocolOperation.Status.ERRORED)
-        self.assertEqual(operation.error_code, "ProtocolVersionMismatch")
-        self.assertEqual(operation.attempt_count, 0)
-        self.assertIsNotNone(operation.completed_at)
+        assert operation.status == ProtocolOperation.Status.ERRORED
+        assert operation.error_code == "ProtocolVersionMismatch"
+        assert operation.attempt_count == 0
+        assert operation.completed_at is not None
 
     def test_consumer_delivery_settles_the_existing_operation(self) -> None:
         operation = create_operation(
@@ -206,10 +206,10 @@ class DeliveryBoundaryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertIsNotNone(operation.first_attempt_at)
-        self.assertEqual(operation.first_attempt_at, operation.last_attempt_at)
+        assert operation.status == ProtocolOperation.Status.COMPLETED
+        assert operation.attempt_count == 1
+        assert operation.first_attempt_at is not None
+        assert operation.first_attempt_at == operation.last_attempt_at
 
     def test_initial_controls_record_call_error_timeout_and_disconnect_outcomes(
         self,
@@ -249,13 +249,13 @@ class DeliveryBoundaryTests(TestCase):
             )
 
             operation.refresh_from_db()
-            self.assertEqual(operation.status, expected_status)
-            self.assertEqual(operation.attempt_count, 1)
-            self.assertIsNotNone(operation.first_attempt_at)
-            self.assertIsNotNone(operation.last_attempt_at)
+            assert operation.status == expected_status
+            assert operation.attempt_count == 1
+            assert operation.first_attempt_at is not None
+            assert operation.last_attempt_at is not None
             if expected_status == ProtocolOperation.Status.RECOVERY_REQUIRED:
-                self.assertIsNone(operation.completed_at)
-                self.assertTrue(operation.last_delivery_error)
+                assert operation.completed_at is None
+                assert operation.last_delivery_error
 
 
     def test_channel_enqueue_failure_preserves_pending_intent(self) -> None:
@@ -266,7 +266,7 @@ class DeliveryBoundaryTests(TestCase):
             "apps.ocpp.transport.operations.get_channel_layer",
             return_value=layer,
         ):
-            with self.assertRaises(ExplicitDeliveryUnavailable):
+            with pytest.raises(ExplicitDeliveryUnavailable):
                 async_to_sync(request_explicit_operation)(
                     charger=self.charger,
                     version=ProtocolVersion.OCPP_16,
@@ -275,10 +275,10 @@ class DeliveryBoundaryTests(TestCase):
                 )
 
         operation = ProtocolOperation.objects.get()
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(operation.attempt_count, 0)
-        self.assertIsNone(operation.first_attempt_at)
-        self.assertIn("Could not confirm delivery", operation.last_delivery_error)
+        assert operation.status == ProtocolOperation.Status.PENDING
+        assert operation.attempt_count == 0
+        assert operation.first_attempt_at is None
+        assert "Could not confirm delivery" in operation.last_delivery_error
 
     def test_successful_channel_enqueue_remains_pending_until_consumer_claims(self) -> None:
         connection(self.charger, channel_name="specific.channel")
@@ -296,11 +296,11 @@ class DeliveryBoundaryTests(TestCase):
             )
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(operation.attempt_count, 0)
-        self.assertEqual(len(layer.messages), 1)
+        assert operation.status == ProtocolOperation.Status.PENDING
+        assert operation.attempt_count == 0
+        assert len(layer.messages) == 1
         _, message = layer.messages[0]
-        self.assertEqual(message["operation_id"], operation.pk)
+        assert message["operation_id"] == operation.pk
 
     def test_duplicate_queue_events_cannot_send_same_pending_operation_twice(self) -> None:
         operation = create_operation(
@@ -328,9 +328,9 @@ class DeliveryBoundaryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 1)
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+        assert sender.calls == 1
+        assert operation.attempt_count == 1
+        assert operation.status == ProtocolOperation.Status.COMPLETED
 
     def test_timeout_preserves_ambiguous_send_for_recovery(self) -> None:
         operation = create_operation(
@@ -350,13 +350,10 @@ class DeliveryBoundaryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(
-            operation.status,
-            ProtocolOperation.Status.RECOVERY_REQUIRED,
-        )
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertIsNone(operation.completed_at)
-        self.assertEqual(operation.last_delivery_error, "response lost")
+        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert operation.attempt_count == 1
+        assert operation.completed_at is None
+        assert operation.last_delivery_error == "response lost"
 
         sender = CountingSender()
         async_to_sync(deliver_queued_operation)(
@@ -366,12 +363,12 @@ class DeliveryBoundaryTests(TestCase):
             operation_id=operation.pk,
             timeout=30,
         )
-        self.assertEqual(sender.calls, 0)
+        assert sender.calls == 0
 
 
 
-class ReconnectOutboundRecoveryTests(TestCase):
-    def setUp(self) -> None:
+class ReconnectOutboundRecoveryTests:
+    def setup_method(self) -> None:
         self.charger = charger("reconnect-recovery")
 
     def _operation(
@@ -403,9 +400,9 @@ class ReconnectOutboundRecoveryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 1)
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+        assert sender.calls == 1
+        assert operation.attempt_count == 1
+        assert operation.status == ProtocolOperation.Status.COMPLETED
 
     def test_reconnect_retries_safe_ambiguous_query(self) -> None:
         operation = self._operation(
@@ -423,9 +420,9 @@ class ReconnectOutboundRecoveryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 1)
-        self.assertEqual(operation.attempt_count, 2)
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+        assert sender.calls == 1
+        assert operation.attempt_count == 2
+        assert operation.status == ProtocolOperation.Status.COMPLETED
 
     def test_reconnect_does_not_retry_reconcile_or_manual_ambiguity(self) -> None:
         reconcile = self._operation(
@@ -444,17 +441,11 @@ class ReconnectOutboundRecoveryTests(TestCase):
             version=ProtocolVersion.OCPP_16,
         )
 
-        self.assertEqual(sender.calls, 0)
+        assert sender.calls == 0
         reconcile.refresh_from_db()
         manual.refresh_from_db()
-        self.assertEqual(
-            reconcile.status,
-            ProtocolOperation.Status.RECOVERY_REQUIRED,
-        )
-        self.assertEqual(
-            manual.status,
-            ProtocolOperation.Status.RECOVERY_REQUIRED,
-        )
+        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert manual.status == ProtocolOperation.Status.RECOVERY_REQUIRED
 
     def test_interrupted_delivery_becomes_ambiguous_then_safe_retry_only(self) -> None:
         safe = self._operation(
@@ -482,15 +473,12 @@ class ReconnectOutboundRecoveryTests(TestCase):
 
         safe.refresh_from_db()
         reconcile.refresh_from_db()
-        self.assertEqual(sender.calls, 1)
-        self.assertEqual(safe.status, ProtocolOperation.Status.COMPLETED)
-        self.assertEqual(safe.attempt_count, 2)
-        self.assertEqual(
-            reconcile.status,
-            ProtocolOperation.Status.RECOVERY_REQUIRED,
-        )
-        self.assertEqual(reconcile.attempt_count, 1)
-        self.assertIn("Previous consumer ended", reconcile.last_delivery_error)
+        assert sender.calls == 1
+        assert safe.status == ProtocolOperation.Status.COMPLETED
+        assert safe.attempt_count == 2
+        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert reconcile.attempt_count == 1
+        assert "Previous consumer ended" in reconcile.last_delivery_error
 
     def test_repeated_reconnect_does_not_repeat_completed_recovery(self) -> None:
         operation = self._operation(
@@ -513,9 +501,9 @@ class ReconnectOutboundRecoveryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 1)
-        self.assertEqual(operation.attempt_count, 2)
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
+        assert sender.calls == 1
+        assert operation.attempt_count == 2
+        assert operation.status == ProtocolOperation.Status.COMPLETED
 
     def test_reconnect_recovers_only_matching_protocol_version(self) -> None:
         operation = self._operation(action="GetConfiguration")
@@ -528,17 +516,17 @@ class ReconnectOutboundRecoveryTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 0)
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(operation.attempt_count, 0)
+        assert sender.calls == 0
+        assert operation.status == ProtocolOperation.Status.PENDING
+        assert operation.attempt_count == 0
 
 
 
-class OutboundRaceHardeningTests(TestCase):
-    def setUp(self) -> None:
+class OutboundRaceHardeningTests:
+    def setup_method(self) -> None:
         self.charger = charger("race-hardening")
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         active_connections.unregister(self.charger)
 
     def test_old_disconnect_does_not_unregister_new_connection_sender(self) -> None:
@@ -562,9 +550,9 @@ class OutboundRaceHardeningTests(TestCase):
             channel_name="old.channel",
         )
 
-        self.assertIs(active_connections.get(self.charger), new_sender)
+        assert active_connections.get(self.charger) is new_sender
         persisted = ChargerConnection.objects.get(charger=self.charger)
-        self.assertEqual(persisted.channel_name, "new.channel")
+        assert persisted.channel_name == "new.channel"
 
     def test_same_owner_recovery_does_not_abandon_its_inflight_attempt(self) -> None:
         operation = create_operation(
@@ -575,7 +563,7 @@ class OutboundRaceHardeningTests(TestCase):
             request_payload={},
         )
         claimed = claim_operation(operation, delivery_owner="current.channel")
-        self.assertIsNotNone(claimed)
+        assert claimed is not None
         sender = CountingSender()
 
         async_to_sync(recover_connected_operations)(
@@ -586,10 +574,10 @@ class OutboundRaceHardeningTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 0)
-        self.assertEqual(operation.status, ProtocolOperation.Status.DELIVERING)
-        self.assertEqual(operation.delivery_owner, "current.channel")
-        self.assertEqual(operation.attempt_count, 1)
+        assert sender.calls == 0
+        assert operation.status == ProtocolOperation.Status.DELIVERING
+        assert operation.delivery_owner == "current.channel"
+        assert operation.attempt_count == 1
 
     def test_new_owner_supersedes_old_safe_attempt_and_late_outcome_is_ignored(
         self,
@@ -602,8 +590,8 @@ class OutboundRaceHardeningTests(TestCase):
             request_payload={},
         )
         first = claim_operation(operation, delivery_owner="old.channel")
-        self.assertIsNotNone(first)
-        self.assertIsNotNone(first.attempt_token)
+        assert first is not None
+        assert first.attempt_token is not None
         first_token = first.attempt_token
 
         pending = prepare_reconnect_operations(
@@ -611,16 +599,16 @@ class OutboundRaceHardeningTests(TestCase):
             version=ProtocolVersion.OCPP_16,
             delivery_owner="new.channel",
         )
-        self.assertEqual(pending, (operation.pk,))
+        assert pending == (operation.pk,)
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.PENDING)
+        assert operation.status == ProtocolOperation.Status.PENDING
         second = claim_operation(operation, delivery_owner="new.channel")
-        self.assertIsNotNone(second)
-        self.assertIsNotNone(second.attempt_token)
+        assert second is not None
+        assert second.attempt_token is not None
         second_token = second.attempt_token
-        self.assertNotEqual(first_token, second_token)
-        self.assertEqual(second.attempt_count, 2)
+        assert first_token != second_token
+        assert second.attempt_count == 2
 
         settle_operation_attempt(
             first,
@@ -634,10 +622,10 @@ class OutboundRaceHardeningTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.DELIVERING)
-        self.assertEqual(operation.attempt_token, second_token)
-        self.assertEqual(operation.delivery_owner, "new.channel")
-        self.assertIsNone(operation.response_payload)
+        assert operation.status == ProtocolOperation.Status.DELIVERING
+        assert operation.attempt_token == second_token
+        assert operation.delivery_owner == "new.channel"
+        assert operation.response_payload is None
 
         settle_operation_attempt(
             second,
@@ -646,9 +634,9 @@ class OutboundRaceHardeningTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
-        self.assertEqual(operation.response_payload, {"status": "new-success"})
-        self.assertEqual(operation.attempt_count, 2)
+        assert operation.status == ProtocolOperation.Status.COMPLETED
+        assert operation.response_payload == {"status": "new-success"}
+        assert operation.attempt_count == 2
 
     def test_new_owner_does_not_resend_reconcile_attempt_after_takeover(self) -> None:
         operation = create_operation(
@@ -659,7 +647,7 @@ class OutboundRaceHardeningTests(TestCase):
             request_payload={},
         )
         first = claim_operation(operation, delivery_owner="old.channel")
-        self.assertIsNotNone(first)
+        assert first is not None
         sender = CountingSender()
 
         async_to_sync(recover_connected_operations)(
@@ -670,10 +658,7 @@ class OutboundRaceHardeningTests(TestCase):
         )
 
         operation.refresh_from_db()
-        self.assertEqual(sender.calls, 0)
-        self.assertEqual(
-            operation.status,
-            ProtocolOperation.Status.RECOVERY_REQUIRED,
-        )
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertIn("Previous consumer ended", operation.last_delivery_error)
+        assert sender.calls == 0
+        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert operation.attempt_count == 1
+        assert "Previous consumer ended" in operation.last_delivery_error

@@ -1,11 +1,13 @@
+import pytest
 from asgiref.sync import async_to_sync
-from django.test import TestCase
 
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.v201.outbound import VALIDATORS, validate_outbound
 from apps.ocpp.transport.operations import active_connections, emit_v201_operation
 from tests.apps.ocpp.builders import charger
 from tests.apps.ocpp.fakes import RecordingSender
+
+pytestmark = pytest.mark.django_db
 
 VALID_PAYLOADS = {
     "CancelReservation": {"reservationId": 1},
@@ -51,32 +53,49 @@ VALID_PAYLOADS = {
 }
 
 
-class Ocpp201OutboundTests(TestCase):
-    def setUp(self) -> None:
-        self.charger = charger("charger-201")
-
-    def tearDown(self) -> None:
-        active_connections.unregister(self.charger)
-
-    def test_explicit_outbound_operation_records_its_correlated_result(self) -> None:
-        sender = RecordingSender()
-        active_connections.register(self.charger, sender)
-
+def test_explicit_outbound_operation_records_its_correlated_result() -> None:
+    selected = charger("charger-201")
+    sender = RecordingSender()
+    active_connections.register(selected, sender)
+    try:
         operation = async_to_sync(emit_v201_operation)(
-            charger=self.charger,
+            charger=selected,
             action="GetVariables",
             payload={"getVariableData": []},
         )
+    finally:
+        active_connections.unregister(selected)
 
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
-        self.assertEqual(sender.calls[0]["unique_id"], str(operation.unique_id))
-        self.assertEqual(operation.response_payload, {"status": "Accepted"})
+    assert operation.status == ProtocolOperation.Status.COMPLETED
+    assert sender.calls[0]["unique_id"] == str(operation.unique_id)
+    assert operation.response_payload == {"status": "Accepted"}
 
-    def test_outbound_payloads_require_their_action_contract(self) -> None:
-        self.assertEqual(set(VALID_PAYLOADS), set(VALIDATORS))
-        for action, payload in VALID_PAYLOADS.items():
-            self.assertEqual(validate_outbound(action, payload), payload)
-        with self.assertRaises(ValueError):
-            validate_outbound("GetVariables", {})
-        with self.assertRaises(ValueError):
-            validate_outbound("Unknown", {})
+
+@pytest.mark.parametrize(
+    ("action", "payload"),
+    list(VALID_PAYLOADS.items()),
+)
+def test_outbound_payloads_accept_their_action_contract(
+    action: str,
+    payload: dict[str, object],
+) -> None:
+    assert validate_outbound(action, payload) == payload
+
+
+def test_outbound_validator_registry_matches_payload_matrix() -> None:
+    assert set(VALID_PAYLOADS) == set(VALIDATORS)
+
+
+@pytest.mark.parametrize(
+    ("action", "payload"),
+    [
+        ("GetVariables", {}),
+        ("Unknown", {}),
+    ],
+)
+def test_outbound_payloads_reject_invalid_contracts(
+    action: str,
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        validate_outbound(action, payload)

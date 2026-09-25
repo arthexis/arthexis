@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
+import pytest
 from asgiref.sync import async_to_sync
-from django.test import TransactionTestCase
 
 from apps.events.models import EventEnvelope
 from apps.ocpp.domain.sessions import (
@@ -21,22 +21,288 @@ from apps.ocpp.tasks import reconcile_meter_energy
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from tests.apps.ocpp.builders import charger
 
+pytestmark = pytest.mark.django_db(transaction=True, reset_sequences=True)
 
-class AsyncMeterDerivationTests(TransactionTestCase):
-    reset_sequences = True
 
-    def setUp(self) -> None:
-        self.charger = charger("async-meter")
-        self.transaction = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="async-meter-remote",
-            started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
-            last_activity_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+@pytest.fixture
+def meter_context():
+    selected = charger("async-meter")
+    transaction = OcppTransaction.objects.create(
+        charger=selected,
+        remote_id="async-meter-remote",
+        started_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+        last_activity_at=datetime(2026, 9, 22, 10, tzinfo=timezone.utc),
+    )
+    return selected, transaction
+
+
+def meter_values() -> list[dict[str, object]]:
+    return [
+        {
+            "timestamp": "2026-09-22T10:05:00Z",
+            "sampledValue": [
+                {
+                    "value": "100",
+                    "measurand": "Energy.Active.Import.Register",
+                    "unit": "Wh",
+                }
+            ],
+        },
+        {
+            "timestamp": "2026-09-22T10:10:00Z",
+            "sampledValue": [
+                {
+                    "value": "150",
+                    "measurand": "Energy.Active.Import.Register",
+                    "unit": "Wh",
+                }
+            ],
+        },
+    ]
+
+
+def dispatcher(selected, version: ProtocolVersion) -> FrameDispatcher:
+    handlers = (
+        InboundActions(selected)
+        if version == ProtocolVersion.OCPP_16
+        else Inbound201Actions(selected)
+    )
+    return FrameDispatcher(
+        charger=selected,
+        version=version,
+        pending_calls=PendingCalls(),
+        handler_resolver=handlers.resolve,
+    )
+
+
+def test_v16_ack_commits_samples_and_freshness_before_async_energy(
+    meter_context,
+) -> None:
+    selected, transaction = meter_context
+    response = async_to_sync(dispatcher(selected, ProtocolVersion.OCPP_16).dispatch)(
+        Call(
+            unique_id="meter-v16",
+            action="MeterValues",
+            payload={
+                "transactionId": transaction.pk,
+                "meterValue": meter_values(),
+            },
         )
+    )
 
-    @staticmethod
-    def _meter_values() -> list[dict[str, object]]:
-        return [
+    assert response == CallResult(unique_id="meter-v16", payload={})
+    assert MeterValue.objects.count() == 2
+
+    transaction.refresh_from_db()
+    assert transaction.last_activity_at == datetime(
+        2026, 9, 22, 10, 10, tzinfo=timezone.utc
+    )
+    assert transaction.energy_kwh is None
+    assert transaction.meter_evidence_revision == 1
+    assert transaction.energy_derived_revision == 0
+
+    replay = InboundProtocolRequest.objects.get(
+        charger=selected,
+        action="MeterValues",
+        unique_id="meter-v16",
+    )
+    assert replay.status == InboundProtocolRequest.Status.COMPLETED
+
+    event = EventEnvelope.objects.get(event_type="ocpp.meter_values.received")
+    assert event.payload["transaction_id"] == transaction.pk
+    assert event.payload["meter_batch_id"] is None
+
+    process_meter_values_received(event)
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.0500")
+    assert transaction.energy_derived_revision == 1
+
+
+def test_v201_event_uses_local_transaction_identity(meter_context) -> None:
+    selected, transaction = meter_context
+    response = async_to_sync(dispatcher(selected, ProtocolVersion.OCPP_201).dispatch)(
+        Call(
+            unique_id="meter-v201",
+            action="MeterValues",
+            payload={
+                "evseId": 1,
+                "meterValue": meter_values(),
+                "transactionInfo": {"transactionId": transaction.remote_id},
+            },
+        )
+    )
+
+    assert response == CallResult(unique_id="meter-v201", payload={})
+    event = EventEnvelope.objects.get(event_type="ocpp.meter_values.received")
+    assert event.payload["transaction_id"] == transaction.pk
+    transaction.refresh_from_db()
+    assert transaction.meter_evidence_revision == 1
+    assert transaction.energy_derived_revision == 0
+
+
+def test_meter_subscriber_is_idempotent(meter_context) -> None:
+    selected, transaction = meter_context
+    MeterValue.objects.create(
+        transaction=transaction,
+        sampled_at=datetime(2026, 9, 22, 10, 5, tzinfo=timezone.utc),
+        value=Decimal("1"),
+        unit="kWh",
+        source_fingerprint="first",
+    )
+    MeterValue.objects.create(
+        transaction=transaction,
+        sampled_at=datetime(2026, 9, 22, 10, 10, tzinfo=timezone.utc),
+        value=Decimal("1.5"),
+        unit="kWh",
+        source_fingerprint="second",
+    )
+    event = EventEnvelope.objects.create(
+        event_type="ocpp.meter_values.received",
+        producer="ocpp",
+        payload={
+            "meter_batch_id": None,
+            "charger_id": selected.pk,
+            "transaction_id": transaction.pk,
+            "evse_id": None,
+        },
+    )
+
+    process_meter_values_received(event)
+    process_meter_values_received(event)
+
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.5000")
+
+
+def test_insufficient_samples_do_not_clear_existing_energy(meter_context) -> None:
+    selected, transaction = meter_context
+    transaction.energy_kwh = Decimal("2.5000")
+    transaction.meter_evidence_revision = 1
+    transaction.save(update_fields=("energy_kwh", "meter_evidence_revision"))
+    MeterValue.objects.create(
+        transaction=transaction,
+        sampled_at=datetime(2026, 9, 22, 10, 5, tzinfo=timezone.utc),
+        value=Decimal("100"),
+        unit="Wh",
+        source_fingerprint="only",
+    )
+    event = EventEnvelope.objects.create(
+        event_type="ocpp.meter_values.received",
+        producer="ocpp",
+        payload={
+            "meter_batch_id": None,
+            "charger_id": selected.pk,
+            "transaction_id": transaction.pk,
+            "evse_id": None,
+        },
+    )
+
+    process_meter_values_received(event)
+
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("2.5000")
+    assert transaction.energy_derived_revision == 1
+
+
+def test_duplicate_retained_meter_evidence_does_not_advance_revision(
+    meter_context,
+) -> None:
+    selected, transaction = meter_context
+    first_count = record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+    transaction.refresh_from_db()
+    assert first_count == 2
+    assert transaction.meter_evidence_revision == 1
+
+    duplicate_count = record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+    transaction.refresh_from_db()
+    assert duplicate_count == 0
+    assert transaction.meter_evidence_revision == 1
+
+
+def test_late_older_meter_evidence_still_advances_revision(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+    transaction.refresh_from_db()
+    assert transaction.meter_evidence_revision == 1
+
+    count = record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=[
+            {
+                "timestamp": "2026-09-22T09:55:00Z",
+                "sampledValue": [
+                    {
+                        "value": "50",
+                        "measurand": "Energy.Active.Import.Register",
+                        "unit": "Wh",
+                    }
+                ],
+            }
+        ],
+    )
+
+    transaction.refresh_from_db()
+    assert count == 1
+    assert transaction.meter_evidence_revision == 2
+    assert transaction.last_activity_at == datetime(
+        2026, 9, 22, 10, 10, tzinfo=timezone.utc
+    )
+
+
+def test_reconciler_repairs_dirty_energy_without_event(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+    transaction.refresh_from_db()
+    assert transaction.meter_evidence_revision == 1
+    assert transaction.energy_derived_revision == 0
+    assert transaction.energy_kwh is None
+
+    assert reconcile_pending_transaction_energy() == 1
+
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.0500")
+    assert transaction.energy_derived_revision == 1
+
+
+def test_reconciler_is_idempotent_after_watermark_catches_up(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+
+    assert reconcile_pending_transaction_energy() == 1
+    assert reconcile_pending_transaction_energy() == 0
+
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.0500")
+    assert transaction.energy_derived_revision == transaction.meter_evidence_revision
+
+
+def test_reconciler_marks_insufficient_evidence_as_considered(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=[
             {
                 "timestamp": "2026-09-22T10:05:00Z",
                 "sampledValue": [
@@ -46,397 +312,113 @@ class AsyncMeterDerivationTests(TransactionTestCase):
                         "unit": "Wh",
                     }
                 ],
-            },
-            {
-                "timestamp": "2026-09-22T10:10:00Z",
-                "sampledValue": [
-                    {
-                        "value": "150",
-                        "measurand": "Energy.Active.Import.Register",
-                        "unit": "Wh",
-                    }
-                ],
-            },
-        ]
+            }
+        ],
+    )
 
-    def _v16_dispatcher(self) -> FrameDispatcher:
-        return FrameDispatcher(
-            charger=self.charger,
-            version=ProtocolVersion.OCPP_16,
-            pending_calls=PendingCalls(),
-            handler_resolver=InboundActions(self.charger).resolve,
-        )
+    assert reconcile_pending_transaction_energy() == 1
 
-    def _v201_dispatcher(self) -> FrameDispatcher:
-        return FrameDispatcher(
-            charger=self.charger,
-            version=ProtocolVersion.OCPP_201,
-            pending_calls=PendingCalls(),
-            handler_resolver=Inbound201Actions(self.charger).resolve,
-        )
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh is None
+    assert transaction.meter_evidence_revision == 1
+    assert transaction.energy_derived_revision == 1
+    assert reconcile_pending_transaction_energy() == 0
 
-    def test_v16_ack_commits_samples_and_freshness_before_async_energy(self) -> None:
-        response = async_to_sync(self._v16_dispatcher().dispatch)(
+
+def test_reconciler_respects_batch_limit(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+    second = OcppTransaction.objects.create(
+        charger=selected,
+        remote_id="async-meter-second",
+        started_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+        last_activity_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
+    )
+    record_meter_values(
+        transaction_id=second.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+
+    assert reconcile_pending_transaction_energy(limit=1) == 1
+    assert OcppTransaction.objects.energy_derivation_pending().count() == 1
+    assert reconcile_pending_transaction_energy(limit=1) == 1
+    assert not OcppTransaction.objects.energy_derivation_pending().exists()
+
+
+def test_periodic_task_uses_sql_reconciler(meter_context) -> None:
+    selected, transaction = meter_context
+    record_meter_values(
+        transaction_id=transaction.pk,
+        charger=selected,
+        meter_values=meter_values(),
+    )
+
+    assert reconcile_meter_energy() == 1
+
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.0500")
+    assert transaction.energy_derived_revision == 1
+
+
+@pytest.mark.parametrize(
+    ("version", "unique_id"),
+    [
+        (ProtocolVersion.OCPP_16, "meter-event-failure-v16"),
+        (ProtocolVersion.OCPP_201, "meter-event-failure-v201"),
+    ],
+)
+def test_lost_post_commit_event_is_repaired_from_sql(
+    meter_context,
+    version: ProtocolVersion,
+    unique_id: str,
+) -> None:
+    selected, transaction = meter_context
+    payload = {
+        "meterValue": meter_values(),
+    }
+    if version == ProtocolVersion.OCPP_16:
+        payload["transactionId"] = transaction.pk
+    else:
+        payload["evseId"] = 1
+        payload["transactionInfo"] = {"transactionId": transaction.remote_id}
+
+    with patch(
+        "apps.ocpp.services.transactions.publish_safely",
+        side_effect=RuntimeError("event unavailable"),
+    ):
+        response = async_to_sync(dispatcher(selected, version).dispatch)(
             Call(
-                unique_id="meter-v16",
+                unique_id=unique_id,
                 action="MeterValues",
-                payload={
-                    "transactionId": self.transaction.pk,
-                    "meterValue": self._meter_values(),
-                },
+                payload=payload,
             )
         )
 
-        self.assertEqual(response, CallResult(unique_id="meter-v16", payload={}))
-        self.assertEqual(MeterValue.objects.count(), 2)
+    assert response == CallResult(unique_id=unique_id, payload={})
+    assert MeterValue.objects.count() == 2
+    assert not EventEnvelope.objects.exists()
 
-        self.transaction.refresh_from_db()
-        self.assertEqual(
-            self.transaction.last_activity_at,
-            datetime(2026, 9, 22, 10, 10, tzinfo=timezone.utc),
-        )
-        self.assertIsNone(self.transaction.energy_kwh)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 0)
+    replay = InboundProtocolRequest.objects.get(
+        charger=selected,
+        action="MeterValues",
+        unique_id=unique_id,
+    )
+    assert replay.status == InboundProtocolRequest.Status.COMPLETED
+    assert replay.response_payload == {}
 
-        replay = InboundProtocolRequest.objects.get(
-            charger=self.charger,
-            action="MeterValues",
-            unique_id="meter-v16",
-        )
-        self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh is None
+    assert transaction.meter_evidence_revision == 1
+    assert transaction.energy_derived_revision == 0
 
-        event = EventEnvelope.objects.get(event_type="ocpp.meter_values.received")
-        self.assertEqual(event.payload["transaction_id"], self.transaction.pk)
-        self.assertIsNone(event.payload["meter_batch_id"])
+    assert reconcile_pending_transaction_energy() == 1
 
-        process_meter_values_received(event)
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-
-    def test_v201_event_uses_local_transaction_identity(self) -> None:
-        response = async_to_sync(self._v201_dispatcher().dispatch)(
-            Call(
-                unique_id="meter-v201",
-                action="MeterValues",
-                payload={
-                    "evseId": 1,
-                    "meterValue": self._meter_values(),
-                    "transactionInfo": {
-                        "transactionId": self.transaction.remote_id,
-                    },
-                },
-            )
-        )
-
-        self.assertEqual(response, CallResult(unique_id="meter-v201", payload={}))
-        event = EventEnvelope.objects.get(event_type="ocpp.meter_values.received")
-        self.assertEqual(event.payload["transaction_id"], self.transaction.pk)
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 0)
-
-    def test_meter_subscriber_is_idempotent(self) -> None:
-        MeterValue.objects.create(
-            transaction=self.transaction,
-            sampled_at=datetime(2026, 9, 22, 10, 5, tzinfo=timezone.utc),
-            value=Decimal("1"),
-            unit="kWh",
-            source_fingerprint="first",
-        )
-        MeterValue.objects.create(
-            transaction=self.transaction,
-            sampled_at=datetime(2026, 9, 22, 10, 10, tzinfo=timezone.utc),
-            value=Decimal("1.5"),
-            unit="kWh",
-            source_fingerprint="second",
-        )
-        event = EventEnvelope.objects.create(
-            event_type="ocpp.meter_values.received",
-            producer="ocpp",
-            payload={
-                "meter_batch_id": None,
-                "charger_id": self.charger.pk,
-                "transaction_id": self.transaction.pk,
-                "evse_id": None,
-            },
-        )
-
-        process_meter_values_received(event)
-        process_meter_values_received(event)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.5000"))
-
-    def test_insufficient_samples_do_not_clear_existing_energy(self) -> None:
-        self.transaction.energy_kwh = Decimal("2.5000")
-        self.transaction.meter_evidence_revision = 1
-        self.transaction.save(
-            update_fields=("energy_kwh", "meter_evidence_revision")
-        )
-        MeterValue.objects.create(
-            transaction=self.transaction,
-            sampled_at=datetime(2026, 9, 22, 10, 5, tzinfo=timezone.utc),
-            value=Decimal("100"),
-            unit="Wh",
-            source_fingerprint="only",
-        )
-        event = EventEnvelope.objects.create(
-            event_type="ocpp.meter_values.received",
-            producer="ocpp",
-            payload={
-                "meter_batch_id": None,
-                "charger_id": self.charger.pk,
-                "transaction_id": self.transaction.pk,
-                "evse_id": None,
-            },
-        )
-
-        process_meter_values_received(event)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("2.5000"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-
-    def test_duplicate_retained_meter_evidence_does_not_advance_revision(self) -> None:
-        first_count = record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-        self.transaction.refresh_from_db()
-        self.assertEqual(first_count, 2)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-
-        duplicate_count = record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-        self.transaction.refresh_from_db()
-        self.assertEqual(duplicate_count, 0)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-
-    def test_late_older_meter_evidence_still_advances_revision(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-
-        count = record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=[
-                {
-                    "timestamp": "2026-09-22T09:55:00Z",
-                    "sampledValue": [
-                        {
-                            "value": "50",
-                            "measurand": "Energy.Active.Import.Register",
-                            "unit": "Wh",
-                        }
-                    ],
-                }
-            ],
-        )
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(count, 1)
-        self.assertEqual(self.transaction.meter_evidence_revision, 2)
-        self.assertEqual(
-            self.transaction.last_activity_at,
-            datetime(2026, 9, 22, 10, 10, tzinfo=timezone.utc),
-        )
-
-    def test_reconciler_repairs_dirty_energy_without_event(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 0)
-        self.assertIsNone(self.transaction.energy_kwh)
-
-        reconciled = reconcile_pending_transaction_energy()
-
-        self.assertEqual(reconciled, 1)
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-
-    def test_reconciler_is_idempotent_after_watermark_catches_up(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-
-        self.assertEqual(reconcile_pending_transaction_energy(), 1)
-        self.assertEqual(reconcile_pending_transaction_energy(), 0)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(
-            self.transaction.energy_derived_revision,
-            self.transaction.meter_evidence_revision,
-        )
-
-    def test_reconciler_marks_insufficient_evidence_as_considered(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=[
-                {
-                    "timestamp": "2026-09-22T10:05:00Z",
-                    "sampledValue": [
-                        {
-                            "value": "100",
-                            "measurand": "Energy.Active.Import.Register",
-                            "unit": "Wh",
-                        }
-                    ],
-                }
-            ],
-        )
-
-        self.assertEqual(reconcile_pending_transaction_energy(), 1)
-
-        self.transaction.refresh_from_db()
-        self.assertIsNone(self.transaction.energy_kwh)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-        self.assertEqual(reconcile_pending_transaction_energy(), 0)
-
-    def test_reconciler_respects_batch_limit(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-        second = OcppTransaction.objects.create(
-            charger=self.charger,
-            remote_id="async-meter-second",
-            started_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
-            last_activity_at=datetime(2026, 9, 22, 11, tzinfo=timezone.utc),
-        )
-        record_meter_values(
-            transaction_id=second.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-
-        self.assertEqual(reconcile_pending_transaction_energy(limit=1), 1)
-        self.assertEqual(
-            OcppTransaction.objects.energy_derivation_pending().count(),
-            1,
-        )
-        self.assertEqual(reconcile_pending_transaction_energy(limit=1), 1)
-        self.assertFalse(OcppTransaction.objects.energy_derivation_pending().exists())
-
-    def test_periodic_task_uses_sql_reconciler(self) -> None:
-        record_meter_values(
-            transaction_id=self.transaction.pk,
-            charger=self.charger,
-            meter_values=self._meter_values(),
-        )
-
-        self.assertEqual(reconcile_meter_energy(), 1)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-
-    def test_v16_lost_post_commit_event_is_repaired_from_sql(self) -> None:
-        with patch(
-            "apps.ocpp.services.transactions.publish_safely",
-            side_effect=RuntimeError("event unavailable"),
-        ):
-            response = async_to_sync(self._v16_dispatcher().dispatch)(
-                Call(
-                    unique_id="meter-event-failure-v16",
-                    action="MeterValues",
-                    payload={
-                        "transactionId": self.transaction.pk,
-                        "meterValue": self._meter_values(),
-                    },
-                )
-            )
-
-        self.assertEqual(
-            response,
-            CallResult(unique_id="meter-event-failure-v16", payload={}),
-        )
-        self.assertEqual(MeterValue.objects.count(), 2)
-        self.assertFalse(EventEnvelope.objects.exists())
-
-        replay = InboundProtocolRequest.objects.get(
-            charger=self.charger,
-            action="MeterValues",
-            unique_id="meter-event-failure-v16",
-        )
-        self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
-        self.assertEqual(replay.response_payload, {})
-
-        self.transaction.refresh_from_db()
-        self.assertIsNone(self.transaction.energy_kwh)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 0)
-
-        self.assertEqual(reconcile_pending_transaction_energy(), 1)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-        self.assertFalse(EventEnvelope.objects.exists())
-
-    def test_v201_lost_post_commit_event_is_repaired_from_sql(self) -> None:
-        with patch(
-            "apps.ocpp.services.transactions.publish_safely",
-            side_effect=RuntimeError("event unavailable"),
-        ):
-            response = async_to_sync(self._v201_dispatcher().dispatch)(
-                Call(
-                    unique_id="meter-event-failure-v201",
-                    action="MeterValues",
-                    payload={
-                        "evseId": 1,
-                        "meterValue": self._meter_values(),
-                        "transactionInfo": {
-                            "transactionId": self.transaction.remote_id,
-                        },
-                    },
-                )
-            )
-
-        self.assertEqual(
-            response,
-            CallResult(unique_id="meter-event-failure-v201", payload={}),
-        )
-        self.assertEqual(MeterValue.objects.count(), 2)
-        self.assertFalse(EventEnvelope.objects.exists())
-
-        replay = InboundProtocolRequest.objects.get(
-            charger=self.charger,
-            action="MeterValues",
-            unique_id="meter-event-failure-v201",
-        )
-        self.assertEqual(replay.status, InboundProtocolRequest.Status.COMPLETED)
-        self.assertEqual(replay.response_payload, {})
-
-        self.transaction.refresh_from_db()
-        self.assertIsNone(self.transaction.energy_kwh)
-        self.assertEqual(self.transaction.meter_evidence_revision, 1)
-        self.assertEqual(self.transaction.energy_derived_revision, 0)
-
-        self.assertEqual(reconcile_pending_transaction_energy(), 1)
-
-        self.transaction.refresh_from_db()
-        self.assertEqual(self.transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(self.transaction.energy_derived_revision, 1)
-        self.assertFalse(EventEnvelope.objects.exists())
+    transaction.refresh_from_db()
+    assert transaction.energy_kwh == Decimal("0.0500")
+    assert transaction.energy_derived_revision == 1
+    assert not EventEnvelope.objects.exists()
