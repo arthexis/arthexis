@@ -130,6 +130,27 @@ with them.
 6. Keep helpers at the narrowest useful common ancestor.
 7. Enforce package topology, not artificial file parity.
 
+## Pytest conventions
+
+Pytest is the native test runner and preferred test style. New or refactored
+tests should use plain test functions, plain `assert` expressions, and pytest
+fixtures rather than adding new `django.test.TestCase` wrappers solely for
+database setup or assertion helpers.
+
+For modules whose tests all require database access, declare
+`pytestmark = pytest.mark.django_db` once at module scope. Use narrower marks
+when only some tests need the database. Keep fixtures local to the test module
+until multiple sibling modules genuinely share the same setup; then move the
+fixture only to their narrowest common `conftest.py`.
+
+Use `pytest.raises` for expected exceptions and fixtures for repeated setup
+that represents a reusable test input. Do not introduce fixtures merely to
+hide one-off object construction: explicit setup is preferable when it makes
+the behavior under test easier to read.
+
+The pytest configuration runs with strict config and strict marker validation
+so misspelled or undeclared test configuration fails early.
+
 ## Test-quality guidance
 
 The topology is stable enough for feature development. Future test work should
