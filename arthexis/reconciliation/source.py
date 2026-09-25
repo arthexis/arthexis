@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -195,7 +196,7 @@ class LegacySource:
                 "Legacy database has none of the supported Arthexis 1.x tables."
             )
 
-    def rows(self, *candidates: str) -> tuple[str | None, object]:
+    def rows(self, *candidates: str) -> tuple[str | None, Iterator[dict[str, Any]]]:
         """Stream rows from the first available candidate table in bounded batches."""
         assert self.connection is not None
         table = next((name for name in candidates if name in self.tables), None)
