@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
     pending_configuration_observation_ids,
+    reconcile_availability_operations,
     reconcile_configuration_operations,
     reconcile_session_operations,
 )
@@ -45,3 +46,9 @@ def reconcile_ambiguous_configuration_operations() -> int:
         operation = ProtocolOperation.objects.select_related("charger").get(pk=operation_id)
         async_to_sync(enqueue_existing_operation)(operation)
     return resolved
+
+
+@shared_task(name="ocpp.maintenance.reconcile_availability_operations")
+def reconcile_ambiguous_availability_operations() -> int:
+    """Resolve ambiguous connector-scoped availability writes from fresh status evidence."""
+    return reconcile_availability_operations()
