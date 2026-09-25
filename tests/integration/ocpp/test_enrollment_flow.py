@@ -1,21 +1,24 @@
 from asgiref.sync import async_to_sync
+import pytest
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 from apps.ocpp.models import Charger
 from arthexis.asgi import application
 from tests.integration.ocpp.support import basic_authorization
 
 
-class OcppEnrollmentFlowTests(TestCase):
+pytestmark = pytest.mark.django_db(transaction=True)
+
+class OcppEnrollmentFlowTests:
     def test_websocket_enrolls_new_charger(self) -> None:
         with override_settings(OCPP_ENROLLMENT_TOKEN_HASH=make_password("enroll")):
             async_to_sync(self._enroll)()
 
         selected = Charger.objects.get(identity="charger-new")
-        self.assertIsNotNone(selected.enrolled_at)
-        self.assertEqual(selected.authorization_mode, Charger.AuthorizationMode.OPEN)
+        assert selected.enrolled_at is not None
+        assert selected.authorization_mode == Charger.AuthorizationMode.OPEN
 
     async def _enroll(self) -> None:
         communicator = WebsocketCommunicator(
@@ -30,8 +33,8 @@ class OcppEnrollmentFlowTests(TestCase):
             ],
         )
         connected, subprotocol = await communicator.connect(timeout=15)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
+        assert connected
+        assert subprotocol == "ocpp1.6"
 
         await communicator.send_json_to(
             [
@@ -42,8 +45,8 @@ class OcppEnrollmentFlowTests(TestCase):
             ]
         )
         response = await communicator.receive_json_from()
-        self.assertEqual(response[:2], [3, "boot-new"])
-        self.assertEqual(response[2]["status"], "Accepted")
-        self.assertEqual(response[2]["interval"], 300)
-        self.assertIn("currentTime", response[2])
+        assert response[:2] == [3, "boot-new"]
+        assert response[2]["status"] == "Accepted"
+        assert response[2]["interval"] == 300
+        assert "currentTime" in response[2]
         await communicator.disconnect()
