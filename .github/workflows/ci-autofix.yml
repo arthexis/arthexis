@@ -133,7 +133,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          codex exec --full-auto "
+          codex --full-auto exec "
           You are repairing CI for an open pull request in the Arthexis repository. The PR may be a draft and does not need any label.
 
           Read AGENTS.md and follow all repository instructions.
@@ -156,7 +156,7 @@ jobs:
         run: |
           gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
             --method POST \
-            -f body="<!-- ci-autofix -->CI auto-fix attempt $ATTEMPT could not run Codex successfully. Check the CI Auto-Fix workflow logs and OPENAI_API_KEY configuration."
+            -f body="<!-- ci-autofix -->CI auto-fix attempt $ATTEMPT could not run Codex successfully. Check the CI Auto-Fix workflow logs for the CLI/runtime error."
 
       - name: Push repair if Codex changed files
         if: steps.pr.outputs.eligible == 'true' && steps.codex.outcome == 'success'
