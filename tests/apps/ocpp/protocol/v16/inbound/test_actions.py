@@ -1,5 +1,5 @@
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 from django.test import override_settings
 
 from apps.cards.models import CardCredential
