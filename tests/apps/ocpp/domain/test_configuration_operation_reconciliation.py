@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
+from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.ocpp.domain.operations import (
@@ -10,7 +11,23 @@ from apps.ocpp.domain.operations import (
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.tasks import reconcile_ambiguous_configuration_operations
+from apps.ocpp.transport.operations import deliver_queued_operation
 from tests.apps.ocpp.builders import charger
+
+
+class StaticResponseSender:
+    def __init__(self, response: dict[str, object]) -> None:
+        self.response = response
+
+    async def send(
+        self,
+        *,
+        action: str,
+        payload: dict[str, object],
+        timeout: float = 30,
+        unique_id: str | None = None,
+    ) -> dict[str, object]:
+        return self.response
 
 
 class ConfigurationOperationReconciliationTests(TestCase):
@@ -305,3 +322,46 @@ class ConfigurationOperationReconciliationTests(TestCase):
         observations = ProtocolOperation.objects.filter(action="GetConfiguration")
         self.assertEqual(observations.count(), 1)
         self.assertEqual(observations.get().status, ProtocolOperation.Status.PENDING)
+
+
+    def test_delivered_observation_resolves_original_on_next_pass(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            action="ChangeConfiguration",
+            payload={"key": "HeartbeatInterval", "value": "300"},
+        )
+
+        reconcile_configuration_operation(operation)
+        observation = ProtocolOperation.objects.get(action="GetConfiguration")
+
+        async_to_sync(deliver_queued_operation)(
+            charger=self.charger,
+            sender=StaticResponseSender(
+                {
+                    "configurationKey": [
+                        {
+                            "key": "HeartbeatInterval",
+                            "readonly": False,
+                            "value": "300",
+                        }
+                    ]
+                }
+            ),
+            version=ProtocolVersion.OCPP_16,
+            operation_id=observation.pk,
+            timeout=30,
+            delivery_owner="test.consumer",
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(observation.attempt_count, 1)
+
+        result = reconcile_configuration_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(
+            result.reconciliation_resolution,
+            ProtocolOperation.ReconciliationResolution.ACHIEVED,
+        )
+        self.assertIn(str(observation.pk), result.reconciliation_basis)
