@@ -10,6 +10,8 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 
 from apps.ocpp.simulator.database_replay import (
+    ReplayPacing,
+    iter_v16_inbound_request_replay,
     iter_v16_transaction_replay,
     run_v16_database_replay,
 )
@@ -54,6 +56,15 @@ def _database(path: Path) -> Path:
                 unit TEXT NOT NULL,
                 multiplier INTEGER NOT NULL
             );
+            CREATE TABLE ocpp_inboundprotocolrequest (
+                id INTEGER PRIMARY KEY,
+                charger_id INTEGER NOT NULL,
+                version TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                action TEXT NOT NULL,
+                request_payload TEXT NOT NULL,
+                received_at TEXT NOT NULL
+            );
 
             INSERT INTO ocpp_charger(id, identity) VALUES
                 (1, 'charger-a'),
@@ -78,6 +89,16 @@ def _database(path: Path) -> Path:
                  'Energy.Active.Import.Register', 'Wh', 0),
                 (2, 10, '2024-01-01T00:20:00+00:00', '200',
                  'Energy.Active.Import.Register', 'Wh', 0);
+
+            INSERT INTO ocpp_inboundprotocolrequest(
+                id, charger_id, version, direction, action, request_payload, received_at
+            ) VALUES
+                (100, 1, 'ocpp1.6', 'charge_point_to_csms', 'Authorize',
+                 '{"idTag":"tag-a"}', '2024-01-01T00:00:01+00:00'),
+                (101, 1, 'ocpp1.6', 'csms_to_charge_point', 'Reset',
+                 '{"type":"Soft"}', '2024-01-01T00:00:02+00:00'),
+                (102, 2, 'ocpp2.0.1', 'charge_point_to_csms', 'Heartbeat',
+                 '{}', '2024-02-01T00:00:01+00:00');
             """
         )
     return path
@@ -161,3 +182,33 @@ class DatabaseReplayExecutionTests(TestCase):
         transaction = target.transactions.get()
         self.assertIsNotNone(transaction.stopped_at)
         self.assertEqual(transaction.meter_values.count(), 2)
+
+
+
+def test_inbound_request_replay_only_returns_v16_charger_originated_requests(tmp_path):
+    database = _database(tmp_path / "replay.sqlite3")
+
+    events = list(
+        iter_v16_inbound_request_replay(
+            database,
+            charger_identity="charger-a",
+            batch_size=1,
+        )
+    )
+
+    assert [event.action for event in events] == ["Authorize"]
+    assert events[0].payload == {"idTag": "tag-a"}
+
+
+def test_replay_pacing_rejects_invalid_configuration():
+    for pacing in (
+        ReplayPacing(mode="unknown"),
+        ReplayPacing(mode="fixed", interval_seconds=-1),
+        ReplayPacing(mode="burst", burst_size=0),
+    ):
+        try:
+            pacing.validate()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid pacing accepted: {pacing}")
