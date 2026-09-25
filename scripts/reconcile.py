@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture, inspect, verify, and reconcile legacy Arthexis data from Arthexis 2.0."""
+"""Capture, restore, and reconcile legacy Arthexis data from Arthexis 2.0."""
 
 from __future__ import annotations
 
@@ -20,14 +20,22 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("capture", "verify", "inspect", "dry-run", "import"),
-        help="capture/verify a passive source, inspect it, or reconcile it",
+        choices=(
+            "capture",
+            "verify",
+            "restore",
+            "reconcile-fixture",
+            "inspect",
+            "dry-run",
+            "import",
+        ),
+        help="capture/restore a legacy source or run reconciliation",
     )
     parser.add_argument(
         "source",
         nargs="?",
         type=Path,
-        help="legacy Arthexis installation, SQLite database, or capture bundle",
+        help="legacy installation/database, capture bundle, or migration fixture",
     )
     parser.add_argument(
         "--database",
@@ -37,7 +45,27 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        help="capture destination root (defaults under ARTHEXIS_DATA_DIR)",
+        help="capture/fixture destination root (defaults under ARTHEXIS_DATA_DIR)",
+    )
+    parser.add_argument(
+        "--destination-database",
+        type=Path,
+        help=(
+            "fresh Arthexis 2 database produced by reconcile-fixture "
+            "(defaults to <fixture>/reconciled.sqlite3)"
+        ),
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=250,
+        help="maximum legacy rows fetched into memory at once (default: 250)",
+    )
+    parser.add_argument(
+        "--nice",
+        type=int,
+        default=10,
+        help="POSIX process niceness increment for local reconciliation (default: 10)",
     )
     return parser
 
@@ -51,18 +79,79 @@ def _setup_django() -> None:
 
 def _require_source(source: Path | None) -> Path:
     if source is None:
-        raise SystemExit("Provide a legacy Arthexis installation path.")
+        raise SystemExit("Provide a source path.")
     return source
+
+
+def _reconcile_fixture(arguments: argparse.Namespace) -> int:
+    source = _require_source(arguments.source).expanduser().resolve()
+    if arguments.batch_size < 1:
+        raise SystemExit("--batch-size must be at least 1.")
+    if arguments.nice < 0:
+        raise SystemExit("--nice cannot be negative.")
+    if arguments.nice and hasattr(os, "nice"):
+        os.nice(arguments.nice)
+    from arthexis.reconciliation.workspace import (
+        reconcile_fixture,
+        verify_fixture_source,
+        write_failure_receipt,
+    )
+
+    verify_fixture_source(source)
+    destination = (
+        arguments.destination_database.expanduser().resolve()
+        if arguments.destination_database
+        else source / "reconciled.sqlite3"
+    )
+    if destination.exists():
+        raise SystemExit(f"Destination database already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    os.environ["ARTHEXIS_DATABASE_PATH"] = str(destination)
+    try:
+        _setup_django()
+        from django.core.management import call_command
+
+        call_command("migrate", interactive=False, verbosity=0)
+        call_command("seed", verbosity=0)
+        report, receipt = reconcile_fixture(
+            source,
+            destination,
+            batch_size=arguments.batch_size,
+        )
+    except Exception as error:
+        diagnostic = write_failure_receipt(source, error)
+        if diagnostic is not None:
+            print(f"Reconciliation diagnostic: {diagnostic}", file=sys.stderr)
+        raise
+
+    print(
+        json.dumps(
+            {
+                "fixture": str(source),
+                "destination_database": str(destination),
+                "receipt": str(receipt),
+                "reconciliation": report.as_dict(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def main() -> int:
     arguments = _parser().parse_args()
 
-    if arguments.command in {"capture", "verify"}:
+    if arguments.command == "reconcile-fixture":
+        return _reconcile_fixture(arguments)
+
+    if arguments.command in {"capture", "verify", "restore"}:
         from arthexis.reconciliation.capture import (
             capture_legacy_installation,
             verify_capture,
         )
+        from arthexis.reconciliation.fixture import restore_fixture
 
         source = _require_source(arguments.source)
         if arguments.command == "verify":
@@ -73,7 +162,28 @@ def main() -> int:
         _setup_django()
         from django.conf import settings
 
-        destination = arguments.output or Path(settings.DATA_DIR) / "migration" / "captures"
+        if arguments.command == "restore":
+            destination = (
+                arguments.output
+                or Path(settings.DATA_DIR) / "migration" / "fixtures"
+            )
+            result = restore_fixture(source, destination)
+            print(
+                json.dumps(
+                    {
+                        "fixture_id": result.fixture_id,
+                        "path": str(result.path),
+                        "database": str(result.database_path),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+
+        destination = (
+            arguments.output or Path(settings.DATA_DIR) / "migration" / "captures"
+        )
         result = capture_legacy_installation(
             source,
             destination,

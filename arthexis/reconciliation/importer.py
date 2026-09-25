@@ -339,7 +339,9 @@ class _Importer:
         import_ocpp_records(self)
 
 
-def reconcile(source_path: Path, *, dry_run: bool = False) -> ReconciliationReport:
+def reconcile(
+    source_path: Path, *, dry_run: bool = False, batch_size: int = 250
+) -> ReconciliationReport:
     """Reconcile supported 1.x logical records without changing the source."""
     inspection = inspect_source(source_path)
     if inspection.classification != "legacy":
@@ -353,7 +355,7 @@ def reconcile(source_path: Path, *, dry_run: bool = False) -> ReconciliationRepo
         source_size=inspection.size,
         dry_run=dry_run,
     )
-    with LegacySource(source_path) as source:
+    with LegacySource(source_path, batch_size=batch_size) as source:
         source.validate()
         importer = _Importer(source, report)
         if dry_run:

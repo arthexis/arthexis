@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -157,8 +158,11 @@ def inspect_source(database_path: Path) -> SourceInspection:
 class LegacySource:
     """Expose only schema-checked rows from one legacy SQLite database."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, batch_size: int = 250) -> None:
+        if batch_size < 1:
+            raise ValueError("Reconciliation batch size must be at least 1.")
         self.path = path
+        self.batch_size = batch_size
         self.connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> LegacySource:
@@ -166,6 +170,8 @@ class LegacySource:
             raise ValueError(f"Legacy database does not exist: {self.path}")
         self.connection = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
         self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA query_only = ON")
+        self.connection.execute("PRAGMA cache_size = -4096")
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -190,13 +196,22 @@ class LegacySource:
                 "Legacy database has none of the supported Arthexis 1.x tables."
             )
 
-    def rows(self, *candidates: str) -> tuple[str | None, list[dict[str, Any]]]:
-        """Return rows from the first available candidate table."""
+    def rows(self, *candidates: str) -> tuple[str | None, Iterator[dict[str, Any]]]:
+        """Stream rows from the first available candidate table in bounded batches."""
         assert self.connection is not None
         table = next((name for name in candidates if name in self.tables), None)
         if table is None:
-            return None, []
+            return None, iter(())
+
         quoted = table.replace('"', '""')
-        return table, [
-            dict(row) for row in self.connection.execute(f'SELECT * FROM "{quoted}"')
-        ]
+        cursor = self.connection.execute(f'SELECT * FROM "{quoted}"')
+
+        def stream():
+            while True:
+                rows = cursor.fetchmany(self.batch_size)
+                if not rows:
+                    break
+                for row in rows:
+                    yield dict(row)
+
+        return table, stream()
