@@ -1,8 +1,37 @@
 """Stateful retained inbound-action scenarios for both supported OCPP versions."""
 
+from dataclasses import dataclass
+
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.simulator.client import OcppSimulator
+
+
+@dataclass(frozen=True)
+class AuthorizationScenarioResult:
+    """One observed authorization result in scenario order."""
+
+    id_tag: str
+    status: str
+
+
+async def run_v16_authorization_scenario(
+    charger: Charger,
+    id_tags: tuple[str, ...],
+) -> tuple[AuthorizationScenarioResult, ...]:
+    """Run an OCPP 1.6 authorization matrix and report actual CSMS decisions."""
+    client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    results: list[AuthorizationScenarioResult] = []
+    for id_tag in id_tags:
+        response = await client.call("Authorize", {"idTag": id_tag})
+        info = response.payload.get("idTagInfo")
+        if not isinstance(info, dict):
+            raise ValueError("Authorize response is missing idTagInfo")
+        status = info.get("status")
+        if not isinstance(status, str) or not status:
+            raise ValueError("Authorize response is missing status")
+        results.append(AuthorizationScenarioResult(id_tag=id_tag, status=status))
+    return tuple(results)
 
 
 async def run_v16_scenario(charger: Charger) -> tuple[str, ...]:
