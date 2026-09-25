@@ -1,6 +1,8 @@
 name: Starter Plan Codex Dispatch
 
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -18,12 +20,19 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: starter-plan-${{ github.repository }}-${{ inputs.issue_number }}
+  group: starter-plan-${{ github.repository }}-${{ github.event.issue.number || inputs.issue_number }}
   cancel-in-progress: false
 
 jobs:
   implement:
     name: Implement starter plan
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issue_comment' &&
+        !github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '<!-- starter-plan:v1 -->')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -34,9 +43,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          INPUT_PLAN: ${{ inputs.plan }}
         run: |
           set -Eeuo pipefail
+
+          if [[ "${EVENT_NAME}" == "issue_comment" ]]; then
+            plan="${COMMENT_BODY#<!-- starter-plan:v1 -->}"
+          else
+            plan="${INPUT_PLAN}"
+          fi
+          if [[ -z "${plan//[[:space:]]/}" ]]; then
+            echo "Starter plan is empty." >&2
+            exit 1
+          fi
+          {
+            echo 'plan<<STARTER_PLAN_EOF'
+            printf '%s\n' "${plan}"
+            echo 'STARTER_PLAN_EOF'
+          } >> "${GITHUB_OUTPUT}"
 
           issue_json="$(gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}")"
           if [[ "$(jq -r '.state' <<< "${issue_json}")" != "open" ]]; then
@@ -107,7 +134,7 @@ jobs:
           effort: high
           allow-bots: true
           prompt: |
-            You are implementing the first planned development unit for Arthexis issue #${{ inputs.issue_number }}.
+            You are implementing the first planned development unit for Arthexis issue #${{ github.event.issue.number || inputs.issue_number }}.
 
             Read AGENTS.md first and follow it as the authoritative repository guide.
             Read the issue itself for product context, but treat the implementation plan below as
@@ -116,7 +143,7 @@ jobs:
 
             STARTER PLAN
             ------------
-            ${{ inputs.plan }}
+            ${{ steps.issue.outputs.plan }}
             ------------
 
             Implement the plan as a coherent, substantive unit. Complete the specified tests,
@@ -147,7 +174,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           BRANCH: ${{ steps.issue.outputs.branch }}
         run: |
           set -Eeuo pipefail
@@ -171,9 +198,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
           BRANCH: ${{ steps.issue.outputs.branch }}
-          PLAN: ${{ inputs.plan }}
+          PLAN: ${{ steps.issue.outputs.plan }}
           CODEX_FINAL_MESSAGE: ${{ steps.codex.outputs.final-message }}
         run: |
           set -Eeuo pipefail
@@ -198,6 +225,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
         run: |
           gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/labels/in-progress" --method DELETE >/dev/null 2>&1 || true
