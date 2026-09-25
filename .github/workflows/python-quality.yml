@@ -34,6 +34,8 @@ jobs:
           tar -xzf "${archive}" -C "${RUNNER_TEMP}" actionlint
       - name: Ruff lint
         run: python -m ruff check apps arthexis scripts tests manage.py
+      - name: Development state reconciler self-test
+        run: python .github/scripts/reconcile_development_state.py --self-test
       - name: GitHub Actions workflow lint
         run: |
           "${RUNNER_TEMP}/actionlint" -shellcheck=
