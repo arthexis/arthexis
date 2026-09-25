@@ -26,7 +26,10 @@ test module for every source module. Closely related behavior may share a test
 module when the production ownership is still clear.
 
 A source-owned test should not remain in a broad or historical feature bucket
-after the production code has acquired a narrower package owner.
+after the production code has acquired a narrower package owner. Top-level
+source-owned test packages are limited to `tests/apps/` and `tests/arthexis/`;
+all other top-level test packages must be explicit cross-package, deployment,
+or external-conformance exceptions.
 
 ## Final topology
 
@@ -111,8 +114,9 @@ one-test-file-per-source-file parity. It verifies that:
 2. mirrored test packages under `tests/apps/` and `tests/arthexis/` point
    to real source packages;
 3. only explicitly approved repository-wide tests live at the test root;
-4. the integration, deploy, and conformance exception buckets remain explicit Python test packages;
-5. the conformance suite does not recreate legacy version-package mirrors.
+4. no historical source-owned top-level package can sit beside the mirrored `apps` and `arthexis` roots;
+5. the integration, deploy, and conformance exception buckets remain explicit Python test packages;
+6. the conformance suite does not recreate legacy version-package mirrors.
 
 When adding a new first-party app, create its mirrored test package as part of
 the same change. When moving production packages, move their source-owned tests
@@ -209,4 +213,6 @@ green.
 
 Sprints T1-T7 established the mirrored package tree and explicit integration
 layer. T8 narrowed helpers, T9 added architecture enforcement, and T10 finalized
-this document and the resulting topology.
+the initial topology. Q1 later tightened that contract by moving the remaining
+historical `tests/reconciliation/` bucket under `tests/arthexis/reconciliation/`
+and enforcing the allowed top-level test packages.
