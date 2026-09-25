@@ -11,6 +11,7 @@ from apps.ocpp.simulator import (
 from tests.apps.ocpp.builders import charger
 
 
+# These scenarios exercise the real CSMS decision path rather than predicting policy.
 class OcppSimulatorTests(TestCase):
     def test_v16_authorization_scenario_preserves_order_repeats_and_actual_status(self) -> None:
         target = charger(
