@@ -93,7 +93,7 @@ jobs:
           fi
 
           approved="$(
-            jq -r '[.labels[].name] | any(. == "Approved")' <<< "$pr_json"
+            jq -r '[.labels[].name | ascii_downcase] | any(. == "approved")' <<< "$pr_json"
           )"
           if [[ "$approved" != "true" ]]; then
             echo "PR #$PR_NUMBER does not have the Approved label."
