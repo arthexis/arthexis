@@ -53,6 +53,8 @@ def verify_fixture_source(path: Path) -> tuple[dict[str, object], Path]:
 def reconcile_fixture(
     fixture_path: Path,
     destination_database: Path,
+    *,
+    batch_size: int = 250,
 ) -> tuple[ReconciliationReport, Path]:
     """Import a verified fixture into the configured fresh 2.0 destination."""
 
@@ -67,7 +69,7 @@ def reconcile_fixture(
             "Configured Arthexis destination database does not match requested output."
         )
 
-    report = reconcile(source_database)
+    report = reconcile(source_database, batch_size=batch_size)
     source_sha_after = _sha256(source_database)
     if source_sha_after != source_sha_before:
         raise RuntimeError("Reconciliation modified the fixture source database.")
