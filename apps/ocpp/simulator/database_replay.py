@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from apps.ocpp.models import Charger
+from apps.ocpp.protocol.contracts import ProtocolVersion
+from apps.ocpp.simulator.client import OcppSimulator
+
 
 @dataclass(frozen=True)
 class ReplayEvent:
@@ -176,3 +180,42 @@ def _integer_meter(value: object) -> int:
     if value in (None, ""):
         return 0
     return int(float(str(value)))
+
+
+async def run_v16_database_replay(
+    charger: Charger,
+    database: Path,
+    *,
+    source_charger_identity: str | None = None,
+    batch_size: int = 250,
+) -> tuple[str, ...]:
+    """Replay migrated transaction history back-to-back at charger speed."""
+
+    client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    runtime_transactions: dict[int, object] = {}
+    completed: list[str] = []
+
+    for event in iter_v16_transaction_replay(
+        database,
+        charger_identity=source_charger_identity,
+        batch_size=batch_size,
+    ):
+        payload = dict(event.payload)
+        if event.requires_runtime_transaction_id:
+            runtime_id = runtime_transactions.get(event.source_transaction_id)
+            if runtime_id is None:
+                raise ValueError(
+                    "Replay event requires a runtime transaction ID before "
+                    f"transaction {event.source_transaction_id} was started."
+                )
+            payload["transactionId"] = runtime_id
+
+        response = await client.call(event.action, payload)
+        if event.action == "StartTransaction":
+            runtime_id = response.payload.get("transactionId")
+            if runtime_id is None:
+                raise ValueError("StartTransaction response is missing transactionId")
+            runtime_transactions[event.source_transaction_id] = runtime_id
+        completed.append(event.action)
+
+    return tuple(completed)
