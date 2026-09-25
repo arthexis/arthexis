@@ -25,6 +25,7 @@ def _parser() -> argparse.ArgumentParser:
             "verify",
             "restore",
             "reconcile-fixture",
+            "verify-migration",
             "inspect",
             "dry-run",
             "import",
@@ -145,6 +146,24 @@ def main() -> int:
 
     if arguments.command == "reconcile-fixture":
         return _reconcile_fixture(arguments)
+
+    if arguments.command == "verify-migration":
+        source = _require_source(arguments.source)
+        from arthexis.reconciliation.verification import verify_reconciliation
+
+        result = verify_reconciliation(source)
+        print(
+            json.dumps(
+                {
+                    "decision": result.decision,
+                    "json_report": str(result.json_path),
+                    "text_report": str(result.text_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0 if result.decision == "GO" else 2
 
     if arguments.command in {"capture", "verify", "restore"}:
         from arthexis.reconciliation.capture import (
