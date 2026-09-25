@@ -8,8 +8,10 @@ from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
     pending_configuration_observation_ids,
+    pending_local_list_observation_ids,
     reconcile_availability_operations,
     reconcile_configuration_operations,
+    reconcile_local_list_operations,
     reconcile_profile_operations,
     reconcile_reservation_operations,
     reconcile_session_operations,
@@ -66,3 +68,13 @@ def reconcile_ambiguous_reservation_operations() -> int:
 def reconcile_ambiguous_profile_operations() -> int:
     """Resolve ambiguous charging-profile mutations from fresh retained state."""
     return reconcile_profile_operations()
+
+
+@shared_task(name="ocpp.maintenance.reconcile_local_list_operations")
+def reconcile_ambiguous_local_list_operations() -> int:
+    """Resolve ambiguous local-list writes and dispatch version observations."""
+    resolved = reconcile_local_list_operations()
+    for operation_id in pending_local_list_observation_ids():
+        operation = ProtocolOperation.objects.select_related("charger").get(pk=operation_id)
+        async_to_sync(enqueue_existing_operation)(operation)
+    return resolved
