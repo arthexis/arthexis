@@ -9,6 +9,7 @@ from django.utils.dateparse import parse_datetime
 
 from apps.ocpp.models import (
     Charger,
+    ChargingProfile,
     InboundProtocolRequest,
     OcppTransaction,
     ProtocolOperation,
@@ -713,6 +714,175 @@ def reconcile_availability_operations(*, limit: int = 100) -> int:
     resolved = 0
     for operation_id in operation_ids:
         current = reconcile_availability_operation(ProtocolOperation(pk=operation_id))
+        if (
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
+        ):
+            resolved += 1
+    return resolved
+
+
+PROFILE_RECONCILE_ACTIONS = frozenset({"SetChargingProfile", "ClearChargingProfile"})
+
+
+def _profile_attempt_at(operation: ProtocolOperation):
+    return operation.last_attempt_at or operation.first_attempt_at or operation.created_at
+
+
+def _set_profile_identity(
+    operation: ProtocolOperation,
+) -> tuple[str, int | None, str | None, str | None] | None:
+    payload = operation.request_payload
+    key = (
+        "csChargingProfiles"
+        if operation.version == ProtocolVersion.OCPP_16.value
+        else "chargingProfile"
+    )
+    profile = payload.get(key)
+    if not isinstance(profile, dict):
+        return None
+    remote_id = profile.get(
+        "chargingProfileId"
+        if operation.version == ProtocolVersion.OCPP_16.value
+        else "id"
+    )
+    if not isinstance(remote_id, (int, str)) or not str(remote_id):
+        return None
+    stack_level = profile.get("stackLevel")
+    purpose = profile.get("chargingProfilePurpose")
+    kind = profile.get("chargingProfileKind")
+    return (
+        str(remote_id),
+        stack_level if isinstance(stack_level, int) else None,
+        purpose if isinstance(purpose, str) else None,
+        kind if isinstance(kind, str) else None,
+    )
+
+
+def _clear_profile_remote_id(operation: ProtocolOperation) -> str | None:
+    payload = operation.request_payload
+    value = payload.get("id")
+    if operation.version == ProtocolVersion.OCPP_201.value:
+        criteria = payload.get("chargingProfileCriteria")
+        if isinstance(criteria, dict):
+            value = criteria.get("chargingProfileId", criteria.get("id", value))
+    if isinstance(value, (int, str)) and str(value):
+        return str(value)
+    return None
+
+
+def _fresh_profile_by_id(
+    operation: ProtocolOperation,
+    *,
+    remote_id: str,
+) -> ChargingProfile | None:
+    return (
+        ChargingProfile.objects.filter(
+            charger=operation.charger,
+            remote_id=remote_id,
+            updated_at__gte=_profile_attempt_at(operation),
+        )
+        .order_by("-updated_at", "-pk")
+        .first()
+    )
+
+
+def _set_profile_evidence(
+    operation: ProtocolOperation,
+    profile: ChargingProfile,
+    identity: tuple[str, int | None, str | None, str | None],
+) -> bool:
+    _, stack_level, purpose, kind = identity
+    if not profile.active:
+        return False
+    if stack_level is not None and profile.stack_level != stack_level:
+        return False
+    if purpose is not None and profile.purpose != purpose:
+        return False
+    if kind is not None and profile.kind != kind:
+        return False
+    return True
+
+
+@transaction.atomic
+def reconcile_profile_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Reconcile ambiguous charging-profile mutations from fresh retained profile state."""
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in PROFILE_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    if current.action == "SetChargingProfile":
+        identity = _set_profile_identity(current)
+        if identity is None:
+            return current
+        profile = _fresh_profile_by_id(current, remote_id=identity[0])
+        if profile is None:
+            return current
+        achieved = _set_profile_evidence(current, profile, identity)
+    else:
+        remote_id = _clear_profile_remote_id(current)
+        if remote_id is None:
+            return current
+        profile = _fresh_profile_by_id(current, remote_id=remote_id)
+        if profile is None:
+            return current
+        achieved = not profile.active
+
+    if achieved:
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"ChargingProfile {profile.remote_id} retained state updated after "
+                f"ambiguous {current.action} intent proves the requested profile state."
+            ),
+        )
+
+    replacement = create_operation(
+        charger=current.charger,
+        version=ProtocolVersion(current.version),
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action=current.action,
+        request_payload=current.request_payload,
+    )
+    return _settle_reconciled_operation(
+        current,
+        resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        basis=(
+            f"ChargingProfile {profile.remote_id} retained state updated after ambiguous "
+            f"{current.action} intent contradicts the requested profile state; created "
+            f"deliberate replacement operation {replacement.pk}."
+        ),
+    )
+
+
+def reconcile_profile_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of ambiguous charging-profile mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=PROFILE_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        current = reconcile_profile_operation(ProtocolOperation(pk=operation_id))
         if (
             current.status == ProtocolOperation.Status.COMPLETED
             and current.reconciled_at is not None
