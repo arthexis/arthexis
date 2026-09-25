@@ -3,11 +3,36 @@ from django.test import TestCase
 
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ALL_ACTIONS
-from apps.ocpp.simulator import run_v16_scenario, run_v201_scenario
+from apps.ocpp.simulator import (
+    run_v16_authorization_scenario,
+    run_v16_scenario,
+    run_v201_scenario,
+)
 from tests.apps.ocpp.builders import charger
 
 
+# These scenarios exercise the real CSMS decision path rather than predicting policy.
 class OcppSimulatorTests(TestCase):
+    def test_v16_authorization_scenario_preserves_order_repeats_and_actual_status(self) -> None:
+        target = charger(
+            "authorization-matrix",
+            authorization_mode="open",
+        )
+
+        results = async_to_sync(run_v16_authorization_scenario)(
+            target,
+            ("known-shape", "unknown-shape", "known-shape"),
+        )
+
+        self.assertEqual(
+            [(result.id_tag, result.status) for result in results],
+            [
+                ("known-shape", "Accepted"),
+                ("unknown-shape", "Accepted"),
+                ("known-shape", "Accepted"),
+            ],
+        )
+
     def test_v16_protocol_client_exercises_every_retained_inbound_action(self) -> None:
         completed = async_to_sync(run_v16_scenario)(charger("simulator-v16"))
 
