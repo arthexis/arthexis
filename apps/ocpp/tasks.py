@@ -5,7 +5,10 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
-from apps.ocpp.domain.operations import (\n    reconcile_configuration_operations,\n    reconcile_session_operations,\n)
+from apps.ocpp.domain.operations import (
+    reconcile_configuration_operations,
+    reconcile_session_operations,
+)
 from apps.ocpp.domain.sessions import reconcile_pending_transaction_energy
 from apps.ocpp.models import Charger, ChargerConnection
 
