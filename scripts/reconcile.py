@@ -24,6 +24,7 @@ def _parser() -> argparse.ArgumentParser:
             "capture",
             "verify",
             "restore",
+            "preserve",
             "reconcile-fixture",
             "verify-migration",
             "inspect",
@@ -165,7 +166,7 @@ def main() -> int:
         )
         return 0 if result.decision == "GO" else 2
 
-    if arguments.command in {"capture", "verify", "restore"}:
+    if arguments.command in {"capture", "verify", "restore", "preserve"}:
         from arthexis.reconciliation.capture import (
             capture_legacy_installation,
             verify_capture,
@@ -180,6 +181,27 @@ def main() -> int:
 
         _setup_django()
         from django.conf import settings
+
+        if arguments.command == "preserve":
+            from arthexis.reconciliation.preservation import preserve_capture
+
+            destination = (
+                arguments.output
+                or Path(settings.DATA_DIR) / "migration" / "preserved"
+            )
+            result = preserve_capture(source, destination)
+            print(
+                json.dumps(
+                    {
+                        "capture_id": result.capture_id,
+                        "path": str(result.path),
+                        "database": str(result.database_path),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
 
         if arguments.command == "restore":
             destination = (
