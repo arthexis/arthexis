@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -13,6 +15,18 @@ from arthexis.reconciliation.importer import ReconciliationReport, reconcile
 from arthexis.reconciliation.source import inspect_source
 
 RECONCILIATION_WORKSPACE_FORMAT = "arthexis-migration-reconciliation-v1"
+
+
+def _peak_memory_usage() -> dict[str, int]:
+    """Return peak RSS on Linux when the standard resource module is available."""
+
+    if not sys.platform.startswith("linux"):
+        return {}
+    try:
+        import resource
+    except ImportError:
+        return {}
+    return {"peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
 
 
 def _sha256(path: Path) -> str:
@@ -69,7 +83,9 @@ def reconcile_fixture(
             "Configured Arthexis destination database does not match requested output."
         )
 
+    started = time.monotonic()
     report = reconcile(source_database, batch_size=batch_size)
+    elapsed_seconds = round(time.monotonic() - started, 3)
     source_sha_after = _sha256(source_database)
     if source_sha_after != source_sha_before:
         raise RuntimeError("Reconciliation modified the fixture source database.")
@@ -95,6 +111,13 @@ def reconcile_fixture(
             "integrity": output_inspection.integrity,
         },
         "reconciliation": report.as_dict(),
+        "resource_policy": {
+            "batch_size": batch_size,
+        },
+        "resource_usage": {
+            "elapsed_seconds": elapsed_seconds,
+            **_peak_memory_usage(),
+        },
     }
     receipt_path = fixture / "reconciliation.json"
     receipt_path.write_text(
