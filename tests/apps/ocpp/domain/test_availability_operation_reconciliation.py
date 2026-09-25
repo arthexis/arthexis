@@ -74,14 +74,14 @@ class AvailabilityOperationReconciliationTests:
         result = reconcile_availability_operation(operation)
 
         assert result.status == ProtocolOperation.Status.COMPLETED
-        self.assertEqual(
-            result.reconciliation_resolution,
-            ProtocolOperation.ReconciliationResolution.ACHIEVED,
+        assert (
+            result.reconciliation_resolution
+            == ProtocolOperation.ReconciliationResolution.ACHIEVED
         )
         assert str(evidence.pk) in result.reconciliation_basis
-        self.assertEqual(
-            ProtocolOperation.objects.filter(action="ChangeAvailability").count(),
-            1,
+        assert (
+            ProtocolOperation.objects.filter(action="ChangeAvailability").count()
+            == 1
         )
 
     def test_v16_contrary_fresh_state_creates_deliberate_replacement(self) -> None:
@@ -99,9 +99,9 @@ class AvailabilityOperationReconciliationTests:
         result = reconcile_availability_operation(operation)
 
         assert result.status == ProtocolOperation.Status.COMPLETED
-        self.assertEqual(
-            result.reconciliation_resolution,
-            ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        assert (
+            result.reconciliation_resolution
+            == ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED
         )
         replacement = (
             ProtocolOperation.objects.filter(action="ChangeAvailability")
@@ -172,9 +172,9 @@ class AvailabilityOperationReconciliationTests:
         result = reconcile_availability_operation(operation)
 
         assert result.status == ProtocolOperation.Status.COMPLETED
-        self.assertEqual(
-            result.reconciliation_resolution,
-            ProtocolOperation.ReconciliationResolution.ACHIEVED,
+        assert (
+            result.reconciliation_resolution
+            == ProtocolOperation.ReconciliationResolution.ACHIEVED
         )
         assert str(evidence.pk) in result.reconciliation_basis
 
