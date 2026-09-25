@@ -65,8 +65,40 @@ database remains untouched. Re-running restore creates a new fixture identity
 and never silently overwrites an existing fixture.
 
 A 2.0 database is created by its own migrations. After this fixture exists,
-reconciliation may operate on the disposable legacy SQLite working copy rather
+reconciliation operates on the disposable legacy SQLite working copy rather
 than modifying either the live old checkout or the immutable capture.
+
+## Cross-major reconciliation from a fixture
+
+Phase 3 consumes the database-only fixture and produces a separate current-
+generation database. The legacy fixture database itself remains read-only input.
+
+```bash
+.venv/bin/python scripts/reconcile.py reconcile-fixture \
+    /opt/arthexis-current/var/lib/migration/fixtures/<fixture-id>
+```
+
+By default this creates:
+
+```text
+<fixture-id>/
+    database.sqlite3       # unchanged legacy working source
+    fixture.json
+    reconciled.sqlite3     # fresh Arthexis 2 destination
+    reconciliation.json    # redacted success receipt
+```
+
+The workflow verifies the fixture source hash first, creates a fresh Arthexis 2
+database with current migrations and the schema-generation marker, runs the
+supported #240 reconciliation engine against the fixture source, and verifies
+that the destination classifies as generation 2. The source hash is checked
+again after reconciliation; any source mutation is a hard failure.
+
+A destination may be selected explicitly with
+`--destination-database /path/to/output.sqlite3`. Existing destinations are
+never overwritten. Failed runs leave a concise `reconciliation-error.json`
+diagnostic in the fixture workspace so the failure can be inspected before a
+fresh rerun.
 
 ## Work packages
 
