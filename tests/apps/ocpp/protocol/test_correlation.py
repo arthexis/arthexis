@@ -1,15 +1,15 @@
-from unittest import IsolatedAsyncioTestCase
+import pytest
 
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.errors import ConnectionClosed
 
 
-class CorrelationTests(IsolatedAsyncioTestCase):
-    async def test_close_rejects_pending_calls(self) -> None:
-        pending_calls = PendingCalls()
-        unique_id, future = pending_calls.open()
+@pytest.mark.asyncio
+async def test_close_rejects_pending_calls() -> None:
+    pending_calls = PendingCalls()
+    unique_id, future = pending_calls.open()
 
-        pending_calls.close()
+    pending_calls.close()
 
-        with self.assertRaises(ConnectionClosed):
-            await pending_calls.wait(unique_id, future, timeout=1)
+    with pytest.raises(ConnectionClosed):
+        await pending_calls.wait(unique_id, future, timeout=1)
