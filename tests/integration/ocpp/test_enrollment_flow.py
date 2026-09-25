@@ -1,5 +1,5 @@
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
 from django.test import override_settings
@@ -7,7 +7,6 @@ from django.test import override_settings
 from apps.ocpp.models import Charger
 from arthexis.asgi import application
 from tests.integration.ocpp.support import basic_authorization
-
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
