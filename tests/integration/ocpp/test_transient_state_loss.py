@@ -1,6 +1,6 @@
 from datetime import timedelta
-import pytest
 
+import pytest
 from asgiref.sync import async_to_sync
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
@@ -23,6 +23,7 @@ from tests.apps.ocpp.builders import charger, connection, protocol_operation
 from tests.integration.ocpp.support import connect_charger
 
 pytestmark = pytest.mark.django_db(transaction=True)
+
 
 class TransientStateLossAcceptanceTests:
     def test_inbound_replay_survives_loss_of_correlation_state(self) -> None:
@@ -49,9 +50,9 @@ class TransientStateLossAcceptanceTests:
         replayed = async_to_sync(fresh_dispatcher.dispatch)(frame)
 
         assert first == CallResult(
-                unique_id="transfer-transient",
-                payload={"status": "Accepted"},
-            ),
+            unique_id="transfer-transient",
+            payload={"status": "Accepted"},
+        )
         assert replayed == first
         assert NotificationRecord.objects.count() == 1
         request = InboundProtocolRequest.objects.get(
