@@ -216,15 +216,14 @@ def _settle_reconciled_operation(
     operation: ProtocolOperation,
     *,
     basis: str,
+    resolution: str = ProtocolOperation.ReconciliationResolution.ACHIEVED,
 ) -> ProtocolOperation:
     now = timezone.now()
     operation.status = ProtocolOperation.Status.COMPLETED
     operation.completed_at = now
     operation.reconciliation_checked_at = now
     operation.reconciled_at = now
-    operation.reconciliation_resolution = (
-        ProtocolOperation.ReconciliationResolution.ACHIEVED
-    )
+    operation.reconciliation_resolution = resolution
     operation.reconciliation_basis = basis[:240]
     operation.save(
         update_fields=(
@@ -279,6 +278,258 @@ def reconcile_session_operation(operation: ProtocolOperation) -> ProtocolOperati
             f"after ambiguous {current.action} intent."
         ),
     )
+
+
+
+CONFIGURATION_RECONCILE_ACTIONS = frozenset({"ChangeConfiguration", "SetVariables"})
+
+
+def _configuration_observation_request(
+    operation: ProtocolOperation,
+) -> tuple[str, dict[str, object]] | None:
+    payload = operation.request_payload
+    if operation.action == "ChangeConfiguration":
+        key = payload.get("key")
+        value = payload.get("value")
+        if not isinstance(key, str) or not key or not isinstance(value, str):
+            return None
+        return "GetConfiguration", {"key": [key]}
+
+    if operation.action != "SetVariables":
+        return None
+    requested = payload.get("setVariableData")
+    if not isinstance(requested, list) or not requested:
+        return None
+
+    observations: list[dict[str, object]] = []
+    for item in requested:
+        if not isinstance(item, dict):
+            return None
+        component = item.get("component")
+        variable = item.get("variable")
+        value = item.get("attributeValue")
+        if (
+            not isinstance(component, dict)
+            or not isinstance(component.get("name"), str)
+            or not isinstance(variable, dict)
+            or not isinstance(variable.get("name"), str)
+            or not isinstance(value, str)
+        ):
+            return None
+        observation: dict[str, object] = {
+            "component": component,
+            "variable": variable,
+        }
+        attribute_type = item.get("attributeType")
+        if isinstance(attribute_type, str) and attribute_type:
+            observation["attributeType"] = attribute_type
+        observations.append(observation)
+    return "GetVariables", {"getVariableData": observations}
+
+
+def _latest_configuration_observation(
+    operation: ProtocolOperation,
+    *,
+    action: str,
+    payload: dict[str, object],
+) -> ProtocolOperation | None:
+    attempt_at = operation.last_attempt_at or operation.first_attempt_at or operation.created_at
+    candidates = (
+        ProtocolOperation.objects.filter(
+            charger=operation.charger,
+            version=operation.version,
+            direction=ProtocolOperation.Direction.CSMS_TO_CHARGE_POINT,
+            action=action,
+            created_at__gte=attempt_at,
+        )
+        .exclude(pk=operation.pk)
+        .order_by("-created_at", "-pk")
+    )
+    return next(
+        (
+            candidate
+            for candidate in candidates[:20]
+            if candidate.request_payload == payload
+        ),
+        None,
+    )
+
+
+def _v16_configuration_evidence(
+    operation: ProtocolOperation,
+    observation: ProtocolOperation,
+) -> bool | None:
+    key = operation.request_payload.get("key")
+    desired = operation.request_payload.get("value")
+    response = observation.response_payload
+    if not isinstance(key, str) or not isinstance(desired, str) or not isinstance(response, dict):
+        return None
+    values = response.get("configurationKey")
+    if not isinstance(values, list):
+        return None
+    for item in values:
+        if not isinstance(item, dict) or item.get("key") != key:
+            continue
+        observed = item.get("value")
+        if not isinstance(observed, str):
+            return None
+        return observed == desired
+    return None
+
+
+def _variable_identity(item: dict[str, object]) -> tuple[str, str, str] | None:
+    component = item.get("component")
+    variable = item.get("variable")
+    if not isinstance(component, dict) or not isinstance(variable, dict):
+        return None
+    component_name = component.get("name")
+    variable_name = variable.get("name")
+    if not isinstance(component_name, str) or not isinstance(variable_name, str):
+        return None
+    attribute_type = item.get("attributeType", "Actual")
+    if not isinstance(attribute_type, str):
+        return None
+    return component_name, variable_name, attribute_type
+
+
+def _v201_variable_evidence(
+    operation: ProtocolOperation,
+    observation: ProtocolOperation,
+) -> bool | None:
+    requested = operation.request_payload.get("setVariableData")
+    response = observation.response_payload
+    if not isinstance(requested, list) or not isinstance(response, dict):
+        return None
+    results = response.get("getVariableResult")
+    if not isinstance(results, list):
+        return None
+
+    observed_values: dict[tuple[str, str, str], str] = {}
+    for item in results:
+        if not isinstance(item, dict) or item.get("attributeStatus") != "Accepted":
+            continue
+        identity = _variable_identity(item)
+        value = item.get("attributeValue")
+        if identity is not None and isinstance(value, str):
+            observed_values[identity] = value
+
+    desired_values: dict[tuple[str, str, str], str] = {}
+    for item in requested:
+        if not isinstance(item, dict):
+            return None
+        identity = _variable_identity(item)
+        value = item.get("attributeValue")
+        if identity is None or not isinstance(value, str):
+            return None
+        desired_values[identity] = value
+
+    if not desired_values or not desired_values.keys() <= observed_values.keys():
+        return None
+    return all(observed_values[key] == value for key, value in desired_values.items())
+
+
+def _configuration_evidence(
+    operation: ProtocolOperation,
+    observation: ProtocolOperation,
+) -> bool | None:
+    if operation.action == "ChangeConfiguration":
+        return _v16_configuration_evidence(operation, observation)
+    if operation.action == "SetVariables":
+        return _v201_variable_evidence(operation, observation)
+    return None
+
+
+@transaction.atomic
+def reconcile_configuration_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Reconcile ambiguous configuration mutations through separate safe observations."""
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in CONFIGURATION_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    observation_spec = _configuration_observation_request(current)
+    if observation_spec is None:
+        return current
+    observation_action, observation_payload = observation_spec
+    observation = _latest_configuration_observation(
+        current,
+        action=observation_action,
+        payload=observation_payload,
+    )
+    if observation is None:
+        create_operation(
+            charger=current.charger,
+            version=ProtocolVersion(current.version),
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action=observation_action,
+            request_payload=observation_payload,
+        )
+        return current
+    if observation.status != ProtocolOperation.Status.COMPLETED:
+        return current
+
+    achieved = _configuration_evidence(current, observation)
+    if achieved is None:
+        return current
+    if achieved:
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"{observation.action} operation {observation.pk} observed the requested "
+                f"configuration state after ambiguous {current.action} intent."
+            ),
+        )
+
+    retry = create_operation(
+        charger=current.charger,
+        version=ProtocolVersion(current.version),
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action=current.action,
+        request_payload=current.request_payload,
+    )
+    return _settle_reconciled_operation(
+        current,
+        resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        basis=(
+            f"{observation.action} operation {observation.pk} proved the requested state "
+            f"was not achieved; created deliberate replacement operation {retry.pk}."
+        ),
+    )
+
+
+def reconcile_configuration_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of ambiguous configuration mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=CONFIGURATION_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        current = reconcile_configuration_operation(ProtocolOperation(pk=operation_id))
+        if (
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
+        ):
+            resolved += 1
+    return resolved
 
 
 def reconcile_session_operations(*, limit: int = 100) -> int:
