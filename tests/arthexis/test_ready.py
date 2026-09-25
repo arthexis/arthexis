@@ -1,6 +1,8 @@
 from unittest.mock import patch
 from urllib.error import URLError
 
+import pytest
+
 from arthexis.ready import local, main
 
 
@@ -45,9 +47,5 @@ def test_ready_local_flag_runs_local_check() -> None:
 
 
 def test_ready_without_scope_is_not_defined_yet() -> None:
-    try:
+    with pytest.raises(ValueError, match="requires --local"):
         main()
-    except ValueError as error:
-        assert "requires --local" in str(error)
-    else:
-        raise AssertionError("ready without a scope should fail")
