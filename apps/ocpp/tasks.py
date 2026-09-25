@@ -10,6 +10,7 @@ from apps.ocpp.domain.operations import (
     pending_configuration_observation_ids,
     reconcile_availability_operations,
     reconcile_configuration_operations,
+    reconcile_profile_operations,
     reconcile_reservation_operations,
     reconcile_session_operations,
 )
@@ -59,3 +60,9 @@ def reconcile_ambiguous_availability_operations() -> int:
 def reconcile_ambiguous_reservation_operations() -> int:
     """Resolve ambiguous reservation mutations from fresh retained domain state."""
     return reconcile_reservation_operations()
+
+
+@shared_task(name="ocpp.maintenance.reconcile_profile_operations")
+def reconcile_ambiguous_profile_operations() -> int:
+    """Resolve ambiguous charging-profile mutations from fresh retained state."""
+    return reconcile_profile_operations()
