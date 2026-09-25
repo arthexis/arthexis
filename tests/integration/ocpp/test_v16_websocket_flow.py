@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
 from django.test import TestCase
 
@@ -15,9 +14,8 @@ from apps.ocpp.models import (
     OcppTransaction,
     OperationalStatusRecord,
 )
-from arthexis.asgi import application
 from tests.apps.ocpp.builders import charger
-from tests.integration.ocpp.support import basic_authorization
+from tests.integration.ocpp.support import connect_charger
 
 
 class Ocpp16WebsocketFlowTests(TestCase):
@@ -68,15 +66,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
         self.assertIsNone(snapshot.current_transaction_id)
 
     async def _run_reconnect_recovery_exchange(self) -> None:
-        first = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp1.6"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await first.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
+        first = await connect_charger()
 
         await first.send_json_to(
             [
@@ -109,15 +99,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
 
         await first.disconnect()
 
-        second = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp1.6"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await second.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
+        second = await connect_charger()
 
         await second.send_json_to(
             [
@@ -149,15 +131,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
         await second.disconnect()
 
     async def _run_exchange(self) -> None:
-        communicator = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp1.6"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await communicator.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
+        communicator = await connect_charger()
 
         await communicator.send_json_to(
             [
