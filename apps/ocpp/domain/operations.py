@@ -6,7 +6,12 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from apps.ocpp.models import Charger, OcppTransaction, ProtocolOperation
+from apps.ocpp.models import (
+    Charger,
+    InboundProtocolRequest,
+    OcppTransaction,
+    ProtocolOperation,
+)
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.recovery import recovery_policy_for
 from apps.ocpp.protocol.registry import resolve_action
@@ -554,6 +559,158 @@ def reconcile_configuration_operations(*, limit: int = 100) -> int:
     resolved = 0
     for operation_id in operation_ids:
         current = reconcile_configuration_operation(ProtocolOperation(pk=operation_id))
+        if (
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
+        ):
+            resolved += 1
+    return resolved
+
+
+AVAILABILITY_RECONCILE_ACTIONS = frozenset({"ChangeAvailability"})
+
+
+def _availability_target(
+    operation: ProtocolOperation,
+) -> tuple[int, str] | None:
+    payload = operation.request_payload
+    if operation.version == ProtocolVersion.OCPP_16.value:
+        connector_id = payload.get("connectorId")
+        desired = payload.get("type")
+        if not isinstance(connector_id, int) or connector_id <= 0:
+            return None
+        if desired not in {"Operative", "Inoperative"}:
+            return None
+        return connector_id, desired
+
+    if operation.version != ProtocolVersion.OCPP_201.value:
+        return None
+    desired = payload.get("operationalStatus")
+    evse = payload.get("evse")
+    if desired not in {"Operative", "Inoperative"} or not isinstance(evse, dict):
+        return None
+    evse_id = evse.get("id")
+    connector_id = evse.get("connectorId")
+    if not isinstance(evse_id, int) or evse_id <= 0:
+        return None
+    if not isinstance(connector_id, int) or connector_id <= 0:
+        return None
+    return (evse_id * 1000) + connector_id, desired
+
+
+def _availability_status_evidence(
+    operation: ProtocolOperation,
+    *,
+    connector_number: int,
+    desired: str,
+) -> tuple[bool | None, InboundProtocolRequest | None]:
+    attempt_at = operation.last_attempt_at or operation.first_attempt_at or operation.created_at
+    requests = (
+        InboundProtocolRequest.objects.filter(
+            charger=operation.charger,
+            version=operation.version,
+            action="StatusNotification",
+            received_at__gte=attempt_at,
+            status=InboundProtocolRequest.Status.COMPLETED,
+        )
+        .order_by("-received_at", "-pk")[:50]
+    )
+    for request in requests:
+        payload = request.request_payload
+        if operation.version == ProtocolVersion.OCPP_16.value:
+            observed_connector = payload.get("connectorId")
+            status = payload.get("status")
+        else:
+            evse_id = payload.get("evseId")
+            connector_id = payload.get("connectorId")
+            if not isinstance(evse_id, int) or not isinstance(connector_id, int):
+                continue
+            observed_connector = (evse_id * 1000) + connector_id
+            status = payload.get("connectorStatus")
+        if observed_connector != connector_number or not isinstance(status, str):
+            continue
+        if status == "Faulted":
+            return None, request
+        if desired == "Inoperative":
+            return status == "Unavailable", request
+        return status != "Unavailable", request
+    return None, None
+
+
+@transaction.atomic
+def reconcile_availability_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Reconcile connector-scoped ChangeAvailability from fresh status evidence."""
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in AVAILABILITY_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    target = _availability_target(current)
+    if target is None:
+        return current
+    connector_number, desired = target
+    achieved, evidence = _availability_status_evidence(
+        current,
+        connector_number=connector_number,
+        desired=desired,
+    )
+    if achieved is None or evidence is None:
+        return current
+    if achieved:
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"StatusNotification request {evidence.pk} observed connector "
+                f"{connector_number} in a state consistent with {desired} after "
+                f"ambiguous ChangeAvailability intent."
+            ),
+        )
+
+    replacement = create_operation(
+        charger=current.charger,
+        version=ProtocolVersion(current.version),
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action=current.action,
+        request_payload=current.request_payload,
+    )
+    return _settle_reconciled_operation(
+        current,
+        resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        basis=(
+            f"StatusNotification request {evidence.pk} observed connector "
+            f"{connector_number} contrary to requested {desired}; created "
+            f"deliberate replacement operation {replacement.pk}."
+        ),
+    )
+
+
+def reconcile_availability_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of connector-scoped availability mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=AVAILABILITY_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        current = reconcile_availability_operation(ProtocolOperation(pk=operation_id))
         if (
             current.status == ProtocolOperation.Status.COMPLETED
             and current.reconciled_at is not None
