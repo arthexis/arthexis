@@ -2,8 +2,8 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
-from channels.exceptions import ChannelFull
 import pytest
+from channels.exceptions import ChannelFull
 from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
