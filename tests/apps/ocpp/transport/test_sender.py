@@ -1,5 +1,7 @@
 import asyncio
-from unittest import IsolatedAsyncioTestCase
+
+import pytest
+from asgiref.sync import async_to_sync
 
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
@@ -8,8 +10,12 @@ from apps.ocpp.protocol.frames import CallError, CallResult
 from apps.ocpp.transport.sender import OutboundSender
 
 
-class OutboundSenderTests(IsolatedAsyncioTestCase):
-    async def test_outbound_result_is_correlated(self) -> None:
+def run(coro):
+    return async_to_sync(coro)()
+
+
+def test_outbound_result_is_correlated() -> None:
+    async def scenario() -> None:
         sent: list[list[object]] = []
 
         async def send_json(frame: list[object]) -> None:
@@ -24,14 +30,18 @@ class OutboundSenderTests(IsolatedAsyncioTestCase):
         task = asyncio.create_task(sender.send(action="GetConfiguration", payload={}))
         await asyncio.sleep(0)
         unique_id = sent[0][1]
-        self.assertIsInstance(unique_id, str)
+        assert isinstance(unique_id, str)
         pending_calls.resolve(
             CallResult(unique_id=unique_id, payload={"configurationKey": []})
         )
 
-        self.assertEqual(await task, {"configurationKey": []})
+        assert await task == {"configurationKey": []}
 
-    async def test_outbound_timeout_is_bounded(self) -> None:
+    run(scenario)
+
+
+def test_outbound_timeout_is_bounded() -> None:
+    async def scenario() -> None:
         async def send_json(frame: list[object]) -> None:
             return None
 
@@ -41,10 +51,14 @@ class OutboundSenderTests(IsolatedAsyncioTestCase):
             send_json=send_json,
             pending_calls=pending_calls,
         )
-        with self.assertRaises(OutboundCallTimeout):
+        with pytest.raises(OutboundCallTimeout):
             await sender.send(action="GetConfiguration", payload={}, timeout=0)
 
-    async def test_outbound_call_error_is_correlated(self) -> None:
+    run(scenario)
+
+
+def test_outbound_call_error_is_correlated() -> None:
+    async def scenario() -> None:
         sent: list[list[object]] = []
 
         async def send_json(frame: list[object]) -> None:
@@ -67,5 +81,7 @@ class OutboundSenderTests(IsolatedAsyncioTestCase):
             )
         )
 
-        with self.assertRaises(OutboundCallError):
+        with pytest.raises(OutboundCallError):
             await task
+
+    run(scenario)
