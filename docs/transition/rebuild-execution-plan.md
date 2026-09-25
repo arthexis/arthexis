@@ -68,10 +68,13 @@ A 2.0 database is created by its own migrations. After this fixture exists,
 reconciliation operates on the disposable legacy SQLite working copy rather
 than modifying either the live old checkout or the immutable capture.
 
-## Cross-major reconciliation from a fixture
+## Local cross-major reconciliation from a fixture
 
-Phase 3 consumes the database-only fixture and produces a separate current-
-generation database. The legacy fixture database itself remains read-only input.
+Phase 3 is local-first. The current Arthexis instance on the satellite consumes
+the database-only fixture and produces a separate current-generation database
+on that same node. The legacy fixture database itself remains read-only input.
+Remote Watchtower reconciliation is deferred unless field measurements show
+that local reconciliation is too costly or risks charger stability.
 
 ```bash
 .venv/bin/python scripts/reconcile.py reconcile-fixture \
@@ -93,6 +96,23 @@ database with current migrations and the schema-generation marker, runs the
 supported #240 reconciliation engine against the fixture source, and verifies
 that the destination classifies as generation 2. The source hash is checked
 again after reconciliation; any source mutation is a hard failure.
+
+To protect the live satellite, local reconciliation is resource-conscious by
+default. Legacy rows are streamed from SQLite in bounded batches instead of
+materializing whole tables in Python memory. The CLI defaults to a batch size of
+250 rows and, on POSIX systems, increases niceness by 10 so charger-serving
+processes retain CPU priority. Both can be tuned for field testing:
+
+```bash
+.venv/bin/python scripts/reconcile.py reconcile-fixture \
+    /path/to/fixture --batch-size 250 --nice 10
+```
+
+The reconciliation receipt records elapsed time and Linux peak RSS so the first
+real satellite rehearsal can determine whether local execution is acceptable.
+If measurements show excessive resource pressure, the same capture/fixture
+contract can later be transported to Watchtower without changing the local
+migration semantics.
 
 A destination may be selected explicitly with
 `--destination-database /path/to/output.sqlite3`. Existing destinations are
