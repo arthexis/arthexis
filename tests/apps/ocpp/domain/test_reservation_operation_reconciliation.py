@@ -208,8 +208,7 @@ class ReservationOperationReconciliationTests(TestCase):
             action="ReserveNow",
             payload={
                 "id": 46,
-                "reservationId": 46,
-                "expiryDateTime": "2026-09-24T21:00:00Z",
+                "expiryDate": "2026-09-24T21:00:00Z",
                 "idToken": {"idToken": "card-2", "type": "Central"},
                 "evseId": 2,
             },
@@ -248,3 +247,33 @@ class ReservationOperationReconciliationTests(TestCase):
             ProtocolOperation.objects.filter(action="CancelReservation").count(),
             2,
         )
+
+    def test_expired_reserve_now_does_not_create_replacement(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            action="ReserveNow",
+            payload={
+                "connectorId": 1,
+                "expiryDate": "2026-09-24T19:00:00Z",
+                "idTag": "card-1",
+                "reservationId": 48,
+            },
+        )
+        self._reservation(
+            remote_id="48",
+            status="rejected",
+            connector_number=1,
+            updated_at=self.attempt_at + timedelta(seconds=1),
+        )
+
+        result = reconcile_reservation_operation(operation)
+
+        self.assertEqual(
+            result.reconciliation_resolution,
+            ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        )
+        self.assertEqual(
+            ProtocolOperation.objects.filter(action="ReserveNow").count(),
+            1,
+        )
+        self.assertIn("no replacement operation was created", result.reconciliation_basis)
