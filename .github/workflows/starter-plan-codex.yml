@@ -1,0 +1,203 @@
+name: Starter Plan Codex Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number whose approved starter plan Codex should implement
+        required: true
+        type: number
+      plan:
+        description: Concrete implementation-ready E0/E1 starter plan
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: starter-plan-${{ github.repository }}-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    name: Implement starter plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Resolve and claim issue
+        id: issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          set -Eeuo pipefail
+
+          issue_json="$(gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}")"
+          if [[ "$(jq -r '.state' <<< "${issue_json}")" != "open" ]]; then
+            echo "Issue #${ISSUE_NUMBER} is not open." >&2
+            exit 1
+          fi
+
+          mapfile -t labels < <(jq -r '.labels[].name | ascii_downcase' <<< "${issue_json}")
+          admitted=false
+          for label in "${labels[@]}"; do
+            case "${label}" in
+              eligible|approved) admitted=true ;;
+              on-hold)
+                echo "Issue #${ISSUE_NUMBER} is on-hold; refusing dispatch." >&2
+                exit 1
+                ;;
+              in-progress)
+                echo "Issue #${ISSUE_NUMBER} is already in-progress; refusing duplicate dispatch." >&2
+                exit 1
+                ;;
+            esac
+          done
+          if [[ "${admitted}" != "true" ]]; then
+            echo "Issue #${ISSUE_NUMBER} is not eligible or approved." >&2
+            exit 1
+          fi
+
+          open_prs="$(gh pr list --repo "${REPOSITORY}" --state open --search "#${ISSUE_NUMBER}" --json number --jq 'length')"
+          if (( open_prs > 0 )); then
+            echo "Issue #${ISSUE_NUMBER} already appears to have an open PR." >&2
+            exit 1
+          fi
+
+          gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/labels" --method POST -f 'labels[]=in-progress' >/dev/null
+
+          branch="issue-${ISSUE_NUMBER}-starter"
+          echo "branch=${branch}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check Codex API key
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [[ -z "${OPENAI_API_KEY}" ]]; then
+            echo "OPENAI_API_KEY is required for starter implementation." >&2
+            exit 1
+          fi
+
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create implementation branch
+        shell: bash
+        env:
+          BRANCH: ${{ steps.issue.outputs.branch }}
+        run: git switch -c "${BRANCH}"
+
+      - name: Run Codex implementation
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          sandbox: workspace-write
+          effort: high
+          allow-bots: true
+          prompt: |
+            You are implementing the first planned development unit for Arthexis issue #${{ inputs.issue_number }}.
+
+            Read AGENTS.md first and follow it as the authoritative repository guide.
+            Read the issue itself for product context, but treat the implementation plan below as
+            the authoritative scope for this starter PR. The planning model has already decided
+            what E0/E1 should contain; do not redesign or broaden that scope.
+
+            STARTER PLAN
+            ------------
+            ${{ inputs.plan }}
+            ------------
+
+            Implement the plan as a coherent, substantive unit. Complete the specified tests,
+            validation, and documentation. Do not make unrelated refactors. Do not edit files
+            under .github/workflows/. Do not commit or push. If the plan is internally
+            contradictory, unsafe, blocked by missing architecture, or cannot be implemented
+            without materially changing its scope, make no speculative substitute; explain the
+            blocker in your final message.
+
+      - name: Require substantive changes
+        id: changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          changed="$(git ls-files --modified --deleted --others --exclude-standard)"
+          if [[ -z "${changed}" ]]; then
+            echo "Codex produced no repository changes." >&2
+            exit 1
+          fi
+          if printf '%s\n' "${changed}" | grep -q '^\.github/workflows/'; then
+            echo "Starter implementation attempted to modify workflow definitions." >&2
+            exit 1
+          fi
+
+      - name: Commit and push implementation
+        id: push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BRANCH: ${{ steps.issue.outputs.branch }}
+        run: |
+          set -Eeuo pipefail
+
+          labels="$(gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}" --jq '[.labels[].name | ascii_downcase]')"
+          if jq -e 'any(. == "on-hold")' <<< "${labels}" >/dev/null; then
+            echo "Issue was put on-hold while Codex was working; refusing to push." >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: start issue #${ISSUE_NUMBER}"
+          gh auth setup-git
+          git push origin "HEAD:${BRANCH}"
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Open Draft pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BRANCH: ${{ steps.issue.outputs.branch }}
+          PLAN: ${{ inputs.plan }}
+          CODEX_FINAL_MESSAGE: ${{ steps.codex.outputs.final-message }}
+        run: |
+          set -Eeuo pipefail
+          title="$(gh issue view "${ISSUE_NUMBER}" --repo "${REPOSITORY}" --json title --jq '.title')"
+          {
+            echo "Starts #${ISSUE_NUMBER} from an implementation-ready starter plan."
+            echo
+            echo "## Planned initial unit"
+            printf '%s\n' "${PLAN}"
+            echo
+            echo "## Codex implementation report"
+            printf '%s\n' "${CODEX_FINAL_MESSAGE}"
+            echo
+            echo "Closes #${ISSUE_NUMBER}"
+          } > "${RUNNER_TEMP}/starter-pr.md"
+
+          gh pr create             --repo "${REPOSITORY}"             --base main             --head "${BRANCH}"             --draft             --title "${title}"             --body-file "${RUNNER_TEMP}/starter-pr.md"
+
+      - name: Release empty failed claim
+        if: failure() && steps.push.outputs.sha == ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          gh api "repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/labels/in-progress" --method DELETE >/dev/null 2>&1 || true
