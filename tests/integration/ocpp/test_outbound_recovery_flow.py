@@ -1,14 +1,10 @@
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
 from django.test import TestCase
 
-from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import ProtocolOperation
-from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
-from arthexis.asgi import application
-from tests.apps.ocpp.builders import charger
-from tests.integration.ocpp.support import basic_authorization
+from tests.apps.ocpp.builders import charger, protocol_operation
+from tests.integration.ocpp.support import connect_charger
 
 
 class OutboundRecoveryAcceptanceTests(TestCase):
@@ -18,27 +14,8 @@ class OutboundRecoveryAcceptanceTests(TestCase):
             connection_token_hash=make_password("charger-secret"),
         )
 
-    def _operation(
-        self,
-        *,
-        action: str,
-        status: str = ProtocolOperation.Status.PENDING,
-        attempts: int = 0,
-    ) -> ProtocolOperation:
-        operation = create_operation(
-            charger=self.charger,
-            version=ProtocolVersion.OCPP_16,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action=action,
-            request_payload={},
-        )
-        operation.status = status
-        operation.attempt_count = attempts
-        operation.save(update_fields=("status", "attempt_count"))
-        return operation
-
     def test_restart_before_send_delivers_durable_pending_intent(self) -> None:
-        operation = self._operation(action="Reset")
+        operation = protocol_operation(self.charger, "Reset")
 
         async_to_sync(self._complete_recovered_call)(
             operation=operation,
@@ -54,8 +31,9 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         self.assertIsNotNone(operation.attempt_token)
 
     def test_restart_after_possible_send_retries_safe_query(self) -> None:
-        operation = self._operation(
-            action="GetConfiguration",
+        operation = protocol_operation(
+            self.charger,
+            "GetConfiguration",
             status=ProtocolOperation.Status.RECOVERY_REQUIRED,
             attempts=1,
         )
@@ -75,8 +53,9 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         )
 
     def test_restart_after_ambiguous_unsafe_command_does_not_resend(self) -> None:
-        operation = self._operation(
-            action="Reset",
+        operation = protocol_operation(
+            self.charger,
+            "Reset",
             status=ProtocolOperation.Status.RECOVERY_REQUIRED,
             attempts=1,
         )
@@ -95,18 +74,6 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         )
         self.assertIsNone(operation.completed_at)
 
-    async def _connect(self) -> WebsocketCommunicator:
-        communicator = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp1.6"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await communicator.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
-        return communicator
-
     async def _complete_recovered_call(
         self,
         *,
@@ -114,7 +81,7 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         expected_action: str,
         response: dict[str, object],
     ) -> None:
-        communicator = await self._connect()
+        communicator = await connect_charger()
         outbound = await communicator.receive_json_from(timeout=5)
 
         self.assertEqual(outbound[0], 2)
@@ -128,6 +95,6 @@ class OutboundRecoveryAcceptanceTests(TestCase):
         await communicator.disconnect()
 
     async def _connect_and_assert_no_outbound_call(self) -> None:
-        communicator = await self._connect()
+        communicator = await connect_charger()
         self.assertTrue(await communicator.receive_nothing(timeout=0.1))
         await communicator.disconnect()
