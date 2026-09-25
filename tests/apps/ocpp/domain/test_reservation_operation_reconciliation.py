@@ -9,7 +9,7 @@ from apps.ocpp.domain.operations import (
 from apps.ocpp.domain.reservations import record_reservation
 from apps.ocpp.models import Connector, ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
-from tests.apps.ocpp.builders import charger
+from tests.apps.ocpp.builders import charger, protocol_operation
 
 
 class ReservationOperationReconciliationTests(TestCase):
@@ -24,26 +24,15 @@ class ReservationOperationReconciliationTests(TestCase):
         action: str,
         payload: dict[str, object],
     ) -> ProtocolOperation:
-        operation = create_operation(
-            charger=self.charger,
+        return protocol_operation(
+            self.charger,
+            action,
             version=version,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action=action,
             request_payload=payload,
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            attempts=1,
+            attempt_at=self.attempt_at,
         )
-        operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
-        operation.attempt_count = 1
-        operation.first_attempt_at = self.attempt_at
-        operation.last_attempt_at = self.attempt_at
-        operation.save(
-            update_fields=(
-                "status",
-                "attempt_count",
-                "first_attempt_at",
-                "last_attempt_at",
-            )
-        )
-        return operation
 
     def _reservation(
         self,
