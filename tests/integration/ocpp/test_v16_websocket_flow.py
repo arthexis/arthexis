@@ -7,7 +7,9 @@ from django.test import TestCase
 
 from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount
+from apps.ocpp.domain.snapshots import snapshot_charger
 from apps.ocpp.models import (
+    Charger,
     Connector,
     NotificationRecord,
     OcppTransaction,
@@ -46,6 +48,105 @@ class Ocpp16WebsocketFlowTests(TestCase):
         self.assertEqual(Connector.objects.get().status, "Preparing")
         self.assertEqual(NotificationRecord.objects.get().action, "DataTransfer")
         self.assertEqual(OperationalStatusRecord.objects.count(), 2)
+
+
+    def test_restart_reconnect_reconciles_open_transaction_from_fresh_status(self) -> None:
+        async_to_sync(self._run_reconnect_recovery_exchange)()
+
+        selected = Charger.objects.get(identity="charger-1")
+        transaction = OcppTransaction.objects.get()
+        snapshot = snapshot_charger(selected)
+
+        self.assertIsNone(transaction.stopped_at)
+        self.assertEqual(
+            transaction.recovery_state,
+            OcppTransaction.RecoveryState.UNRESOLVED,
+        )
+        self.assertEqual(snapshot.state, "unresolved")
+        self.assertEqual(snapshot.active_transactions, 0)
+        self.assertEqual(snapshot.unresolved_sessions, 1)
+        self.assertIsNone(snapshot.current_transaction_id)
+
+    async def _run_reconnect_recovery_exchange(self) -> None:
+        first = WebsocketCommunicator(
+            application,
+            "/ws/ocpp/charger-1/",
+            subprotocols=["ocpp1.6"],
+            headers=[(b"authorization", basic_authorization())],
+        )
+        connected, subprotocol = await first.connect(timeout=5)
+        self.assertTrue(connected)
+        self.assertEqual(subprotocol, "ocpp1.6")
+
+        await first.send_json_to(
+            [
+                2,
+                "boot-recovery-1",
+                "BootNotification",
+                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
+            ]
+        )
+        self.assertEqual((await first.receive_json_from())[2]["status"], "Accepted")
+
+        await first.send_json_to(
+            [2, "authorize-recovery-1", "Authorize", {"idTag": "card-tag"}]
+        )
+        self.assertEqual(
+            (await first.receive_json_from())[2]["idTagInfo"]["status"],
+            "Accepted",
+        )
+
+        await first.send_json_to(
+            [
+                2,
+                "start-recovery-1",
+                "StartTransaction",
+                {"connectorId": 1, "idTag": "card-tag", "meterStart": 100},
+            ]
+        )
+        started = await first.receive_json_from()
+        self.assertEqual(started[2]["idTagInfo"]["status"], "Accepted")
+
+        await first.disconnect()
+
+        second = WebsocketCommunicator(
+            application,
+            "/ws/ocpp/charger-1/",
+            subprotocols=["ocpp1.6"],
+            headers=[(b"authorization", basic_authorization())],
+        )
+        connected, subprotocol = await second.connect(timeout=5)
+        self.assertTrue(connected)
+        self.assertEqual(subprotocol, "ocpp1.6")
+
+        await second.send_json_to(
+            [
+                2,
+                "boot-recovery-2",
+                "BootNotification",
+                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
+            ]
+        )
+        self.assertEqual((await second.receive_json_from())[2]["status"], "Accepted")
+
+        await second.send_json_to(
+            [
+                2,
+                "status-recovery-available",
+                "StatusNotification",
+                {
+                    "connectorId": 1,
+                    "status": "Available",
+                    "timestamp": "2099-01-01T00:00:00Z",
+                },
+            ]
+        )
+        self.assertEqual(
+            await second.receive_json_from(),
+            [3, "status-recovery-available", {}],
+        )
+
+        await second.disconnect()
 
     async def _run_exchange(self) -> None:
         communicator = WebsocketCommunicator(
