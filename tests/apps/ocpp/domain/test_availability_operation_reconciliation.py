@@ -1,0 +1,206 @@
+from datetime import datetime, timedelta, timezone
+
+from django.test import TestCase
+
+from apps.ocpp.domain.operations import (
+    create_operation,
+    reconcile_availability_operation,
+)
+from apps.ocpp.models import InboundProtocolRequest, ProtocolOperation
+from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
+from tests.apps.ocpp.builders import charger
+
+
+class AvailabilityOperationReconciliationTests(TestCase):
+    def setUp(self) -> None:
+        self.charger = charger("reconcile-availability")
+        self.attempt_at = datetime(2026, 9, 24, 20, tzinfo=timezone.utc)
+
+    def _ambiguous(
+        self,
+        *,
+        version: ProtocolVersion,
+        payload: dict[str, object],
+    ) -> ProtocolOperation:
+        operation = create_operation(
+            charger=self.charger,
+            version=version,
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action="ChangeAvailability",
+            request_payload=payload,
+        )
+        operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
+        operation.attempt_count = 1
+        operation.first_attempt_at = self.attempt_at
+        operation.last_attempt_at = self.attempt_at
+        operation.save(
+            update_fields=(
+                "status",
+                "attempt_count",
+                "first_attempt_at",
+                "last_attempt_at",
+            )
+        )
+        return operation
+
+    def _status(
+        self,
+        *,
+        version: ProtocolVersion,
+        payload: dict[str, object],
+        received_at: datetime | None = None,
+        suffix: str,
+    ) -> InboundProtocolRequest:
+        request = InboundProtocolRequest.objects.create(
+            charger=self.charger,
+            version=version.value,
+            direction=Direction.CHARGE_POINT_TO_CSMS.value,
+            action="StatusNotification",
+            unique_id=f"status-{suffix}",
+            fingerprint=f"fingerprint-{suffix}",
+            identity_key=f"identity-{suffix}",
+            request_payload=payload,
+            status=InboundProtocolRequest.Status.COMPLETED,
+        )
+        if received_at is not None:
+            InboundProtocolRequest.objects.filter(pk=request.pk).update(
+                received_at=received_at
+            )
+            request.refresh_from_db()
+        return request
+
+    def test_v16_fresh_unavailable_proves_inoperative_achieved(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "type": "Inoperative"},
+        )
+        evidence = self._status(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "status": "Unavailable"},
+            received_at=self.attempt_at + timedelta(seconds=1),
+            suffix="v16-inoperative",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(
+            result.reconciliation_resolution,
+            ProtocolOperation.ReconciliationResolution.ACHIEVED,
+        )
+        self.assertIn(str(evidence.pk), result.reconciliation_basis)
+        self.assertEqual(
+            ProtocolOperation.objects.filter(action="ChangeAvailability").count(),
+            1,
+        )
+
+    def test_v16_contrary_fresh_state_creates_deliberate_replacement(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "type": "Inoperative"},
+        )
+        self._status(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "status": "Available"},
+            received_at=self.attempt_at + timedelta(seconds=1),
+            suffix="v16-contrary",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(
+            result.reconciliation_resolution,
+            ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        )
+        replacement = (
+            ProtocolOperation.objects.filter(action="ChangeAvailability")
+            .exclude(pk=operation.pk)
+            .get()
+        )
+        self.assertEqual(replacement.status, ProtocolOperation.Status.PENDING)
+        self.assertEqual(replacement.request_payload, operation.request_payload)
+        self.assertIn(str(replacement.pk), result.reconciliation_basis)
+
+    def test_faulted_status_remains_ambiguous(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "type": "Operative"},
+        )
+        self._status(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "status": "Faulted"},
+            received_at=self.attempt_at + timedelta(seconds=1),
+            suffix="faulted",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
+        self.assertIsNone(result.reconciled_at)
+        self.assertEqual(
+            ProtocolOperation.objects.filter(action="ChangeAvailability").count(),
+            1,
+        )
+
+    def test_status_before_attempt_is_not_reconciliation_evidence(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "type": "Inoperative"},
+        )
+        self._status(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "status": "Unavailable"},
+            received_at=self.attempt_at - timedelta(seconds=1),
+            suffix="stale",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
+        self.assertIsNone(result.reconciled_at)
+
+    def test_v201_evse_connector_status_proves_operative(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_201,
+            payload={
+                "operationalStatus": "Operative",
+                "evse": {"id": 2, "connectorId": 3},
+            },
+        )
+        evidence = self._status(
+            version=ProtocolVersion.OCPP_201,
+            payload={
+                "evseId": 2,
+                "connectorId": 3,
+                "connectorStatus": "Occupied",
+            },
+            received_at=self.attempt_at + timedelta(seconds=1),
+            suffix="v201-operative",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        self.assertEqual(
+            result.reconciliation_resolution,
+            ProtocolOperation.ReconciliationResolution.ACHIEVED,
+        )
+        self.assertIn(str(evidence.pk), result.reconciliation_basis)
+
+    def test_station_wide_change_remains_ambiguous_without_aggregate_evidence(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 0, "type": "Inoperative"},
+        )
+        self._status(
+            version=ProtocolVersion.OCPP_16,
+            payload={"connectorId": 1, "status": "Unavailable"},
+            received_at=self.attempt_at + timedelta(seconds=1),
+            suffix="station-wide",
+        )
+
+        result = reconcile_availability_operation(operation)
+
+        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
+        self.assertIsNone(result.reconciled_at)
