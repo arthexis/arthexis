@@ -507,6 +507,36 @@ def reconcile_configuration_operation(operation: ProtocolOperation) -> ProtocolO
     )
 
 
+def pending_configuration_observation_ids(*, limit: int = 100) -> tuple[int, ...]:
+    """Return matching pending observations for ambiguous configuration mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    ids: list[int] = []
+    operations = (
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=CONFIGURATION_RECONCILE_ACTIONS,
+        )
+        .select_related("charger")
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")[:limit]
+    )
+    for operation in operations:
+        spec = _configuration_observation_request(operation)
+        if spec is None:
+            continue
+        action, payload = spec
+        observation = _latest_configuration_observation(
+            operation,
+            action=action,
+            payload=payload,
+        )
+        if observation is not None and observation.status == ProtocolOperation.Status.PENDING:
+            ids.append(observation.pk)
+    return tuple(ids)
+
+
 def reconcile_configuration_operations(*, limit: int = 100) -> int:
     """Reconcile one fair bounded batch of ambiguous configuration mutations."""
     if limit <= 0:
