@@ -1,12 +1,10 @@
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.auth.hashers import make_password
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.ocpp.domain.operations import create_operation
 from apps.ocpp.models import (
     Charger,
     ChargerConnection,
@@ -14,16 +12,14 @@ from apps.ocpp.models import (
     NotificationRecord,
     ProtocolOperation,
 )
-from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.services.presence import connection_is_live
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.operations import active_connections
-from arthexis.asgi import application
-from tests.apps.ocpp.builders import charger, connection
-from tests.integration.ocpp.support import basic_authorization
+from tests.apps.ocpp.builders import charger, connection, protocol_operation
+from tests.integration.ocpp.support import connect_charger
 
 
 class TransientStateLossAcceptanceTests(TestCase):
@@ -70,13 +66,7 @@ class TransientStateLossAcceptanceTests(TestCase):
             "charger-1",
             connection_token_hash=make_password("charger-secret"),
         )
-        operation = create_operation(
-            charger=selected,
-            version=ProtocolVersion.OCPP_16,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action="Reset",
-            request_payload={},
-        )
+        operation = protocol_operation(selected, "Reset")
 
         active_connections.unregister(selected)
 
@@ -103,15 +93,7 @@ class TransientStateLossAcceptanceTests(TestCase):
         self.assertTrue(Charger.objects.disconnected().filter(pk=selected.pk).exists())
 
     async def _complete_recovered_reset(self, operation_id: int) -> None:
-        communicator = WebsocketCommunicator(
-            application,
-            "/ws/ocpp/charger-1/",
-            subprotocols=["ocpp1.6"],
-            headers=[(b"authorization", basic_authorization())],
-        )
-        connected, subprotocol = await communicator.connect(timeout=5)
-        self.assertTrue(connected)
-        self.assertEqual(subprotocol, "ocpp1.6")
+        communicator = await connect_charger()
 
         outbound = await communicator.receive_json_from(timeout=5)
         self.assertEqual(outbound[0], 2)
