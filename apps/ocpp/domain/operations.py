@@ -722,6 +722,165 @@ def reconcile_availability_operations(*, limit: int = 100) -> int:
     return resolved
 
 
+LOCAL_LIST_RECONCILE_ACTIONS = frozenset({"SendLocalList"})
+
+
+def _local_list_requested_version(operation: ProtocolOperation) -> int | None:
+    key = (
+        "listVersion"
+        if operation.version == ProtocolVersion.OCPP_16.value
+        else "version"
+    )
+    value = operation.request_payload.get(key)
+    return value if isinstance(value, int) else None
+
+
+def _latest_local_list_observation(
+    operation: ProtocolOperation,
+) -> ProtocolOperation | None:
+    attempt_at = operation.last_attempt_at or operation.first_attempt_at or operation.created_at
+    return (
+        ProtocolOperation.objects.filter(
+            charger=operation.charger,
+            version=operation.version,
+            direction=ProtocolOperation.Direction.CSMS_TO_CHARGE_POINT,
+            action="GetLocalListVersion",
+            created_at__gte=attempt_at,
+        )
+        .exclude(pk=operation.pk)
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+
+
+def _local_list_observed_version(
+    operation: ProtocolOperation,
+    observation: ProtocolOperation,
+) -> int | None:
+    response = observation.response_payload
+    if not isinstance(response, dict):
+        return None
+    key = (
+        "listVersion"
+        if operation.version == ProtocolVersion.OCPP_16.value
+        else "versionNumber"
+    )
+    value = response.get(key)
+    return value if isinstance(value, int) else None
+
+
+@transaction.atomic
+def reconcile_local_list_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Reconcile ambiguous SendLocalList through a separate safe version query."""
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in LOCAL_LIST_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    desired_version = _local_list_requested_version(current)
+    if desired_version is None:
+        return current
+
+    observation = _latest_local_list_observation(current)
+    if observation is None:
+        create_operation(
+            charger=current.charger,
+            version=ProtocolVersion(current.version),
+            direction=Direction.CSMS_TO_CHARGE_POINT,
+            action="GetLocalListVersion",
+            request_payload={},
+        )
+        return current
+    if observation.status != ProtocolOperation.Status.COMPLETED:
+        return current
+
+    observed_version = _local_list_observed_version(current, observation)
+    if observed_version is None:
+        return current
+    if observed_version == desired_version:
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"GetLocalListVersion operation {observation.pk} reported version "
+                f"{observed_version}, matching ambiguous SendLocalList intent."
+            ),
+        )
+
+    replacement = create_operation(
+        charger=current.charger,
+        version=ProtocolVersion(current.version),
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action=current.action,
+        request_payload=current.request_payload,
+    )
+    return _settle_reconciled_operation(
+        current,
+        resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        basis=(
+            f"GetLocalListVersion operation {observation.pk} reported version "
+            f"{observed_version} instead of requested {desired_version}; created "
+            f"deliberate replacement operation {replacement.pk}."
+        ),
+    )
+
+
+def pending_local_list_observation_ids(*, limit: int = 100) -> tuple[int, ...]:
+    """Return pending local-list observations created for ambiguous mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    ids: list[int] = []
+    operations = (
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=LOCAL_LIST_RECONCILE_ACTIONS,
+        )
+        .select_related("charger")
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")[:limit]
+    )
+    for operation in operations:
+        observation = _latest_local_list_observation(operation)
+        if observation is not None and observation.status == ProtocolOperation.Status.PENDING:
+            ids.append(observation.pk)
+    return tuple(ids)
+
+
+def reconcile_local_list_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of ambiguous local-list mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=LOCAL_LIST_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        current = reconcile_local_list_operation(ProtocolOperation(pk=operation_id))
+        if (
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
+        ):
+            resolved += 1
+    return resolved
+
+
 PROFILE_RECONCILE_ACTIONS = frozenset({"SetChargingProfile", "ClearChargingProfile"})
 
 
