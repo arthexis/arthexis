@@ -6,6 +6,17 @@ ROOT_TEST_ALLOWLIST = {
     "test_architecture.py",
     "test_readme.py",
 }
+TOP_LEVEL_PACKAGE_ALLOWLIST = {
+    "apps",
+    "arthexis",
+    "deploy",
+    "integration",
+    "ocpp",
+}
+MIRRORED_SOURCE_ROOTS = {
+    "apps": Path("apps"),
+    "arthexis": Path("arthexis"),
+}
 
 
 class TestTopologyTests(SimpleTestCase):
@@ -23,9 +34,8 @@ class TestTopologyTests(SimpleTestCase):
                 )
 
     def test_mirrored_test_packages_have_matching_source_packages(self) -> None:
-        for root_name in ("apps", "arthexis"):
+        for root_name, source_root in MIRRORED_SOURCE_ROOTS.items():
             test_root = Path("tests") / root_name
-            source_root = Path(root_name)
             for initializer in test_root.rglob("__init__.py"):
                 relative_package = initializer.parent.relative_to(test_root)
                 source_package = source_root / relative_package
@@ -37,6 +47,15 @@ class TestTopologyTests(SimpleTestCase):
                             f"at {source_package}"
                         ),
                     )
+
+    def test_source_owned_top_level_test_packages_are_mirrored(self) -> None:
+        top_level_packages = {
+            path.name
+            for path in Path("tests").iterdir()
+            if path.is_dir() and (path / "__init__.py").is_file()
+        }
+
+        self.assertEqual(top_level_packages, TOP_LEVEL_PACKAGE_ALLOWLIST)
 
     def test_root_test_modules_are_explicit_repository_contracts(self) -> None:
         root_tests = {
