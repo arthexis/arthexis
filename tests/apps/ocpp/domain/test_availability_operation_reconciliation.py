@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from django.test import TestCase
+import pytest
 
 from apps.ocpp.domain.operations import (
     create_operation,
@@ -11,8 +11,9 @@ from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from tests.apps.ocpp.builders import charger, protocol_operation
 
 
-class AvailabilityOperationReconciliationTests(TestCase):
-    def setUp(self) -> None:
+class AvailabilityOperationReconciliationTests:
+    @pytest.fixture(autouse=True)
+    def _setup(self, db) -> None:
         self.charger = charger("reconcile-availability")
         self.attempt_at = datetime(2026, 9, 24, 20, tzinfo=timezone.utc)
 
@@ -72,12 +73,12 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        assert result.status == ProtocolOperation.Status.COMPLETED
         self.assertEqual(
             result.reconciliation_resolution,
             ProtocolOperation.ReconciliationResolution.ACHIEVED,
         )
-        self.assertIn(str(evidence.pk), result.reconciliation_basis)
+        assert str(evidence.pk) in result.reconciliation_basis
         self.assertEqual(
             ProtocolOperation.objects.filter(action="ChangeAvailability").count(),
             1,
@@ -97,7 +98,7 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        assert result.status == ProtocolOperation.Status.COMPLETED
         self.assertEqual(
             result.reconciliation_resolution,
             ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
@@ -107,9 +108,9 @@ class AvailabilityOperationReconciliationTests(TestCase):
             .exclude(pk=operation.pk)
             .get()
         )
-        self.assertEqual(replacement.status, ProtocolOperation.Status.PENDING)
-        self.assertEqual(replacement.request_payload, operation.request_payload)
-        self.assertIn(str(replacement.pk), result.reconciliation_basis)
+        assert replacement.status == ProtocolOperation.Status.PENDING
+        assert replacement.request_payload == operation.request_payload
+        assert str(replacement.pk) in result.reconciliation_basis
 
     def test_faulted_status_remains_ambiguous(self) -> None:
         operation = self._ambiguous(
@@ -125,8 +126,8 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
-        self.assertIsNone(result.reconciled_at)
+        assert result.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert result.reconciled_at is None
         self.assertEqual(
             ProtocolOperation.objects.filter(action="ChangeAvailability").count(),
             1,
@@ -146,8 +147,8 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
-        self.assertIsNone(result.reconciled_at)
+        assert result.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert result.reconciled_at is None
 
     def test_v201_evse_connector_status_proves_operative(self) -> None:
         operation = self._ambiguous(
@@ -170,12 +171,12 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.COMPLETED)
+        assert result.status == ProtocolOperation.Status.COMPLETED
         self.assertEqual(
             result.reconciliation_resolution,
             ProtocolOperation.ReconciliationResolution.ACHIEVED,
         )
-        self.assertIn(str(evidence.pk), result.reconciliation_basis)
+        assert str(evidence.pk) in result.reconciliation_basis
 
     def test_station_wide_change_remains_ambiguous_without_aggregate_evidence(self) -> None:
         operation = self._ambiguous(
@@ -191,5 +192,5 @@ class AvailabilityOperationReconciliationTests(TestCase):
 
         result = reconcile_availability_operation(operation)
 
-        self.assertEqual(result.status, ProtocolOperation.Status.RECOVERY_REQUIRED)
-        self.assertIsNone(result.reconciled_at)
+        assert result.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert result.reconciled_at is None
