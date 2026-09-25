@@ -1,10 +1,9 @@
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 from django.contrib.auth.hashers import make_password
 
 from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import connect_charger
-
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
