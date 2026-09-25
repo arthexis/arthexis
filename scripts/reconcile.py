@@ -55,6 +55,18 @@ def _parser() -> argparse.ArgumentParser:
             "(defaults to <fixture>/reconciled.sqlite3)"
         ),
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=250,
+        help="maximum legacy rows fetched into memory at once (default: 250)",
+    )
+    parser.add_argument(
+        "--nice",
+        type=int,
+        default=10,
+        help="POSIX process niceness increment for local reconciliation (default: 10)",
+    )
     return parser
 
 
@@ -73,6 +85,12 @@ def _require_source(source: Path | None) -> Path:
 
 def _reconcile_fixture(arguments: argparse.Namespace) -> int:
     source = _require_source(arguments.source).expanduser().resolve()
+    if arguments.batch_size < 1:
+        raise SystemExit("--batch-size must be at least 1.")
+    if arguments.nice < 0:
+        raise SystemExit("--nice cannot be negative.")
+    if arguments.nice and hasattr(os, "nice"):
+        os.nice(arguments.nice)
     from arthexis.reconciliation.workspace import (
         reconcile_fixture,
         verify_fixture_source,
@@ -96,7 +114,11 @@ def _reconcile_fixture(arguments: argparse.Namespace) -> int:
 
         call_command("migrate", interactive=False, verbosity=0)
         call_command("seed", verbosity=0)
-        report, receipt = reconcile_fixture(source, destination)
+        report, receipt = reconcile_fixture(
+            source,
+            destination,
+            batch_size=arguments.batch_size,
+        )
     except Exception as error:
         diagnostic = write_failure_receipt(source, error)
         if diagnostic is not None:
