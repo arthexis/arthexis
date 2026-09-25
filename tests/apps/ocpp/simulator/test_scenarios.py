@@ -1,5 +1,5 @@
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ALL_ACTIONS
