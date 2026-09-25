@@ -12,6 +12,7 @@ from apps.ocpp.models import (
     NotificationRecord,
     ProtocolOperation,
 )
+from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallResult
 from apps.ocpp.protocol.v16.inbound import InboundActions
