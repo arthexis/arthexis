@@ -81,7 +81,7 @@ class ReservationOperationReconciliationTests(TestCase):
             action="ReserveNow",
             payload={
                 "connectorId": 1,
-                "expiryDate": "2026-09-24T21:00:00Z",
+                "expiryDate": "2099-09-24T21:00:00Z",
                 "idTag": "card-1",
                 "reservationId": 41,
             },
@@ -111,7 +111,7 @@ class ReservationOperationReconciliationTests(TestCase):
             action="ReserveNow",
             payload={
                 "connectorId": 1,
-                "expiryDate": "2026-09-24T21:00:00Z",
+                "expiryDate": "2099-09-24T21:00:00Z",
                 "idTag": "card-1",
                 "reservationId": 42,
             },
@@ -208,7 +208,7 @@ class ReservationOperationReconciliationTests(TestCase):
             action="ReserveNow",
             payload={
                 "id": 46,
-                "expiryDate": "2026-09-24T21:00:00Z",
+                "expiryDate": "2099-09-24T21:00:00Z",
                 "idToken": {"idToken": "card-2", "type": "Central"},
                 "evseId": 2,
             },
