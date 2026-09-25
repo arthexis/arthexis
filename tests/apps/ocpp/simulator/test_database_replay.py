@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 from pathlib import Path
 
-from apps.ocpp.simulator.database_replay import iter_v16_transaction_replay
+from asgiref.sync import async_to_sync
+from django.test import TestCase
+
+from apps.ocpp.simulator.database_replay import (
+    iter_v16_transaction_replay,
+    run_v16_database_replay,
+)
+from tests.apps.ocpp.builders import charger
 
 
 def _database(path: Path) -> Path:
@@ -126,3 +134,30 @@ def test_database_replay_requires_current_generation_database(tmp_path):
         assert "current-generation" in str(error)
     else:
         raise AssertionError("legacy database should not be accepted for replay")
+
+
+class DatabaseReplayExecutionTests(TestCase):
+    def test_maximum_speed_replay_rebinds_runtime_transaction_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = _database(Path(directory) / "replay.sqlite3")
+            target = charger("replay-target", authorization_mode="open")
+
+            completed = async_to_sync(run_v16_database_replay)(
+                target,
+                database,
+                source_charger_identity="charger-a",
+                batch_size=1,
+            )
+
+        self.assertEqual(
+            completed,
+            (
+                "StartTransaction",
+                "MeterValues",
+                "MeterValues",
+                "StopTransaction",
+            ),
+        )
+        transaction = target.transactions.get()
+        self.assertIsNotNone(transaction.stopped_at)
+        self.assertEqual(transaction.meter_values.count(), 2)
