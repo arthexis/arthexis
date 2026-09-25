@@ -1,5 +1,9 @@
 import base64
 
+from channels.testing import WebsocketCommunicator
+
+from arthexis.asgi import application
+
 
 def basic_authorization(
     identity: str = "charger-1",
@@ -7,11 +11,6 @@ def basic_authorization(
 ) -> bytes:
     encoded = base64.b64encode(f"{identity}:{token}".encode())
     return b"Basic " + encoded
-
-
-from channels.testing import WebsocketCommunicator
-
-from arthexis.asgi import application
 
 
 async def connect_charger(
