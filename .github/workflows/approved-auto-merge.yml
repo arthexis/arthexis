@@ -128,7 +128,7 @@ jobs:
       - name: Enable auto-merge
         if: steps.gate.outputs.ready == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.BRANCH_UPDATE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ steps.gate.outputs.head_sha }}
