@@ -643,9 +643,9 @@ class HistoricalV16ContinuationTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("historical meter replay completion failed"),
         ):
-            with self.assertRaisesRegex(
+            with pytest.raises(
                 RuntimeError,
-                "historical meter replay completion failed",
+                match="historical meter replay completion failed",
             ):
                 async_to_sync(self.dispatcher.dispatch)(
                     Call(
@@ -676,9 +676,9 @@ class HistoricalV16ContinuationTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("historical stop replay completion failed"),
         ):
-            with self.assertRaisesRegex(
+            with pytest.raises(
                 RuntimeError,
-                "historical stop replay completion failed",
+                match="historical stop replay completion failed",
             ):
                 async_to_sync(self.dispatcher.dispatch)(
                     Call(
