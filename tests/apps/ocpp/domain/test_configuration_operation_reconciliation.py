@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from django.test import TestCase
 
@@ -280,8 +281,27 @@ class ConfigurationOperationReconciliationTests(TestCase):
             payload={"key": "HeartbeatInterval", "value": "300"},
         )
 
-        self.assertEqual(reconcile_ambiguous_configuration_operations(), 0)
+        with patch(
+            "apps.ocpp.tasks.enqueue_existing_operation",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as enqueue:
+            self.assertEqual(reconcile_ambiguous_configuration_operations(), 0)
 
-        self.assertTrue(
-            ProtocolOperation.objects.filter(action="GetConfiguration").exists()
+        observation = ProtocolOperation.objects.get(action="GetConfiguration")
+        enqueue.assert_awaited_once()
+        self.assertEqual(enqueue.await_args.args[0].pk, observation.pk)
+
+    def test_repeated_sweeps_reuse_one_pending_observation(self) -> None:
+        operation = self._ambiguous(
+            version=ProtocolVersion.OCPP_16,
+            action="ChangeConfiguration",
+            payload={"key": "HeartbeatInterval", "value": "300"},
         )
+
+        reconcile_configuration_operation(operation)
+        reconcile_configuration_operation(operation)
+
+        observations = ProtocolOperation.objects.filter(action="GetConfiguration")
+        self.assertEqual(observations.count(), 1)
+        self.assertEqual(observations.get().status, ProtocolOperation.Status.PENDING)
