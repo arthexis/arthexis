@@ -1,5 +1,3 @@
-from django.test import SimpleTestCase
-
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.registry import ACTION_REGISTRY, ALL_ACTIONS, resolve_action
 
@@ -102,37 +100,34 @@ EXPECTED_ACTIONS = {
 }
 
 
-class ActionRegistryTests(SimpleTestCase):
-    def test_registry_matches_the_frozen_action_matrix(self) -> None:
-        for key, expected_actions in EXPECTED_ACTIONS.items():
-            version, direction = key
-            registered_actions = {
-                contract.action
-                for contract in ALL_ACTIONS
-                if contract.version == version and contract.direction == direction
-            }
-            self.assertEqual(registered_actions, expected_actions)
+def test_registry_matches_the_frozen_action_matrix() -> None:
+    for key, expected_actions in EXPECTED_ACTIONS.items():
+        version, direction = key
+        registered_actions = {
+            contract.action
+            for contract in ALL_ACTIONS
+            if contract.version == version and contract.direction == direction
+        }
+        assert registered_actions == expected_actions
 
-    def test_every_contract_has_unique_protocol_metadata(self) -> None:
-        self.assertEqual(len(ACTION_REGISTRY), len(ALL_ACTIONS))
-        for contract in ALL_ACTIONS:
-            self.assertTrue(contract.persistence_owner)
-            self.assertEqual(contract.request_contract, f"{contract.action}Request")
-            self.assertEqual(contract.response_contract, f"{contract.action}Response")
-            self.assertEqual(contract.call_error_contract, "CallError")
 
-    def test_version_and_direction_select_the_action_contract(self) -> None:
-        self.assertIsNotNone(
-            resolve_action(
-                version=ProtocolVersion.OCPP_16,
-                direction=Direction.CSMS_TO_CHARGE_POINT,
-                action="GetConfiguration",
-            )
-        )
-        self.assertIsNone(
-            resolve_action(
-                version=ProtocolVersion.OCPP_16,
-                direction=Direction.CSMS_TO_CHARGE_POINT,
-                action="GetVariables",
-            )
-        )
+def test_every_contract_has_unique_protocol_metadata() -> None:
+    assert len(ACTION_REGISTRY) == len(ALL_ACTIONS)
+    for contract in ALL_ACTIONS:
+        assert contract.persistence_owner
+        assert contract.request_contract == f"{contract.action}Request"
+        assert contract.response_contract == f"{contract.action}Response"
+        assert contract.call_error_contract == "CallError"
+
+
+def test_version_and_direction_select_the_action_contract() -> None:
+    assert resolve_action(
+        version=ProtocolVersion.OCPP_16,
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action="GetConfiguration",
+    ) is not None
+    assert resolve_action(
+        version=ProtocolVersion.OCPP_16,
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action="GetVariables",
+    ) is None
