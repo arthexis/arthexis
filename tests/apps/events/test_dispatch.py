@@ -121,6 +121,54 @@ class EventOutboxDispatchTests(TestCase):
         self.assertEqual(envelope.delivery_attempts, 2)
         self.assertEqual(envelope.dispatch_started_at, now)
 
+
+    def test_broker_acceptance_then_dispatcher_crash_is_reclaimed_and_reenqueued(self) -> None:
+        envelope = self.create_event()
+        first_handoff = Mock()
+        claimed_at = timezone.now()
+
+        with patch(
+            "apps.events.dispatch.mark_published",
+            side_effect=RuntimeError("dispatcher crashed after broker acceptance"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "dispatcher crashed after broker acceptance",
+            ):
+                dispatch_pending_events_batch(
+                    enqueue=first_handoff,
+                    now=claimed_at,
+                )
+
+        first_handoff.assert_called_once()
+        envelope.refresh_from_db()
+        self.assertEqual(
+            envelope.delivery_status,
+            EventEnvelope.DeliveryStatus.DISPATCHING,
+        )
+        self.assertEqual(envelope.delivery_attempts, 1)
+        self.assertIsNone(envelope.published_at)
+
+        retry_handoff = Mock()
+        recovered_at = claimed_at + STALE_DISPATCH_AFTER + timedelta(seconds=1)
+
+        result = dispatch_pending_events_batch(
+            enqueue=retry_handoff,
+            now=recovered_at,
+        )
+
+        self.assertEqual(result, {"claimed": 1, "published": 1, "failed": 0})
+        retry_handoff.assert_called_once()
+        retried = retry_handoff.call_args.args[0]
+        self.assertEqual(retried.event_id, envelope.event_id)
+        envelope.refresh_from_db()
+        self.assertEqual(
+            envelope.delivery_status,
+            EventEnvelope.DeliveryStatus.PUBLISHED,
+        )
+        self.assertEqual(envelope.delivery_attempts, 2)
+        self.assertIsNotNone(envelope.published_at)
+
     @patch("apps.events.tasks.process_event.delay")
     def test_enqueue_uses_only_durable_event_identity(self, delay) -> None:
         envelope = self.create_event()
@@ -131,6 +179,38 @@ class EventOutboxDispatchTests(TestCase):
 
 
 class EventProcessingTests(TestCase):
+
+    def test_worker_loss_policy_redelivers_unacknowledged_processing(self) -> None:
+        self.assertTrue(process_event.acks_late)
+        self.assertTrue(process_event.reject_on_worker_lost)
+
+    def test_subscriber_failure_propagates_before_late_ack(self) -> None:
+        envelope = EventEnvelope.objects.create(
+            event_type="test.retry",
+            producer="tests",
+            payload={"value": 1},
+        )
+
+        with patch(
+            "apps.events.tasks.dispatch_to_subscribers",
+            side_effect=RuntimeError("worker lost before completion"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "worker lost before completion",
+            ):
+                process_event(str(envelope.event_id))
+
+        with patch(
+            "apps.events.tasks.dispatch_to_subscribers",
+            return_value=1,
+        ) as dispatch:
+            count = process_event(str(envelope.event_id))
+
+        self.assertEqual(count, 1)
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.args[0].event_id, envelope.event_id)
+
     def test_process_event_loads_envelope_and_invokes_subscriber(self) -> None:
         envelope = EventEnvelope.objects.create(
             event_type="test.process",
