@@ -11,6 +11,7 @@ from apps.ocpp.models import (
     InboundProtocolRequest,
     OcppTransaction,
     ProtocolOperation,
+    Reservation,
 )
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.protocol.recovery import recovery_policy_for
@@ -711,6 +712,171 @@ def reconcile_availability_operations(*, limit: int = 100) -> int:
     resolved = 0
     for operation_id in operation_ids:
         current = reconcile_availability_operation(ProtocolOperation(pk=operation_id))
+        if (
+            current.status == ProtocolOperation.Status.COMPLETED
+            and current.reconciled_at is not None
+        ):
+            resolved += 1
+    return resolved
+
+
+RESERVATION_RECONCILE_ACTIONS = frozenset({"ReserveNow", "CancelReservation"})
+_ACTIVE_RESERVATION_STATUSES = frozenset({"pending", "accepted", "reserved", "active"})
+_TERMINAL_RESERVATION_STATUSES = frozenset(
+    {"cancelled", "canceled", "expired", "removed", "rejected"}
+)
+
+
+def _reservation_remote_id(operation: ProtocolOperation) -> str | None:
+    value = operation.request_payload.get("reservationId")
+    if isinstance(value, (int, str)) and str(value):
+        return str(value)
+    return None
+
+
+def _reservation_requested_identity(
+    operation: ProtocolOperation,
+) -> tuple[str | None, int | None]:
+    payload = operation.request_payload
+    if operation.version == ProtocolVersion.OCPP_16.value:
+        id_tag = payload.get("idTag")
+        connector_id = payload.get("connectorId")
+        return (
+            id_tag if isinstance(id_tag, str) and id_tag else None,
+            connector_id if isinstance(connector_id, int) and connector_id > 0 else None,
+        )
+
+    token = payload.get("idToken")
+    id_tag = token.get("idToken") if isinstance(token, dict) else None
+    evse_id = payload.get("evseId")
+    return (
+        id_tag if isinstance(id_tag, str) and id_tag else None,
+        (evse_id * 1000) if isinstance(evse_id, int) and evse_id > 0 else None,
+    )
+
+
+def _fresh_reservation(operation: ProtocolOperation) -> Reservation | None:
+    remote_id = _reservation_remote_id(operation)
+    if remote_id is None:
+        return None
+    attempt_at = operation.last_attempt_at or operation.first_attempt_at or operation.created_at
+    return (
+        Reservation.objects.filter(
+            charger=operation.charger,
+            remote_id=remote_id,
+            updated_at__gte=attempt_at,
+        )
+        .select_related("connector")
+        .first()
+    )
+
+
+def _reservation_matches_request(
+    operation: ProtocolOperation,
+    reservation: Reservation,
+) -> bool:
+    id_tag, connector_number = _reservation_requested_identity(operation)
+    if id_tag is not None and reservation.id_tag != id_tag:
+        return False
+    if connector_number is None:
+        return True
+    if reservation.connector is None:
+        return False
+    if operation.version == ProtocolVersion.OCPP_201.value:
+        return reservation.connector.number // 1000 == connector_number // 1000
+    return reservation.connector.number == connector_number
+
+
+def _reservation_evidence(
+    operation: ProtocolOperation,
+    reservation: Reservation,
+) -> bool | None:
+    status = reservation.status.strip().lower()
+    if operation.action == "ReserveNow":
+        if status in _TERMINAL_RESERVATION_STATUSES:
+            return False
+        if status in _ACTIVE_RESERVATION_STATUSES:
+            return _reservation_matches_request(operation, reservation)
+        return None
+
+    if operation.action == "CancelReservation":
+        if status in _TERMINAL_RESERVATION_STATUSES:
+            return True
+        if status in _ACTIVE_RESERVATION_STATUSES:
+            return False
+    return None
+
+
+@transaction.atomic
+def reconcile_reservation_operation(operation: ProtocolOperation) -> ProtocolOperation:
+    """Reconcile ambiguous reservation mutations from fresh retained reservation state."""
+    current = (
+        ProtocolOperation.objects.select_for_update()
+        .select_related("charger")
+        .get(pk=operation.pk)
+    )
+    if current.status != ProtocolOperation.Status.RECOVERY_REQUIRED:
+        return current
+    if current.recovery_policy != ProtocolOperation.RecoveryPolicy.RECONCILE:
+        return current
+    if current.action not in RESERVATION_RECONCILE_ACTIONS:
+        return current
+
+    current.reconciliation_checked_at = timezone.now()
+    current.save(update_fields=("reconciliation_checked_at",))
+
+    reservation = _fresh_reservation(current)
+    if reservation is None:
+        return current
+    achieved = _reservation_evidence(current, reservation)
+    if achieved is None:
+        return current
+    if achieved:
+        return _settle_reconciled_operation(
+            current,
+            basis=(
+                f"Reservation {reservation.remote_id} retained state "
+                f"{reservation.status!r} after ambiguous {current.action} intent "
+                f"proves the requested reservation state."
+            ),
+        )
+
+    replacement = create_operation(
+        charger=current.charger,
+        version=ProtocolVersion(current.version),
+        direction=Direction.CSMS_TO_CHARGE_POINT,
+        action=current.action,
+        request_payload=current.request_payload,
+    )
+    return _settle_reconciled_operation(
+        current,
+        resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+        basis=(
+            f"Reservation {reservation.remote_id} retained state "
+            f"{reservation.status!r} after ambiguous {current.action} intent "
+            f"contradicts the requested state; created deliberate replacement "
+            f"operation {replacement.pk}."
+        ),
+    )
+
+
+def reconcile_reservation_operations(*, limit: int = 100) -> int:
+    """Reconcile one fair bounded batch of ambiguous reservation mutations."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    operation_ids = tuple(
+        ProtocolOperation.objects.filter(
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            recovery_policy=ProtocolOperation.RecoveryPolicy.RECONCILE,
+            action__in=RESERVATION_RECONCILE_ACTIONS,
+        )
+        .order_by(F("reconciliation_checked_at").asc(nulls_first=True), "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    resolved = 0
+    for operation_id in operation_ids:
+        current = reconcile_reservation_operation(ProtocolOperation(pk=operation_id))
         if (
             current.status == ProtocolOperation.Status.COMPLETED
             and current.reconciled_at is not None
