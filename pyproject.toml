@@ -56,3 +56,4 @@ select = ["E9", "F823", "I", "UP", "B904"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "arthexis.settings"
 testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]

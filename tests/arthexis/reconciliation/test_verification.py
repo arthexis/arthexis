@@ -13,7 +13,7 @@ from pathlib import Path
 from arthexis.reconciliation.capture import capture_legacy_installation
 from arthexis.reconciliation.fixture import restore_fixture
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _fixture(tmp_path: Path) -> Path:

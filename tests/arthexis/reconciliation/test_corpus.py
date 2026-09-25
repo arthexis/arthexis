@@ -12,7 +12,7 @@ from arthexis.reconciliation.corpus import (
     inspect_preserved_fixture,
 )
 from arthexis.reconciliation.preservation import preserve_capture
-from tests.reconciliation.test_preservation import _capture
+from tests.arthexis.reconciliation.test_preservation import _capture
 
 
 def test_repository_preserved_fixture_corpus_is_valid():

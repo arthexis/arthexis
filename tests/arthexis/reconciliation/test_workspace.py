@@ -18,7 +18,7 @@ from arthexis.reconciliation.fixture import restore_fixture
 from arthexis.reconciliation.source import classify_database
 from arthexis.reconciliation.workspace import verify_fixture_source
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _sha256(path: Path) -> str:
