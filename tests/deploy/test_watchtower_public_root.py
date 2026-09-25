@@ -1,4 +1,6 @@
 from pathlib import Path
+
+
 class WatchtowerWorkflowTests:
     def test_public_markdown_root_is_asserted_after_exposure(self) -> None:
         workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
