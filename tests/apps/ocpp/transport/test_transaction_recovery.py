@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 
 from apps.cards.models import AuthorizationAttempt
 from apps.ocpp.models import InboundProtocolRequest, MeterValue, OcppTransaction
@@ -149,7 +149,7 @@ class V16StartTransactionRecoveryTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._dispatcher().dispatch)(frame)
 
         assert not OcppTransaction.objects.exists()
@@ -179,7 +179,7 @@ class V16StartTransactionRecoveryTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._dispatcher().dispatch)(self._frame())
 
         assert not OcppTransaction.objects.exists()
@@ -308,7 +308,7 @@ class V201TransactionEventRecoveryTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._dispatcher().dispatch)(
                     Call(
                         unique_id="event-failure",
@@ -432,7 +432,7 @@ class MeterValueRecoveryTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("database completion failed"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "database completion failed"):
+            with pytest.raises(RuntimeError, match="database completion failed"):
                 async_to_sync(self._v16_dispatcher().dispatch)(
                     Call(
                         unique_id="meter-failure",
@@ -845,7 +845,7 @@ class TransactionRestartAcceptanceTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         assert not OcppTransaction.objects.exists()
@@ -884,7 +884,7 @@ class TransactionRestartAcceptanceTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v201_dispatcher().dispatch)(frame)
 
         assert not OcppTransaction.objects.exists()
@@ -927,7 +927,7 @@ class TransactionRestartAcceptanceTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         selected.refresh_from_db()
@@ -962,7 +962,7 @@ class TransactionRestartAcceptanceTests:
             "apps.ocpp.services.transactions.complete_with_result",
             side_effect=RuntimeError("crash before durable response"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "crash before durable response"):
+            with pytest.raises(RuntimeError, match="crash before durable response"):
                 async_to_sync(self._v16_dispatcher().dispatch)(frame)
 
         request = InboundProtocolRequest.objects.get(
