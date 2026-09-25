@@ -7,10 +7,10 @@ import json
 import os
 import shutil
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 from arthexis.reconciliation.source import inspect_source, resolve_source
 
