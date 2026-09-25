@@ -30,13 +30,17 @@ def test_basic_credentials_are_parsed_without_retaining_headers() -> None:
 
 @pytest.mark.django_db
 def test_unknown_identity_requires_a_valid_enrollment_credential() -> None:
-    with override_settings(OCPP_ENROLLMENT_TOKEN_HASH=make_password("enroll")):
-        enrolled = async_to_sync(load_or_enroll_charger)(
-            "charger-new", ("charger-new", "enroll")
-        )
-        rejected = async_to_sync(load_or_enroll_charger)(
-            "charger-rejected", ("charger-rejected", "wrong")
-        )
+    with override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+    ):
+        enrollment_hash = make_password("enroll")
+        with override_settings(OCPP_ENROLLMENT_TOKEN_HASH=enrollment_hash):
+            enrolled = async_to_sync(load_or_enroll_charger)(
+                "charger-new", ("charger-new", "enroll")
+            )
+            rejected = async_to_sync(load_or_enroll_charger)(
+                "charger-rejected", ("charger-rejected", "wrong")
+            )
 
     assert enrolled is not None
     assert enrolled.identity == "charger-new"

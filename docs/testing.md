@@ -203,6 +203,81 @@ When reviewing new tests, ask:
 4. Is the test coupled to a private implementation detail unnecessarily?
 5. Does new application behavior have direct tests at its source owner?
 
+## Practical test commands
+
+Use pytest directly for ordinary development and CI-equivalent focused runs.
+
+```bash
+# Full ordinary suite
+python -m pytest -q
+
+# Source-owned package tests
+python -m pytest -q tests/apps tests/arthexis
+
+# Cross-package/runtime integration
+python -m pytest -q tests/integration
+
+# Deployment/workflow/recipe acceptance
+python -m pytest -q tests/deploy
+
+# External OCPP tooling and conformance contracts
+python -m pytest -q tests/ocpp
+```
+
+The supported compatibility workflow runs the full suite on Python 3.10, 3.11,
+and 3.13 with `--durations=20`, after compile and Django startup checks.
+
+Official OCPP schema conformance is intentionally heavier and depends on
+prepared external schemas. Ordinary pytest runs skip it when
+`OCPP_CONFORMANCE_SCHEMA_ROOT` is absent. The manual
+`OCPP Conformance` workflow prepares the schemas and runs:
+
+```bash
+python -m pytest -q tests/ocpp/test_official_schema_conformance.py
+```
+
+## Final pytest conventions
+
+- Prefer plain test functions and plain `assert` expressions.
+- Use plain pytest classes only when grouping related helper methods improves
+  readability; do not inherit from Django/unittest test-case classes merely for
+  assertion helpers.
+- Use `pytest.mark.django_db` at module scope when the whole module needs the
+  database. Use `transaction=True` only when runtime boundaries such as ASGI,
+  websocket handling, or conformance behavior require committed visibility.
+- Keep fixtures local to the narrowest useful scope. The only shared
+  `conftest.py` currently justified is `tests/apps/events/conftest.py`.
+- Use parametrization for static input/contract matrices. Keep recovery,
+  migration, reconnect, durability, and race scenarios explicit when sequence
+  readability matters.
+- Do not add a slow/heavy split merely because a test is relatively expensive.
+  The ordinary suite currently completes in roughly 17–22 seconds across the
+  supported Python matrix.
+- Reconciliation workspace/verification tests are intentionally among the
+  slowest tests because they launch the real reconciliation CLI and operate on
+  disposable databases. Their cost is part of the acceptance behavior.
+- Test-only password hashing may use a fast Django test hasher when the behavior
+  under test is credential verification rather than production hash cost.
+
+## Q1–Q5 audit outcome
+
+The package-alignment and pytest-quality refactor is complete.
+
+- Q1 established package ownership, topology enforcement, strict pytest config,
+  and representative native-pytest conversions.
+- Q2 migrated events and core runtime tests while preserving durability/retry
+  semantics.
+- Q3 migrated the full source-owned OCPP test surface, including protocol,
+  domain, service, simulator, metering, transport, backlog, and recovery tests.
+- Q4 normalized the explicit integration, deploy, and external-conformance
+  buckets without collapsing their boundaries.
+- Q5 verified the full supported matrix, fixed the stale manual conformance
+  entrypoint, audited duration/duplication, removed the remaining root-level
+  unittest-style contracts, and consolidated the final testing guidance.
+
+No broad fixture promotion, new marker taxonomy, or further topology refactor
+is currently warranted. Future cleanup should be incremental and feature-led.
+
 ## Refactor history
 
 The topology refactor began from `main` commit
