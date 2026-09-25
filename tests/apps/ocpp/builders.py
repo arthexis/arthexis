@@ -114,8 +114,10 @@ def protocol_operation(
     request_payload: dict[str, object] | None = None,
     status: str | None = None,
     attempts: int = 0,
+    attempt_at: datetime | None = None,
+    response_payload: dict[str, object] | None = None,
 ) -> ProtocolOperation:
-    """Create one durable outbound operation with optional recovery state."""
+    """Create one durable operation with optional recovery-test state."""
     operation = create_operation(
         charger=charger,
         version=version,
@@ -130,6 +132,13 @@ def protocol_operation(
     if attempts:
         operation.attempt_count = attempts
         update_fields.append("attempt_count")
+    if attempt_at is not None:
+        operation.first_attempt_at = attempt_at
+        operation.last_attempt_at = attempt_at
+        update_fields.extend(("first_attempt_at", "last_attempt_at"))
+    if response_payload is not None:
+        operation.response_payload = response_payload
+        update_fields.append("response_payload")
     if update_fields:
-        operation.save(update_fields=tuple(update_fields))
+        operation.save(update_fields=tuple(dict.fromkeys(update_fields)))
     return operation
