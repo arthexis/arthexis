@@ -1,13 +1,15 @@
 from asgiref.sync import async_to_sync
+import pytest
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase
 
 from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import connect_charger
 
 
-class Ocpp201WebsocketFlowTests(TestCase):
-    def setUp(self) -> None:
+pytestmark = pytest.mark.django_db(transaction=True)
+
+class Ocpp201WebsocketFlowTests:
+    def setup_method(self) -> None:
         charger(
             "charger-1",
             connection_token_hash=make_password("charger-secret"),
@@ -21,7 +23,7 @@ class Ocpp201WebsocketFlowTests(TestCase):
 
         await communicator.send_json_to([2, "heartbeat-1", "Heartbeat", {}])
         response = await communicator.receive_json_from()
-        self.assertIn("currentTime", response[2])
+        assert "currentTime" in response[2]
 
         await communicator.send_json_to(
             [
@@ -32,11 +34,11 @@ class Ocpp201WebsocketFlowTests(TestCase):
             ]
         )
         response = await communicator.receive_json_from()
-        self.assertEqual(response[2]["status"], "Accepted")
+        assert response[2]["status"] == "Accepted"
 
         await communicator.send_json_to(
             [2, "invalid-boot-201", "BootNotification", {}]
         )
         response = await communicator.receive_json_from()
-        self.assertEqual(response[2], "FormationViolation")
+        assert response[2] == "FormationViolation"
         await communicator.disconnect()
