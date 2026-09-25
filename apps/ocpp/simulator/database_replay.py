@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -10,6 +12,24 @@ from pathlib import Path
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.simulator.client import OcppSimulator
+
+
+@dataclass(frozen=True)
+class ReplayPacing:
+    """Control replay timing independently from historical timestamps."""
+
+    mode: str = "maximum"
+    interval_seconds: float = 0.0
+    burst_size: int = 100
+    burst_pause_seconds: float = 0.0
+
+    def validate(self) -> None:
+        if self.mode not in {"maximum", "fixed", "burst"}:
+            raise ValueError("Replay pacing mode must be maximum, fixed, or burst.")
+        if self.interval_seconds < 0 or self.burst_pause_seconds < 0:
+            raise ValueError("Replay pacing delays cannot be negative.")
+        if self.burst_size < 1:
+            raise ValueError("Replay burst size must be at least 1.")
 
 
 @dataclass(frozen=True)
@@ -31,6 +51,18 @@ def _connect(database: Path) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA query_only = ON")
     return connection
+
+
+async def _pace(pacing: ReplayPacing, sent: int) -> None:
+    pacing.validate()
+    if pacing.mode == "maximum":
+        return
+    if pacing.mode == "fixed":
+        if sent:
+            await asyncio.sleep(pacing.interval_seconds)
+        return
+    if sent and sent % pacing.burst_size == 0:
+        await asyncio.sleep(pacing.burst_pause_seconds)
 
 
 def _require_current_generation(connection: sqlite3.Connection) -> None:
@@ -182,24 +214,85 @@ def _integer_meter(value: object) -> int:
     return int(float(str(value)))
 
 
+def iter_v16_inbound_request_replay(
+    database: Path,
+    *,
+    charger_identity: str | None = None,
+    batch_size: int = 250,
+) -> Iterator[ReplayEvent]:
+    """Stream retained charger-originated OCPP 1.6 requests when payloads exist."""
+
+    if batch_size < 1:
+        raise ValueError("Replay batch size must be at least 1.")
+
+    with _connect(database) as connection:
+        _require_current_generation(connection)
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        if "ocpp_inboundprotocolrequest" not in tables:
+            return
+
+        parameters: list[object] = ["ocpp1.6", "charge_point_to_csms"]
+        charger_filter = ""
+        if charger_identity is not None:
+            charger_filter = "AND charger.identity = ?"
+            parameters.append(charger_identity)
+
+        cursor = connection.execute(
+            f"""
+            SELECT request.id, request.action, request.request_payload,
+                   request.received_at
+            FROM ocpp_inboundprotocolrequest AS request
+            JOIN ocpp_charger AS charger ON charger.id = request.charger_id
+            WHERE request.version = ?
+              AND request.direction = ?
+              {charger_filter}
+            ORDER BY request.received_at, request.id
+            """,
+            parameters,
+        )
+        while True:
+            rows = cursor.fetchmany(batch_size)
+            if not rows:
+                break
+            for row in rows:
+                payload = json.loads(row["request_payload"])
+                if not isinstance(payload, dict):
+                    continue
+                yield ReplayEvent(
+                    source_transaction_id=-int(row["id"]),
+                    occurred_at=str(row["received_at"]),
+                    action=str(row["action"]),
+                    payload=payload,
+                )
+
+
 async def run_v16_database_replay(
     charger: Charger,
     database: Path,
     *,
     source_charger_identity: str | None = None,
     batch_size: int = 250,
+    pacing: ReplayPacing | None = None,
 ) -> tuple[str, ...]:
     """Replay migrated transaction history back-to-back at charger speed."""
 
     client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
     runtime_transactions: dict[int, object] = {}
     completed: list[str] = []
+    pacing = pacing or ReplayPacing()
+    pacing.validate()
 
     for event in iter_v16_transaction_replay(
         database,
         charger_identity=source_charger_identity,
         batch_size=batch_size,
     ):
+        await _pace(pacing, len(completed))
         payload = dict(event.payload)
         if event.requires_runtime_transaction_id:
             runtime_id = runtime_transactions.get(event.source_transaction_id)
@@ -216,6 +309,33 @@ async def run_v16_database_replay(
             if runtime_id is None:
                 raise ValueError("StartTransaction response is missing transactionId")
             runtime_transactions[event.source_transaction_id] = runtime_id
+        completed.append(event.action)
+
+    return tuple(completed)
+
+
+async def run_v16_inbound_request_replay(
+    charger: Charger,
+    database: Path,
+    *,
+    source_charger_identity: str | None = None,
+    batch_size: int = 250,
+    pacing: ReplayPacing | None = None,
+) -> tuple[str, ...]:
+    """Replay retained inbound OCPP requests with independently controlled pacing."""
+
+    client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    completed: list[str] = []
+    pacing = pacing or ReplayPacing()
+    pacing.validate()
+
+    for event in iter_v16_inbound_request_replay(
+        database,
+        charger_identity=source_charger_identity,
+        batch_size=batch_size,
+    ):
+        await _pace(pacing, len(completed))
+        await client.call(event.action, dict(event.payload))
         completed.append(event.action)
 
     return tuple(completed)
