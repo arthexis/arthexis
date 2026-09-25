@@ -1,15 +1,53 @@
 # Rebuild execution plan
 
-This is the execution plan for the Arthexis 2.0 rebuild cutover. A 2.0 database
-is created by its own migrations, then an operator may reconcile an explicitly
-selected 1.x SQLite database with `install.sh --import /path/to/old.sqlite3`.
+This is the execution plan for the Arthexis 2.0 rebuild cutover. Arthexis 2 is
+installed alongside the legacy checkout and is the migration actor. The legacy
+installation remains passive: current Arthexis receives an explicit path to the
+old checkout, captures it read-only, and performs all later work on derived
+artifacts. There is no in-place upgrade path.
+
+## Side-by-side legacy capture
+
+On the field node, install current Arthexis separately from the live legacy
+installation, then point the current instance at the old checkout:
+
+```bash
+ARTHEXIS_DATA_DIR=/opt/arthexis-current/var/lib \
+    .venv/bin/python scripts/reconcile.py capture /opt/arthexis-legacy
+```
+
+The capture command:
+
+- discovers the legacy SQLite database from the explicit source tree;
+- refuses non-legacy databases;
+- takes a consistent point-in-time SQLite snapshot using the online backup API,
+  so the legacy service may remain live;
+- copies only explicitly safe build/version metadata;
+- fingerprints likely configuration files without exporting their contents,
+  because those files may contain credentials or private material;
+- writes a versioned `manifest.json`, `checksums.sha256`, and `FINALIZED`
+  marker under `ARTHEXIS_DATA_DIR/migration/captures`;
+- verifies the finalized bundle before reporting success.
+
+A finalized capture is input evidence. Restore, reconciliation, and verification
+must operate on derived copies and never rewrite the capture bundle. Operators
+can recheck an artifact at any time with:
+
+```bash
+.venv/bin/python scripts/reconcile.py verify \
+    /opt/arthexis-current/var/lib/migration/captures/<capture-id>
+```
+
+A 2.0 database is created by its own migrations. After capture/restore evidence
+is available, reconciliation may operate on an explicitly selected legacy
+SQLite snapshot rather than modifying the old checkout.
 
 ## Work packages
 
 1. **R200-01 — Reconciliation interchange.** Read legacy SQLite read-only,
    validate it before target writes, import only retained logical records by
    stable identities, and emit a redacted JSON receipt under
-   `ARTHEXIS_DATA_DIR`. Never replay 1.x migrations or copy its database.
+   `ARTHEXIS_DATA_DIR`. Never replay 1.x migrations or modify its database.
 2. **R200-02 — Testable boundaries.** Mirror reconciliation code and tests in
    `arthexis/reconciliation` and `tests/reconciliation`; split source before
    it becomes a catch-all compatibility module.
@@ -40,5 +78,5 @@ connection channels. A dry run has no target writes.
 ## Exit evidence
 
 Run Django/migration checks, full tests, Ruff, the OCPP matrix, reconciliation
-fixture tests, and a clean install/import smoke test. Record the backup path
+fixture tests, and a clean install/import smoke test. Record the capture path
 and SHA-256, local and pushed SHAs, and reconciliation receipt in the handoff.
