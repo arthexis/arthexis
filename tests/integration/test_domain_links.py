@@ -3,7 +3,6 @@ from decimal import Decimal
 
 import pytest
 
-
 from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount, EnergyTariff, LedgerEntry
 from apps.events.models import EventEnvelope
@@ -12,6 +11,7 @@ from apps.sigils.models import SigilRoot
 from tests.apps.ocpp.builders import charger, connector, station_model, transaction
 
 pytestmark = pytest.mark.django_db
+
 
 class DomainLinkTests:
     def test_retained_charging_records_keep_cross_domain_links(self) -> None:
