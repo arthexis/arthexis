@@ -20,8 +20,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("capture", "verify", "inspect", "dry-run", "import"),
-        help="capture/verify a passive source, inspect it, or reconcile it",
+        choices=("capture", "verify", "restore", "inspect", "dry-run", "import"),
+        help="capture/verify/restore a passive source, inspect it, or reconcile it",
     )
     parser.add_argument(
         "source",
@@ -37,7 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        help="capture destination root (defaults under ARTHEXIS_DATA_DIR)",
+        help="capture/fixture destination root (defaults under ARTHEXIS_DATA_DIR)",
     )
     return parser
 
@@ -58,11 +58,12 @@ def _require_source(source: Path | None) -> Path:
 def main() -> int:
     arguments = _parser().parse_args()
 
-    if arguments.command in {"capture", "verify"}:
+    if arguments.command in {"capture", "verify", "restore"}:
         from arthexis.reconciliation.capture import (
             capture_legacy_installation,
             verify_capture,
         )
+        from arthexis.reconciliation.fixture import restore_fixture
 
         source = _require_source(arguments.source)
         if arguments.command == "verify":
@@ -72,6 +73,22 @@ def main() -> int:
 
         _setup_django()
         from django.conf import settings
+
+        if arguments.command == "restore":
+            destination = arguments.output or Path(settings.DATA_DIR) / "migration" / "fixtures"
+            result = restore_fixture(source, destination)
+            print(
+                json.dumps(
+                    {
+                        "fixture_id": result.fixture_id,
+                        "path": str(result.path),
+                        "database": str(result.database_path),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
 
         destination = arguments.output or Path(settings.DATA_DIR) / "migration" / "captures"
         result = capture_legacy_installation(
