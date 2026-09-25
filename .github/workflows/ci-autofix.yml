@@ -75,7 +75,7 @@ jobs:
 
           attempts="$(
             gh api --paginate "repos/$REPOSITORY/issues/$pr_number/comments?per_page=100" \
-              --jq '[.[] | select(.body | startswith("<!-- ci-autofix -->"))] | length' \
+              --jq '[.[] | select(.body | startswith("<!-- ci-autofix -->")) | select((.body | contains("pushed a repair")) or (.body | contains("produced no code changes")))] | length' \
               | awk '{s += $1} END {print s+0}'
           )"
 
@@ -133,7 +133,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          codex --full-auto exec "
+          codex -a never -s workspace-write exec "
           You are repairing CI for an open pull request in the Arthexis repository. The PR may be a draft and does not need any label.
 
           Read AGENTS.md and follow all repository instructions.
@@ -156,7 +156,7 @@ jobs:
         run: |
           gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
             --method POST \
-            -f body="<!-- ci-autofix -->CI auto-fix attempt $ATTEMPT could not run Codex successfully. Check the CI Auto-Fix workflow logs for the CLI/runtime error."
+            -f body="<!-- ci-autofix-runtime -->CI auto-fix runtime failed before a repair attempt completed. This does not consume the PR repair-attempt budget. Check the CI Auto-Fix workflow logs for the CLI/runtime error."
 
       - name: Push repair if Codex changed files
         if: steps.pr.outputs.eligible == 'true' && steps.codex.outcome == 'success'
