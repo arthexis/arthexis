@@ -1,32 +1,27 @@
 from unittest.mock import Mock
 
-from django.test import TestCase
+import pytest
 
-from apps.events.models import EventEnvelope
 from apps.events.registry import dispatch_to_subscribers, subscribe
 
+pytestmark = pytest.mark.django_db
 
-class EventRegistryTests(TestCase):
-    def test_registered_subscribers_receive_matching_event(self) -> None:
-        handler = Mock()
-        subscribe("test.matching", handler)
-        envelope = EventEnvelope.objects.create(
-            event_type="test.matching",
-            producer="tests",
-        )
 
-        count = dispatch_to_subscribers(envelope)
+def test_registered_subscribers_receive_matching_event(event_factory) -> None:
+    handler = Mock()
+    subscribe("test.matching", handler)
+    envelope = event_factory(event_type="test.matching", payload={})
 
-        self.assertEqual(count, 1)
-        handler.assert_called_once_with(envelope)
+    count = dispatch_to_subscribers(envelope)
 
-    def test_subscription_is_idempotent(self) -> None:
-        handler = Mock()
-        subscribe("test.idempotent", handler)
-        subscribe("test.idempotent", handler)
-        envelope = EventEnvelope.objects.create(
-            event_type="test.idempotent",
-            producer="tests",
-        )
+    assert count == 1
+    handler.assert_called_once_with(envelope)
 
-        self.assertEqual(dispatch_to_subscribers(envelope), 1)
+
+def test_subscription_is_idempotent(event_factory) -> None:
+    handler = Mock()
+    subscribe("test.idempotent", handler)
+    subscribe("test.idempotent", handler)
+    envelope = event_factory(event_type="test.idempotent", payload={})
+
+    assert dispatch_to_subscribers(envelope) == 1
