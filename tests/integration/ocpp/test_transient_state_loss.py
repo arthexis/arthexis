@@ -22,7 +22,6 @@ from apps.ocpp.transport.operations import active_connections
 from tests.apps.ocpp.builders import charger, connection, protocol_operation
 from tests.integration.ocpp.support import connect_charger
 
-
 pytestmark = pytest.mark.django_db(transaction=True)
 
 class TransientStateLossAcceptanceTests:
