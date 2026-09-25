@@ -678,18 +678,6 @@ def reconcile_availability_operation(operation: ProtocolOperation) -> ProtocolOp
             ),
         )
 
-    if _reservation_is_expired(current):
-        return _settle_reconciled_operation(
-            current,
-            resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
-            basis=(
-                f"Reservation {reservation.remote_id} retained state "
-                f"{reservation.status!r} proves the ambiguous ReserveNow did not "
-                "achieve its requested state, and the reservation has now expired; "
-                "no replacement operation was created."
-            ),
-        )
-
     replacement = create_operation(
         charger=current.charger,
         version=ProtocolVersion(current.version),
@@ -875,6 +863,18 @@ def reconcile_reservation_operation(operation: ProtocolOperation) -> ProtocolOpe
                 f"Reservation {reservation.remote_id} retained state "
                 f"{reservation.status!r} after ambiguous {current.action} intent "
                 f"proves the requested reservation state."
+            ),
+        )
+
+    if _reservation_is_expired(current):
+        return _settle_reconciled_operation(
+            current,
+            resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+            basis=(
+                f"Reservation {reservation.remote_id} retained state "
+                f"{reservation.status!r} proves the ambiguous ReserveNow did not "
+                "achieve its requested state, and the reservation has now expired; "
+                "no replacement operation was created."
             ),
         )
 
