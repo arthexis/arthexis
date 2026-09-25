@@ -1,8 +1,8 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 from channels.exceptions import ChannelFull
 from django.utils import timezone
 
@@ -350,7 +350,7 @@ class DeliveryBoundaryTests:
         )
 
         operation.refresh_from_db()
-        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED,
+        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED
         assert operation.attempt_count == 1
         assert operation.completed_at is None
         assert operation.last_delivery_error == "response lost"
@@ -444,8 +444,8 @@ class ReconnectOutboundRecoveryTests:
         assert sender.calls == 0
         reconcile.refresh_from_db()
         manual.refresh_from_db()
-        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED,
-        assert manual.status == ProtocolOperation.Status.RECOVERY_REQUIRED,
+        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED
+        assert manual.status == ProtocolOperation.Status.RECOVERY_REQUIRED
 
     def test_interrupted_delivery_becomes_ambiguous_then_safe_retry_only(self) -> None:
         safe = self._operation(
@@ -476,7 +476,7 @@ class ReconnectOutboundRecoveryTests:
         assert sender.calls == 1
         assert safe.status == ProtocolOperation.Status.COMPLETED
         assert safe.attempt_count == 2
-        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED,
+        assert reconcile.status == ProtocolOperation.Status.RECOVERY_REQUIRED
         assert reconcile.attempt_count == 1
         assert "Previous consumer ended" in reconcile.last_delivery_error
 
@@ -659,6 +659,6 @@ class OutboundRaceHardeningTests:
 
         operation.refresh_from_db()
         assert sender.calls == 0
-        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED,
+        assert operation.status == ProtocolOperation.Status.RECOVERY_REQUIRED
         assert operation.attempt_count == 1
         assert "Previous consumer ended" in operation.last_delivery_error
