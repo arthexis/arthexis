@@ -5,6 +5,7 @@ import uuid
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.ocpp.models import (
     Charger,
@@ -677,6 +678,18 @@ def reconcile_availability_operation(operation: ProtocolOperation) -> ProtocolOp
             ),
         )
 
+    if _reservation_is_expired(current):
+        return _settle_reconciled_operation(
+            current,
+            resolution=ProtocolOperation.ReconciliationResolution.NOT_ACHIEVED,
+            basis=(
+                f"Reservation {reservation.remote_id} retained state "
+                f"{reservation.status!r} proves the ambiguous ReserveNow did not "
+                "achieve its requested state, and the reservation has now expired; "
+                "no replacement operation was created."
+            ),
+        )
+
     replacement = create_operation(
         charger=current.charger,
         version=ProtocolVersion(current.version),
@@ -728,7 +741,13 @@ _TERMINAL_RESERVATION_STATUSES = frozenset(
 
 
 def _reservation_remote_id(operation: ProtocolOperation) -> str | None:
-    value = operation.request_payload.get("reservationId")
+    key = (
+        "id"
+        if operation.version == ProtocolVersion.OCPP_201.value
+        and operation.action == "ReserveNow"
+        else "reservationId"
+    )
+    value = operation.request_payload.get(key)
     if isinstance(value, (int, str)) and str(value):
         return str(value)
     return None
@@ -785,6 +804,24 @@ def _reservation_matches_request(
     if operation.version == ProtocolVersion.OCPP_201.value:
         return reservation.connector.number // 1000 == connector_number // 1000
     return reservation.connector.number == connector_number
+
+
+def _reservation_is_expired(operation: ProtocolOperation) -> bool:
+    if operation.action != "ReserveNow":
+        return False
+    key = (
+        "expiryDate"
+        if operation.version in {
+            ProtocolVersion.OCPP_16.value,
+            ProtocolVersion.OCPP_201.value,
+        }
+        else ""
+    )
+    value = operation.request_payload.get(key)
+    if not isinstance(value, str):
+        return False
+    parsed = parse_datetime(value)
+    return parsed is not None and parsed <= timezone.now()
 
 
 def _reservation_evidence(
