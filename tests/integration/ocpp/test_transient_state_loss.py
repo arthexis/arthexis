@@ -1,8 +1,8 @@
 from datetime import timedelta
 
+import pytest
 from asgiref.sync import async_to_sync
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase
 from django.utils import timezone
 
 from apps.ocpp.models import (
@@ -22,8 +22,10 @@ from apps.ocpp.transport.operations import active_connections
 from tests.apps.ocpp.builders import charger, connection, protocol_operation
 from tests.integration.ocpp.support import connect_charger
 
+pytestmark = pytest.mark.django_db(transaction=True)
 
-class TransientStateLossAcceptanceTests(TestCase):
+
+class TransientStateLossAcceptanceTests:
     def test_inbound_replay_survives_loss_of_correlation_state(self) -> None:
         selected = charger("transient-replay")
         frame = Call(
@@ -47,20 +49,17 @@ class TransientStateLossAcceptanceTests(TestCase):
         )
         replayed = async_to_sync(fresh_dispatcher.dispatch)(frame)
 
-        self.assertEqual(
-            first,
-            CallResult(
-                unique_id="transfer-transient",
-                payload={"status": "Accepted"},
-            ),
+        assert first == CallResult(
+            unique_id="transfer-transient",
+            payload={"status": "Accepted"},
         )
-        self.assertEqual(replayed, first)
-        self.assertEqual(NotificationRecord.objects.count(), 1)
+        assert replayed == first
+        assert NotificationRecord.objects.count() == 1
         request = InboundProtocolRequest.objects.get(
             charger=selected,
             unique_id="transfer-transient",
         )
-        self.assertEqual(request.status, InboundProtocolRequest.Status.COMPLETED)
+        assert request.status == InboundProtocolRequest.Status.COMPLETED
 
     def test_pending_outbound_operation_recovers_after_live_sender_state_is_lost(self) -> None:
         selected = charger(
@@ -74,9 +73,9 @@ class TransientStateLossAcceptanceTests(TestCase):
         async_to_sync(self._complete_recovered_reset)(operation.pk)
 
         operation.refresh_from_db()
-        self.assertEqual(operation.status, ProtocolOperation.Status.COMPLETED)
-        self.assertEqual(operation.attempt_count, 1)
-        self.assertEqual(operation.response_payload, {"status": "Accepted"})
+        assert operation.status == ProtocolOperation.Status.COMPLETED
+        assert operation.attempt_count == 1
+        assert operation.response_payload == {"status": "Accepted"}
 
     def test_stale_sql_presence_becomes_offline_without_transient_sender_state(self) -> None:
         selected = charger("transient-presence")
@@ -89,19 +88,19 @@ class TransientStateLossAcceptanceTests(TestCase):
         active_connections.unregister(selected)
         selected = Charger.objects.select_related("connection").get(pk=selected.pk)
 
-        self.assertFalse(connection_is_live(selected))
-        self.assertFalse(Charger.objects.connected().filter(pk=selected.pk).exists())
-        self.assertTrue(Charger.objects.disconnected().filter(pk=selected.pk).exists())
+        assert not connection_is_live(selected)
+        assert not Charger.objects.connected().filter(pk=selected.pk).exists()
+        assert Charger.objects.disconnected().filter(pk=selected.pk).exists()
 
     async def _complete_recovered_reset(self, operation_id: int) -> None:
         communicator = await connect_charger()
 
         outbound = await communicator.receive_json_from(timeout=5)
-        self.assertEqual(outbound[0], 2)
-        self.assertEqual(outbound[2], "Reset")
-        self.assertEqual(outbound[3], {})
+        assert outbound[0] == 2
+        assert outbound[2] == "Reset"
+        assert outbound[3] == {}
         operation = await ProtocolOperation.objects.aget(pk=operation_id)
-        self.assertEqual(outbound[1], str(operation.unique_id))
+        assert outbound[1] == str(operation.unique_id)
 
         await communicator.send_json_to(
             [3, outbound[1], {"status": "Accepted"}]

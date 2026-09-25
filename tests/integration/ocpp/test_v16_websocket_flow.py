@@ -1,8 +1,8 @@
 from decimal import Decimal
 
+import pytest
 from asgiref.sync import async_to_sync
 from django.contrib.auth.hashers import make_password
-from django.test import TestCase
 
 from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount
@@ -17,9 +17,11 @@ from apps.ocpp.models import (
 from tests.apps.ocpp.builders import charger
 from tests.integration.ocpp.support import connect_charger
 
+pytestmark = pytest.mark.django_db(transaction=True)
 
-class Ocpp16WebsocketFlowTests(TestCase):
-    def setUp(self) -> None:
+
+class Ocpp16WebsocketFlowTests:
+    def setup_method(self) -> None:
         account = CustomerAccount.objects.create(
             key="account-1",
             name="Account",
@@ -39,13 +41,13 @@ class Ocpp16WebsocketFlowTests(TestCase):
         async_to_sync(self._run_exchange)()
 
         transaction = OcppTransaction.objects.get()
-        self.assertEqual(transaction.meter_start, 100)
-        self.assertEqual(transaction.meter_stop, 150)
-        self.assertEqual(transaction.energy_kwh, Decimal("0.0500"))
-        self.assertEqual(transaction.meter_values.count(), 1)
-        self.assertEqual(Connector.objects.get().status, "Preparing")
-        self.assertEqual(NotificationRecord.objects.get().action, "DataTransfer")
-        self.assertEqual(OperationalStatusRecord.objects.count(), 2)
+        assert transaction.meter_start == 100
+        assert transaction.meter_stop == 150
+        assert transaction.energy_kwh == Decimal("0.0500")
+        assert transaction.meter_values.count() == 1
+        assert Connector.objects.get().status == "Preparing"
+        assert NotificationRecord.objects.get().action == "DataTransfer"
+        assert OperationalStatusRecord.objects.count() == 2
 
 
     def test_restart_reconnect_reconciles_open_transaction_from_fresh_status(self) -> None:
@@ -55,15 +57,12 @@ class Ocpp16WebsocketFlowTests(TestCase):
         transaction = OcppTransaction.objects.get()
         snapshot = snapshot_charger(selected)
 
-        self.assertIsNone(transaction.stopped_at)
-        self.assertEqual(
-            transaction.recovery_state,
-            OcppTransaction.RecoveryState.UNRESOLVED,
-        )
-        self.assertEqual(snapshot.state, "offline")
-        self.assertEqual(snapshot.active_transactions, 0)
-        self.assertEqual(snapshot.unresolved_sessions, 1)
-        self.assertIsNone(snapshot.current_transaction_id)
+        assert transaction.stopped_at is None
+        assert transaction.recovery_state == OcppTransaction.RecoveryState.UNRESOLVED
+        assert snapshot.state == "offline"
+        assert snapshot.active_transactions == 0
+        assert snapshot.unresolved_sessions == 1
+        assert snapshot.current_transaction_id is None
 
     async def _run_reconnect_recovery_exchange(self) -> None:
         first = await connect_charger()
@@ -76,15 +75,12 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 {"chargePointVendor": "ACME", "chargePointModel": "Test"},
             ]
         )
-        self.assertEqual((await first.receive_json_from())[2]["status"], "Accepted")
+        assert (await first.receive_json_from())[2]["status"] == "Accepted"
 
         await first.send_json_to(
             [2, "authorize-recovery-1", "Authorize", {"idTag": "card-tag"}]
         )
-        self.assertEqual(
-            (await first.receive_json_from())[2]["idTagInfo"]["status"],
-            "Accepted",
-        )
+        assert (await first.receive_json_from())[2]["idTagInfo"]["status"] == "Accepted"
 
         await first.send_json_to(
             [
@@ -95,7 +91,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
             ]
         )
         started = await first.receive_json_from()
-        self.assertEqual(started[2]["idTagInfo"]["status"], "Accepted")
+        assert started[2]["idTagInfo"]["status"] == "Accepted"
 
         await first.disconnect()
 
@@ -109,7 +105,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 {"chargePointVendor": "ACME", "chargePointModel": "Test"},
             ]
         )
-        self.assertEqual((await second.receive_json_from())[2]["status"], "Accepted")
+        assert (await second.receive_json_from())[2]["status"] == "Accepted"
 
         await second.send_json_to(
             [
@@ -123,10 +119,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 },
             ]
         )
-        self.assertEqual(
-            await second.receive_json_from(),
-            [3, "status-recovery-available", {}],
-        )
+        assert await second.receive_json_from() == [3, "status-recovery-available", {}]
 
         await second.disconnect()
 
@@ -142,10 +135,10 @@ class Ocpp16WebsocketFlowTests(TestCase):
             ]
         )
         response = await communicator.receive_json_from()
-        self.assertEqual(response[2]["status"], "Accepted")
+        assert response[2]["status"] == "Accepted"
 
         await communicator.send_json_to([2, "heartbeat-1", "Heartbeat", {}])
-        self.assertIn("currentTime", (await communicator.receive_json_from())[2])
+        assert "currentTime" in (await communicator.receive_json_from())[2]
 
         await communicator.send_json_to(
             [
@@ -155,13 +148,13 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 {"connectorId": 1, "status": "Preparing"},
             ]
         )
-        self.assertEqual(await communicator.receive_json_from(), [3, "status-1", {}])
+        assert await communicator.receive_json_from() == [3, "status-1", {}]
 
         await communicator.send_json_to(
             [2, "authorize-1", "Authorize", {"idTag": "card-tag"}]
         )
         response = await communicator.receive_json_from()
-        self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
+        assert response[2]["idTagInfo"]["status"] == "Accepted"
 
         await communicator.send_json_to(
             [
@@ -173,7 +166,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
         )
         response = await communicator.receive_json_from()
         transaction_id = response[2]["transactionId"]
-        self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
+        assert response[2]["idTagInfo"]["status"] == "Accepted"
 
         await communicator.send_json_to(
             [
@@ -191,7 +184,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 },
             ]
         )
-        self.assertEqual(await communicator.receive_json_from(), [3, "meter-1", {}])
+        assert await communicator.receive_json_from() == [3, "meter-1", {}]
 
         await communicator.send_json_to(
             [
@@ -201,10 +194,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
                 {"transactionId": transaction_id, "meterStop": 150},
             ]
         )
-        self.assertEqual(
-            await communicator.receive_json_from(),
-            [3, "stop-1", {"idTagInfo": {"status": "Accepted"}}],
-        )
+        assert await communicator.receive_json_from() == [3, "stop-1", {"idTagInfo": {"status": "Accepted"}}]
 
         for unique_id, action, payload, expected in (
             ("transfer-1", "DataTransfer", {"vendorId": "ACME"}, {"status": "Accepted"}),
@@ -212,9 +202,6 @@ class Ocpp16WebsocketFlowTests(TestCase):
             ("firmware-1", "FirmwareStatusNotification", {"status": "Downloaded"}, {}),
         ):
             await communicator.send_json_to([2, unique_id, action, payload])
-            self.assertEqual(
-                await communicator.receive_json_from(),
-                [3, unique_id, expected],
-            )
+            assert await communicator.receive_json_from() == [3, unique_id, expected]
 
         await communicator.disconnect()

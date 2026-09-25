@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from django.test import TestCase
+import pytest
 
 from apps.cards.models import CardCredential
 from apps.energy.models import CustomerAccount, EnergyTariff, LedgerEntry
@@ -10,8 +10,10 @@ from apps.ocpp.models import MeterValue
 from apps.sigils.models import SigilRoot
 from tests.apps.ocpp.builders import charger, connector, station_model, transaction
 
+pytestmark = pytest.mark.django_db
 
-class DomainLinkTests(TestCase):
+
+class DomainLinkTests:
     def test_retained_charging_records_keep_cross_domain_links(self) -> None:
         tariff = EnergyTariff.objects.create(
             code="standard",
@@ -59,7 +61,7 @@ class DomainLinkTests(TestCase):
             context_type="energy.CustomerAccount",
         )
 
-        self.assertEqual(account.ledger_entries.get(), ledger)
-        self.assertEqual(selected_transaction.meter_values.get(), meter)
-        self.assertTrue(event.payload["accepted"])
-        self.assertEqual(root.context_type, "energy.CustomerAccount")
+        assert account.ledger_entries.get() == ledger
+        assert selected_transaction.meter_values.get() == meter
+        assert event.payload["accepted"]
+        assert root.context_type == "energy.CustomerAccount"

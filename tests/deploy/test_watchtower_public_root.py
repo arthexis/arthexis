@@ -1,27 +1,23 @@
 from pathlib import Path
-from unittest import TestCase
 
 
-class WatchtowerWorkflowTests(TestCase):
+class WatchtowerWorkflowTests:
     def test_public_markdown_root_is_asserted_after_exposure(self) -> None:
         workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "grep -F '<h2 id=\"operational-capabilities\">Operational Capabilities</h2>'",
-            workflow,
+        assert (
+            "grep -F '<h2 id=\"operational-capabilities\">Operational Capabilities</h2>'"
+            in workflow
         )
 
-        self.assertIn("Verify public Markdown root", workflow)
-        self.assertIn(
+        assert "Verify public Markdown root" in workflow
+        assert (
             "curl --fail --silent --show-error --retry 5 --retry-delay 1 "
-            "--retry-all-errors https://arthexis.com/",
-            workflow,
+            "--retry-all-errors https://arthexis.com/"
+            in workflow
         )
-        self.assertIn(
-            "grep -F '<h1 id=\"constellation\">Constellation</h1>'",
-            workflow,
-        )
+        assert "grep -F '<h1 id=\"constellation\">Constellation</h1>'" in workflow
 
     def test_public_watchtower_logs_are_minimal(self) -> None:
         workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
@@ -30,9 +26,9 @@ class WatchtowerWorkflowTests(TestCase):
         start = workflow.index("- name: Expose Arthexis publicly through Gway recipe")
         public_workflow = workflow[start:]
 
-        self.assertIn(
-            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}",
-            public_workflow,
+        assert (
+            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}"
+            in public_workflow
         )
         for forbidden in (
             "systemctl status",
@@ -45,10 +41,9 @@ class WatchtowerWorkflowTests(TestCase):
             "Upload deployment evidence",
             "actions/upload-artifact",
         ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, public_workflow)
+            assert forbidden not in public_workflow
 
-        self.assertIn('echo "service=active"', workflow)
+        assert 'echo "service=active"' in workflow
 
         for status in (
             'echo "public_exposure=ok"',
@@ -57,8 +52,7 @@ class WatchtowerWorkflowTests(TestCase):
             'echo "migration_drift=none"',
             'echo "ocpp_matrix=ok"',
         ):
-            with self.subTest(status=status):
-                self.assertIn(status, public_workflow)
+            assert status in public_workflow
 
 
 
