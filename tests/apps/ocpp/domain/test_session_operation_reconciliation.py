@@ -10,7 +10,7 @@ from apps.ocpp.domain.operations import (
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.contracts import Direction, ProtocolVersion
 from apps.ocpp.tasks import reconcile_ambiguous_session_operations
-from tests.apps.ocpp.builders import charger, connector, transaction
+from tests.apps.ocpp.builders import charger, connector, protocol_operation, transaction
 
 
 class SessionOperationReconciliationTests(TestCase):
@@ -25,26 +25,15 @@ class SessionOperationReconciliationTests(TestCase):
         action: str,
         payload: dict[str, object],
     ) -> ProtocolOperation:
-        operation = create_operation(
-            charger=self.charger,
+        return protocol_operation(
+            self.charger,
+            action,
             version=version,
-            direction=Direction.CSMS_TO_CHARGE_POINT,
-            action=action,
             request_payload=payload,
+            status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+            attempts=1,
+            attempt_at=self.attempt_at,
         )
-        operation.status = ProtocolOperation.Status.RECOVERY_REQUIRED
-        operation.attempt_count = 1
-        operation.first_attempt_at = self.attempt_at
-        operation.last_attempt_at = self.attempt_at
-        operation.save(
-            update_fields=(
-                "status",
-                "attempt_count",
-                "first_attempt_at",
-                "last_attempt_at",
-            )
-        )
-        return operation
 
     def test_v16_remote_start_settles_from_matching_later_transaction(self) -> None:
         selected_connector = connector(self.charger, number=1)
