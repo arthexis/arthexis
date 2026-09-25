@@ -187,6 +187,50 @@ async def request_explicit_operation(
     return operation
 
 
+async def enqueue_existing_operation(
+    operation: ProtocolOperation,
+    *,
+    timeout: float = 30,
+) -> bool:
+    """Enqueue one existing pending operation to its live owning consumer."""
+    connection = await sync_to_async(_load_connection)(operation.charger)
+    if connection is None:
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="Charger is not connected.",
+        )
+        return False
+    if connection.protocol != operation.version:
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="Live charger protocol does not match the queued operation.",
+        )
+        return False
+    channel_layer = get_channel_layer()
+    if channel_layer is None or not _is_shared_channel_layer(channel_layer):
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="A shared channel layer is required for explicit charger delivery.",
+        )
+        return False
+    try:
+        await channel_layer.send(
+            connection.channel_name,
+            {
+                "type": "ocpp.emit",
+                "operation_id": operation.pk,
+                "timeout": timeout,
+            },
+        )
+    except (ChannelFull, OSError, TimeoutError):
+        await sync_to_async(retain_pending_operation)(
+            operation,
+            description="Could not confirm delivery to the live charger consumer.",
+        )
+        return False
+    return True
+
+
 async def deliver_queued_operation(
     *,
     charger: Charger,
