@@ -62,7 +62,7 @@ class Ocpp16WebsocketFlowTests(TestCase):
             transaction.recovery_state,
             OcppTransaction.RecoveryState.UNRESOLVED,
         )
-        self.assertEqual(snapshot.state, "unresolved")
+        self.assertEqual(snapshot.state, "offline")
         self.assertEqual(snapshot.active_transactions, 0)
         self.assertEqual(snapshot.unresolved_sessions, 1)
         self.assertIsNone(snapshot.current_transaction_id)
