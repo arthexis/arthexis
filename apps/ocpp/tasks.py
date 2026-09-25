@@ -5,7 +5,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
-from apps.ocpp.domain.operations import reconcile_session_operations
+from apps.ocpp.domain.operations import (\n    reconcile_configuration_operations,\n    reconcile_session_operations,\n)
 from apps.ocpp.domain.sessions import reconcile_pending_transaction_energy
 from apps.ocpp.models import Charger, ChargerConnection
 
@@ -29,3 +29,9 @@ def reconcile_meter_energy() -> int:
 def reconcile_ambiguous_session_operations() -> int:
     """Resolve ambiguous remote start/stop work from retained session evidence."""
     return reconcile_session_operations()
+
+
+@shared_task(name="ocpp.maintenance.reconcile_configuration_operations")
+def reconcile_ambiguous_configuration_operations() -> int:
+    """Resolve ambiguous configuration writes through safe observational reads."""
+    return reconcile_configuration_operations()
