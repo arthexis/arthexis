@@ -1,5 +1,5 @@
-from asgiref.sync import async_to_sync
 import pytest
+from asgiref.sync import async_to_sync
 
 from apps.ocpp.models import ProtocolOperation
 from apps.ocpp.protocol.v16.outbound import VALIDATORS, validate_outbound
