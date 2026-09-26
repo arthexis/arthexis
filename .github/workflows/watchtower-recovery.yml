@@ -107,19 +107,19 @@ jobs:
             echo "nginx_service=inactive"
           fi
 
-          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1; then
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1; then
             echo "django_check=ok"
           else
             echo "django_check=failed"
           fi
 
-          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1; then
             echo "migration_drift=none"
           else
             echo "migration_drift=detected"
           fi
 
-          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1; then
+          if sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py ocpp_matrix >/dev/null 2>&1; then
             echo "ocpp_matrix=ok"
           else
             echo "ocpp_matrix=failed"
@@ -130,7 +130,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          project=/var/lib/gway/projects/arthexis
+          project=/opt/arthexis
           sudo -n "${project}/.venv/bin/python" -m gway \
             "${project}/deploy/remote-preflight.rx"
           sudo -n "${project}/.venv/bin/python" \
@@ -224,6 +224,16 @@ jobs:
           "${RUNNER_TEMP}/recovery-gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${RECOVERY_GWAY_SHA}" >/dev/null 2>&1
           "${RUNNER_TEMP}/recovery-gway-venv/bin/gway" --help >/dev/null
 
+          sudo -n rm -rf /var/lib/gway/venv.next
+          sudo -n python3 -m venv /var/lib/gway/venv.next
+          sudo -n /var/lib/gway/venv.next/bin/python -m pip install --upgrade pip >/dev/null 2>&1
+          sudo -n /var/lib/gway/venv.next/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${RECOVERY_GWAY_SHA}" >/dev/null 2>&1
+          sudo -n rm -rf /var/lib/gway/venv.previous
+          if sudo -n test -d /var/lib/gway/venv; then
+            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous
+          fi
+          sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv
+
       - name: Refuse schema-unsafe rollback
         if: inputs.action == 'rollback'
         shell: bash
@@ -255,15 +265,24 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n "${RUNNER_TEMP}/recovery-gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
-          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
+          sudo -n test -f /opt/arthexis/install.sh
           sudo -n mkdir -p /var/lib/arthexis
-          sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${RECOVERY_GWAY_SHA}" >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /opt/arthexis/install.sh >/dev/null 2>&1
+          if /opt/arthexis/.venv/bin/python -c 'import gway' >/dev/null 2>&1; then
+            echo "Arthexis product venv must not contain GWAY" >&2
+            exit 1
+          fi
 
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /opt/arthexis && exec /var/lib/gway/venv/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /opt/arthexis && exec /var/lib/gway/venv/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
+          unit=/etc/systemd/system/arthexis-arthexis.com.service
+          exec_start="$(sudo -n awk -F= '/^ExecStart=/{print substr($0,11)}' "${unit}")"
+          test -n "${exec_start}"
+          [[ "${exec_start}" != *gway* ]]
+          sudo -n systemctl restart arthexis-arthexis.com.service
+          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
+          sudo -n sh -c 'cd /opt/arthexis && exec /var/lib/gway/venv/bin/gway ./deploy/ready.rx' >/dev/null 2>&1
           echo "rollback_restore=ok"
 
       - name: Verify restored accepted pair
@@ -271,7 +290,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          project=/var/lib/gway/projects/arthexis
+          project=/opt/arthexis
           sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" check --fail-level ERROR >/dev/null 2>&1
           sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" makemigrations --check --dry-run >/dev/null 2>&1
           sudo -n "${project}/.venv/bin/python" -m gway "${project}/deploy/remote-preflight.rx" >/dev/null
