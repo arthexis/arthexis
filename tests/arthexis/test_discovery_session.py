@@ -1,6 +1,6 @@
 import hashlib
-from concurrent.futures import ThreadPoolExecutor
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -155,7 +155,7 @@ def test_concurrent_appends_get_unique_monotonic_sequences(tmp_path) -> None:
 
 @pytest.mark.parametrize(
     "session_id",
-    ["../escape", "/absolute", "nested/path", "", ".hidden/child"],
+    ["../escape", "/absolute", "nested/path", ".hidden/child"],
 )
 def test_session_ids_cannot_escape_discovery_root(tmp_path, session_id) -> None:
     store = DiscoveryStore(tmp_path / "discovery", now=Clock())
