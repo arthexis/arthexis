@@ -441,7 +441,13 @@ jobs:
             local repo="$1"
             local deployed_sha="$2"
             local companion_sha="$3"
-            GH_TOKEN="$RELEASE_AUTOMATION_TOKEN" gh workflow run pypi-publish.yml               --repo "$repo"               --ref main               -f deployed_sha="$deployed_sha"               -f companion_sha="$companion_sha"               -f watchtower_run="$WATCHTOWER_RUN"
+            local workflow
+            if [[ "$repo" == "arthexis/gway" ]]; then
+              workflow="release.yml"
+            else
+              workflow="publish.yml"
+            fi
+            GH_TOKEN="$RELEASE_AUTOMATION_TOKEN" gh workflow run "$workflow"               --repo "$repo"               --ref main               -f deployed_sha="$deployed_sha"               -f companion_sha="$companion_sha"               -f watchtower_run="$WATCHTOWER_RUN"
           }
 
           if [[ "$GWAY_CHANGED" == "true" ]]; then
