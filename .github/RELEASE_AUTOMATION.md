@@ -46,3 +46,6 @@ GitHub does not expose the permission scope of an Actions secret to the workflow
 ## Post-merge handoff
 
 Approved auto-merges explicitly dispatch the release/deploy entry point with the exact merge SHA. This avoids relying on follow-on `push` events from automation tokens while preserving version-only suppression in the receiving workflow.
+
+
+The repository-local handoff uses the workflow's `GITHUB_TOKEN`; `RELEASE_AUTOMATION_TOKEN` is reserved for cross-repository coordination.
