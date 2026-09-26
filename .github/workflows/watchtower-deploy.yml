@@ -433,41 +433,132 @@ jobs:
           print(json.dumps(manifest, sort_keys=True))
           PY
 
-      - name: Dispatch certified package publishers
+      - name: Reconcile certified package publisher handoff
         shell: bash
         env:
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           WATCHTOWER_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -Eeuo pipefail
-
-          if [[ "$ARTHEXIS_CHANGED" != "true" && "$GWAY_CHANGED" != "true" ]]; then
-            echo "publish_dispatch=not_needed"
-            exit 0
-          fi
           if [[ -z "$RELEASE_AUTOMATION_TOKEN" ]]; then
             echo "RELEASE_AUTOMATION_TOKEN is required to dispatch certified publishers." >&2
             exit 1
           fi
 
-          dispatch() {
-            local repo="$1"
-            local deployed_sha="$2"
-            local companion_sha="$3"
-            local workflow
-            if [[ "$repo" == "arthexis/gway" ]]; then
-              workflow="release.yml"
-            else
-              workflow="publish.yml"
-            fi
-            GH_TOKEN="$RELEASE_AUTOMATION_TOKEN" gh workflow run "$workflow"               --repo "$repo"               --ref main               -f deployed_sha="$deployed_sha"               -f companion_sha="$companion_sha"               -f watchtower_run="$WATCHTOWER_RUN"
-          }
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
 
-          if [[ "$GWAY_CHANGED" == "true" ]]; then
-            dispatch arthexis/gway "$GWAY_EXPECTED_SHA" "$ARTHEXIS_EXPECTED_SHA"
-            echo "gway_publish=dispatched"
-          fi
-          if [[ "$ARTHEXIS_CHANGED" == "true" ]]; then
-            dispatch arthexis/arthexis "$ARTHEXIS_EXPECTED_SHA" "$GWAY_EXPECTED_SHA"
-            echo "arthexis_publish=dispatched"
-          fi
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          token = os.environ["RELEASE_AUTOMATION_TOKEN"]
+          watchtower_run = os.environ["WATCHTOWER_RUN"]
+
+          releases = (
+              {
+                  "package": "gway",
+                  "repository": "arthexis/gway",
+                  "workflow": "release.yml",
+                  "version": os.environ["GWAY_EXPECTED_VERSION"],
+                  "sha": os.environ["GWAY_EXPECTED_SHA"],
+                  "companion_sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+              },
+              {
+                  "package": "arthexis",
+                  "repository": "arthexis/arthexis",
+                  "workflow": "publish.yml",
+                  "version": os.environ["ARTHEXIS_EXPECTED_VERSION"],
+                  "sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+                  "companion_sha": os.environ["GWAY_EXPECTED_SHA"],
+              },
+          )
+
+          def request(method, url, payload=None, *, raw=False):
+              data = None if payload is None else json.dumps(payload).encode()
+              accept = (
+                  "application/vnd.github.raw+json"
+                  if raw
+                  else "application/vnd.github+json"
+              )
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": accept,
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      body = response.read()
+                      if not body:
+                          return response.status, None
+                      return response.status, (
+                          body.decode() if raw else json.loads(body)
+                      )
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, None
+                  raise
+
+          for release in releases:
+              package = release["package"]
+              version = release["version"]
+              target = f".watchtower/releases/{package}/{version}.json"
+              status, body = request(
+                  "GET",
+                  (
+                      f"{api}/repos/arthexis/arthexis/contents/{target}"
+                      "?ref=watchtower-state"
+                  ),
+                  raw=True,
+              )
+
+              if status != 404:
+                  manifest = json.loads(body)
+                  expected = {
+                      "package": package,
+                      "version": version,
+                      "sha": release["sha"],
+                      "companion_sha": release["companion_sha"],
+                  }
+                  mismatches = {
+                      key: (manifest.get(key), value)
+                      for key, value in expected.items()
+                      if manifest.get(key) != value
+                  }
+                  publication = manifest.get("publication", {})
+                  incomplete = [
+                      name
+                      for name in ("pypi", "git_tag", "github_release")
+                      if publication.get(name, {}).get("state") != "published"
+                  ]
+                  if mismatches or incomplete:
+                      raise SystemExit(
+                          f"Release evidence conflict for {target}: "
+                          f"mismatches={mismatches!r} incomplete={incomplete!r}"
+                      )
+                  print(f"{package}_publish=already_recorded")
+                  continue
+
+              dispatch_url = (
+                  f"{api}/repos/{release['repository']}/actions/workflows/"
+                  f"{release['workflow']}/dispatches"
+              )
+              request(
+                  "POST",
+                  dispatch_url,
+                  {
+                      "ref": "main",
+                      "inputs": {
+                          "deployed_sha": release["sha"],
+                          "companion_sha": release["companion_sha"],
+                          "watchtower_run": watchtower_run,
+                      },
+                  },
+              )
+              print(f"{package}_publish=dispatched")
+          PY
