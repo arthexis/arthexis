@@ -1,5 +1,6 @@
 [scopes.chatgpt-logs]
 operations = [
+  "help",
   "log.sources",
   "log.read",
   "log.tail",
