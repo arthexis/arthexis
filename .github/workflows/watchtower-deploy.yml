@@ -433,6 +433,69 @@ jobs:
           print(json.dumps(manifest, sort_keys=True))
           PY
 
+      - name: Open next-version PR after accepted deployment
+        if: env.ARTHEXIS_CHANGED == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          released="$ARTHEXIS_EXPECTED_VERSION"
+          next_version="$(python3 - "$released" <<'PY'
+          import re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit(f"Automatic Arthexis rollover requires X.Y.Z, got {sys.argv[1]!r}")
+          major, minor, patch = map(int, match.groups())
+          print(f"{major}.{minor}.{patch + 1}")
+          PY
+          )"
+          branch="release/advance-arthexis-v${released}"
+
+          git fetch origin main --depth=1
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git worktree add "$work" origin/main
+          cd "$work"
+
+          current="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$current" != "$released" ]]; then
+            echo "rollover=already_advanced current=$current accepted=$released"
+            exit 0
+          fi
+
+          python3 - "$released" "$next_version" <<'PY'
+          from pathlib import Path
+          import re, sys
+          released, nxt = sys.argv[1:]
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          pattern = r'(?m)^version\s*=\s*"' + re.escape(released) + r'"\s*$'
+          updated, count = re.subn(pattern, f'version = "{nxt}"', text, count=1)
+          if count != 1:
+              raise SystemExit("project.version does not match accepted version")
+          path.write_text(updated, encoding="utf-8")
+          Path("VERSION").write_text(nxt + "\n", encoding="utf-8")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add VERSION pyproject.toml
+          git commit -m "chore(release): advance arthexis to v${next_version}"
+          git push --force-with-lease origin "$branch"
+
+          existing="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            echo "rollover_pr=existing number=$existing"
+          else
+            GH_TOKEN="$GH_TOKEN" gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+              --title "Advance Arthexis to ${next_version} after accepted ${released} deployment" \
+              --body "Watchtower successfully accepted Arthexis \`${released}\` at \`${ARTHEXIS_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
+            echo "rollover_pr=created"
+          fi
+
+
       - name: Reconcile certified package publisher handoff
         shell: bash
         env:
