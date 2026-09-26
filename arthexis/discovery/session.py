@@ -1,16 +1,16 @@
 """Filesystem-backed evidence for charger discovery sessions."""
 
+import fcntl
+import json
+import os
+import re
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-import fcntl
 from hashlib import sha256
-import json
-import os
 from pathlib import Path, PurePosixPath
-import re
 from typing import Any
 from uuid import uuid4
 
