@@ -289,7 +289,7 @@ def test_arthexis_product_runtime_is_separate_from_gway() -> None:
     assert "test -f /opt/arthexis/install.sh" in workflow
     assert "/opt/arthexis/.venv/bin/python -m pip install \"gway" not in workflow
     assert "Arthexis product venv must not contain GWAY" in workflow
-    assert "/var/lib/gway/venv/bin/gway" in workflow
+    assert "/var/lib/gway/venv/bin/python -m gway" in workflow
     assert "service=active_independent_of_gway" in workflow
     assert "ExecStart must not depend on GWAY" in workflow
 
