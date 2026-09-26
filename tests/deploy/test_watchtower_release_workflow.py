@@ -46,3 +46,13 @@ def test_watchtower_release_handoff_is_recoverable_without_gh_cli():
     assert "/dispatches" in workflow
     assert '_publish=already_recorded' in workflow
     assert '_publish=dispatched' in workflow
+
+
+def test_watchtower_requires_release_label_before_dispatch():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+
+    assert "_publish=not_requested" in workflow
+    assert "/commits/{release['sha']}/pulls" in workflow
+    assert 'label.get("name") == "release"' in workflow
