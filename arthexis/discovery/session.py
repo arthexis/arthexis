@@ -1,17 +1,22 @@
 """Filesystem-backed evidence for charger discovery sessions."""
 
-import json
-import os
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
+import fcntl
+from hashlib import sha256
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
 from typing import Any
 from uuid import uuid4
 
 
 SCHEMA_VERSION = 1
+SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class EvidenceKind(str, Enum):
@@ -41,6 +46,25 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _validated_session_id(session_id: str) -> str:
+    if not SESSION_ID_PATTERN.fullmatch(session_id):
+        raise ValueError(
+            "Discovery session ID must use only letters, numbers, '.', '_' or '-'."
+        )
+    return session_id
+
+
+def _validated_artifact_path(path: str) -> PurePosixPath:
+    candidate = PurePosixPath(path)
+    if (
+        candidate.is_absolute()
+        or not candidate.parts
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+    ):
+        raise ValueError("Discovery artifact path must stay inside the session.")
+    return candidate
+
+
 @dataclass(frozen=True)
 class DiscoverySession:
     """One append-only discovery evidence stream."""
@@ -64,6 +88,10 @@ class DiscoverySession:
     def summary_path(self) -> Path:
         return self.path / "summary.json"
 
+    @property
+    def lock_path(self) -> Path:
+        return self.path / ".events.lock"
+
     def events(self) -> Iterator[dict[str, Any]]:
         """Yield every complete persisted event in sequence order."""
         if not self.events_path.exists():
@@ -82,6 +110,16 @@ class DiscoverySession:
             if event["seq"] == sequence:
                 return event
         raise KeyError(f"{self.session_id}: no discovery event {sequence}")
+
+    @contextmanager
+    def _event_lock(self) -> Iterator[None]:
+        self.path.mkdir(parents=True, exist_ok=True)
+        with self.lock_path.open("a+b") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
     def _repair_incomplete_tail(self) -> None:
         """Discard only a partial final write left by an interrupted process."""
@@ -111,26 +149,45 @@ class DiscoverySession:
 
         payload = dict(data or {})
         json.dumps(payload)
-        self._repair_incomplete_tail()
-        current = list(self.events())
-        event: dict[str, Any] = {
-            "session_id": self.session_id,
-            "seq": current[-1]["seq"] + 1 if current else 1,
-            "time": _timestamp(self.now()),
-            "type": event_type,
-            "kind": kind.value,
-            "data": payload,
-        }
-        if artifact is not None:
-            event["artifact"] = artifact
+        artifact_path = str(_validated_artifact_path(artifact)) if artifact else None
 
-        serialized = json.dumps(event, sort_keys=True, separators=(",", ":"))
-        self.path.mkdir(parents=True, exist_ok=True)
-        with self.events_path.open("a", encoding="utf-8") as stream:
-            stream.write(serialized + "\n")
+        with self._event_lock():
+            self._repair_incomplete_tail()
+            current = list(self.events())
+            event: dict[str, Any] = {
+                "session_id": self.session_id,
+                "seq": current[-1]["seq"] + 1 if current else 1,
+                "time": _timestamp(self.now()),
+                "type": event_type,
+                "kind": kind.value,
+                "data": payload,
+            }
+            if artifact_path is not None:
+                event["artifact"] = artifact_path
+
+            serialized = json.dumps(event, sort_keys=True, separators=(",", ":"))
+            with self.events_path.open("a", encoding="utf-8") as stream:
+                stream.write(serialized + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+        return event
+
+    def write_artifact(self, relative_path: str, content: bytes) -> dict[str, Any]:
+        """Persist a larger evidence artifact and return its stable reference."""
+        candidate = _validated_artifact_path(relative_path)
+        destination = self.path.joinpath(*candidate.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(destination.suffix + ".tmp")
+        with temporary.open("wb") as stream:
+            stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        return event
+        temporary.replace(destination)
+        return {
+            "path": candidate.as_posix(),
+            "sha256": sha256(content).hexdigest(),
+            "bytes": len(content),
+        }
 
     def summarize(self) -> dict[str, Any]:
         """Derive a compact summary from the append-only evidence stream."""
@@ -200,8 +257,9 @@ class DiscoveryStore:
     ) -> DiscoverySession:
         """Create a new discovery report directory and initial manifest."""
         created_at = self.now()
-        identifier = session_id or (
-            created_at.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
+        identifier = _validated_session_id(
+            session_id
+            or (created_at.strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8])
         )
         path = self.root / identifier
         if path.exists():
@@ -227,9 +285,10 @@ class DiscoveryStore:
 
     def open(self, session_id: str) -> DiscoverySession:
         """Open an existing discovery report without mutating it."""
-        path = self.root / session_id
+        identifier = _validated_session_id(session_id)
+        path = self.root / identifier
         if not path.is_dir() or not (path / "manifest.json").exists():
-            raise KeyError(f"Unknown discovery session: {session_id}")
+            raise KeyError(f"Unknown discovery session: {identifier}")
         return DiscoverySession(path=path, now=self.now)
 
     def list(self) -> list[str]:
@@ -239,5 +298,7 @@ class DiscoveryStore:
         return sorted(
             path.name
             for path in self.root.iterdir()
-            if path.is_dir() and (path / "manifest.json").exists()
+            if path.is_dir()
+            and SESSION_ID_PATTERN.fullmatch(path.name)
+            and (path / "manifest.json").exists()
         )
