@@ -11,6 +11,7 @@ on:
         options:
           - diagnose
           - checkpoint
+          - rollback
 
 concurrency:
   group: watchtower-recovery
@@ -27,7 +28,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Clean privileged Python bytecode from runner workspace
         shell: bash
@@ -137,3 +138,143 @@ jobs:
           sudo -n "${project}/.venv/bin/python" \
             "${project}/scripts/verify_remote_deployment.py" public
           echo "remote_checkpoint=ok"
+
+      - name: Resolve last accepted deployment pair
+        if: inputs.action == 'rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          req = urllib.request.Request(
+              f"{api}/repos/{repository}/contents/.watchtower/accepted.json?ref=watchtower-state",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f'Bearer {os.environ["GH_TOKEN"]}',
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(req) as response:
+              payload = json.load(response)
+          manifest = json.loads(base64.b64decode(payload["content"]).decode())
+
+          required = {
+              "arthexis_sha",
+              "arthexis_version",
+              "gway_sha",
+              "gway_version",
+              "run_url",
+          }
+          missing = sorted(required - manifest.keys())
+          if missing:
+              raise SystemExit(f"accepted deployment manifest is missing: {missing}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for key in (
+                  "arthexis_sha",
+                  "arthexis_version",
+                  "gway_sha",
+                  "gway_version",
+              ):
+                  env.write(f"RECOVERY_{key.upper()}={manifest[key]}\n")
+
+          print(
+              "recovery_pair="
+              f'arthexis@{manifest["arthexis_sha"]} '
+              f'gway@{manifest["gway_sha"]} '
+              f'accepted_by={manifest["run_url"]}'
+          )
+          PY
+
+      - name: Checkout accepted Arthexis revision
+        if: inputs.action == 'rollback'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.RECOVERY_ARTHEXIS_SHA }}
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify accepted rollback inputs
+        if: inputs.action == 'rollback'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "${RECOVERY_ARTHEXIS_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "${RECOVERY_ARTHEXIS_VERSION}"
+          gway_version="$(curl --fail --silent --show-error "https://raw.githubusercontent.com/arthexis/gway/${RECOVERY_GWAY_SHA}/VERSION" | tr -d '[:space:]')"
+          test "${gway_version}" = "${RECOVERY_GWAY_VERSION}"
+          echo "accepted_pair=verified"
+
+      - name: Install accepted Gway
+        if: inputs.action == 'rollback'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m venv "${RUNNER_TEMP}/recovery-gway-venv"
+          "${RUNNER_TEMP}/recovery-gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
+          "${RUNNER_TEMP}/recovery-gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${RECOVERY_GWAY_SHA}" >/dev/null 2>&1
+          "${RUNNER_TEMP}/recovery-gway-venv/bin/gway" --help >/dev/null
+
+      - name: Refuse schema-unsafe rollback
+        if: inputs.action == 'rollback'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          project="${GITHUB_WORKSPACE}"
+          python3 -m venv "${RUNNER_TEMP}/recovery-arthexis-venv"
+          "${RUNNER_TEMP}/recovery-arthexis-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
+          "${RUNNER_TEMP}/recovery-arthexis-venv/bin/python" -m pip install "${project}" >/dev/null 2>&1
+          ARTHEXIS_DATA_DIR=/var/lib/arthexis "${RUNNER_TEMP}/recovery-arthexis-venv/bin/python" "${project}/manage.py" shell -c '
+          from django.db import connection
+          from django.db.migrations.loader import MigrationLoader
+          from django.db.migrations.recorder import MigrationRecorder
+
+          applied = set(MigrationRecorder(connection).applied_migrations())
+          known = set(MigrationLoader(connection, ignore_no_migrations=True).disk_migrations)
+          unknown = sorted(applied - known)
+          if unknown:
+              raise SystemExit(
+                  "rollback refused: database contains migrations unknown to the accepted revision: "
+                  + ", ".join(f"{app}.{name}" for app, name in unknown)
+              )
+          print("schema_rollback_guard=ok")
+          '
+
+      - name: Restore accepted Arthexis and Gway pair
+        if: inputs.action == 'rollback'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n "${RUNNER_TEMP}/recovery-gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
+          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
+          sudo -n mkdir -p /var/lib/arthexis
+          sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
+          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${RECOVERY_GWAY_SHA}" >/dev/null 2>&1
+
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
+          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
+          echo "rollback_restore=ok"
+
+      - name: Verify restored accepted pair
+        if: inputs.action == 'rollback'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          project=/var/lib/gway/projects/arthexis
+          sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" check --fail-level ERROR >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" makemigrations --check --dry-run >/dev/null 2>&1
+          sudo -n "${project}/.venv/bin/python" -m gway "${project}/deploy/remote-preflight.rx" >/dev/null
+          sudo -n "${project}/.venv/bin/python" "${project}/scripts/verify_remote_deployment.py" local
+          sudo -n "${project}/.venv/bin/python" "${project}/scripts/verify_remote_deployment.py" public
+          echo "rollback_verification=ok"

@@ -11,7 +11,6 @@ def test_watchtower_recovery_keeps_sanitized_diagnostics() -> None:
         "confirm_cleanup",
         "redeploy",
         "gway uninstall",
-        "install . --system --force",
         "ss -ltnp",
         "find /var/lib",
         "ls -l",
@@ -37,7 +36,7 @@ def test_watchtower_recovery_keeps_sanitized_diagnostics() -> None:
         assert required in workflow
 
 
-def test_recovery_workflow_exposes_diagnose_and_checkpoint_actions() -> None:
+def test_recovery_workflow_exposes_diagnose_checkpoint_and_rollback_actions() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "action:" in workflow
@@ -45,6 +44,7 @@ def test_recovery_workflow_exposes_diagnose_and_checkpoint_actions() -> None:
     assert "default: diagnose" in workflow
     assert "- diagnose" in workflow
     assert "- checkpoint" in workflow
+    assert "- rollback" in workflow
 
 
 def test_checkpoint_is_additive_to_sanitized_diagnostics() -> None:
@@ -71,3 +71,21 @@ def test_checkpoint_does_not_issue_credentials_or_supply_cache_env() -> None:
 
     assert "security token create" not in workflow
     assert "GWAY_CACHE_DIR=/var/lib/gway/cache" not in workflow
+
+
+def test_rollback_is_explicit_and_mutation_is_scoped_to_it() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    restore = workflow.index("- name: Restore accepted Arthexis and Gway pair")
+    assert "if: inputs.action == 'rollback'" in workflow[restore : restore + 240]
+    assert 'install . --system --force' in workflow[restore:]
+
+
+def test_rollback_requires_accepted_pair_and_schema_guard() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "watchtower-state" in workflow
+    assert ".watchtower/accepted.json" in workflow
+    assert "- name: Verify accepted rollback inputs" in workflow
+    assert "- name: Refuse schema-unsafe rollback" in workflow
+    assert "database contains migrations unknown to the accepted revision" in workflow
