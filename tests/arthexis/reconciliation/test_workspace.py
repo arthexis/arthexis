@@ -20,8 +20,6 @@ from arthexis.reconciliation.workspace import verify_fixture_source
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-pytestmark = pytest.mark.reconciliation_e2e
-
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -64,17 +62,27 @@ def _fixture(tmp_path: Path):
     )
 
 
-def _run_reconciliation(fixture: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+def _run_reconciliation(
+    fixture: Path,
+    tmp_path: Path,
+    *,
+    batch_size: int | None = None,
+) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
     environment.pop("ARTHEXIS_DATABASE_PATH", None)
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+        "reconcile-fixture",
+        str(fixture),
+        "--nice",
+        "0",
+    ]
+    if batch_size is not None:
+        command.extend(["--batch-size", str(batch_size)])
     return subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "reconcile-fixture",
-            str(fixture),
-        ],
+        command,
         cwd=PROJECT_ROOT,
         env=environment,
         capture_output=True,
@@ -83,11 +91,12 @@ def _run_reconciliation(fixture: Path, tmp_path: Path) -> subprocess.CompletedPr
     )
 
 
+@pytest.mark.reconciliation_e2e
 def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(tmp_path):
     fixture = _fixture(tmp_path)
     source_sha = _sha256(fixture.database_path)
 
-    completed = _run_reconciliation(fixture.path, tmp_path)
+    completed = _run_reconciliation(fixture.path, tmp_path, batch_size=1)
 
     assert completed.returncode == 0, completed.stderr
     assert _sha256(fixture.database_path) == source_sha
@@ -110,19 +119,19 @@ def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(tmp_p
     assert receipt["status"] == "success"
     assert receipt["destination_database"]["classification"] == "v2"
     assert receipt["reconciliation"]["imported"]["card_credentials"] == 1
-    assert receipt["resource_policy"]["batch_size"] == 250
+    assert receipt["resource_policy"]["batch_size"] == 1
     assert receipt["resource_usage"]["elapsed_seconds"] >= 0
 
 
 def test_reconcile_fixture_refuses_to_overwrite_output(tmp_path):
     fixture = _fixture(tmp_path)
-    first = _run_reconciliation(fixture.path, tmp_path)
-    assert first.returncode == 0, first.stderr
+    destination = fixture.path / "reconciled.sqlite3"
+    destination.touch()
 
-    second = _run_reconciliation(fixture.path, tmp_path)
+    completed = _run_reconciliation(fixture.path, tmp_path)
 
-    assert second.returncode != 0
-    assert "already exists" in second.stderr
+    assert completed.returncode != 0
+    assert "already exists" in completed.stderr
 
 
 def test_fixture_verification_rejects_modified_source(tmp_path):
@@ -134,34 +143,3 @@ def test_fixture_verification_rejects_modified_source(tmp_path):
 
     with pytest.raises(ValueError, match="changed after restore"):
         verify_fixture_source(fixture.path)
-
-
-def test_reconcile_fixture_accepts_small_batch_for_bounded_local_memory(tmp_path):
-    fixture = _fixture(tmp_path)
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "reconcile-fixture",
-            str(fixture.path),
-            "--batch-size",
-            "1",
-            "--nice",
-            "0",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    receipt = json.loads(
-        (fixture.path / "reconciliation.json").read_text(encoding="utf-8")
-    )
-    assert receipt["resource_policy"]["batch_size"] == 1

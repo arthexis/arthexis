@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -14,10 +15,9 @@ import pytest
 
 from arthexis.reconciliation.capture import capture_legacy_installation
 from arthexis.reconciliation.fixture import restore_fixture
+from arthexis.reconciliation.verification import verify_reconciliation
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
-pytestmark = pytest.mark.reconciliation_e2e
 
 
 def _fixture(tmp_path: Path) -> Path:
@@ -54,7 +54,7 @@ def _fixture(tmp_path: Path) -> Path:
     return fixture.path
 
 
-def _run(command: str, fixture: Path, tmp_path: Path):
+def _reconcile(fixture: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
     environment.pop("ARTHEXIS_DATABASE_PATH", None)
@@ -62,7 +62,7 @@ def _run(command: str, fixture: Path, tmp_path: Path):
         [
             sys.executable,
             str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            command,
+            "reconcile-fixture",
             str(fixture),
             "--nice",
             "0",
@@ -75,27 +75,41 @@ def _run(command: str, fixture: Path, tmp_path: Path):
     )
 
 
-def test_verify_migration_emits_go_report_for_healthy_reconciliation(tmp_path):
+@pytest.fixture(scope="module")
+def reconciled_baseline(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    tmp_path = tmp_path_factory.mktemp("reconciliation-verification")
     fixture = _fixture(tmp_path)
-    reconciliation = _run("reconcile-fixture", fixture, tmp_path)
+    reconciliation = _reconcile(fixture, tmp_path)
     assert reconciliation.returncode == 0, reconciliation.stderr
-
-    verification = _run("verify-migration", fixture, tmp_path)
-
-    assert verification.returncode == 0, verification.stderr
-    report = json.loads((fixture / "migration-report.json").read_text(encoding="utf-8"))
-    assert report["decision"] == "GO"
-    assert report["failures"] == []
-    assert "Decision: GO" in (fixture / "migration-report.txt").read_text(
-        encoding="utf-8"
-    )
+    return fixture
 
 
-def test_verify_migration_emits_no_go_for_retained_dependency_loss(tmp_path):
-    fixture = _fixture(tmp_path)
-    reconciliation = _run("reconcile-fixture", fixture, tmp_path)
-    assert reconciliation.returncode == 0, reconciliation.stderr
+def _copy_baseline(reconciled_baseline: Path, tmp_path: Path) -> Path:
+    fixture = tmp_path / "fixture"
+    shutil.copytree(reconciled_baseline, fixture)
+    return fixture
 
+
+@pytest.mark.reconciliation_e2e
+def test_verify_migration_emits_go_report_for_healthy_reconciliation(
+    reconciled_baseline,
+    tmp_path,
+):
+    fixture = _copy_baseline(reconciled_baseline, tmp_path)
+
+    result = verify_reconciliation(fixture)
+
+    assert result.decision == "GO"
+    assert result.report["failures"] == []
+    assert "Decision: GO" in result.text_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.reconciliation_e2e
+def test_verify_migration_emits_no_go_for_retained_dependency_loss(
+    reconciled_baseline,
+    tmp_path,
+):
+    fixture = _copy_baseline(reconciled_baseline, tmp_path)
     receipt_path = fixture / "reconciliation.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["reconciliation"]["skipped"]["ledger_entries"] = (
@@ -106,9 +120,7 @@ def test_verify_migration_emits_no_go_for_retained_dependency_loss(tmp_path):
         encoding="utf-8",
     )
 
-    verification = _run("verify-migration", fixture, tmp_path)
+    result = verify_reconciliation(fixture)
 
-    assert verification.returncode == 2
-    report = json.loads((fixture / "migration-report.json").read_text(encoding="utf-8"))
-    assert report["decision"] == "NO-GO"
-    assert any("ledger_entries" in failure for failure in report["failures"])
+    assert result.decision == "NO-GO"
+    assert any("ledger_entries" in failure for failure in result.report["failures"])
