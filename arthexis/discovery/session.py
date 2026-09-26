@@ -85,6 +85,20 @@ class DiscoverySession:
                 return event
         raise KeyError(f"{self.session_id}: no discovery event {sequence}")
 
+    def _repair_incomplete_tail(self) -> None:
+        """Discard only a partial final write left by an interrupted process."""
+        if not self.events_path.exists():
+            return
+        with self.events_path.open("rb+") as stream:
+            data = stream.read()
+            if not data or data.endswith(b"\n"):
+                return
+            last_newline = data.rfind(b"\n")
+            stream.seek(last_newline + 1 if last_newline >= 0 else 0)
+            stream.truncate()
+            stream.flush()
+            os.fsync(stream.fileno())
+
     def append(
         self,
         event_type: str,
@@ -99,6 +113,7 @@ class DiscoverySession:
 
         payload = dict(data or {})
         json.dumps(payload)
+        self._repair_incomplete_tail()
         current = list(self.events())
         event: dict[str, Any] = {
             "session_id": self.session_id,
