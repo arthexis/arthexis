@@ -132,8 +132,8 @@ jobs:
           # the Watchtower host's Python 3.10 and do not assume tomllib/tomli is installed.
           gway_version="$(curl --fail --silent --show-error             "https://raw.githubusercontent.com/arthexis/gway/$gway_sha/pyproject.toml" |
             awk '
-              /^\\[project\\][[:space:]]*$/ { in_project=1; next }
-              /^\\[/ && in_project { exit }
+              /^\[project\][[:space:]]*$/ { in_project=1; next }
+              /^\[/ && in_project { exit }
               in_project && /^[[:space:]]*version[[:space:]]*=/ {
                 value=$0
                 sub(/^[^=]*=[[:space:]]*/, "", value)
