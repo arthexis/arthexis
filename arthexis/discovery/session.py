@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import threading
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from uuid import uuid4
 
 SCHEMA_VERSION = 1
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_EVENT_LOCKS: dict[str, threading.Lock] = {}
+_EVENT_LOCKS_GUARD = threading.Lock()
 
 
 class EvidenceKind(str, Enum):
@@ -110,15 +113,21 @@ class DiscoverySession:
                 return event
         raise KeyError(f"{self.session_id}: no discovery event {sequence}")
 
+    def _thread_lock(self) -> threading.Lock:
+        key = str(self.path.resolve())
+        with _EVENT_LOCKS_GUARD:
+            return _EVENT_LOCKS.setdefault(key, threading.Lock())
+
     @contextmanager
     def _event_lock(self) -> Iterator[None]:
         self.path.mkdir(parents=True, exist_ok=True)
-        with self.lock_path.open("a+b") as stream:
-            os.lockf(stream.fileno(), os.F_LOCK, 0)
-            try:
-                yield
-            finally:
-                os.lockf(stream.fileno(), os.F_ULOCK, 0)
+        with self._thread_lock():
+            with self.lock_path.open("a+b") as stream:
+                os.lockf(stream.fileno(), os.F_LOCK, 0)
+                try:
+                    yield
+                finally:
+                    os.lockf(stream.fileno(), os.F_ULOCK, 0)
 
     def _repair_incomplete_tail(self) -> None:
         """Discard only a partial final write left by an interrupted process."""
