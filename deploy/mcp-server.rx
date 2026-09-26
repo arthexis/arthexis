@@ -1,3 +1,5 @@
+default --role watchtower
+
 # Watchtower MCP service entrypoint.
 # Gway owns the MCP implementation; Arthexis owns only production deployment values.
 recipe mcp/server
