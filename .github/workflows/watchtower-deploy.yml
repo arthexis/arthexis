@@ -507,6 +507,26 @@ jobs:
           for release in releases:
               package = release["package"]
               version = release["version"]
+
+              # Release intent is durable PR metadata, not an implication of deployment.
+              # A retry can therefore rediscover intent after Watchtower acceptance.
+              _, pulls = request(
+                  "GET",
+                  f"{api}/repos/{release['repository']}/commits/{release['sha']}/pulls",
+              )
+              release_prs = [
+                  pull
+                  for pull in (pulls or [])
+                  if pull.get("merge_commit_sha") == release["sha"]
+                  and any(
+                      label.get("name") == "release"
+                      for label in pull.get("labels", [])
+                  )
+              ]
+              if not release_prs:
+                  print(f"{package}_publish=not_requested")
+                  continue
+
               target = f".watchtower/releases/{package}/{version}.json"
               status, body = request(
                   "GET",
