@@ -20,6 +20,8 @@ from arthexis.reconciliation.workspace import verify_fixture_source
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
+pytestmark = pytest.mark.reconciliation_e2e
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
