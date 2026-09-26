@@ -193,6 +193,17 @@ jobs:
           "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
 
+          sudo -n rm -rf /var/lib/gway/venv.next
+          sudo -n python3 -m venv /var/lib/gway/venv.next
+          sudo -n /var/lib/gway/venv.next/bin/python -m pip install --upgrade pip >/dev/null 2>&1
+          sudo -n /var/lib/gway/venv.next/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
+          sudo -n rm -rf /var/lib/gway/venv.previous
+          if sudo -n test -d /var/lib/gway/venv; then
+            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous
+          fi
+          sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv
+          sudo -n /var/lib/gway/venv/bin/gway --help >/dev/null
+
       - name: Verify exact deployment pair before mutation
         shell: bash
         run: |
@@ -206,16 +217,19 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
-          sudo -n test -f /var/lib/gway/projects/arthexis/pyproject.toml
-          sudo -n test -f /var/lib/gway/projects/arthexis/install.sh
+          sudo -n test -f /opt/arthexis/pyproject.toml
+          sudo -n test -f /opt/arthexis/install.sh
 
       - name: Prepare persistent Arthexis runtime
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/install.sh >/dev/null 2>&1
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/install.sh >/dev/null 2>&1
+          if /opt/arthexis/.venv/bin/python -c 'import gway' >/dev/null 2>&1; then
+            echo "Arthexis product venv must not contain GWAY" >&2
+            exit 1
+          fi
 
       - name: Install canonical Watchtower Gway admin launcher
         shell: bash
@@ -227,8 +241,7 @@ jobs:
             '#!/bin/sh' \
             'set -eu' \
             'export GWAY_CACHE_DIR=/var/lib/gway/cache' \
-            'cd /var/lib/gway/projects/arthexis' \
-            'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' \
+            'exec /var/lib/gway/venv/bin/gway "$@"' \
             >"${launcher}"
           chmod 0755 "${launcher}"
           sudo -n install -m 0755 "${launcher}" /usr/local/bin/gway
@@ -242,20 +255,30 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
+          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
+          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
-          sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/ready.rx' >/dev/null 2>&1
-          echo "service=active"
+          unit=/etc/systemd/system/arthexis-arthexis.com.service
+          sudo -n test -f "${unit}"
+          exec_start="$(sudo -n awk -F= '/^ExecStart=/{print substr($0,11)}' "${unit}")"
+          test -n "${exec_start}"
+          if [[ "${exec_start}" == *gway* ]]; then
+            echo "Arthexis systemd ExecStart must not depend on GWAY: ${exec_start}" >&2
+            exit 1
+          fi
+          sudo -n systemctl restart arthexis-arthexis.com.service
+          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
+          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/ready.rx' >/dev/null 2>&1
+          echo "service=active_independent_of_gway"
 
       - name: Provision Watchtower remote policy and services
         shell: bash
         run: |
           set -Eeuo pipefail
           sudo -n install -d -m 0700 -o root -g root /var/lib/gway/cache
-          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote.rx' >/dev/null; then
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/remote.rx' >/dev/null; then
             echo "remote_provision=failed"
             sudo -n systemctl status gway-mcp-server.service --no-pager || true
             sudo -n systemctl status gway-remote-auth.service --no-pager || true
@@ -266,7 +289,7 @@ jobs:
           sudo -n test -f /var/lib/gway/cache/security/state.sqlite
           sudo -n systemctl is-active --quiet gway-mcp-server.service
           sudo -n systemctl is-active --quiet gway-remote-auth.service
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py local
+          sudo -n /opt/arthexis/.venv/bin/python /opt/arthexis/scripts/verify_remote_deployment.py local
           echo "remote_services=active"
       - name: Expose Arthexis publicly through Gway recipe
         shell: bash
@@ -286,7 +309,7 @@ jobs:
           if ! getent ahostsv4 remote.arthexis.com >/dev/null 2>&1; then
             dns_errors="$(mktemp)"
             chmod 600 "${dns_errors}"
-            if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' \
+            if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/remote-dns.rx --public-ipv4 "'${public_ipv4}'"' \
               >/dev/null 2>"${dns_errors}"; then
               echo "dns_bootstrap=failed"
               tail -n 20 "${dns_errors}" || true
@@ -301,7 +324,7 @@ jobs:
 
           exposure_errors="$(mktemp)"
           chmod 600 "${exposure_errors}"
-          if ! sudo -n sh -c 'cd /var/lib/gway/projects/arthexis && exec .venv/bin/python -m gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' \
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/watchtower.rx --email "'${ARTHEXIS_CERTBOT_EMAIL}'" --public-ipv4 "'${public_ipv4}'"' \
             >/dev/null 2>"${exposure_errors}"; then
             echo "public_exposure=failed"
             tail -n 30 "${exposure_errors}" || true
@@ -318,7 +341,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/scripts/verify_remote_deployment.py public
+          sudo -n /opt/arthexis/.venv/bin/python /opt/arthexis/scripts/verify_remote_deployment.py public
           echo "remote_public=ok"
 
       - name: Verify public Markdown root
@@ -335,11 +358,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py check --fail-level ERROR >/dev/null 2>&1
           echo "django_check=ok"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py makemigrations --check --dry-run >/dev/null 2>&1
           echo "migration_drift=none"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
+          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/.venv/bin/python /opt/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
           echo "ocpp_matrix=ok"
 
 
