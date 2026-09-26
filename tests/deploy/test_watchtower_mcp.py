@@ -120,7 +120,7 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 def test_watchtower_workflow_delegates_remote_provisioning_to_recipe() -> None:
     step = _remote_step()
 
-    assert ".venv/bin/python -m gway ./deploy/remote.rx" in step
+    assert "/usr/local/bin/gway ./deploy/remote.rx" in step
     assert "install -d -m 0700 -o root -g root /var/lib/gway/cache" in step
     assert "/var/lib/gway/cache/security/state.sqlite" in step
     assert "GWAY_CACHE_DIR" not in step
@@ -275,8 +275,20 @@ def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
 
     assert "- name: Install canonical Watchtower Gway admin launcher" in workflow
     assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in workflow
-    assert "cd /var/lib/gway/projects/arthexis" in workflow
-    assert 'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' in workflow
+    assert "cd /var/lib/gway/projects/arthexis" not in workflow
+    assert 'exec /var/lib/gway/venv/bin/gway "$@"' in workflow
     assert 'install -m 0755 "${launcher}" /usr/local/bin/gway' in workflow
     assert "/usr/local/bin/gway help security oauth client create" in workflow
     assert "/usr/local/bin/gway security oauth client list" in workflow
+
+
+def test_arthexis_product_runtime_is_separate_from_gway() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "test -f /opt/arthexis/pyproject.toml" in workflow
+    assert "test -f /opt/arthexis/install.sh" in workflow
+    assert "/opt/arthexis/.venv/bin/python -m pip install \"gway" not in workflow
+    assert "Arthexis product venv must not contain GWAY" in workflow
+    assert "/var/lib/gway/venv/bin/gway" in workflow
+    assert "service=active_independent_of_gway" in workflow
+    assert "ExecStart must not depend on GWAY" in workflow
