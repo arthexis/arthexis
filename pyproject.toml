@@ -58,3 +58,6 @@ ignore = ["I001"]
 DJANGO_SETTINGS_MODULE = "arthexis.settings"
 testpaths = ["tests"]
 addopts = ["--strict-config", "--strict-markers"]
+markers = [
+    "reconciliation_e2e: slow end-to-end legacy reconciliation acceptance",
+]
