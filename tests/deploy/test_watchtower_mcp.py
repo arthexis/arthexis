@@ -292,3 +292,24 @@ def test_arthexis_product_runtime_is_separate_from_gway() -> None:
     assert "/var/lib/gway/venv/bin/gway" in workflow
     assert "service=active_independent_of_gway" in workflow
     assert "ExecStart must not depend on GWAY" in workflow
+
+
+def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
+    policy = POLICY.read_text(encoding="utf-8")
+    logs_section = policy.split("[scopes.chatgpt-logs]", 1)[1].split(
+        "[scopes.chatgpt-actions]", 1
+    )[0]
+
+    assert '"help"' in logs_section
+    assert '"log.sources"' in logs_section
+
+
+def test_watchtower_deploy_accepts_wire_as_gway_extension() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "- name: Verify Watchtower Wire extension" in workflow
+    assert "systemctl is-active --quiet gway-wire-enroll.service" in workflow
+    assert "/usr/local/bin/gway log sources" in workflow
+    assert "grep -F 'gway/wire-enroll'" in workflow
+    assert "https://register.arthexis.com/health" in workflow
+    assert "gway wire server check --domain register.arthexis.com" in workflow
