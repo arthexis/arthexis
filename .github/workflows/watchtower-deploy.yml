@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy:
@@ -55,17 +55,37 @@ jobs:
           test "${remote_main}" = "${GITHUB_SHA}"
           sudo -n true
 
+      - name: Snapshot exact deployment pair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          arthexis_sha="${GITHUB_SHA}"
+          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test -n "${gway_sha}"
+          test "$(git rev-parse HEAD)" = "${arthexis_sha}"
+
+          arthexis_version="$(tr -d '[:space:]' < VERSION)"
+          gway_version="$(curl --fail --silent --show-error "https://raw.githubusercontent.com/arthexis/gway/${gway_sha}/VERSION" | tr -d '[:space:]')"
+          test -n "${arthexis_version}"
+          test -n "${gway_version}"
+
+          {
+            echo "ARTHEXIS_EXPECTED_SHA=${arthexis_sha}"
+            echo "ARTHEXIS_EXPECTED_VERSION=${arthexis_version}"
+            echo "GWAY_EXPECTED_SHA=${gway_sha}"
+            echo "GWAY_EXPECTED_VERSION=${gway_version}"
+          } >> "${GITHUB_ENV}"
+
+          echo "deployment_pair=arthexis@${arthexis_sha} gway@${gway_sha}"
+
       - name: Install exact canonical Gway
         shell: bash
         run: |
           set -Eeuo pipefail
-          gway_sha="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
-          test -n "${gway_sha}"
           python3 -m venv "${RUNNER_TEMP}/gway-venv"
           "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${gway_sha}" >/dev/null 2>&1
+          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
-          echo "GWAY_EXPECTED_SHA=${gway_sha}" >> "${GITHUB_ENV}"
 
       - name: Deploy Arthexis through Gway system scope
         shell: bash
@@ -208,3 +228,95 @@ jobs:
           sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /var/lib/gway/projects/arthexis/.venv/bin/python /var/lib/gway/projects/arthexis/manage.py ocpp_matrix >/dev/null 2>&1
           echo "ocpp_matrix=ok"
 
+
+      - name: Refuse stale deployment pair before attestation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current_arthexis="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          current_gway="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test "${current_arthexis}" = "${ARTHEXIS_EXPECTED_SHA}"
+          test "${current_gway}" = "${GWAY_EXPECTED_SHA}"
+          echo "deployment_pair=stable"
+
+      - name: Record accepted Watchtower deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          token = os.environ["GH_TOKEN"]
+          state_branch = "watchtower-state"
+          state_path = ".watchtower/accepted.json"
+
+          manifest = {
+              "arthexis_sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+              "arthexis_version": os.environ["ARTHEXIS_EXPECTED_VERSION"],
+              "gway_sha": os.environ["GWAY_EXPECTED_SHA"],
+              "gway_version": os.environ["GWAY_EXPECTED_VERSION"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "run_url": (
+                  f'{os.environ["GITHUB_SERVER_URL"]}/{repository}/actions/runs/'
+                  f'{os.environ["GITHUB_RUN_ID"]}'
+              ),
+              "accepted_at": datetime.now(timezone.utc).isoformat(),
+          }
+
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  f"{api}/repos/{repository}/{path}",
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, None
+                  raise
+
+          status, _ = request("GET", f"git/ref/heads/{state_branch}")
+          if status == 404:
+              request(
+                  "POST",
+                  "git/refs",
+                  {"ref": f"refs/heads/{state_branch}", "sha": manifest["arthexis_sha"]},
+              )
+
+          status, existing = request(
+              "GET", f"contents/{state_path}?ref={state_branch}"
+          )
+          payload = {
+              "message": (
+                  "Record accepted Watchtower deployment "
+                  f'{manifest["arthexis_sha"][:12]} + {manifest["gway_sha"][:12]}'
+              ),
+              "content": base64.b64encode(
+                  (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+              ).decode(),
+              "branch": state_branch,
+          }
+          if status != 404:
+              payload["sha"] = existing["sha"]
+
+          request("PUT", f"contents/{state_path}", payload)
+          print(json.dumps(manifest, sort_keys=True))
+          PY
