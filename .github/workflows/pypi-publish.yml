@@ -476,6 +476,7 @@ jobs:
 
           updated = text[: match.start(1)] + next_version + text[match.end(1) :]
           path.write_text(updated, encoding="utf-8")
+          Path("VERSION").write_text(next_version + "\n", encoding="utf-8")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("changed=true\n")
               output.write(f"next_version={next_version}\n")
@@ -497,8 +498,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add pyproject.toml
-          test "$(git diff --cached --name-only)" = "pyproject.toml"
+          git add pyproject.toml VERSION
+          test "$(git diff --cached --name-only | sort)" = "$(printf 'VERSION\npyproject.toml')"
           git commit -m "chore(release): advance arthexis to v${NEXT_VERSION}"
           git push --force-with-lease origin "$branch"
           gh pr create \
