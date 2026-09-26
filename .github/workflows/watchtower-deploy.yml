@@ -6,6 +6,11 @@ on:
   repository_dispatch:
     types: [gway-candidate]
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact merged Arthexis SHA to classify and deploy"
+        required: false
+        type: string
 
 concurrency:
   group: watchtower-deploy-main
@@ -22,8 +27,9 @@ jobs:
       deploy: ${{ steps.change.outputs.deploy }}
     steps:
       - uses: actions/checkout@v7
-        if: github.event_name == 'push'
+        if: github.event_name != 'repository_dispatch'
         with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -32,12 +38,17 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || '' }}
           BEFORE_SHA: ${{ github.event.before || '' }}
-          AFTER_SHA: ${{ github.sha }}
+          AFTER_SHA: ${{ inputs.candidate_sha || github.sha }}
         run: |
           set -Eeuo pipefail
           deploy=true
-          if [[ "$EVENT_NAME" == "push" ]] &&
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]] &&
+             [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            BEFORE_SHA="$(git rev-parse "$AFTER_SHA^1")"
+          fi
+          if [[ "$EVENT_NAME" != "repository_dispatch" ]] &&
              [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] &&
              [[ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] &&
              python .github/scripts/is_version_only_rollover.py "$BEFORE_SHA" "$AFTER_SHA"; then
@@ -77,6 +88,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_GWAY_SHA: ${{ github.event.client_payload.gway_sha || '' }}
+          REQUESTED_ARTHEXIS_SHA: ${{ inputs.candidate_sha || '' }}
         run: |
           set -Eeuo pipefail
 
@@ -104,8 +116,10 @@ jobs:
             arthexis_sha="${previous_arthexis:-$current_arthexis}"
             source="gway"
           else
-            test "${GITHUB_SHA}" = "$current_arthexis"
-            arthexis_sha="${GITHUB_SHA}"
+            requested_arthexis="${REQUESTED_ARTHEXIS_SHA:-${GITHUB_SHA}}"
+            [[ "$requested_arthexis" =~ ^[0-9a-f]{40}$ ]]
+            test "$requested_arthexis" = "$current_arthexis"
+            arthexis_sha="$requested_arthexis"
             gway_sha="${previous_gway:-$current_gway}"
             source="arthexis"
           fi
