@@ -35,11 +35,6 @@ Repository = "https://github.com/arthexis/arthexis"
 [tool.gway.variables]
 cache_dir = "/var/lib/gway/cache"
 
-[[tool.gway.bindings]]
-topics = []
-subject = "role"
-sources = [{type = "file", value = "/var/lib/arthexis/role"}]
-
 [[tool.gway.roles.watchtower.guide]]
 tasks = ["check this node", "watchtower status"]
 command = "node status"
