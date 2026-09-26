@@ -52,6 +52,7 @@ exclude = ["**/migrations/**"]
 
 [tool.ruff.lint]
 select = ["E9", "F823", "I", "UP", "B904"]
+ignore = ["I001"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "arthexis.settings"
