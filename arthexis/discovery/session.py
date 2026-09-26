@@ -14,7 +14,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
 
-
 SCHEMA_VERSION = 1
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _EVENT_LOCKS: dict[str, threading.Lock] = {}
