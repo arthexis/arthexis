@@ -1,3 +1,5 @@
+default --role watchtower
+
 # Watchtower deployment composition.
 # Keep the public Arthexis application and remote access surface as separate
 # child deployments so each can evolve and recover independently.
