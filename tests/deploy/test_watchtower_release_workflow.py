@@ -33,3 +33,16 @@ in_project && /^[[:space:]]*version[[:space:]]*=/ {
         check=True,
     )
     assert result.stdout.strip() == "0.4.59"
+
+
+def test_watchtower_release_handoff_is_recoverable_without_gh_cli():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+
+    assert "gh workflow run" not in workflow
+    assert ".watchtower/releases/{package}/{version}.json" in workflow
+    assert "/actions/workflows/" in workflow
+    assert "/dispatches" in workflow
+    assert '_publish=already_recorded' in workflow
+    assert '_publish=dispatched' in workflow
