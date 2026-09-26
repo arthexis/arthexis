@@ -4,3 +4,7 @@
 ./arthexis.rx
 
 ./remote-expose.rx
+
+recipe wire/watchtower
+--email [email]
+--public-address [public_ipv4]
