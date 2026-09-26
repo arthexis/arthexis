@@ -120,7 +120,10 @@ jobs:
             [[ "$requested_arthexis" =~ ^[0-9a-f]{40}$ ]]
             test "$requested_arthexis" = "$current_arthexis"
             arthexis_sha="$requested_arthexis"
-            gway_sha="${previous_gway:-$current_gway}"
+            # Arthexis deployments converge against current GWAY main. Reusing the
+            # previously accepted GWAY SHA can downgrade the runtime after GWAY has
+            # migrated durable state to a newer schema.
+            gway_sha="$current_gway"
             source="arthexis"
           fi
 

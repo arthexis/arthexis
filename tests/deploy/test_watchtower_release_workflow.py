@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 
 def test_watchtower_gway_version_awk_extracts_project_version():
@@ -56,3 +57,10 @@ def test_watchtower_requires_release_label_before_dispatch():
     assert "_publish=not_requested" in workflow
     assert "/commits/{release['sha']}/pulls" in workflow
     assert 'label.get("name") == "release"' in workflow
+
+
+def test_arthexis_deploy_uses_current_gway_main() -> None:
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+
+    assert 'gway_sha="$current_gway"' in workflow
+    assert 'gway_sha="${previous_gway:-$current_gway}"' not in workflow
