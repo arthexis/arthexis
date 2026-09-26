@@ -41,3 +41,8 @@ It requires only the repository permissions needed by the operations above:
 It does not need pull-request write permission, release/tag write permission in Gway, issue permission, administration permission, secrets permission, or broader organization access.
 
 GitHub does not expose the permission scope of an Actions secret to the workflow itself. Therefore repository code can constrain where the credential is used, but confirming that the stored token/GitHub App installation has no broader permissions is an external GitHub configuration check.
+
+
+## Post-merge handoff
+
+Approved auto-merges explicitly dispatch the release/deploy entry point with the exact merge SHA. This avoids relying on follow-on `push` events from automation tokens while preserving version-only suppression in the receiving workflow.
