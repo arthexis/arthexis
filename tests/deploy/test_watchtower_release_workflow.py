@@ -1,6 +1,5 @@
-from pathlib import Path
-
 import subprocess
+from pathlib import Path
 
 
 def test_watchtower_gway_version_awk_extracts_project_version():
