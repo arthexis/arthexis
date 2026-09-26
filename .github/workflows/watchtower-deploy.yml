@@ -256,7 +256,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n /opt/arthexis/.venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
+          sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
           sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
           sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
