@@ -35,6 +35,26 @@ Repository = "https://github.com/arthexis/arthexis"
 [tool.gway.variables]
 cache_dir = "/var/lib/gway/cache"
 
+[[tool.gway.bindings]]
+topics = []
+subject = "role"
+sources = [{type = "file", value = "/var/lib/arthexis/role"}]
+
+[[tool.gway.roles.watchtower.guide]]
+tasks = ["check this node", "watchtower status"]
+command = "node status"
+reason = "Inspect the local Watchtower application and remote-service status."
+
+[[tool.gway.roles.watchtower.guide]]
+tasks = ["diagnose this node", "diagnose watchtower"]
+command = "node diagnose"
+reason = "Run the maintained Watchtower diagnostic aggregation."
+
+[[tool.gway.roles.watchtower.guide]]
+tasks = ["audit server hardening", "security audit"]
+command = "node security audit"
+reason = "Inspect the local Watchtower security boundary without mutation."
+
 [tool.setuptools]
 include-package-data = true
 py-modules = ["manage"]
@@ -43,7 +63,7 @@ py-modules = ["manage"]
 "apps.base" = ["templates/**/*.html"]
 
 [tool.setuptools.packages.find]
-include = ["apps*", "arthexis*", "scripts*"]
+include = ["apps*", "arthexis*", "scripts*", "node*"]
 
 [tool.ruff]
 target-version = "py310"
