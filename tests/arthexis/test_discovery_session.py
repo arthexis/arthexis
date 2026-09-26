@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -133,6 +135,68 @@ def test_store_lists_and_reads_sessions_by_id(tmp_path) -> None:
 
     with pytest.raises(KeyError, match="Unknown discovery session"):
         store.open("missing")
+
+
+def test_concurrent_appends_get_unique_monotonic_sequences(tmp_path) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+    store.create(session_id="field-concurrent")
+
+    def append(index: int) -> int:
+        session = store.open("field-concurrent")
+        return session.append("traffic_observed", data={"index": index})["seq"]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        sequences = sorted(executor.map(append, range(20)))
+
+    assert sequences == list(range(2, 22))
+    persisted = list(store.open("field-concurrent").events())
+    assert [event["seq"] for event in persisted] == list(range(1, 22))
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    ["../escape", "/absolute", "nested/path", "", ".hidden/child"],
+)
+def test_session_ids_cannot_escape_discovery_root(tmp_path, session_id) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+
+    with pytest.raises(ValueError, match="Discovery session ID"):
+        store.create(session_id=session_id)
+
+
+@pytest.mark.parametrize(
+    "artifact_path",
+    ["../outside.bin", "/absolute.bin", "nested/../outside.bin"],
+)
+def test_artifact_paths_cannot_escape_session(tmp_path, artifact_path) -> None:
+    session = DiscoveryStore(
+        tmp_path / "discovery", now=Clock()
+    ).create(session_id="field-artifact-safe")
+
+    with pytest.raises(ValueError, match="artifact path"):
+        session.write_artifact(artifact_path, b"evidence")
+
+
+def test_write_artifact_returns_relative_path_hash_and_size(tmp_path) -> None:
+    session = DiscoveryStore(
+        tmp_path / "discovery", now=Clock()
+    ).create(session_id="field-artifact")
+    content = b"pcap-or-debug-evidence"
+
+    artifact = session.write_artifact("traffic/sample.bin", content)
+    event = session.append(
+        "traffic_artifact",
+        data={"sha256": artifact["sha256"], "bytes": artifact["bytes"]},
+        artifact=artifact["path"],
+    )
+
+    assert artifact == {
+        "path": "traffic/sample.bin",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "bytes": len(content),
+    }
+    assert (session.path / "traffic" / "sample.bin").read_bytes() == content
+    assert event["artifact"] == "traffic/sample.bin"
 
 
 def test_append_rejects_non_json_evidence_before_writing(tmp_path) -> None:
