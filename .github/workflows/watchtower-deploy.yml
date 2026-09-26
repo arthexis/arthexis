@@ -47,10 +47,8 @@ jobs:
 
           before = os.environ["BEFORE_SHA"]
           after = os.environ["AFTER_SHA"]
-
           changed = subprocess.check_output(
-              ["git", "diff", "--name-only", before, after],
-              text=True,
+              ["git", "diff", "--name-only", before, after], text=True
           ).splitlines()
 
           version_only = set(changed) == {"VERSION", "pyproject.toml"}
@@ -67,7 +65,8 @@ jobs:
               new_pyproject = subprocess.check_output(
                   ["git", "show", f"{after}:pyproject.toml"], text=True
               )
-              pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)    runs-on: [self-hosted, Linux, X64, arthexis-ci]
+              pattern = re.compile(r'(?m)^(version\s*=\s*")[^"]+(".*)
+    runs-on: [self-hosted, Linux, X64, arthexis-ci]
     timeout-minutes: 45
     env:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
@@ -463,7 +462,9 @@ jobs:
                   )
                   version_only = (
                       old_version != new_version
-                      and new_match.group(0).split('"')[1] == new_version
+                      and new_match.group(1) is not None
+                      and re.search(r'^version\s*=\s*"([^"]+)"', new_match.group(0)).group(1)
+                      == new_version
                       and pyproject_only_version
                   )
 
