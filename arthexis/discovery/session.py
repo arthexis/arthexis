@@ -1,6 +1,5 @@
 """Filesystem-backed evidence for charger discovery sessions."""
 
-import fcntl
 import json
 import os
 import re
@@ -115,11 +114,11 @@ class DiscoverySession:
     def _event_lock(self) -> Iterator[None]:
         self.path.mkdir(parents=True, exist_ok=True)
         with self.lock_path.open("a+b") as stream:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            os.lockf(stream.fileno(), os.F_LOCK, 0)
             try:
                 yield
             finally:
-                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+                os.lockf(stream.fileno(), os.F_ULOCK, 0)
 
     def _repair_incomplete_tail(self) -> None:
         """Discard only a partial final write left by an interrupted process."""
