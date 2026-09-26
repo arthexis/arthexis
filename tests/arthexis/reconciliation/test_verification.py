@@ -10,10 +10,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from arthexis.reconciliation.capture import capture_legacy_installation
 from arthexis.reconciliation.fixture import restore_fixture
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+pytestmark = pytest.mark.reconciliation_e2e
 
 
 def _fixture(tmp_path: Path) -> Path:
