@@ -85,6 +85,18 @@ def test_reader_ignores_incomplete_trailing_event_after_interruption(tmp_path) -
     assert [event["seq"] for event in session.events()] == [1]
 
 
+def test_append_repairs_incomplete_trailing_event_after_interruption(tmp_path) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+    session = store.create(session_id="field-004-recovered")
+    with session.events_path.open("a", encoding="utf-8") as stream:
+        stream.write('{"seq":999')
+
+    event = store.open("field-004-recovered").append("traffic_observed")
+
+    assert event["seq"] == 2
+    assert [item["seq"] for item in session.events()] == [1, 2]
+
+
 def test_complete_derives_capture_and_charger_summary(tmp_path) -> None:
     session = DiscoveryStore(
         tmp_path / "discovery", now=Clock()
