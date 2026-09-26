@@ -87,6 +87,17 @@ jobs:
           "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
           "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
 
+      - name: Refuse stale deployment pair before mutation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current_arthexis="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          current_gway="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          test "${current_arthexis}" = "${ARTHEXIS_EXPECTED_SHA}"
+          test "${current_gway}" = "${GWAY_EXPECTED_SHA}"
+          test "$(git rev-parse HEAD)" = "${ARTHEXIS_EXPECTED_SHA}"
+          echo "deployment_pair=stable_before_mutation"
+
       - name: Deploy Arthexis through Gway system scope
         shell: bash
         run: |
@@ -229,7 +240,7 @@ jobs:
           echo "ocpp_matrix=ok"
 
 
-      - name: Refuse stale deployment pair before attestation
+      - name: Revalidate deployment pair before attestation
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -237,7 +248,8 @@ jobs:
           current_gway="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
           test "${current_arthexis}" = "${ARTHEXIS_EXPECTED_SHA}"
           test "${current_gway}" = "${GWAY_EXPECTED_SHA}"
-          echo "deployment_pair=stable"
+          test "$(git rev-parse HEAD)" = "${ARTHEXIS_EXPECTED_SHA}"
+          echo "deployment_pair=stable_for_attestation"
 
       - name: Record accepted Watchtower deployment
         env:
