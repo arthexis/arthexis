@@ -89,3 +89,12 @@ def test_remote_exposure_does_not_reimplement_nginx_or_certbot() -> None:
     assert "nginx " not in recipe
     assert "certbot " not in recipe
     assert "render " not in recipe
+
+
+
+def test_watchtower_deploy_composes_wire_recipe():
+    recipe = Path("deploy/watchtower.rx").read_text(encoding="utf-8")
+
+    assert "recipe wire/watchtower" in recipe
+    assert "--email [email]" in recipe
+    assert "--public-address [public_ipv4]" in recipe
