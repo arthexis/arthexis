@@ -276,7 +276,7 @@ def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
     assert "- name: Install canonical Watchtower Gway admin launcher" in workflow
     assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in workflow
     assert "cd /var/lib/gway/projects/arthexis" not in workflow
-    assert 'exec /var/lib/gway/venv/bin/gway "$@"' in workflow
+    assert 'exec /var/lib/gway/venv/bin/python -m gway "$@"' in workflow
     assert 'install -m 0755 "${launcher}" /usr/local/bin/gway' in workflow
     assert "/usr/local/bin/gway help security oauth client create" in workflow
     assert "/usr/local/bin/gway security oauth client list" in workflow
@@ -313,3 +313,10 @@ def test_watchtower_deploy_accepts_wire_as_gway_extension() -> None:
     assert "grep -F 'gway/wire-enroll'" in workflow
     assert "https://register.arthexis.com/health" in workflow
     assert "gway wire server check --domain register.arthexis.com" in workflow
+
+
+def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "/var/lib/gway/venv/bin/python -m gway --help" in workflow
+    assert "/var/lib/gway/venv/bin/gway --help" not in workflow
