@@ -128,8 +128,21 @@ jobs:
           [[ "$gway_sha" =~ ^[0-9a-f]{40}$ ]]
 
           arthexis_version="$(curl --fail --silent --show-error             "https://raw.githubusercontent.com/arthexis/arthexis/$arthexis_sha/VERSION" | tr -d '[:space:]')"
+          # This runs before the canonical Gway venv exists. Keep it compatible with
+          # the Watchtower host's Python 3.10 and do not assume tomllib/tomli is installed.
           gway_version="$(curl --fail --silent --show-error             "https://raw.githubusercontent.com/arthexis/gway/$gway_sha/pyproject.toml" |
-            python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            awk '
+              /^\\[project\\][[:space:]]*$/ { in_project=1; next }
+              /^\\[/ && in_project { exit }
+              in_project && /^[[:space:]]*version[[:space:]]*=/ {
+                value=$0
+                sub(/^[^=]*=[[:space:]]*/, "", value)
+                sub(/[[:space:]]*#.*/, "", value)
+                gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", value)
+                print value
+                exit
+              }
+            ')"
           test -n "$arthexis_version"
           test -n "$gway_version"
 
