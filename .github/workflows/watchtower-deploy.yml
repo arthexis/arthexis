@@ -336,6 +336,20 @@ jobs:
           echo "PUBLIC_EXPOSURE_ENABLED=true" >> "${GITHUB_ENV}"
           echo "public_exposure=ok"
 
+      - name: Verify Watchtower Wire extension
+        if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n systemctl is-active --quiet gway-wire-enroll.service
+          sudo -n sh -c 'exec /usr/local/bin/gway log sources' | grep -F 'gway/wire-enroll' >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            https://register.arthexis.com/health >/dev/null
+          sudo -n sh -c 'exec /usr/local/bin/gway wire server check --domain register.arthexis.com' >/dev/null
+          echo "wire_extension=active"
+          echo "wire_log_source=visible"
+          echo "wire_public_health=ok"
+
       - name: Verify public remote access surface
         if: env.PUBLIC_EXPOSURE_ENABLED == 'true'
         shell: bash
