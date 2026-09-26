@@ -228,7 +228,7 @@ jobs:
             'set -eu' \
             'export GWAY_CACHE_DIR=/var/lib/gway/cache' \
             'cd /var/lib/gway/projects/arthexis' \
-            'exec /var/lib/gway/projects/arthexis/.venv/bin/gway "$@"' \
+            'exec /var/lib/gway/projects/arthexis/.venv/bin/gway default --role watchtower ";" "$@"' \
             >"${launcher}"
           chmod 0755 "${launcher}"
           sudo -n install -m 0755 "${launcher}" /usr/local/bin/gway
