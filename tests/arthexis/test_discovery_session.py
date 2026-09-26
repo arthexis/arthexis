@@ -208,3 +208,21 @@ def test_append_rejects_non_json_evidence_before_writing(tmp_path) -> None:
         session.append("bad", data={"value": object()})
 
     assert [event["seq"] for event in session.events()] == [1]
+
+
+def test_concurrent_appends_from_reopened_sessions_share_thread_lock(tmp_path) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+    store.create(session_id="field-concurrent-reopen")
+
+    sessions = [store.open("field-concurrent-reopen") for _ in range(8)]
+
+    def append(index: int) -> int:
+        session = sessions[index % len(sessions)]
+        return session.append("traffic_observed", data={"index": index})["seq"]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        sequences = sorted(executor.map(append, range(32)))
+
+    assert sequences == list(range(2, 34))
+    persisted = list(store.open("field-concurrent-reopen").events())
+    assert [event["seq"] for event in persisted] == list(range(1, 34))
