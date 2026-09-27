@@ -26,7 +26,7 @@ def authorization_context():
     return open_charger, restricted_charger, card
 
 
-def test_open_policy_accepts_unknown_cards_and_records_the_decision(
+def test_open_policy_accepts_and_learns_unknown_cards(
     authorization_context,
 ) -> None:
     open_charger, _, _ = authorization_context
@@ -34,10 +34,13 @@ def test_open_policy_accepts_unknown_cards_and_records_the_decision(
     result = authorize_id_tag(charger=open_charger, id_tag="guest-card")
 
     assert result.accepted
-    assert result.card is None
+    assert result.card is not None
+    assert result.card.external_id == "guest-card"
+    assert result.card.ocpp_id_tag == "guest-card"
     attempt = AuthorizationAttempt.objects.get()
+    assert attempt.card == result.card
     assert attempt.accepted
-    assert attempt.reason == "open_policy"
+    assert attempt.reason == "learned_open_policy"
 
 
 def test_restricted_policy_accepts_only_active_matching_credentials(
@@ -56,8 +59,26 @@ def test_restricted_policy_accepts_only_active_matching_credentials(
 
     assert not rejected.accepted
     assert rejected.reason == "unknown_or_inactive_credential"
+    assert not CardCredential.objects.filter(external_id="guest-card").exists()
     assert accepted.accepted
     assert accepted.card == card
+
+
+def test_open_policy_does_not_reactivate_explicitly_disabled_card() -> None:
+    selected = charger("charger-open")
+    disabled = CardCredential.objects.create(
+        external_id="disabled-card",
+        ocpp_id_tag="disabled-card",
+        active=False,
+    )
+
+    result = authorize_id_tag(charger=selected, id_tag="disabled-card")
+
+    assert result.accepted
+    disabled.refresh_from_db()
+    assert not disabled.active
+    assert result.card is None
+    assert AuthorizationAttempt.objects.get().reason == "open_policy"
 
 
 def test_authorization_records_attempt_and_event() -> None:
