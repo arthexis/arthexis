@@ -28,6 +28,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   classify:
@@ -81,11 +82,48 @@ jobs:
           echo "stage=$stage" >> "$GITHUB_OUTPUT"
           echo "deploy=$deploy stage=$stage"
 
+
+  queue-gate:
+    name: Coalesce active PR queue
+    needs: classify
+    if: needs.classify.outputs.deploy == 'true' && needs.classify.outputs.stage == 'arthexis'
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.queue.outputs.deploy }}
+    steps:
+      - name: Skip superseded deployment while PRs remain
+        id: queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          active=0
+          for repository in arthexis/arthexis arthexis/gway; do
+            prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | index("on-hold")) | not) | [.number, .title] | @tsv')"
+            if [[ -n "$prs" ]]; then
+              echo "active_prs[$repository]=begin"
+              printf '%s\n' "$prs"
+              echo "active_prs[$repository]=end"
+              active=1
+            fi
+          done
+          if [[ "$active" == 1 ]]; then
+            echo "watchtower_deploy=coalesced_active_pr_queue"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "watchtower_deploy=queue_drained"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+
   deploy:
     name: Watchtower Deploy
-    needs: classify
+    needs: [classify, queue-gate]
     if: >-
+      always() &&
       needs.classify.outputs.deploy == 'true' &&
+      (needs.classify.outputs.stage != 'arthexis' || needs.queue-gate.outputs.deploy == 'true') &&
       github.repository == 'arthexis/arthexis' &&
       (github.event_name == 'push' ||
        github.event_name == 'repository_dispatch' ||
