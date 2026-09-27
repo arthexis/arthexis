@@ -330,3 +330,14 @@ def test_watchtower_quarantines_only_incomplete_inactive_product_target() -> Non
     assert "Refusing to quarantine active incomplete /opt/arthexis runtime" in workflow
     assert 'sudo -n mv /opt/arthexis "${stale_product}"' in workflow
     assert 'sudo -n mv "${stale_product}" /opt/arthexis' in workflow
+
+
+def test_watchtower_service_transition_tolerates_absent_legacy_web_and_diagnoses_failure() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "legacy_web_stop=already_absent_or_inactive" in workflow
+    assert "service_diagnostics()" in workflow
+    assert "arthexis_service_install=failed" in workflow
+    assert "arthexis_service_restart=failed" in workflow
+    assert "arthexis_ready=failed" in workflow
+    assert "journalctl -u arthexis-arthexis.com.service -n 80" in workflow
