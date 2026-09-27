@@ -296,7 +296,8 @@ def test_watchtower_deploy_accepts_wire_as_manual_gway_extension() -> None:
     assert "- name: Converge Watchtower Wire stage" in workflow
     assert "- name: Verify Watchtower Wire stage" in workflow
     assert "default: arthexis" in workflow
-    assert "gway -e wire watchtower --public-address 192.0.2.1" in workflow
+    assert "gway -e wire watchtower" not in workflow
+    assert "test -f /var/lib/gway/venv/share/gway/sampler/wire/watchtower.rx" in workflow
     assert "gway wire watchtower" in workflow
     assert "systemctl is-active --quiet gway-wire-enroll.service" in workflow
     assert "gway-wireguard-enroll.service" in workflow
