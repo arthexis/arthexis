@@ -93,6 +93,14 @@ class DiscoverySession:
     def lock_path(self) -> Path:
         return self.path / ".events.lock"
 
+    @property
+    def handoff_path(self) -> Path:
+        return self.path / "handoff.json"
+
+    @property
+    def claimed_handoff_path(self) -> Path:
+        return self.path / "handoff.claimed.json"
+
     def events(self) -> Iterator[dict[str, Any]]:
         """Yield every complete persisted event in sequence order."""
         if not self.events_path.exists():
@@ -235,7 +243,62 @@ class DiscoverySession:
             summary["latest_candidate"] = candidates[-1]["data"]
         if connections:
             summary["charger"] = connections[-1]["data"].get("charger")
+        if self.claimed_handoff_path.exists():
+            summary["handoff_claimed"] = True
+        elif self.handoff_path.exists():
+            summary["handoff_armed"] = True
         return summary
+
+    def arm_handoff(
+        self,
+        *,
+        charger_identity: str | None = None,
+        client_host: str | None = None,
+        original_destination: Mapping[str, Any] | None = None,
+        strategy: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist the expected redirected connection before network mutation."""
+        if not charger_identity and not client_host:
+            raise ValueError(
+                "Discovery handoff requires charger_identity and/or client_host."
+            )
+        payload: dict[str, Any] = {
+            "charger_identity": charger_identity or "",
+            "client_host": client_host or "",
+        }
+        if original_destination is not None:
+            payload["original_destination"] = dict(original_destination)
+        if strategy:
+            payload["strategy"] = strategy
+        with self._event_lock():
+            if self.handoff_path.exists() or self.claimed_handoff_path.exists():
+                raise FileExistsError(
+                    f"{self.session_id}: discovery handoff is already armed or claimed"
+                )
+            _atomic_json(self.handoff_path, payload)
+        self.append("capture_started", data=payload)
+        self.write_summary()
+        return payload
+
+    def claim_handoff(
+        self,
+        *,
+        charger_identity: str,
+        client_host: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Atomically claim this session when a matching normal OCPP connection arrives."""
+        with self._event_lock():
+            if not self.handoff_path.exists():
+                return None
+            payload = json.loads(self.handoff_path.read_text(encoding="utf-8"))
+            expected_identity = payload.get("charger_identity") or ""
+            expected_host = payload.get("client_host") or ""
+            if expected_identity and expected_identity != charger_identity:
+                return None
+            if expected_host and expected_host != (client_host or ""):
+                return None
+            self.handoff_path.replace(self.claimed_handoff_path)
+            return payload
 
     def write_summary(self) -> dict[str, Any]:
         """Regenerate the derived machine-readable summary atomically."""
@@ -297,6 +360,22 @@ class DiscoveryStore:
         if not path.is_dir() or not (path / "manifest.json").exists():
             raise KeyError(f"Unknown discovery session: {identifier}")
         return DiscoverySession(path=path, now=self.now)
+
+    def claim_handoff(
+        self,
+        *,
+        charger_identity: str,
+        client_host: str | None = None,
+    ) -> DiscoverySession | None:
+        """Claim the newest armed discovery session matching one OCPP connection."""
+        for session_id in reversed(self.list()):
+            session = self.open(session_id)
+            if session.claim_handoff(
+                charger_identity=charger_identity,
+                client_host=client_host,
+            ) is not None:
+                return session
+        return None
 
     def list(self) -> list[str]:
         """Return known session IDs in lexical order."""
