@@ -320,3 +320,13 @@ def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
 
     assert "/var/lib/gway/venv/bin/python -m gway --help" in workflow
     assert "/var/lib/gway/venv/bin/gway --help" not in workflow
+
+
+def test_watchtower_quarantines_only_incomplete_inactive_product_target() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "! sudo -n test -f /opt/arthexis/pyproject.toml" in workflow
+    assert '[[ "${exec_start}" == *"/opt/arthexis/"* ]]' in workflow
+    assert "Refusing to quarantine active incomplete /opt/arthexis runtime" in workflow
+    assert 'sudo -n mv /opt/arthexis "${stale_product}"' in workflow
+    assert 'sudo -n mv "${stale_product}" /opt/arthexis' in workflow
