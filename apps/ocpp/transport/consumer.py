@@ -11,6 +11,7 @@ from apps.ocpp.protocol.frames import CallError, parse_frame
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
 from apps.ocpp.services.compatibility import record_compatibility_evidence
+from apps.ocpp.services.discovery_handoff import claim_and_record_discovery_handoff
 from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
     basic_credentials,
@@ -91,6 +92,12 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.accept(
             subprotocol=None if protocol_fallback else self.subprotocol
+        )
+        await sync_to_async(claim_and_record_discovery_handoff)(
+            charger=self.charger,
+            scope=self.scope,
+            protocol=self.subprotocol,
+            offered_subprotocols=list(offered_subprotocols),
         )
         asyncio.create_task(
             recover_connected_operations(
