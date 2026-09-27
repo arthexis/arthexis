@@ -307,13 +307,13 @@ jobs:
 
           sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py
 
-          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- /usr/bin/env ARTHEXIS_DATA_DIR=/var/lib/arthexis ARTHEXIS_ALLOWED_HOSTS=arthexis.com /opt/arthexis/.venv/bin/daphne -b 127.0.0.1 -p 8888 arthexis.asgi:application'; then
             echo "arthexis_service_install=failed"
             service_diagnostics
             exit 1
           fi
 
-          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- /usr/bin/env ARTHEXIS_DATA_DIR=/var/lib/arthexis ARTHEXIS_ALLOWED_HOSTS=arthexis.com /opt/arthexis/.venv/bin/daphne -b 127.0.0.1 -p 8888 arthexis.asgi:application'; then
             echo "arthexis_service_restart=failed"
             service_diagnostics
             exit 1

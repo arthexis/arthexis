@@ -341,3 +341,20 @@ def test_watchtower_service_transition_tolerates_absent_legacy_web_and_diagnoses
     assert "arthexis_service_restart=failed" in workflow
     assert "arthexis_ready=failed" in workflow
     assert "journalctl -u arthexis-arthexis.com.service -n 80" in workflow
+
+
+def test_arthexis_systemd_service_uses_native_daphne_command() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    native = (
+        "/usr/bin/env ARTHEXIS_DATA_DIR=/var/lib/arthexis "
+        "ARTHEXIS_ALLOWED_HOSTS=arthexis.com "
+        "/opt/arthexis/.venv/bin/daphne -b 127.0.0.1 -p 8888 "
+        "arthexis.asgi:application"
+    )
+    assert f"service install --backend systemd --system --name arthexis.com -- {native}" in workflow
+    assert f"service restart --system --name arthexis.com --timeout 40 -- {native}" in workflow
+    assert (
+        "service install --backend systemd --system --name arthexis.com -- serve"
+        not in workflow
+    )
