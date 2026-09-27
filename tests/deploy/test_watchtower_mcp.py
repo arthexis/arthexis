@@ -426,3 +426,13 @@ def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
     assert "git worktree prune" in workflow
     assert 'git -C "$GITHUB_WORKSPACE" worktree remove --force "$work"' in workflow
     assert 'trap cleanup EXIT' in workflow
+
+
+def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}' in workflow
+    assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
+    assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
+    assert 'push --force-with-lease origin "$branch"' in workflow
+    assert "https://$GH_TOKEN@" not in workflow
