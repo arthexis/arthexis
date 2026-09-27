@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import async_to_sync
+from django.test import override_settings
 
 from apps.events.models import EventEnvelope
 from apps.ocpp.domain.sessions import (
@@ -428,3 +429,49 @@ def test_lost_post_commit_event_is_repaired_from_sql(
         event_type="ocpp.meter_values.received",
         producer="ocpp",
     ).exists()
+
+
+
+@override_settings(OCPP_METER_VALUE_BATCH_SIZE=2)
+def test_meter_value_persistence_flushes_bounded_batches(meter_context) -> None:
+    selected, transaction = meter_context
+    values = [
+        {
+            "timestamp": f"2026-09-22T10:0{index}:00Z",
+            "sampledValue": [
+                {
+                    "value": str(index),
+                    "measurand": "Energy.Active.Import.Register",
+                    "unit": "Wh",
+                }
+            ],
+        }
+        for index in range(1, 6)
+    ]
+
+    original = MeterValue.objects.bulk_create
+    with patch(
+        "apps.ocpp.domain.sessions.MeterValue.objects.bulk_create",
+        wraps=original,
+    ) as bulk_create:
+        retained = record_meter_values(
+            transaction_id=transaction.pk,
+            charger=selected,
+            meter_values=values,
+        )
+
+    assert retained == 5
+    assert [len(call.args[0]) for call in bulk_create.call_args_list] == [2, 2, 1]
+    assert MeterValue.objects.filter(transaction=transaction).count() == 5
+
+
+@override_settings(OCPP_METER_VALUE_BATCH_SIZE=0)
+def test_meter_value_persistence_rejects_nonpositive_batch_size(meter_context) -> None:
+    selected, transaction = meter_context
+
+    with pytest.raises(ValueError, match="OCPP_METER_VALUE_BATCH_SIZE must be positive"):
+        record_meter_values(
+            transaction_id=transaction.pk,
+            charger=selected,
+            meter_values=meter_values(),
+        )
