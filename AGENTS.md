@@ -44,3 +44,7 @@ Before any repository cutover, create a verified local backup and complete
 local validation. Do not use CI status as proof unless asked. The orphan
 `arthexis-rebuild` branch is an integration handoff, not authorization to merge
 or deploy it.
+
+### Gway resolution
+
+Use `gway resolve VALUE` for non-mutating semantic value/sigil resolution and `gway resolve TOKEN TOKEN...` to inspect which operation or sampler recipe normal dispatch would select without executing it. The former `-e`/`--expression` CLI flag has been removed; do not use `-e` as explain or dry-run syntax.
