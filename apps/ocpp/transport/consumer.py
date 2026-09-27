@@ -10,6 +10,7 @@ from apps.ocpp.protocol.errors import ProtocolFrameError
 from apps.ocpp.protocol.frames import CallError, parse_frame
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
+from apps.ocpp.services.compatibility import record_compatibility_evidence
 from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
     ConnectionRejected,
@@ -32,13 +33,8 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
     """Connect, parse, dispatch, and send without embedding OCPP action logic."""
 
     async def connect(self) -> None:
-        try:
-            self.subprotocol, self.version = negotiate_subprotocol(
-                self.scope.get("subprotocols", [])
-            )
-        except ConnectionRejected:
-            await self.close(code=4406)
-            return
+        offered_subprotocols = self.scope.get("subprotocols", [])
+        self.subprotocol, self.version = negotiate_subprotocol(offered_subprotocols)
 
         identity = self.scope["url_route"]["kwargs"]["charger_identity"]
         credentials = basic_credentials(self.scope.get("headers", []))
@@ -50,6 +46,14 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         if self.charger is None:
             await self.close(code=4401)
             return
+
+        if self.subprotocol not in offered_subprotocols:
+            await sync_to_async(record_compatibility_evidence)(
+                kind="protocol_fallback",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                details={"offered_subprotocols": offered_subprotocols},
+            )
 
         self.pending_calls = PendingCalls()
         inbound_actions = (
@@ -113,8 +117,26 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         try:
             frame = parse_frame(content)
         except ProtocolFrameError as error:
+            unique_id = (
+                content[1]
+                if isinstance(content, list)
+                and len(content) > 1
+                and isinstance(content[1], str)
+                else ""
+            )
+            await sync_to_async(record_compatibility_evidence)(
+                kind="malformed_frame",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                unique_id=unique_id,
+                details={
+                    "error_code": error.code,
+                    "description": error.description,
+                    "frame": content,
+                },
+            )
             await self.send_json(
-                CallError("", error.code, error.description, {}).to_wire()
+                CallError(unique_id, error.code, error.description, {}).to_wire()
             )
             return
         await sync_to_async(touch_connection)(
