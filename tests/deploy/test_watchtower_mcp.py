@@ -383,8 +383,9 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
     recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
 
     assert (
-        "ingest /opt/arthexis/.venv/bin/ready --kind proc --aka arthexis-ready"
+        "ingest /opt/arthexis/.venv/bin/python --kind proc --aka arthexis-python"
         in recipe
     )
-    assert "arthexis-ready --local" in recipe
+    assert "arthexis-python -m arthexis.ready --local" in recipe
+    assert "/opt/arthexis/.venv/bin/ready" not in recipe
     assert "\nready --local\n" not in recipe
