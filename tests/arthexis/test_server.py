@@ -38,20 +38,22 @@ def test_cli_main_parses_standalone_server_arguments(monkeypatch):
     }
 
 
-def test_watchtower_uses_native_arthexis_server_module():
+def test_watchtower_uses_accepted_build_compatible_arthexis_server_callable():
     from pathlib import Path
 
     workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
         encoding="utf-8"
     )
 
-    native = (
-        "/opt/arthexis/.venv/bin/python -m arthexis.server "
-        "--host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis "
-        "--allowed-hosts arthexis.com"
+    compatible = (
+        "/opt/arthexis/.venv/bin/python -c "
+        "'from arthexis.server import main; "
+        'main(host="127.0.0.1", port=8888, data_dir="/var/lib/arthexis", '
+        'allowed_hosts="arthexis.com")\''
     )
-    assert native in workflow
-    assert "ExecStart must use the native module CLI" in workflow
+    assert compatible in workflow
+    assert "accepted-build-compatible server callable" in workflow
+    assert "/opt/arthexis/.venv/bin/python -m arthexis.server" not in workflow
     assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
 
 
