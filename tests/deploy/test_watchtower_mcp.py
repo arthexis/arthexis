@@ -435,8 +435,12 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
     assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
     assert 'push --force-with-lease origin "$branch"' in workflow
-    assert '${auth_header}" \\\\n            push --force-with-lease origin "$branch"' in workflow
-    assert '${auth_header}" \\\\\\\\n            push --force-with-lease origin "$branch"' not in workflow
+    push_line = next(
+        line for line in workflow.splitlines()
+        if 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in line
+    )
+    assert push_line.endswith("\\")
+    assert not push_line.endswith("\\\\")
     assert "https://$GH_TOKEN@" not in workflow
 
 
