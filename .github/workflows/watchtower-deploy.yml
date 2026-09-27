@@ -344,7 +344,19 @@ jobs:
             service_diagnostics
             exit 1
           fi
-          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/ready.rx'; then
+          ready=false
+          for attempt in $(seq 1 10); do
+            if sudo -n env \
+              ARTHEXIS_DATA_DIR=/var/lib/arthexis \
+              ARTHEXIS_ALLOWED_HOSTS=arthexis.com \
+              /opt/arthexis/.venv/bin/python -c \
+              'from arthexis.ready import local; raise SystemExit(0 if local(host="127.0.0.1", port=8888, domain="arthexis.com", path="/health/", timeout=2) else 1)'; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "${ready}" != true ]]; then
             echo "arthexis_ready=failed"
             service_diagnostics
             exit 1
