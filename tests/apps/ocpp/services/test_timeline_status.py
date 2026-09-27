@@ -28,6 +28,7 @@ def test_snapshot_is_json_safe_and_read_only():
         "charger_id": selected.pk,
         "charger_identity": selected.identity,
         "state": ChargerTimelineProgress.State.HISTORICAL,
+        "condition": "catching_up",
         "as_of": received.isoformat(),
         "newest_event_at": (received - timedelta(hours=2)).isoformat(),
         "last_received_at": received.isoformat(),
@@ -55,6 +56,7 @@ def test_state_transition_publishes_operator_event_after_commit():
     assert event.payload["charger_id"] == selected.pk
     assert event.payload["previous_state"] == ChargerTimelineProgress.State.UNKNOWN
     assert event.payload["state"] == ChargerTimelineProgress.State.HISTORICAL
+    assert event.payload["condition"] == "catching_up"
 
 
 def test_same_state_does_not_emit_duplicate_transition_event():
@@ -90,6 +92,7 @@ def test_query_without_timeline_data_returns_unknown_without_creating_state():
         "charger_id": selected.pk,
         "charger_identity": selected.identity,
         "state": ChargerTimelineProgress.State.UNKNOWN,
+        "condition": "unknown",
         "as_of": current.isoformat(),
         "newest_event_at": None,
         "last_received_at": None,
@@ -132,3 +135,43 @@ def test_query_surface_resolves_charger_by_public_identity():
     assert snapshot["charger_id"] == selected.pk
     assert snapshot["charger_identity"] == selected.identity
     assert snapshot["state"] == ChargerTimelineProgress.State.UNKNOWN
+
+
+
+@pytest.mark.parametrize(
+    ("state", "age", "expected"),
+    [
+        (ChargerTimelineProgress.State.LIVE, timedelta(minutes=15), "ready"),
+        (ChargerTimelineProgress.State.LIVE, timedelta(minutes=15, seconds=1), "degraded"),
+        (ChargerTimelineProgress.State.HISTORICAL, timedelta(minutes=15), "catching_up"),
+        (ChargerTimelineProgress.State.HISTORICAL, timedelta(minutes=15, seconds=1), "stalled"),
+        (ChargerTimelineProgress.State.CATCHING_UP, timedelta(minutes=15), "catching_up"),
+        (ChargerTimelineProgress.State.CATCHING_UP, timedelta(minutes=15, seconds=1), "stalled"),
+    ],
+)
+def test_operator_condition_boundaries(state, age, expected):
+    selected = charger(f"timeline-condition-{state}-{expected}")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=state,
+        newest_event_at=current - timedelta(minutes=2),
+        last_received_at=current - age,
+        observed_events=2,
+        historical_events_seen=2,
+    )
+
+    assert timeline_snapshot(progress, as_of=current)["condition"] == expected
+
+
+def test_unknown_state_remains_unknown_even_with_recent_receipt():
+    selected = charger("timeline-condition-unknown")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=ChargerTimelineProgress.State.UNKNOWN,
+        last_received_at=current,
+        observed_events=1,
+    )
+
+    assert timeline_snapshot(progress, as_of=current)["condition"] == "unknown"
