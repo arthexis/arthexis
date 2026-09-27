@@ -20,6 +20,7 @@ from apps.ocpp.transport.connection import (
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.listener import trusted_charger_listener
 from apps.ocpp.transport.operations import (
+    connection_capacity_available,
     deliver_queued_operation,
     recover_connected_operations,
     register_connection,
@@ -54,6 +55,16 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
                 protocol=self.subprotocol,
                 details={"offered_subprotocols": offered_subprotocols},
             )
+
+        if not await connection_capacity_available(self.charger):
+            await sync_to_async(record_compatibility_evidence)(
+                kind="connection_capacity",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                details={"limit": "reached"},
+            )
+            await self.close(code=1013)
+            return
 
         self.pending_calls = PendingCalls()
         inbound_actions = (
