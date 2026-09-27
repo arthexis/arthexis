@@ -377,3 +377,14 @@ def test_remote_verifier_uses_canonical_gway_runtime() -> None:
         "/opt/arthexis/scripts/verify_remote_deployment.py local"
         not in workflow
     )
+
+
+def test_ready_recipe_executes_product_runtime_externally() -> None:
+    recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
+
+    assert (
+        "ingest /opt/arthexis/.venv/bin/ready --kind proc --aka arthexis-ready"
+        in recipe
+    )
+    assert "arthexis-ready --local" in recipe
+    assert "\nready --local\n" not in recipe
