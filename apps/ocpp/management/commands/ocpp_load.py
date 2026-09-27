@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from time import perf_counter
 
