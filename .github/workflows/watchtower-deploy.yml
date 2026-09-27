@@ -295,11 +295,36 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py >/dev/null 2>&1
-          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1
-          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
+
+          service_diagnostics() {
+            sudo -n systemctl status arthexis-arthexis.com.service --no-pager || true
+            sudo -n journalctl -u arthexis-arthexis.com.service -n 80 --no-pager || true
+          }
+
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service stop --system --name web -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com' >/dev/null 2>&1; then
+            echo "legacy_web_stop=already_absent_or_inactive"
+          fi
+
+          sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py
+
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
+            echo "arthexis_service_install=failed"
+            service_diagnostics
+            exit 1
+          fi
+
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- serve --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
+            echo "arthexis_service_restart=failed"
+            service_diagnostics
+            exit 1
+          fi
+
+          if ! sudo -n systemctl is-active --quiet arthexis-arthexis.com.service; then
+            echo "arthexis_service_active=failed"
+            service_diagnostics
+            exit 1
+          fi
+
           unit=/etc/systemd/system/arthexis-arthexis.com.service
           sudo -n test -f "${unit}"
           exec_start="$(sudo -n awk -F= '/^ExecStart=/{print substr($0,11)}' "${unit}")"
@@ -308,9 +333,22 @@ jobs:
             echo "Arthexis systemd ExecStart must not depend on GWAY: ${exec_start}" >&2
             exit 1
           fi
-          sudo -n systemctl restart arthexis-arthexis.com.service
-          sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
-          sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/ready.rx' >/dev/null 2>&1
+
+          if ! sudo -n systemctl restart arthexis-arthexis.com.service; then
+            echo "arthexis_native_restart=failed"
+            service_diagnostics
+            exit 1
+          fi
+          if ! sudo -n systemctl is-active --quiet arthexis-arthexis.com.service; then
+            echo "arthexis_native_restart_active=failed"
+            service_diagnostics
+            exit 1
+          fi
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway ./deploy/ready.rx'; then
+            echo "arthexis_ready=failed"
+            service_diagnostics
+            exit 1
+          fi
           echo "service=active_independent_of_gway"
 
       - name: Provision Watchtower remote policy and services
