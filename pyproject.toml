@@ -27,7 +27,7 @@ dev = [
 arthexis = "manage:main"
 reconcile = "scripts.reconcile:main"
 ready = "arthexis.ready:main"
-serve = "arthexis.server:main"
+serve = "arthexis.server:cli_main"
 
 [project.urls]
 Repository = "https://github.com/arthexis/arthexis"
