@@ -44,7 +44,6 @@ def test_readme_documents_operational_capabilities() -> None:
         "**Authorization policy**",
         "**Explicit charger control**",
         "**Operation correlation**",
-        "**Structured events**",
     ):
         assert capability in readme
 
@@ -72,3 +71,19 @@ def test_readme_avoids_product_version_migration_framing() -> None:
         "legacy reconciliation",
     ):
         assert phrase not in readme
+
+
+def test_event_system_is_documented_outside_base_readme() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+    events = Path("docs/events.md").read_text(encoding="utf-8")
+
+    assert "**Structured events**" not in readme
+    assert "### Publish a structured event" not in readme
+    for contract in (
+        "# Events and Celery",
+        "`ocpp.meter_values.received`",
+        "`discovery.event`",
+        "`events.dispatch_pending`",
+        "`events.process`",
+    ):
+        assert contract in events

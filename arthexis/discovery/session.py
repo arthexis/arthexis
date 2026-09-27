@@ -72,6 +72,7 @@ class DiscoverySession:
 
     path: Path
     now: Callable[[], datetime] = _utc_now
+    projector: Callable[[Mapping[str, Any]], object] | None = None
 
     @property
     def session_id(self) -> str:
@@ -185,6 +186,12 @@ class DiscoverySession:
                 stream.write(serialized + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
+        if self.projector is not None:
+            try:
+                self.projector(event)
+            except Exception:
+                # Live projection is deliberately subordinate to filesystem durability.
+                pass
         return event
 
     def write_artifact(self, relative_path: str, content: bytes) -> dict[str, Any]:
@@ -318,6 +325,7 @@ class DiscoveryStore:
 
     root: Path
     now: Callable[[], datetime] = _utc_now
+    projector: Callable[[Mapping[str, Any]], object] | None = None
 
     def create(
         self,
@@ -345,7 +353,7 @@ class DiscoveryStore:
             manifest["interface"] = interface
         _atomic_json(path / "manifest.json", manifest)
 
-        session = DiscoverySession(path=path, now=self.now)
+        session = DiscoverySession(path=path, now=self.now, projector=self.projector)
         session.append(
             "session_started",
             data={"interface": interface} if interface is not None else {},
@@ -359,7 +367,7 @@ class DiscoveryStore:
         path = self.root / identifier
         if not path.is_dir() or not (path / "manifest.json").exists():
             raise KeyError(f"Unknown discovery session: {identifier}")
-        return DiscoverySession(path=path, now=self.now)
+        return DiscoverySession(path=path, now=self.now, projector=self.projector)
 
     def claim_handoff(
         self,
