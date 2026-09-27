@@ -42,19 +42,10 @@ def test_remote_acceptance_requires_mcp_oauth_challenge() -> None:
     assert 'resource_metadata="{PROTECTED}"' in script
 
 
-def test_watchtower_runs_local_acceptance_before_public_exposure() -> None:
+def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    local = workflow.index("verify_remote_deployment.py local")
-    expose = workflow.index("- name: Expose Arthexis publicly through Gway recipe")
-    assert local < expose
-
-
-def test_watchtower_runs_public_acceptance_after_exposure() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    expose = workflow.index("- name: Expose Arthexis publicly through Gway recipe")
-    public = workflow.index("verify_remote_deployment.py public")
-    assert expose < public
-    assert "if: env.PUBLIC_EXPOSURE_ENABLED == 'true'" in workflow
-    assert 'echo "remote_public=ok"' in workflow
+    assert "stage:" in workflow
+    assert "default: arthexis" in workflow
+    assert "verify_remote_deployment.py local" not in workflow
+    assert "verify_remote_deployment.py public" not in workflow
