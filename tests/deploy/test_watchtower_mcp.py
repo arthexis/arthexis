@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+
 
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
 POLICY = Path("deploy/mcp-scopes.toml")
@@ -442,6 +444,25 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert push_line.endswith("\\")
     assert not push_line.endswith("\\\\")
     assert "https://$GH_TOKEN@" not in workflow
+
+
+def test_watchtower_rollover_push_command_executes_against_local_remote(tmp_path: Path) -> None:
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "CI"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "ci@example.invalid"], check=True)
+    (work / "VERSION").write_text("2.0.2\\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "VERSION"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-m", "seed"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(remote)], check=True)
+
+    command = r'''\nset -Eeuo pipefail\nbranch=release/next-arthexis\nauth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"\ngit checkout -B "$branch"\ngit -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\\n  push --force-with-lease origin "$branch"\n''' 
+    subprocess.run(["bash", "-c", command], cwd=work, check=True, capture_output=True, text=True)
+    remote_branch = subprocess.run(\n        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/release/next-arthexis"],\n        check=True, capture_output=True, text=True,\n    ).stdout.strip()
+    local_head = subprocess.run(\n        ["git", "-C", str(work), "rev-parse", "HEAD"],\n        check=True, capture_output=True, text=True,\n    ).stdout.strip()
+    assert remote_branch == local_head
 
 
 def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
