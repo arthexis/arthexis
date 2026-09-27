@@ -311,13 +311,13 @@ jobs:
 
           sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py
 
-          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- /opt/arthexis/.venv/bin/python -c "from arthexis.server import main; main(host='127.0.0.1', port=8888, data_dir='/var/lib/arthexis', allowed_hosts='arthexis.com')"'; then
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- /opt/arthexis/.venv/bin/python -m arthexis.server --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
             echo "arthexis_service_install=failed"
             service_diagnostics
             exit 1
           fi
 
-          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- /opt/arthexis/.venv/bin/python -c "from arthexis.server import main; main(host='127.0.0.1', port=8888, data_dir='/var/lib/arthexis', allowed_hosts='arthexis.com')"'; then
+          if ! sudo -n sh -c 'cd /opt/arthexis && exec /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- /opt/arthexis/.venv/bin/python -m arthexis.server --host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis --allowed-hosts arthexis.com'; then
             echo "arthexis_service_restart=failed"
             service_diagnostics
             exit 1
@@ -335,6 +335,10 @@ jobs:
           test -n "${exec_start}"
           if [[ "${exec_start}" == *gway* ]]; then
             echo "Arthexis systemd ExecStart must not depend on GWAY: ${exec_start}" >&2
+            exit 1
+          fi
+          if [[ "${exec_start}" != *" -m arthexis.server "* ]]; then
+            echo "Arthexis systemd ExecStart must use the native module CLI: ${exec_start}" >&2
             exit 1
           fi
 

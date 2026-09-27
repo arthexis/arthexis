@@ -347,15 +347,13 @@ def test_arthexis_systemd_service_uses_standalone_server_command() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     native = (
-        '/opt/arthexis/.venv/bin/python -c "'
-        "from arthexis.server import main; "
-        "main(host='127.0.0.1', port=8888, data_dir='/var/lib/arthexis', "
-        "allowed_hosts='arthexis.com')"
-        '"'
+        "/opt/arthexis/.venv/bin/python -m arthexis.server "
+        "--host 127.0.0.1 --port 8888 --data-dir /var/lib/arthexis "
+        "--allowed-hosts arthexis.com"
     )
     assert f"service install --backend systemd --system --name arthexis.com -- {native}" in workflow
     assert f"service restart --system --name arthexis.com --timeout 40 -- {native}" in workflow
-    assert "-m arthexis.server" not in workflow
+    assert "ExecStart must use the native module CLI" in workflow
     assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
 
 
