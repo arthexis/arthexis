@@ -22,11 +22,6 @@ def _blocks(path: Path) -> list[str]:
     return blocks
 
 
-def _remote_step() -> str:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    start = workflow.index("- name: Provision Watchtower remote policy and services")
-    end = workflow.index("- name: Expose Arthexis publicly through Gway recipe", start)
-    return workflow[start:end]
 
 
 def test_watchtower_mcp_policy_has_read_only_remote_scopes() -> None:
@@ -117,16 +112,10 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
     assert "--timeout 40" in restart
 
 
-def test_watchtower_workflow_delegates_remote_provisioning_to_recipe() -> None:
-    step = _remote_step()
-
-    assert "/usr/local/bin/gway ./deploy/remote.rx" in step
-    assert "install -d -m 0700 -o root -g root /var/lib/gway/cache" in step
-    assert "/var/lib/gway/cache/security/state.sqlite" in step
-    assert "GWAY_CACHE_DIR" not in step
-    assert "systemctl is-active --quiet gway-mcp-server.service" in step
-    assert "systemctl is-active --quiet gway-remote-auth.service" in step
-
+def test_base_watchtower_stage_excludes_remote_provisioning() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "Provision Watchtower remote policy and services" not in workflow
+    assert "/usr/local/bin/gway ./deploy/remote.rx" not in workflow
 
 def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -137,14 +126,11 @@ def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
     assert "security token create" not in workflow
 
 
-def test_watchtower_remote_uses_semantic_gway_cache_root() -> None:
+def test_remote_recipe_uses_semantic_gway_cache_root() -> None:
     project = Path("pyproject.toml").read_text(encoding="utf-8")
     remote = REMOTE.read_text(encoding="utf-8")
-    step = _remote_step()
-
     assert "[tool.gway.variables]" in project
     assert 'cache_dir = "/var/lib/gway/cache"' in project
-    assert "GWAY_CACHE_DIR" not in step
     assert "GWAY_CACHE_DIR" not in remote
 
 def test_remote_dns_recipe_stays_credential_free() -> None:
@@ -304,16 +290,19 @@ def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
     assert '"log.sources"' in logs_section
 
 
-def test_watchtower_deploy_accepts_wire_as_gway_extension() -> None:
+def test_watchtower_deploy_accepts_wire_as_manual_gway_extension() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "- name: Verify Watchtower Wire extension" in workflow
+    assert "- name: Preflight Watchtower Wire stage" in workflow
+    assert "- name: Converge Watchtower Wire stage" in workflow
+    assert "- name: Verify Watchtower Wire stage" in workflow
+    assert "default: arthexis" in workflow
+    assert "gway -e wire watchtower --public-address 192.0.2.1" in workflow
+    assert "gway wire watchtower" in workflow
     assert "systemctl is-active --quiet gway-wire-enroll.service" in workflow
+    assert "gway-wireguard-enroll.service" in workflow
     assert "/usr/local/bin/gway log sources" in workflow
-    assert "grep -F 'gway/wire-enroll'" in workflow
     assert "https://register.arthexis.com/health" in workflow
     assert "gway wire server check --domain register.arthexis.com" in workflow
-
 
 def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -373,20 +362,10 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
     assert "exec /usr/local/bin/gway ./deploy/ready.rx" not in workflow
 
 
-def test_remote_verifier_uses_canonical_gway_runtime() -> None:
+def test_base_watchtower_stage_does_not_run_remote_verifier() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert (
-        "/var/lib/gway/venv/bin/python "
-        "/opt/arthexis/scripts/verify_remote_deployment.py local"
-        in workflow
-    )
-    assert (
-        "/opt/arthexis/.venv/bin/python "
-        "/opt/arthexis/scripts/verify_remote_deployment.py local"
-        not in workflow
-    )
-
+    assert "verify_remote_deployment.py local" not in workflow
+    assert "verify_remote_deployment.py public" not in workflow
 
 def test_ready_recipe_executes_product_runtime_externally() -> None:
     recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
@@ -406,7 +385,7 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in workflow
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in workflow
     assert "- name: Restore previous Gway runtime after failed deployment" in workflow
-    assert "failure() && env.GWAY_RUNTIME_SWAPPED == 'true'" in workflow
+    assert "failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true'" in workflow
     assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in workflow
     assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in workflow
     assert "systemctl restart gway-mcp-server.service" in workflow
