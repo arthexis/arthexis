@@ -414,6 +414,8 @@ jobs:
           sudo -n systemctl is-active --quiet arthexis-arthexis.com.service
           sudo -n /usr/local/bin/gway help wire >/dev/null
           sudo -n test -f /var/lib/gway/venv/share/gway/sampler/wire/watchtower.rx
+          sudo -n /usr/local/bin/gway --json resolve wire watchtower | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve wire watchtower | grep -F 'sampler/wire/watchtower.rx' >/dev/null
           sudo -n /usr/local/bin/gway wire server check --domain register.arthexis.com >/dev/null
           echo "wire_preflight=ok"
           echo "wire_units=begin"
