@@ -5,8 +5,9 @@ from django.db import models
 class CardCredential(models.Model):
     external_id = models.CharField(max_length=128, unique=True)
     label = models.CharField(max_length=120, blank=True)
-    ocpp_id_tag = models.CharField(max_length=20, blank=True)
+    ocpp_id_tag = models.CharField(max_length=128, blank=True)
     active = models.BooleanField(default=True)
+    auto_learned = models.BooleanField(default=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

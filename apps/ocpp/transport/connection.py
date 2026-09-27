@@ -9,7 +9,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, OcppPolicy
 from apps.ocpp.protocol.contracts import ProtocolVersion
 
 SUBPROTOCOL_VERSIONS = {
@@ -54,28 +54,46 @@ def basic_credentials(headers: list[tuple[bytes, bytes]]) -> tuple[str, str] | N
 def load_or_enroll_charger(
     identity: str, credentials: tuple[str, str] | None
 ) -> Charger | None:
-    """Authenticate an active charger or enroll an unknown identity once."""
+    """Load or enroll a charger under the instance admission policy."""
+    policy = OcppPolicy.load()
+    open_admission = (
+        policy.charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
+    )
     charger = Charger.objects.filter(identity=identity).first()
     if charger is not None:
-        if charger.active and authenticate_charger_sync(charger, credentials):
+        if not charger.active:
+            return None
+        if open_admission or authenticate_charger_sync(charger, credentials):
             return charger
         return None
-    if not _valid_enrollment_credentials(identity, credentials):
+
+    if not open_admission and not _valid_enrollment_credentials(identity, credentials):
         return None
+
     try:
         with transaction.atomic():
             enrolled_at = timezone.now()
             return Charger.objects.create(
                 identity=identity,
-                connection_token_hash=make_password(credentials[1]),
+                connection_token_hash=_connection_token_hash(identity, credentials),
                 enrolled_at=enrolled_at,
                 authority_cutover_at=enrolled_at,
             )
     except IntegrityError:
         charger = Charger.objects.filter(identity=identity, active=True).first()
-        if charger is None or not authenticate_charger_sync(charger, credentials):
+        if charger is None:
             return None
-        return charger
+        if open_admission or authenticate_charger_sync(charger, credentials):
+            return charger
+        return None
+
+
+def _connection_token_hash(
+    identity: str, credentials: tuple[str, str] | None
+) -> str:
+    if credentials is None or credentials[0] != identity:
+        return ""
+    return make_password(credentials[1])
 
 
 def _valid_enrollment_credentials(
@@ -91,7 +109,7 @@ def _valid_enrollment_credentials(
 def authenticate_charger_sync(
     charger: Charger, credentials: tuple[str, str] | None
 ) -> bool:
-    """Verify credentials inside a synchronous enrollment race recovery path."""
+    """Verify credentials inside restricted admission paths."""
     if credentials is None or not charger.connection_token_hash:
         return False
     identity, token = credentials

@@ -5,6 +5,7 @@ from apps.ocpp.models.certificates import CertificateRecord
 from apps.ocpp.models.configuration import ChargerVariable
 from apps.ocpp.models.notifications import MonitoringRecord, NotificationRecord
 from apps.ocpp.models.operations import ProtocolOperation
+from apps.ocpp.models.policy import OcppPolicy
 from apps.ocpp.models.profiles import ChargingProfile
 from apps.ocpp.models.replay import InboundProtocolRequest
 from apps.ocpp.models.reservations import Reservation
@@ -23,6 +24,7 @@ __all__ = [
     "MeterValue",
     "MonitoringRecord",
     "NotificationRecord",
+    "OcppPolicy",
     "OcppTransaction",
     "OperationalStatusRecord",
     "ProtocolOperation",

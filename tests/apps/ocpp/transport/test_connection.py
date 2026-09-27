@@ -3,7 +3,7 @@ from asgiref.sync import async_to_sync
 from django.contrib.auth.hashers import make_password
 from django.test import override_settings
 
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, OcppPolicy
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.transport.connection import (
     ConnectionRejected,
@@ -29,7 +29,42 @@ def test_basic_credentials_are_parsed_without_retaining_headers() -> None:
 
 
 @pytest.mark.django_db
-def test_unknown_identity_requires_a_valid_enrollment_credential() -> None:
+def test_open_admission_enrolls_unknown_charger_without_credentials() -> None:
+    selected = async_to_sync(load_or_enroll_charger)("charger-new", None)
+
+    assert selected is not None
+    assert selected.identity == "charger-new"
+    assert selected.enrolled_at is not None
+    assert selected.authority_cutover_at == selected.enrolled_at
+    assert selected.connection_token_hash == ""
+    assert selected.authorization_mode == Charger.AuthorizationMode.OPEN
+    assert OcppPolicy.load().charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
+
+
+@pytest.mark.django_db
+def test_open_admission_accepts_existing_active_charger_without_credentials() -> None:
+    existing = Charger.objects.create(identity="charger-existing")
+
+    selected = async_to_sync(load_or_enroll_charger)("charger-existing", None)
+
+    assert selected == existing
+
+
+@pytest.mark.django_db
+def test_open_admission_still_rejects_disabled_chargers() -> None:
+    Charger.objects.create(identity="charger-disabled", active=False)
+
+    selected = async_to_sync(load_or_enroll_charger)("charger-disabled", None)
+
+    assert selected is None
+
+
+@pytest.mark.django_db
+def test_restricted_admission_requires_enrollment_credentials_for_unknown_charger() -> None:
+    policy = OcppPolicy.load()
+    policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED
+    policy.save()
+
     with override_settings(
         PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
     ):
@@ -43,21 +78,27 @@ def test_unknown_identity_requires_a_valid_enrollment_credential() -> None:
             )
 
     assert enrolled is not None
-    assert enrolled.identity == "charger-new"
-    assert enrolled.enrolled_at is not None
-    assert enrolled.authority_cutover_at == enrolled.enrolled_at
-    assert enrolled.active
-    assert enrolled.authorization_mode == Charger.AuthorizationMode.OPEN
+    assert enrolled.connection_token_hash
     assert rejected is None
     assert not Charger.objects.filter(identity="charger-rejected").exists()
 
 
 @pytest.mark.django_db
-def test_enrollment_is_disabled_without_a_configured_credential() -> None:
-    with override_settings(OCPP_ENROLLMENT_TOKEN_HASH=""):
-        selected = async_to_sync(load_or_enroll_charger)(
-            "charger-new", ("charger-new", "enroll")
-        )
+def test_restricted_admission_authenticates_existing_chargers() -> None:
+    policy = OcppPolicy.load()
+    policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED
+    policy.save()
+    existing = Charger.objects.create(
+        identity="charger-existing",
+        connection_token_hash=make_password("secret"),
+    )
 
-    assert selected is None
-    assert not Charger.objects.filter(identity="charger-new").exists()
+    accepted = async_to_sync(load_or_enroll_charger)(
+        "charger-existing", ("charger-existing", "secret")
+    )
+    rejected = async_to_sync(load_or_enroll_charger)(
+        "charger-existing", ("charger-existing", "wrong")
+    )
+
+    assert accepted == existing
+    assert rejected is None
