@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+
 
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
 POLICY = Path("deploy/mcp-scopes.toml")
@@ -435,8 +437,49 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
     assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
     assert 'push --force-with-lease origin "$branch"' in workflow
+    push_line = next(
+        line for line in workflow.splitlines()
+        if 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in line
+    )
+    assert push_line.endswith("\\")
+    assert not push_line.endswith("\\\\")
     assert "https://$GH_TOKEN@" not in workflow
 
+
+def test_watchtower_rollover_push_command_executes_against_local_remote(tmp_path: Path) -> None:
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "CI"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "ci@example.invalid"], check=True)
+    (work / "VERSION").write_text("2.0.2\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "VERSION"], check=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-m", "seed"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(remote)], check=True)
+
+    command = """
+set -Eeuo pipefail
+branch=release/next-arthexis
+auth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"
+git checkout -B "$branch"
+git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
+  push --force-with-lease origin "$branch"
+"""
+    subprocess.run(["bash", "-c", command], cwd=work, check=True, capture_output=True, text=True)
+    remote_branch = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/release/next-arthexis"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    local_head = subprocess.run(
+        ["git", "-C", str(work), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert remote_branch == local_head
 
 def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
