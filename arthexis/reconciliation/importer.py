@@ -77,6 +77,7 @@ class _Importer:
         self.source, self.report = source, report
         self.accounts: dict[Any, object] = {}
         self.cards_by_value: dict[str, object] = {}
+        self.cards_by_legacy_id: dict[Any, object] = {}
         self.chargers: dict[Any, object] = {}
         self.connectors: dict[tuple[Any, Any], object] = {}
         self.transactions: dict[Any, object] = {}
@@ -94,15 +95,21 @@ class _Importer:
             raw = _first(row, "rfid", "uid", default="")
             if not raw:
                 continue
+            legacy_id = _first(row, "id", "pk", default=raw)
+            # The legacy RFID value was the credential presented to chargers.
+            # Preserve it as the OCPP-facing tag while keeping external_id
+            # pseudonymous for reconciliation receipts and administrative views.
+            ocpp_id_tag = str(_first(row, "ocpp_id_tag", default=raw))[:128]
             card, _ = CardCredential.objects.update_or_create(
                 external_id=_stable("legacy-card", raw),
                 defaults={
                     "label": str(_first(row, "custom_label", "generated_label"))[:120],
-                    "ocpp_id_tag": str(_first(row, "ocpp_id_tag", default=""))[:20],
+                    "ocpp_id_tag": ocpp_id_tag,
                     "active": _bool(_first(row, "active", default=True)),
                 },
             )
             self.cards_by_value[str(raw)] = card
+            self.cards_by_legacy_id[legacy_id] = card
             self.report.count("card_credentials")
         for row in self._rows("authorization_attempts", "cards_rfidattempt"):
             raw = _first(row, "rfid", "presented_id", default="")
@@ -148,6 +155,57 @@ class _Importer:
             )
             self.accounts[legacy_id] = account
             self.report.count("customer_accounts")
+
+        self._link_cards_to_accounts()
+
+
+    def _link_cards_to_accounts(self) -> None:
+        """Restore deterministic legacy RFID-to-energy-account relationships."""
+        found, rows = self.source.rows(
+            "core_account_rfid",
+            "core_account_rfids",
+            "core_account_cards",
+            "core_customeraccount_rfid",
+        )
+        if found is not None:
+            for row in rows:
+                card = self.cards_by_legacy_id.get(
+                    _first(row, "rfid_id", "card_id", "credential_id")
+                )
+                account = self.accounts.get(
+                    _first(row, "account_id", "customer_account_id")
+                )
+                if card is not None and account is not None:
+                    card.account = account
+                    card.save(update_fields=("account",))
+                    self.report.count("card_account_links")
+            return
+
+        # Some legacy schemas stored the relationship directly on core_rfid.
+        _, card_rows = self.source.rows("core_rfid")
+        linked = 0
+        for row in card_rows:
+            account_id = _first(
+                row,
+                "account_id",
+                "customer_account_id",
+                "energy_account_id",
+                default=None,
+            )
+            if account_id is None:
+                continue
+            card = self.cards_by_legacy_id.get(_first(row, "id", "pk"))
+            account = self.accounts.get(account_id)
+            if card is not None and account is not None:
+                card.account = account
+                card.save(update_fields=("account",))
+                linked += 1
+        if linked:
+            self.report.count("card_account_links", linked)
+        else:
+            self.report.skipped["card_account_links"] = (
+                "no deterministic legacy RFID/account relationship"
+            )
 
     def ledger(self) -> None:
         from apps.energy.models import LedgerEntry
