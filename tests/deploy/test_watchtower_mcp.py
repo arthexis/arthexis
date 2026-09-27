@@ -404,7 +404,12 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in workflow
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in workflow
     assert "- name: Restore previous Gway runtime after failed deployment" in workflow
-    assert "failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true'" in workflow
+    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in workflow
+    assert (
+        "failure() && env.WATCHTOWER_STAGE == 'arthexis' "
+        "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
+        "&& env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'"
+    ) in workflow
     assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in workflow
     assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in workflow
     assert "systemctl restart gway-mcp-server.service" in workflow
@@ -413,3 +418,11 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
     assert 'for port in 8000 8001; do' in workflow
     assert 'gway_runtime_rollback=restored' in workflow
+
+
+def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "git worktree prune" in workflow
+    assert 'git -C "$GITHUB_WORKSPACE" worktree remove --force "$work"' in workflow
+    assert 'trap cleanup EXIT' in workflow
