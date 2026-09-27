@@ -35,3 +35,5 @@ def test_wire_preflight_records_service_and_listener_state() -> None:
     assert "sport = :8787" in workflow
     assert "gway -e wire watchtower" not in workflow
     assert "test -f /var/lib/gway/venv/share/gway/sampler/wire/watchtower.rx" in workflow
+    assert "gway --json resolve wire watchtower" in workflow
+    assert "sampler/wire/watchtower.rx" in workflow
