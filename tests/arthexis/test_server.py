@@ -1,35 +1,54 @@
-import os
-from unittest.mock import patch
+from __future__ import annotations
 
-from arthexis.server import daphne_command, main
+import sys
+
+from arthexis import server
 
 
-def test_daphne_command_binds_locally_by_default() -> None:
-    command = daphne_command()
+def test_cli_main_parses_standalone_server_arguments(monkeypatch):
+    captured = {}
 
-    assert command[-5:] == (
-        "-b",
-        "127.0.0.1",
-        "-p",
-        "8888",
-        "arthexis.asgi:application",
+    def fake_main(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(server, "main", fake_main)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "arthexis.server",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9000",
+            "--data-dir",
+            "/srv/arthexis",
+            "--allowed-hosts",
+            "example.test",
+        ],
     )
 
+    server.cli_main()
 
-@patch("arthexis.server.os.execv")
-@patch("arthexis.server.daphne_command")
-def test_main_sets_persistent_data_dir_before_exec(command, execv) -> None:
-    command.return_value = ("/runtime/bin/daphne", "daphne-arg")
+    assert captured == {
+        "host": "0.0.0.0",
+        "port": 9000,
+        "data_dir": "/srv/arthexis",
+        "allowed_hosts": "example.test",
+    }
 
-    with patch.dict("arthexis.server.os.environ", {}, clear=True):
-        main(
-            data_dir="/var/lib/arthexis",
-            allowed_hosts="0.0.0.0,arthexis.com",
-        )
-        assert os.environ["ARTHEXIS_DATA_DIR"] == "/var/lib/arthexis"
-        assert os.environ["ARTHEXIS_ALLOWED_HOSTS"] == "0.0.0.0,arthexis.com"
 
-    execv.assert_called_once_with(
-        "/runtime/bin/daphne",
-        ("/runtime/bin/daphne", "daphne-arg"),
+def test_watchtower_uses_native_arthexis_server_module():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
+        encoding="utf-8"
     )
+
+    native = (
+        "/opt/arthexis/.venv/bin/python -m arthexis.server "
+        "--host 127.0.0.1 --port 8888 "
+        "--data-dir /var/lib/arthexis --allowed-hosts arthexis.com"
+    )
+    assert native in workflow
+    assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
