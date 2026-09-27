@@ -357,4 +357,6 @@ def test_meter_database_work_stays_bounded_as_backlog_grows(backlog_context) -> 
         )
 
     assert len(late_queries) <= len(early_queries) + 2
-    assert len(late_queries) <= 20
+    # Timeline observation adds fixed per-message bookkeeping but must remain
+    # independent of backlog size.
+    assert len(late_queries) <= 22
