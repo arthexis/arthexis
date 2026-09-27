@@ -219,7 +219,13 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >/dev/null 2>&1
+          install_log="${RUNNER_TEMP}/arthexis-product-install.log"
+          if ! sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >"${install_log}" 2>&1; then
+            echo "arthexis_product_install=failed"
+            cat "${install_log}"
+            exit 1
+          fi
+          echo "arthexis_product_install=ok"
           sudo -n test -f /opt/arthexis/pyproject.toml
           sudo -n test -f /opt/arthexis/install.sh
 
