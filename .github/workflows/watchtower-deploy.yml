@@ -439,7 +439,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n systemctl is-active --quiet gway-wire-enroll.service
+          if ! sudo -n systemctl is-active --quiet gway-wire-enroll.service; then
+            echo "wire_extension=failed"
+            sudo -n systemctl status gway-wire-enroll.service --no-pager || true
+            sudo -n journalctl -u gway-wire-enroll.service -n 100 --no-pager || true
+            exit 1
+          fi
           sudo -n sh -c 'exec /usr/local/bin/gway log sources' | grep -F 'gway/wire-enroll' >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
             https://register.arthexis.com/health >/dev/null
