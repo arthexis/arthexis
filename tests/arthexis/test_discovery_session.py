@@ -226,3 +226,62 @@ def test_concurrent_appends_from_reopened_sessions_share_thread_lock(tmp_path) -
     assert sequences == list(range(2, 34))
     persisted = list(store.open("field-concurrent-reopen").events())
     assert [event["seq"] for event in persisted] == list(range(1, 34))
+
+
+
+def test_handoff_arm_and_claim_are_durable_and_single_use(tmp_path) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+    session = store.create(interface="eth0", session_id="handoff-001")
+
+    armed = session.arm_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.40",
+        original_destination={"host": "vendor.example", "port": 9000},
+        strategy="dnat",
+    )
+
+    assert armed["charger_identity"] == "CP001"
+    assert session.handoff_path.exists()
+    assert session.summarize()["handoff_armed"] is True
+    assert store.claim_handoff(
+        charger_identity="OTHER",
+        client_host="192.0.2.40",
+    ) is None
+
+    claimed = store.claim_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.40",
+    )
+
+    assert claimed is not None
+    assert claimed.session_id == "handoff-001"
+    assert not claimed.handoff_path.exists()
+    assert claimed.claimed_handoff_path.exists()
+    assert claimed.summarize()["handoff_claimed"] is True
+    assert store.claim_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.40",
+    ) is None
+
+
+def test_handoff_can_match_source_host_when_identity_is_not_known_yet(tmp_path) -> None:
+    store = DiscoveryStore(tmp_path / "discovery", now=Clock())
+    session = store.create(session_id="handoff-host")
+    session.arm_handoff(client_host="198.51.100.8", strategy="transparent_redirect")
+
+    claimed = store.claim_handoff(
+        charger_identity="learned-from-ocpp-path",
+        client_host="198.51.100.8",
+    )
+
+    assert claimed is not None
+    assert claimed.session_id == "handoff-host"
+
+
+def test_handoff_requires_a_match_key(tmp_path) -> None:
+    session = DiscoveryStore(
+        tmp_path / "discovery", now=Clock()
+    ).create(session_id="handoff-invalid")
+
+    with pytest.raises(ValueError, match="charger_identity and/or client_host"):
+        session.arm_handoff()
