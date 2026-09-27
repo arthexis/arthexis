@@ -358,3 +358,11 @@ def test_arthexis_systemd_service_uses_native_daphne_command() -> None:
         "service install --backend systemd --system --name arthexis.com -- serve"
         not in workflow
     )
+
+
+def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "/opt/arthexis/.venv/bin/python -c" in workflow
+    assert "from arthexis.ready import local" in workflow
+    assert "exec /usr/local/bin/gway ./deploy/ready.rx" not in workflow
