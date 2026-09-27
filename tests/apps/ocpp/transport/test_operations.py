@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import async_to_sync
 from channels.exceptions import ChannelFull
+from django.test import override_settings
 from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
@@ -24,6 +25,7 @@ from apps.ocpp.transport.operations import (
     ExplicitDeliveryUnavailable,
     ProtocolVersionMismatch,
     active_connections,
+    connection_capacity_available,
     deliver_queued_operation,
     recover_connected_operations,
     register_connection,
@@ -102,6 +104,21 @@ class DeliveryBoundaryTests:
 
     def teardown_method(self) -> None:
         active_connections.unregister(self.charger)
+
+    @override_settings(OCPP_MAX_CONNECTIONS=1)
+    def test_connection_capacity_limits_new_sessions_but_allows_replacement(self) -> None:
+        other = charger("charger-2")
+        connection(other, channel_name="other.channel")
+
+        assert async_to_sync(connection_capacity_available)(other) is True
+        assert async_to_sync(connection_capacity_available)(self.charger) is False
+
+    @override_settings(OCPP_MAX_CONNECTIONS=0)
+    def test_connection_capacity_can_be_unbounded_without_message_rate_limits(self) -> None:
+        other = charger("charger-unbounded")
+        connection(other, channel_name="other.channel")
+
+        assert async_to_sync(connection_capacity_available)(self.charger) is True
 
     def test_connection_presence_is_registered_and_cleared_by_channel_owner(
         self,

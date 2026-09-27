@@ -5,7 +5,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from django.test import override_settings
 from django.utils import timezone
 
-from apps.ocpp.models import InboundProtocolRequest
+from apps.ocpp.models import CompatibilityEvidence, InboundProtocolRequest
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult
@@ -216,3 +216,55 @@ def test_repeatable_action_same_call_and_payload_is_new_after_window(
         assert second != first
 
     run(scenario)
+
+
+def test_unknown_action_is_recorded_as_compatibility_evidence(
+    replay_charger,
+) -> None:
+    async def scenario() -> None:
+        async def handler(payload: dict[str, object]) -> dict[str, object]:
+            return {}
+
+        dispatcher = make_dispatcher(replay_charger, handler)
+        response = await dispatcher.dispatch(
+            Call(unique_id="vendor-1", action="VendorMagic", payload={"x": 1})
+        )
+
+        assert response == CallError(
+            unique_id="vendor-1",
+            code="NotSupported",
+            description="Unsupported action: VendorMagic",
+            details={},
+        )
+
+    run(scenario)
+
+    evidence = CompatibilityEvidence.objects.get(kind="unsupported_action")
+    assert evidence.charger == replay_charger
+    assert evidence.unique_id == "vendor-1"
+    assert evidence.action == "VendorMagic"
+    assert evidence.details == {"payload": {"x": 1}}
+
+
+def test_unmatched_call_error_is_recorded_without_disconnect(replay_charger) -> None:
+    async def scenario() -> None:
+        async def handler(payload: dict[str, object]) -> dict[str, object]:
+            return {}
+
+        dispatcher = make_dispatcher(replay_charger, handler)
+        response = await dispatcher.dispatch(
+            CallError(
+                unique_id="orphan",
+                code="VendorError",
+                description="unexpected",
+                details={"vendor": "x"},
+            )
+        )
+        assert response is None
+
+    run(scenario)
+
+    evidence = CompatibilityEvidence.objects.get(kind="unmatched_response")
+    assert evidence.charger == replay_charger
+    assert evidence.unique_id == "orphan"
+    assert evidence.details["frame_type"] == "CallError"

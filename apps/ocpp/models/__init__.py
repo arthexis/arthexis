@@ -2,6 +2,7 @@
 
 from apps.ocpp.models.assets import Charger, ChargerConnection, Connector, StationModel
 from apps.ocpp.models.certificates import CertificateRecord
+from apps.ocpp.models.compatibility import CompatibilityEvidence
 from apps.ocpp.models.configuration import ChargerVariable
 from apps.ocpp.models.notifications import MonitoringRecord, NotificationRecord
 from apps.ocpp.models.operations import ProtocolOperation
@@ -14,6 +15,7 @@ from apps.ocpp.models.status import OperationalStatusRecord
 
 __all__ = [
     "CertificateRecord",
+    "CompatibilityEvidence",
     "Charger",
     "ChargerConnection",
     "ChargerVariable",

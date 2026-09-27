@@ -10,9 +10,9 @@ from apps.ocpp.protocol.errors import ProtocolFrameError
 from apps.ocpp.protocol.frames import CallError, parse_frame
 from apps.ocpp.protocol.v16.inbound import InboundActions
 from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
+from apps.ocpp.services.compatibility import record_compatibility_evidence
 from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
-    ConnectionRejected,
     basic_credentials,
     load_or_enroll_charger,
     negotiate_subprotocol,
@@ -20,6 +20,7 @@ from apps.ocpp.transport.connection import (
 from apps.ocpp.transport.dispatch import FrameDispatcher
 from apps.ocpp.transport.listener import trusted_charger_listener
 from apps.ocpp.transport.operations import (
+    connection_capacity_available,
     deliver_queued_operation,
     recover_connected_operations,
     register_connection,
@@ -32,13 +33,8 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
     """Connect, parse, dispatch, and send without embedding OCPP action logic."""
 
     async def connect(self) -> None:
-        try:
-            self.subprotocol, self.version = negotiate_subprotocol(
-                self.scope.get("subprotocols", [])
-            )
-        except ConnectionRejected:
-            await self.close(code=4406)
-            return
+        offered_subprotocols = self.scope.get("subprotocols", [])
+        self.subprotocol, self.version = negotiate_subprotocol(offered_subprotocols)
 
         identity = self.scope["url_route"]["kwargs"]["charger_identity"]
         credentials = basic_credentials(self.scope.get("headers", []))
@@ -49,6 +45,25 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         )
         if self.charger is None:
             await self.close(code=4401)
+            return
+
+        protocol_fallback = self.subprotocol not in offered_subprotocols
+        if protocol_fallback:
+            await sync_to_async(record_compatibility_evidence)(
+                kind="protocol_fallback",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                details={"offered_subprotocols": offered_subprotocols},
+            )
+
+        if not await connection_capacity_available(self.charger):
+            await sync_to_async(record_compatibility_evidence)(
+                kind="connection_capacity",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                details={"limit": "reached"},
+            )
+            await self.close(code=1013)
             return
 
         self.pending_calls = PendingCalls()
@@ -74,7 +89,9 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             channel_name=self.channel_name,
             version=self.version,
         )
-        await self.accept(subprotocol=self.subprotocol)
+        await self.accept(
+            subprotocol=None if protocol_fallback else self.subprotocol
+        )
         asyncio.create_task(
             recover_connected_operations(
                 charger=self.charger,
@@ -113,8 +130,26 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         try:
             frame = parse_frame(content)
         except ProtocolFrameError as error:
+            unique_id = (
+                content[1]
+                if isinstance(content, list)
+                and len(content) > 1
+                and isinstance(content[1], str)
+                else ""
+            )
+            await sync_to_async(record_compatibility_evidence)(
+                kind="malformed_frame",
+                charger=self.charger,
+                protocol=self.subprotocol,
+                unique_id=unique_id,
+                details={
+                    "error_code": error.code,
+                    "description": error.description,
+                    "frame": content,
+                },
+            )
             await self.send_json(
-                CallError("", error.code, error.description, {}).to_wire()
+                CallError(unique_id, error.code, error.description, {}).to_wire()
             )
             return
         await sync_to_async(touch_connection)(

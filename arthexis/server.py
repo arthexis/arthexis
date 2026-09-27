@@ -5,8 +5,15 @@ import os
 from pathlib import Path
 
 
-def daphne_command(*, host="127.0.0.1", port=8888):
-    """Return the Daphne command for the current Python environment."""
+def daphne_command(
+    *,
+    host="127.0.0.1",
+    port=8888,
+    websocket_connect_timeout=10,
+    ping_interval=30,
+    ping_timeout=30,
+):
+    """Return the bounded Daphne command for the current Python environment."""
     executable = Path(os.environ.get("VIRTUAL_ENV", "")) / "bin" / "daphne"
     if not executable.is_file():
         executable = Path(os.sys.executable).with_name("daphne")
@@ -16,6 +23,12 @@ def daphne_command(*, host="127.0.0.1", port=8888):
         str(host),
         "-p",
         str(int(port)),
+        "--websocket_connect_timeout",
+        str(int(websocket_connect_timeout)),
+        "--ping-interval",
+        str(int(ping_interval)),
+        "--ping-timeout",
+        str(int(ping_timeout)),
         "arthexis.asgi:application",
     )
 
@@ -29,7 +42,19 @@ def main(
     """Replace this process with Daphne serving the Arthexis ASGI application."""
     os.environ["ARTHEXIS_DATA_DIR"] = str(Path(data_dir).expanduser())
     os.environ["ARTHEXIS_ALLOWED_HOSTS"] = allowed_hosts
-    command = daphne_command(host=host, port=port)
+    command = daphne_command(
+        host=host,
+        port=port,
+        websocket_connect_timeout=int(
+            os.environ.get("ARTHEXIS_OCPP_WEBSOCKET_CONNECT_TIMEOUT_SECONDS", "10")
+        ),
+        ping_interval=int(
+            os.environ.get("ARTHEXIS_OCPP_WEBSOCKET_PING_INTERVAL_SECONDS", "30")
+        ),
+        ping_timeout=int(
+            os.environ.get("ARTHEXIS_OCPP_WEBSOCKET_PING_TIMEOUT_SECONDS", "30")
+        ),
+    )
     os.execv(command[0], command)
 
 
