@@ -5,6 +5,7 @@ from typing import Protocol
 from asgiref.sync import sync_to_async
 from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.utils import timezone
 
 from apps.ocpp.domain.operations import (
@@ -78,6 +79,21 @@ class ExplicitDeliveryUnavailable(RuntimeError):
 
 class ProtocolVersionMismatch(ExplicitDeliveryUnavailable):
     """The configured operation version differs from the live connection."""
+
+
+async def connection_capacity_available(charger: Charger) -> bool:
+    """Return whether this charger may occupy a live OCPP session slot."""
+    return await sync_to_async(_connection_capacity_available)(charger)
+
+
+def _connection_capacity_available(charger: Charger) -> bool:
+    maximum = settings.OCPP_MAX_CONNECTIONS
+    if maximum <= 0:
+        return True
+    live = ChargerConnection.objects.filter(lease_expires_at__gte=timezone.now())
+    if live.filter(charger=charger).exists():
+        return True
+    return live.count() < maximum
 
 
 async def register_connection(
