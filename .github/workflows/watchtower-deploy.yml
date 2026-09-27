@@ -392,6 +392,12 @@ jobs:
 
           echo "remote_runtime_diagnostics=begin"
           sudo -n /usr/local/bin/gway --version || true
+          sudo -n /usr/local/bin/gway security scope list || true
+          if ! sudo -n /usr/local/bin/gway security scope show full-access; then
+            echo "remote_full_access_scope=missing"
+          else
+            echo "remote_full_access_scope=present"
+          fi
           sudo -n systemctl cat gway-remote-auth.service --no-pager || true
           sudo -n systemctl show gway-remote-auth.service -p ExecStart -p FragmentPath -p ActiveState -p SubState --no-pager || true
           sudo -n journalctl -u gway-remote-auth.service -n 100 --no-pager || true
