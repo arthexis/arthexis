@@ -18,6 +18,7 @@ from apps.ocpp.transport.connection import (
     negotiate_subprotocol,
 )
 from apps.ocpp.transport.dispatch import FrameDispatcher
+from apps.ocpp.transport.listener import trusted_charger_listener
 from apps.ocpp.transport.operations import (
     deliver_queued_operation,
     recover_connected_operations,
@@ -41,7 +42,11 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
 
         identity = self.scope["url_route"]["kwargs"]["charger_identity"]
         credentials = basic_credentials(self.scope.get("headers", []))
-        self.charger = await load_or_enroll_charger(identity, credentials)
+        self.charger = await load_or_enroll_charger(
+            identity,
+            credentials,
+            trusted_listener=trusted_charger_listener(self.scope),
+        )
         if self.charger is None:
             await self.close(code=4401)
             return
