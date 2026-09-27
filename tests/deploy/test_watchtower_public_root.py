@@ -1,107 +1,36 @@
 from pathlib import Path
 
 
-class WatchtowerWorkflowTests:
-    def test_public_markdown_root_is_asserted_after_exposure(self) -> None:
-        workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-            encoding="utf-8"
-        )
-        assert (
-            "grep -F '<h2 id=\"operational-capabilities\">Operational Capabilities</h2>'"
-            in workflow
-        )
-
-        assert "Verify public Markdown root" in workflow
-        assert (
-            "curl --fail --silent --show-error --retry 5 --retry-delay 1 "
-            "--retry-all-errors https://arthexis.com/"
-            in workflow
-        )
-        assert "grep -F '<h1 id=\"constellation\">Constellation</h1>'" in workflow
-
-    def test_public_watchtower_logs_are_minimal(self) -> None:
-        workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-            encoding="utf-8"
-        )
-        start = workflow.index("- name: Expose Arthexis publicly through Gway recipe")
-        public_workflow = workflow[start:]
-
-        assert (
-            "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}"
-            in public_workflow
-        )
-        for forbidden in (
-            "systemctl status",
-            "journalctl",
-            "managed_path=",
-            "data_path=",
-            "python --version",
-            "pip check 2>&1",
-            "Capture deployment evidence",
-            "Upload deployment evidence",
-            "actions/upload-artifact",
-        ):
-            assert forbidden not in public_workflow
-
-        assert 'echo "service=active"' in workflow
-
-        for status in (
-            'echo "public_exposure=ok"',
-            'echo "public_root=ok"',
-            'echo "django_check=ok"',
-            'echo "migration_drift=none"',
-            'echo "ocpp_matrix=ok"',
-        ):
-            assert status in public_workflow
+WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
 
 
-
-def test_watchtower_public_exposure_reuses_primary_edge_ipv4_for_remote_dns() -> None:
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert "getent ahostsv4 arthexis.com" in workflow
-    assert "getent ahostsv4 remote.arthexis.com" in workflow
-    assert "./deploy/remote-dns.rx" in workflow
-    assert "--public-ipv4 " in workflow
+def test_base_watchtower_stage_excludes_public_surface_convergence() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "default: arthexis" in workflow
+    assert "Expose Arthexis publicly through Gway recipe" not in workflow
+    assert "Verify public Markdown root" not in workflow
+    assert "./deploy/remote-dns.rx" not in workflow
+    assert "remote.arthexis.com" not in workflow
 
 
-
-def test_watchtower_remote_provision_failure_keeps_safe_diagnostics() -> None:
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert 'echo "remote_provision=failed"' in workflow
-    assert "systemctl status gway-mcp-server.service --no-pager" in workflow
-    assert "systemctl status gway-remote-auth.service --no-pager" in workflow
-    assert "journalctl -u gway-mcp-server.service -n 50 --no-pager" in workflow
-    assert "journalctl -u gway-remote-auth.service -n 50 --no-pager" in workflow
+def test_wire_stage_keeps_public_health_verification_bounded() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "- name: Verify Watchtower Wire stage" in workflow
+    assert "https://register.arthexis.com/health" in workflow
+    assert "curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors" in workflow
+    assert "set -x" not in workflow
 
 
-
-def test_watchtower_dns_bootstrap_uses_host_secret_store() -> None:
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-        encoding="utf-8"
-    )
-
+def test_wire_stage_uses_certbot_secret_without_dns_credentials() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
     assert "ACTIONS_GODADDY_PAT" not in workflow
     assert "ACTIONS_GODADDY_API_KEY" not in workflow
     assert "ACTIONS_GODADDY_API_SECRET" not in workflow
-    assert 'GODADDY_PAT="${godaddy_pat}"' not in workflow
-    assert 'GODADDY_API_KEY="${godaddy_key}"' not in workflow
-    assert 'GODADDY_API_SECRET="${godaddy_secret}"' not in workflow
-    assert "dns_credentials=missing" not in workflow
 
 
-def test_watchtower_dns_and_exposure_failures_keep_bounded_diagnostics() -> None:
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert 'echo "dns_bootstrap=failed"' in workflow
-    assert 'tail -n 20 "${dns_errors}"' in workflow
-    assert 'echo "public_exposure=failed"' in workflow
-    assert 'tail -n 30 "${exposure_errors}"' in workflow
-    assert "set -x" not in workflow
+def test_wire_preflight_records_service_and_listener_state() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "systemctl show gway-wire-enroll.service gway-wireguard-enroll.service" in workflow
+    assert "sport = :8787" in workflow
+    assert "gway -e wire watchtower --public-address 192.0.2.1" in workflow
