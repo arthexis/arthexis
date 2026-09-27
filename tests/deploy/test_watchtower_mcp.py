@@ -116,6 +116,21 @@ def test_base_watchtower_stage_excludes_remote_provisioning() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "Provision Watchtower remote policy and services" not in workflow
     assert "/usr/local/bin/gway ./deploy/remote.rx" not in workflow
+    assert "default: arthexis" in workflow
+
+
+def test_watchtower_deploy_accepts_remote_as_manual_gway_extension() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "          - remote" in workflow
+    assert "- name: Preflight Watchtower Remote stage" in workflow
+    assert "- name: Converge Watchtower Remote stage" in workflow
+    assert "- name: Verify Watchtower Remote stage" in workflow
+    assert "gway --recipe deploy/remote.rx" in workflow
+    assert "gway --recipe deploy/remote-expose.rx" in workflow
+    assert "systemctl is-active --quiet gway-mcp-server.service" in workflow
+    assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
+    assert "verify_remote_deployment.py local" in workflow
+    assert "verify_remote_deployment.py public" in workflow
 
 def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -365,10 +380,11 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
     assert "exec /usr/local/bin/gway ./deploy/ready.rx" not in workflow
 
 
-def test_base_watchtower_stage_does_not_run_remote_verifier() -> None:
+def test_remote_verifier_runs_only_in_remote_stage() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "verify_remote_deployment.py local" not in workflow
-    assert "verify_remote_deployment.py public" not in workflow
+    assert "if: env.WATCHTOWER_STAGE == 'remote'" in workflow
+    assert "verify_remote_deployment.py local" in workflow
+    assert "verify_remote_deployment.py public" in workflow
 
 def test_ready_recipe_executes_product_runtime_externally() -> None:
     recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
