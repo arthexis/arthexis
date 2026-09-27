@@ -5,7 +5,11 @@ import pytest
 from apps.events.models import EventEnvelope
 from apps.ocpp.models import ChargerTimelineProgress
 from apps.ocpp.services.timeline import observe_timeline
-from apps.ocpp.services.timeline_status import timeline_snapshot, timeline_status
+from apps.ocpp.services.timeline_status import (
+    query_timeline_status,
+    timeline_snapshot,
+    timeline_status,
+)
 from tests.apps.ocpp.builders import charger
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -116,3 +120,15 @@ def test_query_reports_lag_and_receipt_age_without_mutating_progress():
     assert snapshot["receipt_age_seconds"] == 300.0
     progress.refresh_from_db()
     assert progress.updated_at == updated_at
+
+
+
+def test_query_surface_resolves_charger_by_public_identity():
+    selected = charger("timeline-public-query")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+
+    snapshot = query_timeline_status(selected.identity, now=current)
+
+    assert snapshot["charger_id"] == selected.pk
+    assert snapshot["charger_identity"] == selected.identity
+    assert snapshot["state"] == ChargerTimelineProgress.State.UNKNOWN
