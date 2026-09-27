@@ -1,67 +1,128 @@
-# Events Architecture
+# Events and Celery
 
-The `events` app is Arthexis' durable domain-event boundary.
+Arthexis uses durable local state first and Celery for asynchronous delivery and
+maintenance. The application database and domain-specific retained evidence are
+authoritative; Redis/Celery are recoverable secondary infrastructure.
 
-## Current E0 contract
+This document inventories the event streams and Celery jobs currently implemented.
+It is descriptive of the codebase, not a list of planned event types.
 
-Today, publishing an event means validating a JSON-compatible mapping and
-persisting an `EventEnvelope` in the application database. Event persistence
-is local database work; it is not a Celery or broker operation.
+## Event lifecycle
 
-`publish()` is the strict API. Invalid event metadata, non-serializable
-payloads, or database failures propagate to the caller.
+Domain producers call `publish()` or `publish_safely()` to create an
+`EventEnvelope` in SQL. New envelopes start as `pending`.
 
-`publish_safely()` is the fail-soft API for protocol and other latency-sensitive
-paths. Expected validation, serialization, and database failures are logged and
-converted to `None`. A secondary event failure must not turn an otherwise valid
-OCPP exchange into a charger communication failure.
+Celery Beat runs `events.dispatch_pending` every 30 seconds. The dispatcher claims
+a bounded batch, then enqueues `events.process` with only the durable
+`event_id`. Workers reload the envelope from SQL and invoke handlers registered
+for its `event_type`.
 
-`published_at` is reserved for the durable delivery lifecycle introduced by
-the outbox work. E0 does not mark events published and does not couple event
-creation to Celery.
+Broker handoff is at-least-once. Consumers must therefore be idempotent. Failed
+broker handoffs are retained and retried with bounded backoff; stale
+`dispatching` claims can be reclaimed after five minutes.
 
-## Hot-path rule
+`published_at` means Celery accepted the processing task. It does not mean every
+subscriber completed.
 
-For OCPP and other live protocol handlers:
+## Event streams
 
-1. perform only reply-critical validation and authoritative state changes;
-2. persist any domain event locally when useful;
-3. return the protocol response without waiting for external brokers, email,
-   analytics, or other secondary systems.
+| Event type | Producer | Authoritative source | Payload / reference | Current consumer |
+| --- | --- | --- | --- | --- |
+| `ocpp.meter_values.received` | OCPP metering intake (`apps.ocpp.services.metering`) | Retained `MeterReadingBatch` / transaction meter evidence | Meter batch ID, charger ID, transaction ID when applicable, EVSE ID | `apps.ocpp.subscribers.process_meter_values_received`; recomputes retained transaction energy when a transaction ID is present |
+| `discovery.event` | Discovery projection (`apps.ocpp.services.discovery_handoff`) | Filesystem discovery session `events.jsonl` | Session ID, sequence, discovery event type/kind, optional artifact reference | No built-in domain subscriber yet; intended for independent live observers while full evidence is retrieved from the discovery report |
 
-The database is authoritative. Celery and Redis must remain recoverable
-secondary infrastructure rather than prerequisites for a valid immediate
-charger response.
+### OCPP meter events
 
-## E1 durable outbox
+Standalone retained OCPP 2.0.1 meter intake persists the meter batch and its
+protocol result first. Publication is scheduled with `transaction.on_commit`, so
+secondary processing cannot precede the authoritative database commit.
 
-E1 turns `EventEnvelope` into a SQL-backed outbox without changing the publish
-API. New events begin in `pending`. A Celery Beat task periodically claims due
-events in short database transactions, releases database locks, then hands only
-the durable `event_id` to the broker.
+The registered OCPP subscriber listens for `ocpp.meter_values.received`. If the
+event identifies a transaction, it recomputes transaction energy from retained
+meter evidence. Events without a transaction ID are valid and require no
+transaction recomputation.
 
-Successful broker handoff marks the event `published` and sets
-`published_at`. Broker failures become retryable `failed` rows with bounded
-backoff. A process that dies after claiming work leaves a `dispatching` event;
-claims older than five minutes are stale and can be recovered by a later pass.
+### Discovery events
 
-The broker handoff is at-least-once. A crash after the broker accepts a task but
-before SQL records `published` can cause the same event to be handed off again.
-Downstream event consumers therefore must be idempotent.
+Discovery has a different source of truth: each discovery session has an
+append-only filesystem `events.jsonl`. An observation is flushed and fsynced there
+before live projection is attempted.
 
-The generic worker reloads the full envelope from SQL by `event_id` and invokes
-registered consumers. SQL remains the source of truth; broker messages carry no
-copy of the domain payload.
+The projected `discovery.event` deliberately does not copy packet captures,
+OCPP payloads, notes, or other potentially large evidence. Consumers receive a
+stable session ID and sequence number and can retrieve the durable event/report
+by those identifiers. An artifact path may be included as a reference.
 
-`published_at` means that asynchronous processing was successfully handed to
-Celery. It does not mean that every eventual subscriber completed. Per-consumer
-delivery state can be introduced later if real consumers require that stronger
-contract.
+Projection is best-effort. Failure to create the SQL event envelope, failure of
+Celery, or broker outage must not invalidate or stop the discovery session.
+Filesystem evidence remains retrievable independently.
 
-## Planned evolution
+Discovery event subtypes currently come from the discovery evidence stream and
+include lifecycle/observation names such as `session_started`,
+`traffic_observed`, `dns_query`, `connection_attempt`, `csms_candidate`,
+`capture_started`, `capture_failed`, `redirect_observed`,
+`ocpp_connection`, `capture_succeeded`, and `session_completed`. They are
+carried in the `event_type` field of the outer `discovery.event` payload rather
+than becoming separate SQL event-envelope types.
 
-The next phases add restart-safe inbound OCPP replay identities, restore
-crash-safe transaction reconciliation, and progressively move secondary charger
-work behind durable event processing.
+## Celery tasks
 
-Those changes must preserve the E0 fail-soft hot-path rule.
+### Event delivery
+
+| Task | Trigger | Purpose |
+| --- | --- | --- |
+| `events.dispatch_pending` | Celery Beat, every 30 seconds | Claims pending/failed/stale event envelopes and hands their IDs to the broker |
+| `events.process` | Enqueued by the event dispatcher | Reloads one `EventEnvelope` from SQL and dispatches it to registered subscribers |
+
+### OCPP maintenance and reconciliation
+
+| Task | Scheduled today | Purpose |
+| --- | --- | --- |
+| `ocpp.maintenance.refresh_stale_connections` | Every hour | Clears stale charger connection state older than two hours |
+| `ocpp.maintenance.reconcile_meter_energy` | Every 60 seconds | Repairs stale transaction energy from authoritative retained meter evidence |
+| `ocpp.maintenance.reconcile_session_operations` | Every 60 seconds | Reconciles ambiguous remote start/stop operations from retained session evidence |
+| `ocpp.maintenance.reconcile_configuration_operations` | Not in the base Beat schedule | Reconciles ambiguous configuration writes and dispatches required observation operations |
+| `ocpp.maintenance.reconcile_availability_operations` | Not in the base Beat schedule | Reconciles ambiguous connector availability operations |
+| `ocpp.maintenance.reconcile_reservation_operations` | Not in the base Beat schedule | Reconciles ambiguous reservation mutations |
+| `ocpp.maintenance.reconcile_profile_operations` | Not in the base Beat schedule | Reconciles ambiguous charging-profile mutations |
+| `ocpp.maintenance.reconcile_local_list_operations` | Not in the base Beat schedule | Reconciles ambiguous local-list writes and dispatches required version observations |
+
+The unscheduled maintenance tasks are Celery-capable entry points but are not
+periodic jobs in the base `CELERY_BEAT_SCHEDULE`. Deployment-specific orchestration
+may invoke them explicitly; documentation should not imply that Beat runs them
+unless the schedule changes.
+
+## Producers and consumers
+
+Event producers own authoritative state changes; events describe work or facts
+that have already been retained. A producer must not require a live broker to
+complete a valid charger exchange.
+
+Consumers are registered in-process through `apps.events.registry.subscribe`.
+They receive the full SQL `EventEnvelope`, not a broker copy of its payload.
+Handlers must be idempotent because delivery is at-least-once.
+
+OCPP registers its subscribers through `apps.ocpp.subscribers`. Discovery
+currently has no mandatory built-in subscriber: this is intentional. LCD, audio,
+remote monitoring, Watchtower ingestion, or other observers can consume the
+stable discovery reference contract without becoming part of discovery
+persistence or charger operation.
+
+## Failure boundaries
+
+For live OCPP and discovery paths:
+
+1. perform reply-critical validation and authoritative state changes;
+2. durably retain domain/discovery evidence;
+3. project a compact event when useful;
+4. never wait for external consumers to finish before acknowledging valid
+   charger work.
+
+`publish()` is the strict event API and propagates validation/database errors.
+`publish_safely()` converts expected serialization/database publication failures
+to `None` after logging. Callers on especially sensitive paths may additionally
+guard projection so unexpected secondary failures cannot break the authoritative
+operation.
+
+Celery/Redis failure can delay event consumers and maintenance jobs, but it must
+not erase retained OCPP state or filesystem discovery evidence.

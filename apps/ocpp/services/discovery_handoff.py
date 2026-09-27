@@ -8,14 +8,35 @@ from typing import Any
 from django.conf import settings
 
 from arthexis.discovery import DiscoverySession, DiscoveryStore
+from apps.events.services import publish_safely
 from apps.ocpp.models import Charger
 
 logger = logging.getLogger(__name__)
 
 
+def _project_discovery_event(event: Mapping[str, Any]) -> object:
+    """Best-effort projection of one already-durable discovery event."""
+    payload = {
+        "session_id": event["session_id"],
+        "sequence": event["seq"],
+        "event_type": event["type"],
+        "kind": event["kind"],
+    }
+    if "artifact" in event:
+        payload["artifact"] = event["artifact"]
+    return publish_safely(
+        event_type="discovery.event",
+        producer="arthexis.discovery",
+        payload=payload,
+    )
+
+
 def discovery_store() -> DiscoveryStore:
     """Return the filesystem-backed discovery store for this Arthexis instance."""
-    return DiscoveryStore(Path(settings.DATA_DIR) / "discovery")
+    return DiscoveryStore(
+        Path(settings.DATA_DIR) / "discovery",
+        projector=_project_discovery_event,
+    )
 
 
 def arm_discovery_handoff(
