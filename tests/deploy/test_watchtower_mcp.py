@@ -366,3 +366,18 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
     assert "/opt/arthexis/.venv/bin/python -c" in workflow
     assert "from arthexis.ready import local" in workflow
     assert "exec /usr/local/bin/gway ./deploy/ready.rx" not in workflow
+
+
+def test_remote_verifier_uses_canonical_gway_runtime() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert (
+        "/var/lib/gway/venv/bin/python "
+        "/opt/arthexis/scripts/verify_remote_deployment.py local"
+        in workflow
+    )
+    assert (
+        "/opt/arthexis/.venv/bin/python "
+        "/opt/arthexis/scripts/verify_remote_deployment.py local"
+        not in workflow
+    )
