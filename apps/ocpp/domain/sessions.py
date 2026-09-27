@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 
+from django.conf import settings
 from django.db import transaction as db_transaction
 from django.utils import timezone
 
@@ -239,9 +240,47 @@ def record_v201_meter_values(
 def _record_meter_values(
     *, transaction: OcppTransaction, meter_values: object
 ) -> tuple[int, datetime | None]:
-    """Create sampled-value records and return the newest retained activity time."""
-    records: list[MeterValue] = []
+    """Create sampled-value records in bounded batches and return newest activity."""
+    if not isinstance(meter_values, list):
+        raise ValueError("meterValue must be a list")
+    batch_size = settings.OCPP_METER_VALUE_BATCH_SIZE
+    if batch_size <= 0:
+        raise ValueError("OCPP_METER_VALUE_BATCH_SIZE must be positive")
+
+    pending: list[MeterValue] = []
+    retained_count = 0
     latest_activity: datetime | None = None
+
+    def flush() -> None:
+        nonlocal retained_count
+        if not pending:
+            return
+        fingerprints = {record.source_fingerprint for record in pending}
+        existing = set(
+            transaction.meter_values.filter(
+                source_fingerprint__in=fingerprints
+            ).values_list("source_fingerprint", flat=True)
+        )
+        unique_records: list[MeterValue] = []
+        seen = set(existing)
+        for record in pending:
+            if record.source_fingerprint in seen:
+                continue
+            seen.add(record.source_fingerprint)
+            unique_records.append(record)
+        MeterValue.objects.bulk_create(
+            unique_records,
+            ignore_conflicts=True,
+            batch_size=batch_size,
+        )
+        persisted = set(
+            transaction.meter_values.filter(
+                source_fingerprint__in=fingerprints
+            ).values_list("source_fingerprint", flat=True)
+        )
+        retained_count += len(persisted - existing)
+        pending.clear()
+
     for meter_value in meter_values:
         if not isinstance(meter_value, dict):
             raise ValueError("Each meter value must be an object")
@@ -262,14 +301,7 @@ def _record_meter_values(
             measurand = str(
                 sampled_value.get("measurand", "Energy.Active.Import.Register")
             )
-            fingerprint = _meter_sample_fingerprint(
-                sampled_at=sampled_at,
-                value=value,
-                measurand=measurand,
-                unit=unit,
-                multiplier=multiplier,
-            )
-            records.append(
+            pending.append(
                 MeterValue(
                     transaction=transaction,
                     sampled_at=sampled_at,
@@ -277,30 +309,19 @@ def _record_meter_values(
                     measurand=measurand,
                     unit=unit,
                     multiplier=multiplier,
-                    source_fingerprint=fingerprint,
+                    source_fingerprint=_meter_sample_fingerprint(
+                        sampled_at=sampled_at,
+                        value=value,
+                        measurand=measurand,
+                        unit=unit,
+                        multiplier=multiplier,
+                    ),
                 )
             )
-
-    fingerprints = {record.source_fingerprint for record in records}
-    existing = set(
-        transaction.meter_values.filter(
-            source_fingerprint__in=fingerprints
-        ).values_list("source_fingerprint", flat=True)
-    )
-    unique_records: list[MeterValue] = []
-    seen = set(existing)
-    for record in records:
-        if record.source_fingerprint in seen:
-            continue
-        seen.add(record.source_fingerprint)
-        unique_records.append(record)
-    MeterValue.objects.bulk_create(unique_records, ignore_conflicts=True)
-    persisted = set(
-        transaction.meter_values.filter(
-            source_fingerprint__in=fingerprints
-        ).values_list("source_fingerprint", flat=True)
-    )
-    return len(persisted - existing), latest_activity
+            if len(pending) >= batch_size:
+                flush()
+    flush()
+    return retained_count, latest_activity
 
 
 @db_transaction.atomic
