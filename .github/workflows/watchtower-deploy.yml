@@ -220,10 +220,41 @@ jobs:
         run: |
           set -Eeuo pipefail
           install_log="${RUNNER_TEMP}/arthexis-product-install.log"
+          stale_product=""
+
+          # Recover only the known incomplete migration shape: /opt/arthexis exists
+          # but is not a standard Arthexis project tree. Never move a live runtime.
+          if sudo -n test -d /opt/arthexis &&
+             ! sudo -n test -f /opt/arthexis/pyproject.toml; then
+            unit=/etc/systemd/system/arthexis-arthexis.com.service
+            if sudo -n test -f "${unit}"; then
+              exec_start="$(sudo -n awk -F= '/^ExecStart=/{print substr($0,11)}' "${unit}")"
+              if [[ "${exec_start}" == *"/opt/arthexis/"* ]]; then
+                echo "Refusing to quarantine active incomplete /opt/arthexis runtime: ${exec_start}" >&2
+                exit 1
+              fi
+            fi
+
+            stale_product="/opt/.arthexis.incomplete-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            sudo -n rm -rf "${stale_product}"
+            sudo -n mv /opt/arthexis "${stale_product}"
+            echo "arthexis_product_quarantine=${stale_product}"
+          fi
+
           if ! sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >"${install_log}" 2>&1; then
             echo "arthexis_product_install=failed"
             cat "${install_log}"
+            if [[ -n "${stale_product}" ]] &&
+               ! sudo -n test -e /opt/arthexis &&
+               sudo -n test -e "${stale_product}"; then
+              sudo -n mv "${stale_product}" /opt/arthexis
+              echo "arthexis_product_quarantine=restored"
+            fi
             exit 1
+          fi
+
+          if [[ -n "${stale_product}" ]]; then
+            sudo -n rm -rf "${stale_product}"
           fi
           echo "arthexis_product_install=ok"
           sudo -n test -f /opt/arthexis/pyproject.toml
