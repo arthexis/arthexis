@@ -1,3 +1,4 @@
+# CI refresh: evaluate rollover authentication against current workflow set
 name: Watchtower Deploy
 
 on:
@@ -676,7 +677,10 @@ jobs:
           git checkout -B "$branch"
           git add VERSION pyproject.toml
           git commit -m "chore(release): advance arthexis to v${next_version}"
-          git push --force-with-lease origin "$branch"
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
+            push --force-with-lease origin "$branch"
+          unset auth_header
 
           existing="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number // empty')"
           if [[ -n "$existing" ]]; then
