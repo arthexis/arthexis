@@ -391,13 +391,18 @@ jobs:
           echo "remote_services=active"
 
           echo "remote_runtime_diagnostics=begin"
-          sudo -n /usr/local/bin/gway --version || true
+          sudo -n /var/lib/gway/venv/bin/python -c 'import importlib.metadata; print("gway_version=" + importlib.metadata.version("gway"))' || true
           sudo -n /usr/local/bin/gway security scope list || true
-          if ! sudo -n /usr/local/bin/gway security scope show full-access; then
+          if ! full_access="$(sudo -n /usr/local/bin/gway security scope show full-access)"; then
             echo "remote_full_access_scope=missing"
-          else
-            echo "remote_full_access_scope=present"
+            exit 1
           fi
+          echo "$full_access"
+          if [[ "$full_access" != *"__all__"* ]]; then
+            echo "remote_full_access_scope=invalid"
+            exit 1
+          fi
+          echo "remote_full_access_scope=present"
           sudo -n systemctl cat gway-remote-auth.service --no-pager || true
           sudo -n systemctl show gway-remote-auth.service -p ExecStart -p FragmentPath -p ActiveState -p SubState --no-pager || true
           sudo -n journalctl -u gway-remote-auth.service -n 100 --no-pager || true

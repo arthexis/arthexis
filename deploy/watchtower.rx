@@ -8,3 +8,7 @@
 recipe wire/watchtower
 --email [email]
 --public-address [public_ipv4]
+
+# The Wire recipe owns a systemd enrollment service; fail at composition time
+# if service installation silently failed to materialize its unit.
+check path /etc/systemd/system/gway-wire-enroll.service
