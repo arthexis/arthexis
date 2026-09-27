@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import perf_counter
-from typing import Callable
+from collections.abc import Callable
 
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
