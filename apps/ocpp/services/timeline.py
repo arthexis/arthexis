@@ -2,10 +2,13 @@
 
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from apps.events.services import publish_safely
 from apps.ocpp.models import Charger, ChargerTimelineProgress
+from apps.ocpp.services.timeline_status import timeline_snapshot
 
 LIVE_WINDOW = timedelta(minutes=15)
 
@@ -35,6 +38,16 @@ def observe_timeline(
     else:
         state = ChargerTimelineProgress.State.CATCHING_UP
     if progress.state != state:
+        previous_state = progress.state
         progress.state = state
         progress.save(update_fields=("state", "updated_at"))
+        payload = timeline_snapshot(progress)
+        payload["previous_state"] = previous_state
+        transaction.on_commit(
+            lambda payload=payload: publish_safely(
+                event_type="ocpp.timeline.state_changed",
+                producer="ocpp.timeline",
+                payload=payload,
+            )
+        )
     return progress
