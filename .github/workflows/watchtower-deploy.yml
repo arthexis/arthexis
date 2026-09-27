@@ -619,6 +619,7 @@ jobs:
           request("PUT", f"contents/{state_path}", payload)
           print(json.dumps(manifest, sort_keys=True))
           PY
+          echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Open next-version PR after accepted deployment
         if: env.WATCHTOWER_STAGE == 'arthexis' && env.ARTHEXIS_CHANGED == 'true'
@@ -640,9 +641,14 @@ jobs:
           branch="release/advance-arthexis-v${released}"
 
           git fetch origin main --depth=1
+          git worktree prune
           work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
-          git worktree add "$work" origin/main
+          cleanup() {
+            git -C "$GITHUB_WORKSPACE" worktree remove --force "$work" >/dev/null 2>&1 || true
+            rm -rf "$work"
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$work" origin/main
           cd "$work"
 
           current="$(tr -d '[:space:]' < VERSION)"
@@ -684,7 +690,7 @@ jobs:
 
 
       - name: Restore previous Gway runtime after failed deployment
-        if: ${{ failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true' }}
+        if: ${{ failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
         shell: bash
         run: |
           set -Eeuo pipefail
