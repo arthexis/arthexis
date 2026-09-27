@@ -60,6 +60,39 @@ def test_open_admission_still_rejects_disabled_chargers() -> None:
 
 
 @pytest.mark.django_db
+def test_trusted_listener_overrides_restricted_instance_admission() -> None:
+    policy = OcppPolicy.load()
+    policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED
+    policy.save()
+
+    selected = async_to_sync(load_or_enroll_charger)(
+        "charger-local",
+        None,
+        trusted_listener=True,
+    )
+
+    assert selected is not None
+    assert selected.identity == "charger-local"
+    assert selected.connection_token_hash == ""
+
+
+@pytest.mark.django_db
+def test_untrusted_listener_obeys_restricted_instance_admission() -> None:
+    policy = OcppPolicy.load()
+    policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED
+    policy.save()
+
+    selected = async_to_sync(load_or_enroll_charger)(
+        "charger-remote",
+        None,
+        trusted_listener=False,
+    )
+
+    assert selected is None
+    assert not Charger.objects.filter(identity="charger-remote").exists()
+
+
+@pytest.mark.django_db
 def test_restricted_admission_requires_enrollment_credentials_for_unknown_charger() -> None:
     policy = OcppPolicy.load()
     policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED

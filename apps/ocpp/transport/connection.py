@@ -52,11 +52,14 @@ def basic_credentials(headers: list[tuple[bytes, bytes]]) -> tuple[str, str] | N
 
 @sync_to_async
 def load_or_enroll_charger(
-    identity: str, credentials: tuple[str, str] | None
+    identity: str,
+    credentials: tuple[str, str] | None,
+    *,
+    trusted_listener: bool = False,
 ) -> Charger | None:
-    """Load or enroll a charger under the instance admission policy."""
+    """Load or enroll a charger under listener and instance admission policy."""
     policy = OcppPolicy.load()
-    open_admission = (
+    open_admission = trusted_listener or (
         policy.charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
     )
     charger = Charger.objects.filter(identity=identity).first()
