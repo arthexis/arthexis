@@ -45,6 +45,6 @@ local validation. Do not use CI status as proof unless asked. The orphan
 `arthexis-rebuild` branch is an integration handoff, not authorization to merge
 or deploy it.
 
-### Gway expression mode
+### Gway resolution
 
-Gway `-e` / `--expression` takes an expression value; it is not an explain, dry-run, or command-resolution flag. For example, `gway -e '[site]'` resolves that expression. Do not use `gway -e wire watchtower` to inspect how `wire watchtower` would dispatch: argparse treats `wire` as the expression and `watchtower` as an unexpected positional recipe-context argument. Until Gway exposes a dedicated non-executing resolver/introspection command, validate sampler availability with filesystem/read-only health checks and execute operational commands only when mutation is intended.
+Use `gway resolve VALUE` for non-mutating semantic value/sigil resolution and `gway resolve TOKEN TOKEN...` to inspect which operation or sampler recipe normal dispatch would select without executing it. The former `-e`/`--expression` CLI flag has been removed; do not use `-e` as explain or dry-run syntax.
