@@ -455,8 +455,8 @@ def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None
 def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     gate = workflow.index("  queue-gate:")
-    deploy = workflow.index("  deploy:")
-    runner = workflow.index("runs-on: [self-hosted, Linux, X64, arthexis-ci]")
+    deploy = workflow.index("\n  deploy:\n    name: Watchtower Deploy\n", gate)
+    runner = workflow.index("runs-on: [self-hosted, Linux, X64, arthexis-ci]", deploy)
 
     assert gate < deploy < runner
     assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
