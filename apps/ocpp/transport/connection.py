@@ -18,17 +18,13 @@ SUBPROTOCOL_VERSIONS = {
 }
 
 
-class ConnectionRejected(ValueError):
-    """The client did not offer a retained OCPP subprotocol."""
-
-
 def negotiate_subprotocol(requested: list[str]) -> tuple[str, ProtocolVersion]:
-    """Select the first client-offered retained OCPP subprotocol."""
+    """Select a retained protocol, falling back to OCPP 1.6J for compatibility."""
     for protocol in requested:
         version = SUBPROTOCOL_VERSIONS.get(protocol)
         if version is not None:
             return protocol, version
-    raise ConnectionRejected("No supported OCPP subprotocol was offered.")
+    return "ocpp1.6", ProtocolVersion.OCPP_16
 
 
 def basic_credentials(headers: list[tuple[bytes, bytes]]) -> tuple[str, str] | None:

@@ -11,6 +11,7 @@ from apps.ocpp.protocol.correlation import PendingCalls
 from apps.ocpp.protocol.frames import Call, CallError, CallResult, Frame
 from apps.ocpp.protocol.registry import resolve_action
 from apps.ocpp.protocol.replay import replay_context_for_action
+from apps.ocpp.services.compatibility import record_compatibility_evidence
 from apps.ocpp.services.intake import (
     generic_notification_response,
     is_report_action,
@@ -58,7 +59,15 @@ class FrameDispatcher:
 
     async def dispatch(self, frame: Frame) -> CallResult | CallError | None:
         if isinstance(frame, (CallResult, CallError)):
-            self.pending_calls.resolve(frame)
+            resolved = self.pending_calls.resolve(frame)
+            if not resolved:
+                await sync_to_async(record_compatibility_evidence)(
+                    kind="unmatched_response",
+                    charger=self.charger,
+                    protocol=self.version.value,
+                    unique_id=frame.unique_id,
+                    details={"frame_type": type(frame).__name__, "frame": frame.to_wire()},
+                )
             return None
 
         contract = resolve_action(
@@ -67,6 +76,14 @@ class FrameDispatcher:
             action=frame.action,
         )
         if contract is None:
+            await sync_to_async(record_compatibility_evidence)(
+                kind="unsupported_action",
+                charger=self.charger,
+                protocol=self.version.value,
+                unique_id=frame.unique_id,
+                action=frame.action,
+                details={"payload": frame.payload},
+            )
             return CallError(
                 unique_id=frame.unique_id,
                 code="NotSupported",
@@ -76,6 +93,14 @@ class FrameDispatcher:
 
         handler = self.handler_resolver(frame.action)
         if handler is None:
+            await sync_to_async(record_compatibility_evidence)(
+                kind="unimplemented_action",
+                charger=self.charger,
+                protocol=self.version.value,
+                unique_id=frame.unique_id,
+                action=frame.action,
+                details={"payload": frame.payload},
+            )
             return CallError(
                 unique_id=frame.unique_id,
                 code="NotSupported",

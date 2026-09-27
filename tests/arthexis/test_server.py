@@ -55,3 +55,28 @@ def test_watchtower_uses_native_arthexis_server_module():
     assert native in workflow
     assert "-m arthexis.server" not in workflow
     assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
+
+
+
+def test_daphne_command_configures_websocket_resource_bounds(monkeypatch):
+    monkeypatch.setenv("VIRTUAL_ENV", "/missing")
+    command = server.daphne_command(
+        websocket_connect_timeout=7,
+        ping_interval=11,
+        ping_timeout=13,
+    )
+
+    assert "--websocket_connect_timeout" in command
+    assert command[command.index("--websocket_connect_timeout") + 1] == "7"
+    assert "--ping-interval" in command
+    assert command[command.index("--ping-interval") + 1] == "11"
+    assert "--ping-timeout" in command
+    assert command[command.index("--ping-timeout") + 1] == "13"
+
+
+def test_patched_daphne_provides_websocket_message_and_frame_limits():
+    from pathlib import Path
+
+    project = Path("pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"daphne==4.2.3"' in project
