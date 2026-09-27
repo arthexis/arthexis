@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from apps.cards.models import AuthorizationAttempt, CardCredential
 from apps.energy.models import CustomerAccount, EnergyTariff, LedgerEntry
 from apps.ocpp.models import Charger, Connector, MeterValue, OcppTransaction
+from apps.ocpp.services.authorization import authorize_id_tag
 from arthexis.reconciliation.importer import reconcile, write_receipt
 
 
@@ -20,7 +21,7 @@ class ReconciliationTests(TestCase):
         with sqlite3.connect(self.source) as database:
             database.executescript(
                 """
-                CREATE TABLE core_rfid (id integer, rfid text, custom_label text, active integer);
+                CREATE TABLE core_rfid (id integer, rfid text, custom_label text, active integer, account_id integer);
                 CREATE TABLE cards_rfidattempt (id integer, rfid text, status text);
                 CREATE TABLE core_energytariff (id integer, price_mxn numeric);
                 CREATE TABLE core_account (id integer, name text, balance_kw numeric, energy_tariff_id integer);
@@ -34,7 +35,7 @@ class ReconciliationTests(TestCase):
                 CREATE TABLE ocpp_chargingprofile (id integer, charger_id integer, charging_profile_id text, stack_level integer, purpose text, kind text);
                 CREATE TABLE ocpp_cpreservation (id integer, charger_id integer, connector_id integer, reservation_id text, id_tag text, expiry_date text, status text);
                 CREATE TABLE ocpp_chargervariable (id integer, charger_id integer, component text, variable text, attribute_type text, value text);
-                INSERT INTO core_rfid VALUES (1, 'raw-card-id-must-not-persist', 'Front desk', 1);
+                INSERT INTO core_rfid VALUES (1, 'TAG-1', 'Front desk', 1, 1);
                 INSERT INTO cards_rfidattempt VALUES (1, 'raw-card-id-must-not-persist', 'accepted');
                 INSERT INTO core_energytariff VALUES (1, 2.75);
                 INSERT INTO core_account VALUES (1, 'Legacy customer', 12.5, 1);
@@ -72,8 +73,18 @@ class ReconciliationTests(TestCase):
         self.assertEqual(OcppTransaction.objects.count(), 1)
         self.assertEqual(MeterValue.objects.count(), 1)
         self.assertEqual(report.imported["chargers"], 1)
+        card = CardCredential.objects.get()
+        account = CustomerAccount.objects.get()
+        self.assertEqual(card.ocpp_id_tag, "TAG-1")
+        self.assertEqual(card.account, account)
+        self.assertEqual(report.imported["card_account_links"], 1)
+        selected = Charger.objects.get()
+        authorization = authorize_id_tag(charger=selected, id_tag="TAG-1")
+        self.assertTrue(authorization.accepted)
+        self.assertEqual(authorization.card, card)
+        self.assertEqual(authorization.account, account)
         self.assertNotIn(
-            "raw-card-id-must-not-persist", str(CardCredential.objects.values())
+            "TAG-1", CardCredential.objects.get().external_id
         )
 
     @override_settings(ARTHEXIS_DATA_DIR="/tmp")
@@ -83,7 +94,7 @@ class ReconciliationTests(TestCase):
 
         data = json.loads(receipt.read_text())
         self.assertEqual(data["format"], "arthexis-reconciliation-v1")
-        self.assertNotIn("raw-card-id-must-not-persist", receipt.read_text())
+        self.assertNotIn("TAG-1", receipt.read_text())
 
     def test_unrelated_sqlite_file_is_rejected_before_target_writes(self) -> None:
         unrelated = Path(self.temporary_directory.name) / "unrelated.sqlite3"
