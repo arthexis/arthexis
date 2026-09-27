@@ -46,9 +46,12 @@ def test_watchtower_uses_native_arthexis_server_module():
     )
 
     native = (
-        "/opt/arthexis/.venv/bin/python -m arthexis.server "
-        "--host 127.0.0.1 --port 8888 "
-        "--data-dir /var/lib/arthexis --allowed-hosts arthexis.com"
+        '/opt/arthexis/.venv/bin/python -c "'
+        "from arthexis.server import main; "
+        "main(host='127.0.0.1', port=8888, data_dir='/var/lib/arthexis', "
+        "allowed_hosts='arthexis.com')"
+        '"'
     )
     assert native in workflow
+    assert "-m arthexis.server" not in workflow
     assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
