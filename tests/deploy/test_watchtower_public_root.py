@@ -33,4 +33,5 @@ def test_wire_preflight_records_service_and_listener_state() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "systemctl show gway-wire-enroll.service gway-wireguard-enroll.service" in workflow
     assert "sport = :8787" in workflow
-    assert "gway -e wire watchtower --public-address 192.0.2.1" in workflow
+    assert "gway -e wire watchtower" not in workflow
+    assert "test -f /var/lib/gway/venv/share/gway/sampler/wire/watchtower.rx" in workflow
