@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -278,6 +278,7 @@ async def run_v16_database_replay(
     source_charger_identity: str | None = None,
     batch_size: int = 250,
     pacing: ReplayPacing | None = None,
+    after_event: Callable[[int], Awaitable[None]] | None = None,
 ) -> tuple[str, ...]:
     """Replay migrated transaction history back-to-back at charger speed."""
 
@@ -310,6 +311,8 @@ async def run_v16_database_replay(
                 raise ValueError("StartTransaction response is missing transactionId")
             runtime_transactions[event.source_transaction_id] = runtime_id
         completed.append(event.action)
+        if after_event is not None:
+            await after_event(len(completed))
 
     return tuple(completed)
 

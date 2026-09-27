@@ -1,9 +1,9 @@
 """Deterministic synthetic backlog load scenarios for OCPP 1.6."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import perf_counter
-from collections.abc import Callable
 
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
@@ -14,7 +14,7 @@ Clock = Callable[[], float]
 
 @dataclass(frozen=True)
 class BacklogLoadResult:
-    """Baseline protocol measurements for one synthetic backlog drain."""
+    """Baseline protocol measurements for one backlog drain."""
 
     requested_meter_values: int
     attempted: int
@@ -24,6 +24,10 @@ class BacklogLoadResult:
     throughput_per_second: float
     mean_latency_seconds: float
     max_latency_seconds: float
+    live_probes: int = 0
+    live_failures: int = 0
+    mean_live_latency_seconds: float = 0.0
+    max_live_latency_seconds: float = 0.0
 
 
 async def run_v16_historical_backlog(
@@ -32,6 +36,8 @@ async def run_v16_historical_backlog(
     meter_values: int,
     start_at: datetime,
     spacing: timedelta = timedelta(seconds=1),
+    live_every: int = 0,
+    live_action: str = "Heartbeat",
     clock: Clock = perf_counter,
 ) -> BacklogLoadResult:
     """Drain one deterministic historical transaction through real OCPP handlers."""
@@ -41,6 +47,8 @@ async def run_v16_historical_backlog(
         raise ValueError("start_at must be timezone-aware")
     if spacing <= timedelta(0):
         raise ValueError("spacing must be positive")
+    if live_every < 0:
+        raise ValueError("live_every cannot be negative")
     if charger.authority_cutover_at is None:
         raise ValueError("historical backlog load requires authority_cutover_at")
     stop_at = start_at + spacing * (meter_values + 1)
@@ -48,10 +56,13 @@ async def run_v16_historical_backlog(
         raise ValueError("synthetic backlog timestamps must predate authority cutover")
 
     client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    live_client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
     latencies: list[float] = []
+    live_latencies: list[float] = []
     attempted = 0
     succeeded = 0
     failed = 0
+    live_failures = 0
     run_started = clock()
 
     async def call(action: str, payload: dict[str, object]):
@@ -67,6 +78,17 @@ async def run_v16_historical_backlog(
             latencies.append(max(0.0, clock() - started))
         succeeded += 1
         return response
+
+    async def probe() -> None:
+        nonlocal live_failures
+        started = clock()
+        try:
+            await live_client.call(live_action, _live_payload(live_action))
+        except Exception:
+            live_failures += 1
+            raise
+        finally:
+            live_latencies.append(max(0.0, clock() - started))
 
     started = await call(
         "StartTransaction",
@@ -99,6 +121,8 @@ async def run_v16_historical_backlog(
                 ],
             },
         )
+        if live_every and (index + 1) % live_every == 0:
+            await probe()
 
     await call(
         "StopTransaction",
@@ -119,7 +143,23 @@ async def run_v16_historical_backlog(
         throughput_per_second=(succeeded / elapsed) if elapsed else 0.0,
         mean_latency_seconds=(sum(latencies) / len(latencies)) if latencies else 0.0,
         max_latency_seconds=max(latencies, default=0.0),
+        live_probes=len(live_latencies),
+        live_failures=live_failures,
+        mean_live_latency_seconds=(
+            sum(live_latencies) / len(live_latencies) if live_latencies else 0.0
+        ),
+        max_live_latency_seconds=max(live_latencies, default=0.0),
     )
+
+
+def _live_payload(action: str) -> dict[str, object]:
+    if action == "Heartbeat":
+        return {}
+    if action == "Authorize":
+        return {"idTag": "live-load-probe"}
+    if action == "StatusNotification":
+        return {"connectorId": 1, "status": "Available"}
+    raise ValueError(f"Unsupported live probe action: {action}")
 
 
 def _timestamp(value: datetime) -> str:
