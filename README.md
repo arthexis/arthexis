@@ -109,7 +109,6 @@ The protocol matrix describes what Arthexis can exchange with a charger. The app
 | **Explicit charger control** | Request reset, remote start, or remote stop for one selected charger. Arthexis derives the correct OCPP 1.6 or 2.0.1 action from the charger's configured protocol and rejects incompatible options before delivery. |
 | **Operation correlation** | Track outbound protocol calls through pending, completed, errored, timed-out, and disconnected outcomes without treating an attempted send as a successful charger action. |
 | **Administration** | Inspect and maintain retained application records through Django admin, including chargers, sessions, operation outcomes, authorization state, certificates, reservations, profiles, and related records. |
-| **Structured events** | Publish and persist typed event envelopes with an event type, producer, JSON payload, creation time, and publication time. |
 | **Energy and account records** | Maintain customer accounts, tariffs, kWh balances, ledger entries, logical card credentials, and charging attribution data used by retained authorization and accounting flows. |
 | **Node topology** | Record Terminal, Control, Satellite, and Watchtower node identities and explicit links between nodes without dynamically changing the installed Django application set. |
 
@@ -189,16 +188,6 @@ The fleet command is read-only:
 ```
 
 It can filter by charger identity and by enabled, connected, or charging state, and can include connector, transaction, and energy detail.
-
-### Publish a structured event
-
-Events can be published explicitly from the application command line:
-
-```bash
-.venv/bin/python manage.py event publish charger.audit --producer operator --payload '{"source":"manual"}'
-```
-
-The payload must be a JSON object. The command persists the event envelope and prints its generated event identifier.
 
 ### Administration
 
