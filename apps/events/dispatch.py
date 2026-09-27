@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -30,10 +31,18 @@ def _safe_error(error: Exception) -> str:
     return f"Broker handoff failed: {type(error).__name__}"
 
 
+def _batch_limit(limit: int | None) -> int:
+    selected = settings.EVENT_DISPATCH_BATCH_SIZE if limit is None else int(limit)
+    if selected <= 0:
+        raise ValueError("event dispatch batch size must be positive")
+    return selected
+
+
 def claim_pending_events(
-    *, limit: int = DEFAULT_BATCH_SIZE, now=None
+    *, limit: int | None = None, now=None
 ) -> list[EventEnvelope]:
     """Claim due or stale events without holding locks during broker I/O."""
+    limit = _batch_limit(limit)
     current = now or timezone.now()
     stale_before = current - STALE_DISPATCH_AFTER
     due = Q(
@@ -104,7 +113,7 @@ def mark_failed(envelope: EventEnvelope, error: Exception, *, now=None) -> None:
 
 def dispatch_pending_events_batch(
     *,
-    limit: int = DEFAULT_BATCH_SIZE,
+    limit: int | None = None,
     enqueue: Enqueue | None = None,
     now=None,
 ) -> dict[str, int]:
