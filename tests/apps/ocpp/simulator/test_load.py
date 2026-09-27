@@ -74,3 +74,25 @@ def test_historical_backlog_load_requires_authority_cutover() -> None:
             meter_values=1,
             start_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+
+
+
+def test_historical_backlog_load_injects_live_probes() -> None:
+    cutover = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    target = charger("backlog-load-live")
+    target.authority_cutover_at = cutover
+    target.save(update_fields=("authority_cutover_at",))
+
+    result = async_to_sync(run_v16_historical_backlog)(
+        target,
+        meter_values=6,
+        start_at=cutover - timedelta(days=1),
+        live_every=2,
+        live_action="Heartbeat",
+        clock=StepClock(),
+    )
+
+    assert result.live_probes == 3
+    assert result.live_failures == 0
+    assert result.mean_live_latency_seconds > 0
+    assert result.max_live_latency_seconds >= result.mean_live_latency_seconds
