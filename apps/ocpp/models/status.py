@@ -20,3 +20,23 @@ class OperationalStatusRecord(models.Model):
     payload = models.JSONField(default=dict)
     reported_at = models.DateTimeField(null=True, blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
+
+
+class ChargerTimelineProgress(models.Model):
+    """Observed charger timeline progress, independent from transport health."""
+
+    class State(models.TextChoices):
+        UNKNOWN = "unknown", "Unknown"
+        HISTORICAL = "historical", "Historical"
+        CATCHING_UP = "catching_up", "Catching up"
+        LIVE = "live", "Live"
+
+    charger = models.OneToOneField(
+        Charger, on_delete=models.CASCADE, related_name="timeline_progress"
+    )
+    state = models.CharField(max_length=16, choices=State.choices, default=State.UNKNOWN)
+    newest_event_at = models.DateTimeField(null=True, blank=True)
+    last_received_at = models.DateTimeField(null=True, blank=True)
+    historical_events_seen = models.PositiveBigIntegerField(default=0)
+    observed_events = models.PositiveBigIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
