@@ -389,6 +389,19 @@ jobs:
           sudo -n systemctl is-active --quiet gway-remote-auth.service
           sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/verify_remote_deployment.py local
           echo "remote_services=active"
+
+          echo "remote_runtime_diagnostics=begin"
+          sudo -n /usr/local/bin/gway --version || true
+          sudo -n /usr/local/bin/gway security scope list || true
+          if ! sudo -n /usr/local/bin/gway security scope show full-access; then
+            echo "remote_full_access_scope=missing"
+          else
+            echo "remote_full_access_scope=present"
+          fi
+          sudo -n systemctl cat gway-remote-auth.service --no-pager || true
+          sudo -n systemctl show gway-remote-auth.service -p ExecStart -p FragmentPath -p ActiveState -p SubState --no-pager || true
+          sudo -n journalctl -u gway-remote-auth.service -n 100 --no-pager || true
+          echo "remote_runtime_diagnostics=end"
       - name: Expose Arthexis publicly through Gway recipe
         shell: bash
         env:
@@ -439,7 +452,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n systemctl is-active --quiet gway-wire-enroll.service
+          if ! sudo -n systemctl is-active --quiet gway-wire-enroll.service; then
+            echo "wire_extension=failed"
+            sudo -n systemctl status gway-wire-enroll.service --no-pager || true
+            sudo -n journalctl -u gway-wire-enroll.service -n 100 --no-pager || true
+            exit 1
+          fi
           sudo -n sh -c 'exec /usr/local/bin/gway log sources' | grep -F 'gway/wire-enroll' >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
             https://register.arthexis.com/health >/dev/null
