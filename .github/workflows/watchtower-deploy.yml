@@ -716,7 +716,7 @@ jobs:
           git add VERSION pyproject.toml
           git commit -m "chore(release): advance arthexis to v${next_version}"
           auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             push --force-with-lease origin "$branch"
           unset auth_header
 
