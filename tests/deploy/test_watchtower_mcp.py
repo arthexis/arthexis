@@ -436,3 +436,27 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
     assert 'push --force-with-lease origin "$branch"' in workflow
     assert "https://$GH_TOKEN@" not in workflow
+
+
+def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "queue-gate:" in workflow
+    assert "name: Coalesce active PR queue" in workflow
+    assert "for repository in arthexis/arthexis arthexis/gway; do" in workflow
+    assert "pulls?state=open&per_page=100" in workflow
+    assert 'index("on-hold")' in workflow
+    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in workflow
+    assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in workflow
+    assert "needs: [classify, queue-gate]" in workflow
+    assert "needs.queue-gate.outputs.deploy == 'true'" in workflow
+
+
+def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    gate = workflow.index("  queue-gate:")
+    deploy = workflow.index("  deploy:")
+    runner = workflow.index("runs-on: [self-hosted, Linux, X64, arthexis-ci]")
+
+    assert gate < deploy < runner
+    assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
