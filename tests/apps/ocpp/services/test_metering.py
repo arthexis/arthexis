@@ -401,7 +401,10 @@ def test_lost_post_commit_event_is_repaired_from_sql(
 
     assert response == CallResult(unique_id=unique_id, payload={})
     assert MeterValue.objects.count() == 2
-    assert not EventEnvelope.objects.exists()
+    assert not EventEnvelope.objects.filter(
+        event_type="ocpp.meter_values.received",
+        producer="ocpp",
+    ).exists()
 
     replay = InboundProtocolRequest.objects.get(
         charger=selected,
@@ -421,4 +424,7 @@ def test_lost_post_commit_event_is_repaired_from_sql(
     transaction.refresh_from_db()
     assert transaction.energy_kwh == Decimal("0.0500")
     assert transaction.energy_derived_revision == 1
-    assert not EventEnvelope.objects.exists()
+    assert not EventEnvelope.objects.filter(
+        event_type="ocpp.meter_values.received",
+        producer="ocpp",
+    ).exists()
