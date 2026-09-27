@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from apps.events.dispatch import (
@@ -195,3 +196,60 @@ def test_process_event_loads_envelope_and_invokes_subscriber(event_factory) -> N
     assert count == 1
     dispatch.assert_called_once()
     assert dispatch.call_args.args[0].pk == envelope.pk
+
+
+
+@override_settings(EVENT_DISPATCH_BATCH_SIZE=37)
+def test_large_backlog_claims_only_configured_batch(event_factory) -> None:
+    for index in range(1000):
+        event_factory(payload={"index": index})
+
+    claimed = claim_pending_events()
+
+    assert len(claimed) == 37
+    assert (
+        EventEnvelope.objects.filter(
+            delivery_status=EventEnvelope.DeliveryStatus.PENDING
+        ).count()
+        == 963
+    )
+    assert (
+        EventEnvelope.objects.filter(
+            delivery_status=EventEnvelope.DeliveryStatus.DISPATCHING
+        ).count()
+        == 37
+    )
+
+
+@override_settings(EVENT_DISPATCH_BATCH_SIZE=23)
+def test_broker_outage_fails_only_bounded_batch_and_preserves_backlog(
+    event_factory,
+) -> None:
+    for index in range(250):
+        event_factory(payload={"index": index})
+
+    result = dispatch_pending_events_batch(
+        enqueue=Mock(side_effect=ConnectionError("broker unavailable")),
+    )
+
+    assert result == {"claimed": 23, "published": 0, "failed": 23}
+    assert (
+        EventEnvelope.objects.filter(
+            delivery_status=EventEnvelope.DeliveryStatus.FAILED
+        ).count()
+        == 23
+    )
+    assert (
+        EventEnvelope.objects.filter(
+            delivery_status=EventEnvelope.DeliveryStatus.PENDING
+        ).count()
+        == 227
+    )
+
+
+@override_settings(EVENT_DISPATCH_BATCH_SIZE=0)
+def test_invalid_dispatch_batch_size_fails_fast(event_factory) -> None:
+    event_factory()
+
+    with pytest.raises(ValueError, match="batch size must be positive"):
+        claim_pending_events()
