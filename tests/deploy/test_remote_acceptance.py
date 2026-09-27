@@ -47,5 +47,12 @@ def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
 
     assert "stage:" in workflow
     assert "default: arthexis" in workflow
-    assert "verify_remote_deployment.py local" not in workflow
-    assert "verify_remote_deployment.py public" not in workflow
+    assert "default: arthexis" in workflow
+    assert "- name: Preflight Watchtower Remote stage" in workflow
+    assert "- name: Converge Watchtower Remote stage" in workflow
+    assert "- name: Verify Watchtower Remote stage" in workflow
+    assert "if: env.WATCHTOWER_STAGE == 'remote'" in workflow
+    assert "gway --recipe deploy/remote.rx" in workflow
+    assert "gway --recipe deploy/remote-expose.rx" in workflow
+    assert "verify_remote_deployment.py local" in workflow
+    assert "verify_remote_deployment.py public" in workflow
