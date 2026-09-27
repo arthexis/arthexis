@@ -52,16 +52,19 @@ def test_state_transition_publishes_operator_event_after_commit():
 def test_same_state_does_not_emit_duplicate_transition_event():
     selected = charger("timeline-stable")
     received = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
-    event = received - timedelta(days=30)
 
-    observe_timeline(charger=selected, event_at=event, received_at=received)
     observe_timeline(
         charger=selected,
-        event_at=event + timedelta(days=1),
+        event_at=received - timedelta(minutes=2),
+        received_at=received,
+    )
+    observe_timeline(
+        charger=selected,
+        event_at=received - timedelta(minutes=1),
         received_at=received + timedelta(seconds=1),
     )
 
     assert EventEnvelope.objects.filter(
         event_type="ocpp.timeline.state_changed",
         producer="ocpp.timeline",
-    ).count() == 2
+    ).count() == 1
