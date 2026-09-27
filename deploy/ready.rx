@@ -1,8 +1,8 @@
 # Wait for the local Arthexis service to become healthy without importing
 # the product package into the GWAY control-plane runtime.
-ingest /opt/arthexis/.venv/bin/ready --kind proc --aka arthexis-ready
+ingest /opt/arthexis/.venv/bin/python --kind proc --aka arthexis-python
 
-arthexis-ready --local
+arthexis-python -m arthexis.ready --local
 --host [host|127.0.0.1]
 --port [port|8888]
 --domain [domain|arthexis.com]
