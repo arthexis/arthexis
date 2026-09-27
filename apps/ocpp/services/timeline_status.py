@@ -7,6 +7,14 @@ from django.utils import timezone
 from apps.ocpp.models import Charger, ChargerTimelineProgress
 
 
+def query_timeline_status(
+    identity: str, *, now: datetime | None = None
+) -> dict[str, object]:
+    """Resolve a charger by its public identity and return read-only health."""
+    charger = Charger.objects.get_by_natural_key(identity)
+    return timeline_status(charger, now=now)
+
+
 def timeline_status(
     charger: Charger, *, now: datetime | None = None
 ) -> dict[str, object]:
