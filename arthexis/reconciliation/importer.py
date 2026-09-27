@@ -202,10 +202,6 @@ class _Importer:
                 linked += 1
         if linked:
             self.report.count("card_account_links", linked)
-        else:
-            self.report.skipped["card_account_links"] = (
-                "no deterministic legacy RFID/account relationship"
-            )
 
     def ledger(self) -> None:
         from apps.energy.models import LedgerEntry
