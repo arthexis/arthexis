@@ -16,8 +16,16 @@ from apps.ocpp.domain.sessions import (
 from apps.ocpp.models import Charger, InboundProtocolRequest, OcppTransaction
 from apps.ocpp.services.authorization import authorize_id_tag
 from apps.ocpp.services.replay import complete_with_result
+from apps.ocpp.services.timeline import observe_timeline
+from apps.ocpp.services.timeline_evidence import newest_event_at
 
 logger = logging.getLogger(__name__)
+
+
+def _observe(charger: Charger, action: str, payload: dict[str, object]) -> None:
+    event_at = newest_event_at(action, payload)
+    if event_at is not None:
+        observe_timeline(charger=charger, event_at=event_at)
 
 @transaction.atomic
 def process_v16_start_transaction(
@@ -64,6 +72,7 @@ def process_v16_start_transaction(
                 "transactionId": selected.pk,
             }
 
+    _observe(charger, "StartTransaction", payload)
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
     return response
@@ -120,6 +129,7 @@ def process_v201_transaction_event(
         live_evidence=payload.get("offline") is not True,
     )
     response = {"idTokenInfo": {"status": "Accepted"}}
+    _observe(charger, "TransactionEvent", payload)
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
     return response
@@ -168,6 +178,7 @@ def process_v16_meter_values(
     response: dict[str, object] = {}
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
+    _observe(charger, "MeterValues", payload)
     transaction.on_commit(
         lambda: _publish_transaction_meter_event(
             charger_id=charger.pk,
@@ -198,6 +209,7 @@ def process_v201_meter_values(
     response: dict[str, object] = {}
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
+    _observe(charger, "MeterValues", payload)
     transaction.on_commit(
         lambda: _publish_transaction_meter_event(
             charger_id=charger.pk,
@@ -223,6 +235,7 @@ def process_v16_stop_transaction(
         timestamp=payload.get("timestamp"),
     )
     response = {"idTagInfo": {"status": "Accepted"}}
+    _observe(charger, "StopTransaction", payload)
     if replay_request is not None:
         complete_with_result(replay_request, payload=response)
     return response
