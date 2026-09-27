@@ -1,8 +1,9 @@
 """Join durable discovery capture evidence to the normal OCPP domain path."""
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from django.conf import settings
 
