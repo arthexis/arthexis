@@ -211,7 +211,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh pr merge "$PR_NUMBER"             --repo "$REPOSITORY"             --auto             --merge             --match-head-commit "$HEAD_SHA"
+          merge_output=""
+          if merge_output="$(gh pr merge "$PR_NUMBER" \
+            --repo "$REPOSITORY" \
+            --auto \
+            --merge \
+            --match-head-commit "$HEAD_SHA" 2>&1)"; then
+            [[ -n "$merge_output" ]] && printf '%s\n' "$merge_output"
+            exit 0
+          fi
+
+          status=$?
+          printf '%s\n' "$merge_output"
+
+          if grep -Fq "Merge already in progress" <<< "$merge_output"; then
+            echo "Auto-merge is already in progress for PR #$PR_NUMBER; treating as success."
+            exit 0
+          fi
+
+          exit "$status"
 
       - name: Dispatch post-merge Arthexis handoff
         if: steps.gate.outputs.ready == 'true'
