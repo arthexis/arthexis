@@ -23,6 +23,6 @@ class CompatibilityEvidence(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=("charger", "kind", "observed_at")),
-            models.Index(fields=("charger_identity", "kind", "observed_at")),
+            models.Index(fields=("charger", "kind", "observed_at"), name="ocpp_compat_charger_kind_idx"),
+            models.Index(fields=("charger_identity", "kind", "observed_at"), name="ocpp_compat_identity_kind_idx"),
         ]
