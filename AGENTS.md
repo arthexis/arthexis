@@ -44,3 +44,7 @@ Before any repository cutover, create a verified local backup and complete
 local validation. Do not use CI status as proof unless asked. The orphan
 `arthexis-rebuild` branch is an integration handoff, not authorization to merge
 or deploy it.
+
+### Gway expression mode
+
+Gway `-e` / `--expression` takes an expression value; it is not an explain, dry-run, or command-resolution flag. For example, `gway -e '[site]'` resolves that expression. Do not use `gway -e wire watchtower` to inspect how `wire watchtower` would dispatch: argparse treats `wire` as the expression and `watchtower` as an unexpected positional recipe-context argument. Until Gway exposes a dedicated non-executing resolver/introspection command, validate sampler availability with filesystem/read-only health checks and execute operational commands only when mutation is intended.
