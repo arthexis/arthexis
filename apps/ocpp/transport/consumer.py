@@ -13,7 +13,6 @@ from apps.ocpp.protocol.v201.inbound import InboundActions as Inbound201Actions
 from apps.ocpp.services.compatibility import record_compatibility_evidence
 from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
-    ConnectionRejected,
     basic_credentials,
     load_or_enroll_charger,
     negotiate_subprotocol,
@@ -47,7 +46,8 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4401)
             return
 
-        if self.subprotocol not in offered_subprotocols:
+        protocol_fallback = self.subprotocol not in offered_subprotocols
+        if protocol_fallback:
             await sync_to_async(record_compatibility_evidence)(
                 kind="protocol_fallback",
                 charger=self.charger,
@@ -78,7 +78,9 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
             channel_name=self.channel_name,
             version=self.version,
         )
-        await self.accept(subprotocol=self.subprotocol)
+        await self.accept(
+            subprotocol=None if protocol_fallback else self.subprotocol
+        )
         asyncio.create_task(
             recover_connected_operations(
                 charger=self.charger,
