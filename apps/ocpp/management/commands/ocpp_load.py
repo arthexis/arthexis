@@ -45,6 +45,12 @@ class Command(BaseCommand):
             default="Heartbeat",
         )
         parser.add_argument("--live-every", type=int, default=100)
+        parser.add_argument(
+            "--max-live-latency",
+            type=float,
+            default=0.5,
+            help="Maximum acceptable live-probe latency in seconds.",
+        )
         parser.add_argument("--json", action="store_true", dest="json_output")
 
     def handle(self, *args, **options):
@@ -54,6 +60,8 @@ class Command(BaseCommand):
             raise CommandError(f"Unknown charger: {options['charger']}") from error
         if options["live_every"] < 1:
             raise CommandError("--live-every must be positive")
+        if options["max_live_latency"] <= 0:
+            raise CommandError("--max-live-latency must be positive")
 
         try:
             if options["synthetic"]:
@@ -63,11 +71,21 @@ class Command(BaseCommand):
         except ValueError as error:
             raise CommandError(str(error)) from error
 
+        live_latency_ok = (
+            payload.get("live_failures", 0) == 0
+            and payload.get("max_live_latency_seconds", 0.0)
+            <= options["max_live_latency"]
+        )
+        payload["max_live_latency_threshold_seconds"] = options["max_live_latency"]
+        payload["live_latency_ok"] = live_latency_ok
+
         if options["json_output"]:
             self.stdout.write(json.dumps(payload, sort_keys=True))
-            return
-        for key, value in payload.items():
-            self.stdout.write(f"{key}: {value}")
+        else:
+            for key, value in payload.items():
+                self.stdout.write(f"{key}: {value}")
+        if not live_latency_ok:
+            raise CommandError("Live OCPP health threshold failed during backlog load.")
 
     def _run_synthetic(self, charger: Charger, options) -> dict[str, object]:
         cutover = charger.authority_cutover_at
