@@ -392,3 +392,20 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
     assert "arthexis-python -m arthexis.ready --local" in recipe
     assert "/opt/arthexis/.venv/bin/ready" not in recipe
     assert "\nready --local\n" not in recipe
+
+
+def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in workflow
+    assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in workflow
+    assert "- name: Restore previous Gway runtime after failed deployment" in workflow
+    assert "failure() && env.GWAY_RUNTIME_SWAPPED == 'true'" in workflow
+    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in workflow
+    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in workflow
+    assert "systemctl restart gway-mcp-server.service" in workflow
+    assert "systemctl restart gway-remote-auth.service" in workflow
+    assert "systemctl is-active --quiet gway-mcp-server.service" in workflow
+    assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
+    assert 'for port in 8000 8001; do' in workflow
+    assert 'gway_runtime_rollback=restored' in workflow

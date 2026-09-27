@@ -203,8 +203,12 @@ jobs:
           sudo -n rm -rf /var/lib/gway/venv.previous
           if sudo -n test -d /var/lib/gway/venv; then
             sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous
+            echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"
+          else
+            echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=false" >> "$GITHUB_ENV"
           fi
           sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv
+          echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
 
       - name: Verify exact deployment pair before mutation
@@ -622,6 +626,57 @@ jobs:
             echo "rollover_pr=created"
           fi
 
+
+      - name: Restore previous Gway runtime after failed deployment
+        if: ${{ failure() && env.GWAY_RUNTIME_SWAPPED == 'true' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${GWAY_RUNTIME_ROLLBACK_AVAILABLE:-false}" != "true" ]] ||
+             ! sudo -n test -d /var/lib/gway/venv.previous; then
+            echo "gway_runtime_rollback=unavailable"
+            exit 0
+          fi
+
+          echo "gway_runtime_rollback=starting"
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          if sudo -n test -d /var/lib/gway/venv; then
+            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.failed
+          fi
+          sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv
+          sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+
+          sudo -n systemctl daemon-reload
+          sudo -n systemctl restart gway-mcp-server.service
+          sudo -n systemctl restart gway-remote-auth.service
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          sudo -n systemctl is-active --quiet gway-remote-auth.service
+
+          for port in 8000 8001; do
+            ready=false
+            for attempt in $(seq 1 20); do
+              if python3 - "$port" <<'PY'
+          import socket
+          import sys
+
+          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+              pass
+          PY
+              then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$ready" != "true" ]]; then
+              echo "gway_runtime_rollback=service_port_failed port=$port" >&2
+              exit 1
+            fi
+          done
+
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          echo "gway_runtime_rollback=restored"
 
       - name: Reconcile certified package publisher handoff
         shell: bash
