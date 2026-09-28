@@ -24,6 +24,21 @@ def render_discovery_events(
             interface = metadata.get("interface") or "unknown"
             role = metadata.get("role") or "unknown"
             lines.append(f"Interface: {interface} ({role})")
+        elif event_type == "link_state":
+            interface = metadata.get("interface") or "unknown"
+            state = metadata.get("state") or "unknown"
+            lines.append(f"Link: {interface} {state}")
+        elif event_type == "dhcp":
+            message_type = metadata.get("message_type")
+            requested = metadata.get("requested_address")
+            offered = metadata.get("offered_address")
+            details = []
+            if requested:
+                details.append(f"requested={requested}")
+            if offered:
+                details.append(f"offered={offered}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            lines.append(f"DHCP: type={message_type}{suffix}")
         elif event_type == "dns_resolution":
             name = metadata.get("name")
             address = metadata.get("address")
@@ -82,6 +97,12 @@ def render_discovery_events(
             mac = candidate.get("destination_mac")
             if mac:
                 details.append(f"mac={mac}")
+            intervals = candidate.get("retry_intervals_seconds")
+            if isinstance(intervals, list) and intervals:
+                details.append(
+                    "retry="
+                    + ",".join(f"{float(value):g}s" for value in intervals)
+                )
             suffix = f" ({'; '.join(details)})" if details else ""
             lines.append(f"  {index}. {endpoint} attempts={attempts}{suffix}")
     else:
