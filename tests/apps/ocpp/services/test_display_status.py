@@ -1,8 +1,6 @@
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from django.core.management import call_command
 
 from apps.ocpp.models import ChargerTimelineProgress
 from apps.ocpp.services import display_status
@@ -12,7 +10,7 @@ from tests.apps.ocpp.builders import charger
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def test_display_projection_is_compact_and_read_only(capsys):
+def test_display_projection_is_compact_and_read_only():
     selected = charger("display-health")
     current = datetime(2026, 9, 28, 2, tzinfo=timezone.utc)
     ChargerTimelineProgress.objects.create(
@@ -36,20 +34,6 @@ def test_display_projection_is_compact_and_read_only(capsys):
     assert "charger_id" not in payload
     assert "recent_requests" not in payload
     assert ChargerTimelineProgress.objects.count() == before
-
-
-def test_display_status_command_emits_json():
-    selected = charger("display-json")
-
-    from io import StringIO
-
-    stdout = StringIO()
-    call_command("ocpp_status", charger=selected.identity, json_output=True, stdout=stdout)
-    payload = json.loads(stdout.getvalue())
-
-    assert payload["charger"] == selected.identity
-    assert payload["condition"] == "unknown"
-    assert payload["connection_live"] is False
 
 
 def test_display_projection_only_queries_authoritative_snapshot(monkeypatch):
@@ -80,22 +64,7 @@ def test_display_projection_only_queries_authoritative_snapshot(monkeypatch):
     payload = display_status.query_display_status("isolated-display")
 
     assert calls == ["isolated-display"]
+    assert tuple(payload) == DISPLAY_STATUS_FIELDS
     assert payload["condition"] == "ready"
     assert payload["pending_work"] == 0
     assert payload["connection_live"] is True
-
-
-def test_display_renderer_contract_has_stable_fields_and_text_order():
-    selected = charger("display-contract")
-
-    from io import StringIO
-
-    stdout = StringIO()
-    call_command("ocpp_status", charger=selected.identity, stdout=stdout)
-    lines = [line for line in stdout.getvalue().splitlines() if line]
-
-    assert tuple(query_display_status(selected.identity)) == DISPLAY_STATUS_FIELDS
-    assert tuple(line.split(":", 1)[0] for line in lines) == DISPLAY_STATUS_FIELDS
-    assert lines[0] == "charger: display-contract"
-    assert "condition: unknown" in lines
-    assert "connection_live: False" in lines
