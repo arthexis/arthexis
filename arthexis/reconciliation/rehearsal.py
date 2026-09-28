@@ -8,6 +8,7 @@ import os
 import shutil
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_MAX_ELAPSED_SECONDS = 1800.0
@@ -135,6 +136,7 @@ def create_go_bundle(
     migration_report: Path,
     migration_text_report: Path,
     resource_report: Path,
+    cutover_report: Path | None = None,
 ) -> Path:
     """Create one immutable, checksummed handoff bundle for an accepted GO."""
 
@@ -142,14 +144,16 @@ def create_go_bundle(
     reconciliation_path = fixture_path / "reconciliation.json"
     destination_database = fixture_path / "reconciled.sqlite3"
 
-    required = (
+    required = [
         capture_manifest_path,
         reconciliation_path,
         destination_database,
         migration_report,
         migration_text_report,
         resource_report,
-    )
+    ]
+    if cutover_report is not None:
+        required.append(cutover_report)
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise ValueError(f"GO bundle inputs are incomplete: {', '.join(missing)}")
@@ -186,6 +190,8 @@ def create_go_bundle(
             "migration/resource-report.json": resource_report,
             "database/reconciled.sqlite3": destination_database,
         }
+        if cutover_report is not None:
+            payloads["migration/cutover-report.json"] = cutover_report
         checksums: list[tuple[str, str]] = []
         for relative, source in payloads.items():
             target = temporary / relative
@@ -218,6 +224,15 @@ def create_go_bundle(
                 "policy": resources.get("policy", {}),
                 "usage": resources.get("usage", {}),
             },
+            "cutover": (
+                {
+                    "report_path": "migration/cutover-report.json",
+                    "mode": "final-cutover",
+                    "no_missed_writes_proven": True,
+                }
+                if cutover_report is not None
+                else {"mode": "ordinary-rehearsal"}
+            ),
             "provenance": {
                 "reconciliation_receipt": "migration/reconciliation.json",
                 "capture_manifest": "capture/manifest.json",
@@ -250,3 +265,38 @@ def create_go_bundle(
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+
+
+CUTOVER_REPORT_FORMAT = "arthexis-migration-cutover-v1"
+
+
+def verify_cutover_source(
+    source_database: Path,
+    *,
+    captured_database_sha256: str,
+    started_at: datetime,
+    rehearsal_root: Path,
+) -> dict[str, object]:
+    """Prove that no legacy writes occurred after the accepted cutover snapshot."""
+
+    current_sha256 = _sha256(source_database)
+    unchanged = current_sha256 == captured_database_sha256
+    result = {
+        "format": CUTOVER_REPORT_FORMAT,
+        "cutover_started_at": started_at.astimezone(timezone.utc).isoformat(),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "source_database": str(source_database),
+        "captured_database_sha256": captured_database_sha256,
+        "current_database_sha256": current_sha256,
+        "no_missed_writes_proven": unchanged,
+        "decision": "GO" if unchanged else "NO-GO",
+        "reason": (
+            "source-unchanged-since-capture"
+            if unchanged
+            else "legacy-source-advanced-after-capture"
+        ),
+    }
+    path = rehearsal_root / "cutover-report.json"
+    path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    result["report_path"] = str(path)
+    return result
