@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, fields
 from decimal import Decimal
 from enum import Enum
+from hashlib import sha256
+
 
 class SessionCompleteness(str, Enum):
     """Reporting completeness independent of charger/protocol implementation."""
