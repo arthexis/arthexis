@@ -16,6 +16,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: pr-branch-update-${{ github.repository }}
@@ -40,6 +41,43 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          ensure_freshness_label() {
+            if ! gh api "repos/$REPOSITORY/labels/needs%20update" >/dev/null 2>&1; then
+              gh api "repos/$REPOSITORY/labels" \
+                --method POST \
+                -f "name=needs update" \
+                -f "color=fbca04" \
+                -f "description=PR branch is behind the default branch" >/dev/null
+            fi
+          }
+
+          set_freshness() {
+            local pr_number="$1"
+            local head_sha="$2"
+            local behind_by="$3"
+
+            ensure_freshness_label
+
+            if (( behind_by > 0 )); then
+              gh api "repos/$REPOSITORY/issues/$pr_number/labels" \
+                --method POST \
+                -f 'labels[]=needs update' >/dev/null
+              gh api "repos/$REPOSITORY/statuses/$head_sha" \
+                --method POST \
+                -f "state=failure" \
+                -f "context=Branch Freshness" \
+                -f "description=Branch is $behind_by commit(s) behind $DEFAULT_BRANCH" >/dev/null
+            else
+              gh api "repos/$REPOSITORY/issues/$pr_number/labels/needs%20update" \
+                --method DELETE >/dev/null 2>&1 || true
+              gh api "repos/$REPOSITORY/statuses/$head_sha" \
+                --method POST \
+                -f "state=success" \
+                -f "context=Branch Freshness" \
+                -f "description=Branch is up to date with $DEFAULT_BRANCH" >/dev/null
+            fi
+          }
 
           update_pr() {
             local pr_number="$1"
@@ -66,23 +104,25 @@ jobs:
               return
             fi
 
-            if jq -e '[.labels[].name | ascii_downcase] | any(. == "on-hold")' <<< "$pr_json" >/dev/null; then
-              echo "PR #$pr_number: on-hold; skipping."
-              return
-            fi
-
-            if jq -e '[.labels[].name | ascii_downcase] | any(. == "in-progress")' <<< "$pr_json" >/dev/null; then
-              echo "PR #$pr_number: already in progress; another worker owns it."
-              return
-            fi
-
             head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
             live_base_sha="$(gh api "repos/$REPOSITORY/git/ref/heads/$base_ref" --jq '.object.sha')"
             compare_json="$(gh api "repos/$REPOSITORY/compare/$live_base_sha...$head_sha")"
             behind_by="$(jq -r '.behind_by' <<< "$compare_json")"
 
+            set_freshness "$pr_number" "$head_sha" "$behind_by"
+
             if (( behind_by == 0 )); then
               echo "PR #$pr_number: already up to date."
+              return
+            fi
+
+            if jq -e '[.labels[].name | ascii_downcase] | any(. == "on-hold")' <<< "$pr_json" >/dev/null; then
+              echo "PR #$pr_number: on-hold; freshness recorded but automatic update skipped."
+              return
+            fi
+
+            if jq -e '[.labels[].name | ascii_downcase] | any(. == "in-progress")' <<< "$pr_json" >/dev/null; then
+              echo "PR #$pr_number: already in progress; freshness recorded but another worker owns it."
               return
             fi
 
