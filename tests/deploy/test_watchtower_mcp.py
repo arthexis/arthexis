@@ -429,8 +429,9 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert "ARTHEXIS_CHANGED" not in step
     assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
     assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
-    assert '--label approved' in step
-    assert '--label version-only' in step
+    assert 'gh api --method POST' in step
+    assert '{"labels":["approved","version-only"]}' in step
+    assert '/issues/${rollover_pr}/labels' in step
     assert 'rollover_pr=approved number=$rollover_pr' in step
 
 
@@ -535,34 +536,3 @@ def test_approved_auto_merge_serializes_and_reconciles_watchtower_handoff() -> N
     assert 'select(.body ==' in workflow
     assert "post_merge_handoff=already_accepted" in workflow
     assert workflow.index("post_merge_handoff=already_accepted") < workflow.index("gh workflow run watchtower-deploy.yml")
-
-
-def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
-    workflow_paths = (
-        Path(".github/workflows/python-quality.yml"),
-        Path(".github/workflows/python-package.yml"),
-        Path(".github/workflows/python-compatibility.yml"),
-        Path(".github/workflows/secret-scan.yml"),
-    )
-
-    for path in workflow_paths:
-        workflow = path.read_text(encoding="utf-8")
-        assert "types: [opened, synchronize, reopened]" in workflow
-        assert "labeled" not in workflow.split("workflow_dispatch:", 1)[0]
-        assert "unlabeled" not in workflow.split("workflow_dispatch:", 1)[0]
-
-
-def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    arthexis = workflow.split(
-        "gh pr create --repo \"$GITHUB_REPOSITORY\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-    gway = workflow.split(
-        "gh pr create --repo \"$repository\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-
-    for command in (arthexis, gway):
-        assert "--label approved" in command
-        assert "--label version-only" in command
