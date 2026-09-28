@@ -46,6 +46,8 @@ def test_snapshot_is_json_safe_and_read_only():
         "recent_requests": 0,
         "recent_completed_requests": 0,
         "processing_rate_per_minute": 0.0,
+        "mean_processing_latency_seconds": None,
+        "max_processing_latency_seconds": None,
         "recent_request_errors": 0,
         "recent_outbound_errors": 0,
         "recent_retry_attempts": 0,
@@ -258,6 +260,12 @@ def test_snapshot_reports_recent_rate_errors_retries_and_pressure():
     InboundProtocolRequest.objects.filter(pk__in=[completed.pk, errored.pk, processing.pk]).update(
         received_at=current - timedelta(minutes=1)
     )
+    InboundProtocolRequest.objects.filter(pk=completed.pk).update(
+        completed_at=current - timedelta(minutes=1) + timedelta(seconds=2)
+    )
+    InboundProtocolRequest.objects.filter(pk=errored.pk).update(
+        completed_at=current - timedelta(minutes=1) + timedelta(seconds=4)
+    )
     InboundProtocolRequest.objects.filter(pk=old.pk).update(
         received_at=current - timedelta(minutes=10)
     )
@@ -295,6 +303,8 @@ def test_snapshot_reports_recent_rate_errors_retries_and_pressure():
     assert snapshot["recent_requests"] == 3
     assert snapshot["recent_completed_requests"] == 2
     assert snapshot["processing_rate_per_minute"] == pytest.approx(0.4)
+    assert snapshot["mean_processing_latency_seconds"] == 3.0
+    assert snapshot["max_processing_latency_seconds"] == 4.0
     assert snapshot["recent_request_errors"] == 1
     assert snapshot["recent_outbound_errors"] == 1
     assert snapshot["recent_retry_attempts"] == 2
@@ -364,3 +374,45 @@ def test_pending_work_uses_oldest_authoritative_timestamp():
     assert snapshot["pending_work"] == 2
     assert snapshot["oldest_pending_at"] == (current - timedelta(minutes=4)).isoformat()
     assert snapshot["oldest_pending_age_seconds"] == 240.0
+
+
+def test_processing_latency_ignores_incomplete_and_future_completions():
+    selected = charger("timeline-latency-as-of")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=ChargerTimelineProgress.State.LIVE,
+        newest_event_at=current,
+        last_received_at=current,
+    )
+    complete = _inbound_request(
+        selected,
+        unique_id="latency-complete",
+        status=InboundProtocolRequest.Status.COMPLETED,
+    )
+    future = _inbound_request(
+        selected,
+        unique_id="latency-future",
+        status=InboundProtocolRequest.Status.COMPLETED,
+    )
+    incomplete = _inbound_request(
+        selected,
+        unique_id="latency-incomplete",
+        status=InboundProtocolRequest.Status.COMPLETED,
+    )
+    for request in (complete, future, incomplete):
+        InboundProtocolRequest.objects.filter(pk=request.pk).update(
+            received_at=current - timedelta(seconds=10)
+        )
+    InboundProtocolRequest.objects.filter(pk=complete.pk).update(
+        completed_at=current - timedelta(seconds=4)
+    )
+    InboundProtocolRequest.objects.filter(pk=future.pk).update(
+        completed_at=current + timedelta(seconds=1)
+    )
+
+    snapshot = timeline_snapshot(progress, as_of=current)
+
+    assert snapshot["recent_completed_requests"] == 1
+    assert snapshot["mean_processing_latency_seconds"] == 6.0
+    assert snapshot["max_processing_latency_seconds"] == 6.0
