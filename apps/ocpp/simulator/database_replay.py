@@ -87,7 +87,7 @@ class ReplayMetrics:
         self.max_latency_seconds = max(self.max_latency_seconds, latency)
 
     def record_failure(self, started_at: float, exc: Exception) -> None:
-        latency = time.monotonic() - started_at
+        latency = self._clock() - started_at
         self.failed_requests += 1
         self.transport_failures += 1
         self.total_latency_seconds += latency
@@ -97,7 +97,7 @@ class ReplayMetrics:
 
     def start_reconnect(self) -> float:
         self.reconnect_attempts += 1
-        return time.monotonic()
+        return self._clock()
 
     def record_reconnect_success(self, started_at: float) -> None:
         elapsed = self._clock() - started_at
@@ -106,7 +106,7 @@ class ReplayMetrics:
         self.max_reconnect_seconds = max(self.max_reconnect_seconds, elapsed)
 
     def record_reconnect_failure(self, started_at: float, exc: Exception) -> None:
-        elapsed = time.monotonic() - started_at
+        elapsed = self._clock() - started_at
         self.reconnect_failures += 1
         self.total_reconnect_seconds += elapsed
         self.max_reconnect_seconds = max(self.max_reconnect_seconds, elapsed)
