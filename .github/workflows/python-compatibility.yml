@@ -43,7 +43,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           WORKFLOW_PR: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') }}
-          INTEGRATION_PR: ${{ contains(github.event.pull_request.labels.*.name, 'integration') }}
+          INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
         run: |
           if [[ "$INTEGRATION_PR" == "true" ]]; then
             python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not reconciliation_e2e"
