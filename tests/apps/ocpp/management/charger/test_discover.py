@@ -10,8 +10,18 @@ def test_discover_uses_configured_data_root(monkeypatch, settings, tmp_path) -> 
         pass
 
     class FakeSession:
+        session_id = "test-session"
+
         def write_summary(self):
-            return {"session_id": "test-session"}
+            return {"session_id": self.session_id}
+
+        def events(self):
+            return [
+                {
+                    "event_type": "interface_selected",
+                    "metadata": {"interface": "eth0", "role": "control"},
+                }
+            ]
 
     def fake_run(**kwargs):
         captured.update(kwargs)
@@ -23,7 +33,12 @@ def test_discover_uses_configured_data_root(monkeypatch, settings, tmp_path) -> 
 
     result = discover_module.discover(interface="eth0", role="control")
 
-    assert result == {"session_id": "test-session"}
+    assert result["session_id"] == "test-session"
+    assert result["display"] == (
+        "Discovery session test-session\n"
+        "Interface: eth0 (control)\n"
+        "No CSMS candidates observed."
+    )
     assert captured["interface"] == "eth0"
     assert captured["role"] == "control"
     assert captured["root"] == Path(tmp_path)
