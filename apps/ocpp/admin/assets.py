@@ -21,11 +21,12 @@ class ChargerAdmin(admin.ModelAdmin):
         "identity",
         "station_model",
         "node",
+        "protocol_mode",
         "authorization_mode",
         "enrolled_at",
         "active",
     )
-    list_filter = ("active", "authorization_mode")
+    list_filter = ("active", "protocol_mode", "authorization_mode")
     search_fields = ("identity",)
     exclude = ("connection_token_hash",)
 

@@ -36,6 +36,8 @@ def charger(
     active: bool = True,
     **values,
 ) -> Charger:
+    values.setdefault("protocol_mode", Charger.AuthorizationMode.OPEN)
+    values.setdefault("authorization_mode", Charger.AuthorizationMode.OPEN)
     return Charger.objects.create(
         identity=identity,
         station_model=station,

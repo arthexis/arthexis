@@ -27,6 +27,24 @@ def local(
     return payload == {"status": "ok"}
 
 
+def ocpp(
+    dimension: str | None = None,
+    mode: str | None = None,
+    *,
+    charger: str | None = None,
+    chargers: bool = False,
+) -> bool | str | dict[str, object]:
+    """Return OCPP intake readiness and permissiveness posture."""
+    from apps.ocpp.services.readiness import evaluate_ocpp_readiness
+
+    return evaluate_ocpp_readiness(
+        dimension=dimension,
+        mode=mode,
+        charger=charger,
+        chargers=chargers,
+    )
+
+
 def main(
     *,
     local: bool = False,

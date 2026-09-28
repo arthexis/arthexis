@@ -3,7 +3,7 @@ from urllib.error import URLError
 
 import pytest
 
-from arthexis.ready import local, main
+from arthexis.ready import local, main, ocpp
 
 
 class Response:
@@ -49,3 +49,56 @@ def test_ready_local_flag_runs_local_check() -> None:
 def test_ready_without_scope_is_not_defined_yet() -> None:
     with pytest.raises(ValueError, match="requires --local"):
         main()
+
+
+
+def test_ready_ocpp_delegates_to_ocpp_readiness_evaluator() -> None:
+    with patch(
+        "apps.ocpp.services.readiness.evaluate_ocpp_readiness",
+        return_value="partial",
+    ) as evaluator:
+        assert ocpp("protocol") == "partial"
+
+    evaluator.assert_called_once_with(
+        dimension="protocol",
+        mode=None,
+        charger=None,
+        chargers=False,
+    )
+
+
+def test_ready_ocpp_predicate_returns_boolean_result() -> None:
+    with patch(
+        "apps.ocpp.services.readiness.evaluate_ocpp_readiness",
+        return_value=True,
+    ) as evaluator:
+        assert ocpp("cards", "strict", charger="CHARGER-001") is True
+
+    evaluator.assert_called_once_with(
+        dimension="cards",
+        mode="strict",
+        charger="CHARGER-001",
+        chargers=False,
+    )
+
+
+
+def test_ready_ocpp_delegates_fleet_selector() -> None:
+    expected = {
+        "ready": True,
+        "protocol": "partial",
+        "cards": "strict",
+        "chargers": [],
+    }
+    with patch(
+        "apps.ocpp.services.readiness.evaluate_ocpp_readiness",
+        return_value=expected,
+    ) as evaluator:
+        assert ocpp(chargers=True) == expected
+
+    evaluator.assert_called_once_with(
+        dimension=None,
+        mode=None,
+        charger=None,
+        chargers=True,
+    )

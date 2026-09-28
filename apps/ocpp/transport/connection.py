@@ -18,13 +18,23 @@ SUBPROTOCOL_VERSIONS = {
 }
 
 
-def negotiate_subprotocol(requested: list[str]) -> tuple[str, ProtocolVersion]:
-    """Select a retained protocol, falling back to OCPP 1.6J for compatibility."""
+class ConnectionRejected(ValueError):
+    """The charger cannot be accepted under its effective protocol policy."""
+
+
+def negotiate_subprotocol(
+    requested: list[str],
+    *,
+    permissive: bool = True,
+) -> tuple[str, ProtocolVersion]:
+    """Select a retained protocol, optionally falling back to OCPP 1.6J."""
     for protocol in requested:
         version = SUBPROTOCOL_VERSIONS.get(protocol)
         if version is not None:
             return protocol, version
-    return "ocpp1.6", ProtocolVersion.OCPP_16
+    if permissive:
+        return "ocpp1.6", ProtocolVersion.OCPP_16
+    raise ConnectionRejected("No supported OCPP subprotocol was offered.")
 
 
 def basic_credentials(headers: list[tuple[bytes, bytes]]) -> tuple[str, str] | None:
@@ -77,6 +87,16 @@ def load_or_enroll_charger(
                 connection_token_hash=_connection_token_hash(identity, credentials),
                 enrolled_at=enrolled_at,
                 authority_cutover_at=enrolled_at,
+                protocol_mode=(
+                    policy.protocol_mode
+                    if open_admission
+                    else Charger.AuthorizationMode.RESTRICTED
+                ),
+                authorization_mode=(
+                    policy.card_mode
+                    if open_admission
+                    else Charger.AuthorizationMode.RESTRICTED
+                ),
             )
     except IntegrityError:
         charger = Charger.objects.filter(identity=identity, active=True).first()

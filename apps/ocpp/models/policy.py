@@ -17,6 +17,16 @@ class OcppPolicy(models.Model):
         default=AdmissionMode.OPEN,
         max_length=16,
     )
+    protocol_mode = models.CharField(
+        choices=AdmissionMode.choices,
+        default=AdmissionMode.OPEN,
+        max_length=16,
+    )
+    card_mode = models.CharField(
+        choices=AdmissionMode.choices,
+        default=AdmissionMode.OPEN,
+        max_length=16,
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod
