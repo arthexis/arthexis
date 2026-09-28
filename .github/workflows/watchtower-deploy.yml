@@ -499,8 +499,8 @@ jobs:
           PY
           done
           cd /opt/arthexis
-          sudo -n /opt/arthexis/.venv/bin/python scripts/verify_remote_deployment.py local
-          sudo -n /opt/arthexis/.venv/bin/python scripts/verify_remote_deployment.py public
+          sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py local
+          sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py public
           echo "remote_services=active"
           echo "remote_acceptance=ok"
 
