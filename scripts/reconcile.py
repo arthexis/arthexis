@@ -184,11 +184,6 @@ def _rehearse(arguments: argparse.Namespace) -> int:
     """Run capture -> restore -> reconcile -> verify from one live legacy source."""
 
     started = time.monotonic()
-    cutover_started_at = None
-    if arguments.cutover:
-        from datetime import datetime, timezone
-
-        cutover_started_at = datetime.now(timezone.utc)
     source = _require_source(arguments.source).expanduser().resolve()
     if arguments.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1.")
