@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from apps.ocpp.discovery.capture import CapturePlan
+from apps.ocpp.discovery.session import DiscoverySession
 from apps.ocpp.management.charger import discover as discover_module
 
 
@@ -43,3 +45,130 @@ def test_discover_uses_configured_data_root(monkeypatch, settings, tmp_path) -> 
     assert captured["role"] == "control"
     assert captured["root"] == Path(tmp_path)
     assert isinstance(captured["observer"], FakeObserver)
+
+
+
+def test_capture_request_without_gway_keeps_discovery_report(
+    monkeypatch,
+    settings,
+    tmp_path,
+) -> None:
+    settings.DATA_DIR = tmp_path
+
+    def fake_run(**kwargs):
+        session = DiscoverySession.create(tmp_path, session_id="capture-no-gway")
+        session.record(
+            "csms_candidate",
+            category="inference",
+            metadata={
+                "destination_ip": "198.51.100.40",
+                "destination_port": 9000,
+                "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "hostnames": ["csms.example.com"],
+            },
+        )
+        return session
+
+    monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
+    monkeypatch.setattr(discover_module, "default_capture_provider", lambda: None)
+
+    result = discover_module.discover(
+        interface="eth0",
+        role="control",
+        capture=True,
+    )
+
+    assert result["capture"] == {
+        "requested": True,
+        "available": False,
+        "attempted": False,
+        "succeeded": False,
+        "strategy": None,
+        "failure_reason": "capture_provider_unavailable",
+    }
+    assert "Capture: unavailable (capture_provider_unavailable)" in result["display"]
+
+
+def test_capture_request_with_provider_records_plan_without_mutation(
+    monkeypatch,
+    settings,
+    tmp_path,
+) -> None:
+    settings.DATA_DIR = tmp_path
+
+    def fake_run(**kwargs):
+        session = DiscoverySession.create(tmp_path, session_id="capture-provider")
+        session.record(
+            "csms_candidate",
+            category="inference",
+            metadata={
+                "destination_ip": "198.51.100.40",
+                "destination_port": 9000,
+                "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "hostnames": ["csms.example.com"],
+            },
+        )
+        return session
+
+    class FakeProvider:
+        name = "fake-gway"
+
+        def __init__(self) -> None:
+            self.requests = []
+
+        def plan(self, request):
+            self.requests.append(request)
+            return CapturePlan(
+                provider=self.name,
+                strategy="destination-nat",
+                request=request,
+            )
+
+    provider = FakeProvider()
+    monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
+    monkeypatch.setattr(
+        discover_module,
+        "default_capture_provider",
+        lambda: provider,
+    )
+
+    result = discover_module.discover(
+        interface="eth0",
+        role="control",
+        capture=True,
+    )
+
+    assert len(provider.requests) == 1
+    assert provider.requests[0].destination_ip == "198.51.100.40"
+    assert result["capture"] == {
+        "requested": True,
+        "available": True,
+        "attempted": False,
+        "succeeded": False,
+        "strategy": "destination-nat",
+        "failure_reason": None,
+    }
+    assert "Capture: available via fake-gway (destination-nat)" in result["display"]
+
+
+def test_capture_request_without_candidate_reports_unavailable(
+    monkeypatch,
+    settings,
+    tmp_path,
+) -> None:
+    settings.DATA_DIR = tmp_path
+
+    def fake_run(**kwargs):
+        return DiscoverySession.create(tmp_path, session_id="capture-no-candidate")
+
+    monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
+
+    result = discover_module.discover(
+        interface="eth0",
+        role="control",
+        capture=True,
+    )
+
+    assert result["capture"]["requested"] is True
+    assert result["capture"]["available"] is False
+    assert result["capture"]["failure_reason"] == "no_csms_candidate"
