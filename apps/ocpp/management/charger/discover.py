@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 
 from apps.ocpp.discovery.network import TsharkObserver, run_passive_discovery
+from apps.ocpp.discovery.render import render_discovery_events
 
 
 def discover(
@@ -18,6 +19,10 @@ def discover(
         interface=interface,
         role=role,
         root=Path(root) if root else Path(settings.DATA_DIR),
-        observer=TcpdumpObserver(),
+        observer=TsharkObserver(),
     )
-    return session.write_summary()
+    summary = session.write_summary()
+    return {
+        **summary,
+        "display": render_discovery_events(session.session_id, session.events()),
+    }
