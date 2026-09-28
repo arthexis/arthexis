@@ -10,10 +10,14 @@ import json
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from apps.ocpp.simulator.authorization import (
+    authorization_policy_scenario,
+    run_live_authorization_scenario,
+)
 from apps.ocpp.simulator.network import (
     LiveOcpp16Simulator,
     LiveSimulatorConfig,
@@ -263,6 +267,25 @@ class LiveSimulatorWorker:
                 "charger": self.config.charger,
                 "boot": self._boot.status if self._boot else None,
                 "authorization": status,
+            }
+        if action == "authorize-scenario":
+            scenario = authorization_policy_scenario(
+                policy_context=str(request.get("policy_context", "")),
+                known_authorized=str(request.get("known_authorized", "")),
+                known_denied=str(request.get("known_denied", "")),
+                unknown=str(request.get("unknown", "")),
+            )
+            async with self._transport_lock:
+                results = await run_live_authorization_scenario(
+                    self._simulator,
+                    scenario,
+                )
+            return {
+                "ok": True,
+                "charger": self.config.charger,
+                "scenario": scenario.name,
+                "policy_context": scenario.policy_context,
+                "results": [asdict(result) for result in results],
             }
         if action == "reconnect":
             await self.reconnect()

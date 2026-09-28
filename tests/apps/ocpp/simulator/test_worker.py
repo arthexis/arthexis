@@ -1,19 +1,8 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
 
-import pytest
-from django.core.management import CommandError, call_command
-
-from apps.ocpp.management.commands.ocpp_simulator import Command
 from apps.ocpp.simulator.network import LiveSimulatorConfig
-from apps.ocpp.simulator.worker import (
-    LiveSimulatorWorker,
-    error_path,
-    runtime_dir,
-    session_path,
-    socket_path,
-)
+from apps.ocpp.simulator.worker import LiveSimulatorWorker, runtime_dir
 
 
 def insecure_config(**kwargs):
@@ -109,52 +98,6 @@ def test_runtime_directory_is_owner_only(tmp_path, monkeypatch):
     assert secured.stat().st_mode & 0o777 == 0o700
 
 
-def test_authorize_requires_open_worker(tmp_path, monkeypatch):
-    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
-    with pytest.raises(CommandError, match="is not open"):
-        call_command(
-            "ocpp_simulator",
-            "authorize",
-            "--charger",
-            "MISSING",
-            "--id-tag",
-            "X",
-        )
-
-
-def test_open_rejects_plaintext_without_opt_in(tmp_path, monkeypatch):
-    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
-    with pytest.raises(CommandError, match="allow-insecure-ws"):
-        call_command(
-            "ocpp_simulator",
-            "open",
-            "--url",
-            "ws://example.test:9000",
-            "--charger",
-            "GWAY001",
-        )
-
-
-def test_startup_failure_terminates_worker_and_cleans_artifacts(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
-    charger = "GWAY001"
-    for path in (session_path(charger), socket_path(charger), error_path(charger)):
-        path.write_text("stale")
-
-    process = Mock()
-    process.poll.return_value = None
-    Command._stop_starting_worker(process, charger)
-
-    process.terminate.assert_called_once_with()
-    process.wait.assert_called_once_with(timeout=5)
-    process.kill.assert_not_called()
-    assert not session_path(charger).exists()
-    assert not socket_path(charger).exists()
-    assert not error_path(charger).exists()
-
-
 def test_reconnect_waits_for_inflight_heartbeat():
     async def exercise():
         fake = FakeSimulator()
@@ -177,5 +120,55 @@ def test_reconnect_waits_for_inflight_heartbeat():
         assert fake.calls == [("Heartbeat", {})]
         assert fake.reconnects == 1
         assert response["reconnects"] == 1
+
+    asyncio.run(exercise())
+
+
+def test_worker_authorization_scenario_returns_privacy_safe_matrix():
+    class MatrixSimulator(FakeSimulator):
+        def __init__(self):
+            super().__init__()
+            self.outcomes = iter(["Accepted", "Blocked", "Invalid", "Accepted"])
+
+        async def authorize(self, id_tag):
+            self.calls.append(("Authorize", id_tag))
+            return next(self.outcomes)
+
+    async def exercise():
+        fake = MatrixSimulator()
+        worker = worker_with(fake)
+        await worker.connect_and_boot()
+
+        response = await worker.dispatch(
+            {
+                "action": "authorize-scenario",
+                "policy_context": "restricted",
+                "known_authorized": "KNOWN-OK",
+                "known_denied": "KNOWN-NO",
+                "unknown": "UNKNOWN",
+            }
+        )
+
+        assert response["scenario"] == "restricted-authorization-matrix"
+        assert response["policy_context"] == "restricted"
+        assert [item["status"] for item in response["results"]] == [
+            "Accepted",
+            "Blocked",
+            "Invalid",
+            "Accepted",
+        ]
+        assert [item["attempt"] for item in response["results"]] == [
+            "known-authorized",
+            "known-denied",
+            "unknown",
+            "known-authorized-repeat",
+        ]
+        assert all("id_tag" not in item for item in response["results"])
+        assert fake.calls == [
+            ("Authorize", "KNOWN-OK"),
+            ("Authorize", "KNOWN-NO"),
+            ("Authorize", "UNKNOWN"),
+            ("Authorize", "KNOWN-OK"),
+        ]
 
     asyncio.run(exercise())

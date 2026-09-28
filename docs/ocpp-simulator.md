@@ -36,6 +36,49 @@ python manage.py ocpp_simulator authorize \
 The JSON response reports the actual OCPP authorization status returned by
 GW004. Raw idTags are deliberately not written to the worker status surface.
 
+## Authorization policy matrix
+
+After opening the persistent simulator connection, run the standard policy
+matrix with operator-selected tag roles. The simulator does not infer the
+expected result; GW004 remains the system under test and returns the actual OCPP
+status for each attempt.
+
+For a charger configured with open authorization mode:
+
+```console
+python manage.py ocpp_simulator authorize-scenario \
+  --charger GWAY001 \
+  --policy-context open \
+  --known-authorized KNOWN_OK \
+  --known-denied KNOWN_DENIED \
+  --unknown UNKNOWN_TAG
+```
+
+For restricted mode, use the same real tag roles and change only the descriptive
+policy context:
+
+```console
+python manage.py ocpp_simulator authorize-scenario \
+  --charger GWAY001 \
+  --policy-context restricted \
+  --known-authorized KNOWN_OK \
+  --known-denied KNOWN_DENIED \
+  --unknown UNKNOWN_TAG
+```
+
+The matrix runs four attempts in order: known-authorized, known-denied, unknown,
+and a repeat of known-authorized. Human-readable output is the default. Add
+`--json` for the complete privacy-safe machine-readable result.
+
+Result records include scenario name, attempt name, sequence, observed status or
+transport error, repeat identity, and policy context. They do not include the
+raw RFID/idTag values supplied on the command line.
+
+Run both policy contexts against the corresponding real Arthexis configuration
+when comparing behavior. The simulator intentionally does not encode what
+`open` or `restricted` should return, so a policy change in Arthexis remains
+observable rather than being duplicated in test code.
+
 Inspect or deliberately cycle the connection:
 
 ```console

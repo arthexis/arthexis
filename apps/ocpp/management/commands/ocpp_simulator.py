@@ -48,6 +48,27 @@ class Command(BaseCommand):
             help="Allow ws:// only for a trusted local test network.",
         )
 
+        scenario_parser = actions.add_parser(
+            "authorize-scenario",
+            help="Run the standard live authorization policy matrix.",
+        )
+        scenario_parser.add_argument("--charger", required=True)
+        scenario_parser.add_argument(
+            "--policy-context",
+            required=True,
+            choices=("open", "restricted"),
+            help="Describe the remote charger's configured authorization mode.",
+        )
+        scenario_parser.add_argument("--known-authorized", required=True)
+        scenario_parser.add_argument("--known-denied", required=True)
+        scenario_parser.add_argument("--unknown", required=True)
+        scenario_parser.add_argument(
+            "--json",
+            action="store_true",
+            dest="json_output",
+            help="Emit the complete privacy-safe scenario result as JSON.",
+        )
+
         for name, help_text in (
             ("authorize", "Send Authorize on an existing live connection."),
             ("status", "Report the existing live simulator state."),
@@ -76,10 +97,43 @@ class Command(BaseCommand):
             request = {"action": action}
             if action == "authorize":
                 request["id_tag"] = options["id_tag"]
+            elif action == "authorize-scenario":
+                request.update(
+                    {
+                        "policy_context": options["policy_context"],
+                        "known_authorized": options["known_authorized"],
+                        "known_denied": options["known_denied"],
+                        "unknown": options["unknown"],
+                    }
+                )
             result = asyncio.run(send_control(options["charger"], request))
-            self.stdout.write(json.dumps(result, sort_keys=True))
+            if action == "authorize-scenario" and not options["json_output"]:
+                self.stdout.write(self._format_authorization_scenario(result))
+            else:
+                self.stdout.write(json.dumps(result, sort_keys=True))
         except (LiveSimulatorError, OSError, ValueError, TimeoutError) as exc:
             raise CommandError(str(exc)) from exc
+
+    @staticmethod
+    def _format_authorization_scenario(result: dict[str, object]) -> str:
+        lines = [
+            f"Authorization scenario: {result.get('scenario', '-')}",
+            f"Charger: {result.get('charger', '-')}",
+            f"Policy context: {result.get('policy_context', '-')}",
+        ]
+        entries = result.get("results", [])
+        if not isinstance(entries, list):
+            raise LiveSimulatorError("authorization scenario returned invalid results")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise LiveSimulatorError("authorization scenario returned invalid result")
+            sequence = entry.get("sequence", "?")
+            attempt = entry.get("attempt", "-")
+            outcome = entry.get("status") or f"ERROR: {entry.get('error', 'unknown')}"
+            repeat_of = entry.get("repeat_of")
+            suffix = f" (repeat of {repeat_of})" if repeat_of else ""
+            lines.append(f"{sequence}. {attempt}: {outcome}{suffix}")
+        return "\n".join(lines)
 
     def _run_worker(self, options) -> None:
         from apps.ocpp.simulator.worker import LiveSimulatorWorker
