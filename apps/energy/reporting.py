@@ -140,8 +140,10 @@ class ReportingPeriodProjection:
             "content_digest": self.content_digest,
         }
 
+
 class ReportingContractError(ValueError):
     """Raised when a serialized reporting payload is incompatible or malformed."""
+
 
 def reporting_contract() -> dict[str, object]:
     """Describe the stable transport contract without requiring a report run."""
@@ -170,6 +172,7 @@ def reporting_contract() -> dict[str, object]:
         },
     }
 
+
 def validate_reporting_payload(payload: object) -> dict[str, object]:
     """Validate one serialized period payload against the current contract."""
 
@@ -191,24 +194,6 @@ def validate_reporting_payload(payload: object) -> dict[str, object]:
         raise ReportingContractError(
             f"unsupported reporting schema version: {payload['schema_version']!r}"
         )
-    digest = payload["content_digest"]
-    if not isinstance(digest, str) or len(digest) != 64:
-        raise ReportingContractError("reporting content_digest must be a sha256 hex digest")
-
-    canonical_content = {
-        key: value for key, value in payload.items() if key != "content_digest"
-    }
-    expected_digest = sha256(
-        json.dumps(
-            canonical_content,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-    ).hexdigest()
-    if digest != expected_digest:
-        raise ReportingContractError("reporting content_digest does not match payload")
-
     if not isinstance(payload["sessions"], list):
         raise ReportingContractError("reporting sessions must be a list")
     if not isinstance(payload["authority_nodes"], list):
@@ -266,6 +251,26 @@ def validate_reporting_payload(payload: object) -> dict[str, object]:
                     f"session {index} source_evidence {evidence_index} "
                     "requires kind and reference"
                 )
+
+    digest = payload["content_digest"]
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ReportingContractError(
+            "reporting content_digest must be a sha256 hex digest"
+        )
+
+    canonical_content = {
+        key: value for key, value in payload.items() if key != "content_digest"
+    }
+    expected_digest = sha256(
+        json.dumps(
+            canonical_content,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if digest != expected_digest:
+        raise ReportingContractError("reporting content_digest does not match payload")
 
     return payload
 
