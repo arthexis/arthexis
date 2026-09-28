@@ -388,6 +388,7 @@ async def run_v16_replay_events(
     pacing: ReplayPacing | None = None,
     after_event: Callable[[int], Awaitable[None]] | None = None,
     metrics: ReplayMetrics | None = None,
+    max_retained_actions: int | None = None,
 ) -> tuple[str, ...]:
     """Replay ordered OCPP 1.6 events through an arbitrary live-style transport."""
     runtime_transactions: dict[int, object] = {}
@@ -395,9 +396,12 @@ async def run_v16_replay_events(
     pacing = pacing or ReplayPacing()
     pacing.validate()
     metrics = metrics or ReplayMetrics()
+    if max_retained_actions is not None and max_retained_actions < 0:
+        raise ValueError("max_retained_actions cannot be negative")
+    completed_count = 0
 
     for event in events:
-        await _pace(pacing, len(completed))
+        await _pace(pacing, completed_count)
         payload = dict(event.payload)
         if event.requires_runtime_transaction_id:
             runtime_id = runtime_transactions.get(event.source_transaction_id)
@@ -421,9 +425,11 @@ async def run_v16_replay_events(
             if runtime_id is None:
                 raise ValueError("StartTransaction response is missing transactionId")
             runtime_transactions[event.source_transaction_id] = runtime_id
-        completed.append(event.action)
+        completed_count += 1
+        if max_retained_actions is None or len(completed) < max_retained_actions:
+            completed.append(event.action)
         if after_event is not None:
-            await after_event(len(completed))
+            await after_event(completed_count)
 
     metrics.finish()
     return tuple(completed)
@@ -437,6 +443,7 @@ async def run_v16_live_replay_events(
     pacing: ReplayPacing | None = None,
     after_event: Callable[[int], Awaitable[None]] | None = None,
     metrics: ReplayMetrics | None = None,
+    max_retained_actions: int | None = None,
 ) -> tuple[str, ...]:
     """Replay events and optionally reconnect the real charger mid-drain."""
     if reconnect_after is not None and reconnect_after < 1:
@@ -447,9 +454,12 @@ async def run_v16_live_replay_events(
     pacing = pacing or ReplayPacing()
     pacing.validate()
     metrics = metrics or ReplayMetrics()
+    if max_retained_actions is not None and max_retained_actions < 0:
+        raise ValueError("max_retained_actions cannot be negative")
+    completed_count = 0
 
     for event in events:
-        if reconnect_after is not None and len(completed) == reconnect_after:
+        if reconnect_after is not None and completed_count == reconnect_after:
             reconnect_started = metrics.start_reconnect()
             try:
                 await transport.reconnect()
@@ -466,7 +476,7 @@ async def run_v16_live_replay_events(
                 raise
             metrics.record_reconnect_success(reconnect_started)
 
-        await _pace(pacing, len(completed))
+        await _pace(pacing, completed_count)
         payload = dict(event.payload)
         if event.requires_runtime_transaction_id:
             runtime_id = runtime_transactions.get(event.source_transaction_id)
@@ -491,9 +501,11 @@ async def run_v16_live_replay_events(
                 raise ValueError("StartTransaction response is missing transactionId")
             runtime_transactions[event.source_transaction_id] = runtime_id
 
-        completed.append(event.action)
+        completed_count += 1
+        if max_retained_actions is None or len(completed) < max_retained_actions:
+            completed.append(event.action)
         if after_event is not None:
-            await after_event(len(completed))
+            await after_event(completed_count)
 
     metrics.finish()
     return tuple(completed)
