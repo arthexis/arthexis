@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-from django.db.models import Sum
-from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.ocpp.models import (
@@ -99,7 +97,10 @@ def _empty_snapshot(*, charger: Charger, as_of: datetime) -> dict[str, object]:
 
 def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, object]:
     window_start = as_of - METRIC_WINDOW
-    recent_inbound = charger.inbound_protocol_requests.filter(received_at__gte=window_start)
+    recent_inbound = charger.inbound_protocol_requests.filter(
+        received_at__gte=window_start,
+        received_at__lte=as_of,
+    )
     completed = recent_inbound.filter(status=InboundProtocolRequest.Status.COMPLETED).count()
     request_errors = recent_inbound.filter(
         response_kind=InboundProtocolRequest.ResponseKind.ERROR
@@ -116,7 +117,10 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
     outbound_pressure = charger.protocol_operations.filter(
         status__in=pressure_statuses
     ).count()
-    recent_outbound = charger.protocol_operations.filter(created_at__gte=window_start)
+    recent_outbound = charger.protocol_operations.filter(
+        created_at__gte=window_start,
+        created_at__lte=as_of,
+    )
     outbound_errors = recent_outbound.filter(
         status__in=(
             ProtocolOperation.Status.ERRORED,
@@ -124,8 +128,10 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
             ProtocolOperation.Status.DISCONNECTED,
         )
     ).count()
-    attempts = recent_outbound.aggregate(total=Coalesce(Sum("attempt_count"), 0))["total"]
-    retry_attempts = max(0, int(attempts) - recent_outbound.count())
+    retry_attempts = sum(
+        max(0, attempt_count - 1)
+        for attempt_count in recent_outbound.values_list("attempt_count", flat=True)
+    )
 
     connection = getattr(charger, "connection", None)
     lease_remaining = (
