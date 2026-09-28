@@ -101,10 +101,21 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
         received_at__gte=window_start,
         received_at__lte=as_of,
     )
-    completed = recent_inbound.filter(status=InboundProtocolRequest.Status.COMPLETED).count()
+    completed_requests = recent_inbound.filter(
+        status=InboundProtocolRequest.Status.COMPLETED,
+        completed_at__isnull=False,
+        completed_at__lte=as_of,
+    )
+    completed = completed_requests.count()
     request_errors = recent_inbound.filter(
         response_kind=InboundProtocolRequest.ResponseKind.ERROR
     ).count()
+    latencies = [
+        max(0.0, (completed_at - received_at).total_seconds())
+        for received_at, completed_at in completed_requests.values_list(
+            "received_at", "completed_at"
+        )
+    ]
     inbound_pending = charger.inbound_protocol_requests.filter(
         status=InboundProtocolRequest.Status.PROCESSING,
         received_at__lte=as_of,
@@ -159,6 +170,10 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
         "recent_requests": recent_inbound.count(),
         "recent_completed_requests": completed,
         "processing_rate_per_minute": completed / (METRIC_WINDOW.total_seconds() / 60),
+        "mean_processing_latency_seconds": (
+            sum(latencies) / len(latencies) if latencies else None
+        ),
+        "max_processing_latency_seconds": max(latencies, default=None),
         "recent_request_errors": request_errors,
         "recent_outbound_errors": outbound_errors,
         "recent_retry_attempts": retry_attempts,
