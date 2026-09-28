@@ -13,7 +13,9 @@ from apps.ocpp.simulator.database_replay import (
     ReplayPacing,
     iter_v16_inbound_request_replay,
     iter_v16_transaction_replay,
+    ReplayEvent,
     run_v16_database_replay,
+    run_v16_replay_events,
 )
 from tests.apps.ocpp.builders import charger
 
@@ -246,3 +248,82 @@ def test_database_replay_rejects_invalid_reconnect_checkpoint(tmp_path) -> None:
             source_charger_identity="charger-a",
             reconnect_after=0,
         )
+
+
+def test_transport_neutral_replay_preserves_order_and_rebinds_transaction_id():
+    class FakeLiveTransport:
+        def __init__(self):
+            self.calls = []
+
+        async def call(self, action, payload):
+            self.calls.append((action, dict(payload)))
+            if action == "StartTransaction":
+                return {"transactionId": 91}
+            return {}
+
+    async def exercise():
+        transport = FakeLiveTransport()
+        events = (
+            ReplayEvent(
+                source_transaction_id=10,
+                occurred_at="2024-01-01T00:00:00+00:00",
+                action="StartTransaction",
+                payload={
+                    "connectorId": 1,
+                    "idTag": "tag-a",
+                    "meterStart": 100,
+                    "timestamp": "2024-01-01T00:00:00+00:00",
+                },
+            ),
+            ReplayEvent(
+                source_transaction_id=10,
+                occurred_at="2024-01-01T00:10:00+00:00",
+                action="MeterValues",
+                payload={"meterValue": []},
+                requires_runtime_transaction_id=True,
+            ),
+            ReplayEvent(
+                source_transaction_id=10,
+                occurred_at="2024-01-01T01:00:00+00:00",
+                action="StopTransaction",
+                payload={
+                    "meterStop": 300,
+                    "timestamp": "2024-01-01T01:00:00+00:00",
+                },
+                requires_runtime_transaction_id=True,
+            ),
+        )
+
+        completed = await run_v16_replay_events(transport, events)
+
+        assert completed == (
+            "StartTransaction",
+            "MeterValues",
+            "StopTransaction",
+        )
+        assert [action for action, _ in transport.calls] == list(completed)
+        assert transport.calls[1][1]["transactionId"] == 91
+        assert transport.calls[2][1]["transactionId"] == 91
+
+    async_to_sync(exercise)()
+
+
+def test_transport_neutral_replay_rejects_missing_runtime_transaction_id():
+    class FakeLiveTransport:
+        async def call(self, action, payload):
+            return {}
+
+    async def exercise():
+        events = (
+            ReplayEvent(
+                source_transaction_id=10,
+                occurred_at="2024-01-01T00:10:00+00:00",
+                action="MeterValues",
+                payload={"meterValue": []},
+                requires_runtime_transaction_id=True,
+            ),
+        )
+        with pytest.raises(ValueError, match="runtime transaction ID"):
+            await run_v16_replay_events(FakeLiveTransport(), events)
+
+    async_to_sync(exercise)()
