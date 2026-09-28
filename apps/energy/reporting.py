@@ -142,7 +142,7 @@ def projected_sessions_for_period(queryset, *, started_at, before):
         .prefetch_related("meter_values")
         .order_by("started_at", "pk")
     )
-    for transaction in selected.iterator():
+    for transaction in selected:
         yield project_charging_session(transaction)
 
 
