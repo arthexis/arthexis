@@ -46,6 +46,11 @@ class Command(BaseCommand):
         )
         parser.add_argument("--live-every", type=int, default=100)
         parser.add_argument(
+            "--reconnect-after",
+            type=int,
+            help="Reconnect the backlog client after this many completed backlog events.",
+        )
+        parser.add_argument(
             "--max-live-latency",
             type=float,
             default=0.5,
@@ -62,6 +67,8 @@ class Command(BaseCommand):
             raise CommandError("--live-every must be positive")
         if options["max_live_latency"] <= 0:
             raise CommandError("--max-live-latency must be positive")
+        if options["reconnect_after"] is not None and options["reconnect_after"] < 1:
+            raise CommandError("--reconnect-after must be positive")
 
         try:
             if options["synthetic"]:
@@ -97,6 +104,7 @@ class Command(BaseCommand):
             start_at=cutover - timedelta(days=1),
             live_every=options["live_every"],
             live_action=options["live_probe"],
+            reconnect_after=options["reconnect_after"],
         )
         return {"source": "synthetic", **asdict(result)}
 
@@ -135,6 +143,7 @@ class Command(BaseCommand):
             source_charger_identity=options["source_charger"],
             batch_size=options["batch_size"],
             pacing=pacing,
+            reconnect_after=options["reconnect_after"],
             after_event=after_event,
         )
         elapsed = max(0.0, perf_counter() - started)
@@ -151,6 +160,10 @@ class Command(BaseCommand):
                 sum(live_latencies) / len(live_latencies) if live_latencies else 0.0
             ),
             "max_live_latency_seconds": max(live_latencies, default=0.0),
+            "reconnects": int(
+                options["reconnect_after"] is not None
+                and len(completed) > options["reconnect_after"]
+            ),
         }
 
 
