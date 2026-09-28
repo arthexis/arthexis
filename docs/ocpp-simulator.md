@@ -162,6 +162,12 @@ for a fixed rate, or `--pacing burst --burst-size ... --burst-pause-seconds ...`
 for burst delivery. `--batch-size` controls SQLite fetch size rather than
 loading the complete history into memory.
 
+Every replay result includes a bounded `metrics` object with attempted,
+completed, and failed request counts; elapsed wall-clock time; completed-request
+throughput; mean and maximum OCPP request latency; and error counts grouped by
+exception type. Each request is timed individually, but latency samples are not
+retained, so metrics memory usage does not grow with replay size.
+
 When the migrated database contains retained charger-originated
 `InboundProtocolRequest` payloads, replay those protocol-realistic requests
 directly instead of reconstructing transaction history:
