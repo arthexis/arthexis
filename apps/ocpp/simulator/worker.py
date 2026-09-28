@@ -19,6 +19,7 @@ from apps.ocpp.simulator.authorization import (
     run_live_authorization_scenario,
 )
 from apps.ocpp.simulator.database_replay import (
+    ReplayMetrics,
     ReplayPacing,
     iter_v16_inbound_request_replay,
     iter_v16_transaction_replay,
@@ -32,6 +33,7 @@ from apps.ocpp.simulator.network import (
 )
 
 DEFAULT_IDLE_TIMEOUT = 300.0
+MAX_REPLAY_ACTIONS_IN_RESPONSE = 1000
 
 
 def runtime_dir() -> Path:
@@ -325,12 +327,15 @@ class LiveSimulatorWorker:
                 ),
                 batch_size=batch_size,
             )
+            metrics = ReplayMetrics()
             async with self._transport_lock:
                 completed = await run_v16_live_replay_events(
                     self._simulator,
                     events,
                     reconnect_after=reconnect_after,
                     pacing=pacing,
+                    metrics=metrics,
+                    max_retained_actions=MAX_REPLAY_ACTIONS_IN_RESPONSE,
                 )
             return {
                 "ok": True,
@@ -339,10 +344,12 @@ class LiveSimulatorWorker:
                 "capture_id": source.capture_id,
                 "source_charger": request.get("source_charger"),
                 "stream": replay_stream,
-                "events_completed": len(completed),
+                "events_completed": metrics.completed_requests,
                 "actions": list(completed),
+                "actions_truncated": metrics.completed_requests > len(completed),
                 "pacing": pacing.mode,
                 "reconnect_after": reconnect_after,
+                "metrics": metrics.as_dict(),
             }
         if action == "reconnect":
             await self.reconnect()

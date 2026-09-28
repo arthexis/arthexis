@@ -264,3 +264,117 @@ def test_replay_command_selects_inbound_stream(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["stream"] == "inbound"
     assert payload["actions"] == ["Authorize"]
+
+
+
+def test_start_uses_endpoint_and_local_identity(monkeypatch):
+    seen = {}
+
+    def fake_open(self, options):
+        seen.update(options)
+
+    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
+    monkeypatch.setattr(Command, "_open", fake_open)
+
+    call_command("ocpp_simulator", "start", "ws://192.168.129.10:9000")
+
+    assert seen["action"] == "start"
+    assert seen["endpoint"] == "ws://192.168.129.10:9000"
+    assert seen["charger"] is None
+
+
+def test_default_identity_prefers_explicit_environment(monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
+
+    assert Command._default_charger_identity() == "GW001"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "allowed"),
+    [
+        ("ws://192.168.129.10:9000", True),
+        ("ws://127.0.0.1:9000", True),
+        ("ws://169.254.10.2:9000", True),
+        ("ws://example.test:9000", False),
+        ("wss://192.168.129.10:9000", False),
+    ],
+)
+def test_local_plaintext_policy_only_auto_allows_local_ip_endpoints(endpoint, allowed):
+    assert Command._allow_local_insecure_ws(endpoint) is allowed
+
+
+def test_session_authorize_uses_default_identity_and_positional_tag(monkeypatch, capsys):
+    seen = {}
+
+    async def fake_send_control(charger, request):
+        seen["charger"] = charger
+        seen["request"] = request
+        return {"ok": True, "charger": charger, "authorization": "Accepted"}
+
+    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command("ocpp_simulator", "authorize", "TEST001")
+
+    assert seen == {
+        "charger": "GW001",
+        "request": {"action": "authorize", "id_tag": "TEST001"},
+    }
+    assert json.loads(capsys.readouterr().out)["authorization"] == "Accepted"
+
+
+def test_session_replay_uses_default_identity_and_positional_source(monkeypatch, capsys):
+    seen = {}
+
+    async def fake_send_control(charger, request):
+        seen["charger"] = charger
+        seen["request"] = request
+        return {
+            "ok": True,
+            "charger": charger,
+            "source_kind": "database",
+            "source_charger": None,
+            "stream": "transactions",
+            "events_completed": 0,
+            "actions": [],
+            "actions_truncated": False,
+            "pacing": "maximum",
+            "reconnect_after": None,
+            "metrics": {},
+        }
+
+    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command("ocpp_simulator", "replay", "reconciled.sqlite3")
+
+    assert seen["charger"] == "GW001"
+    assert seen["request"]["source"] == "reconciled.sqlite3"
+    assert seen["request"]["pacing"] == "maximum"
+    assert json.loads(capsys.readouterr().out)["events_completed"] == 0
+
+
+def test_stop_maps_to_close_for_default_session(monkeypatch, capsys):
+    seen = {}
+
+    async def fake_send_control(charger, request):
+        seen["charger"] = charger
+        seen["request"] = request
+        return {"ok": True, "charger": charger, "closed": True}
+
+    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command("ocpp_simulator", "stop")
+
+    assert seen == {"charger": "GW001", "request": {"action": "close"}}
+    assert json.loads(capsys.readouterr().out)["closed"] is True

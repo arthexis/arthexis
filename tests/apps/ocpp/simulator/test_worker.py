@@ -204,11 +204,20 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             *,
             reconnect_after,
             pacing,
+            metrics,
+            max_retained_actions,
         ):
             seen["transport"] = transport
+            seen["max_retained_actions"] = max_retained_actions
+            seen["metrics"] = metrics
             seen["events"] = events
             seen["reconnect_after"] = reconnect_after
             seen["pacing"] = pacing
+            metrics.attempted_requests = 2
+            metrics.completed_requests = 2
+            metrics.elapsed_seconds = 0.5
+            metrics.total_latency_seconds = 0.2
+            metrics.max_latency_seconds = 0.15
             return ("StartTransaction", "MeterValues")
 
         monkeypatch.setattr(
@@ -249,6 +258,7 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
         assert seen["pacing"].mode == "burst"
         assert seen["pacing"].burst_size == 10
         assert seen["pacing"].burst_pause_seconds == 1.5
+        assert seen["max_retained_actions"] == 1000
         assert response == {
             "ok": True,
             "charger": "GWAY001",
@@ -258,8 +268,25 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             "stream": "transactions",
             "events_completed": 2,
             "actions": ["StartTransaction", "MeterValues"],
+            "actions_truncated": False,
             "pacing": "burst",
             "reconnect_after": 25,
+            "metrics": {
+                "attempted_requests": 2,
+                "completed_requests": 2,
+                "failed_requests": 0,
+                "transport_failures": 0,
+                "reconnect_attempts": 0,
+                "reconnect_successes": 0,
+                "reconnect_failures": 0,
+                "elapsed_seconds": 0.5,
+                "throughput_requests_per_second": 4.0,
+                "mean_latency_seconds": 0.1,
+                "max_latency_seconds": 0.15,
+                "mean_reconnect_seconds": 0.0,
+                "max_reconnect_seconds": 0.0,
+                "error_counts": {},
+            },
         }
 
     asyncio.run(exercise())
@@ -292,8 +319,17 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
             seen["batch_size"] = batch_size
             return ("inbound-events",)
 
-        async def fake_run(transport, events, *, reconnect_after, pacing):
+        async def fake_run(
+            transport,
+            events,
+            *,
+            reconnect_after,
+            pacing,
+            metrics,
+            max_retained_actions,
+        ):
             seen["events"] = events
+            seen["max_retained_actions"] = max_retained_actions
             return ("Authorize",)
 
         monkeypatch.setattr(
@@ -324,7 +360,9 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
         assert seen["source_charger"] == "field-charger"
         assert seen["batch_size"] == 25
         assert seen["events"] == ("inbound-events",)
+        assert seen["max_retained_actions"] == 1000
         assert response["stream"] == "inbound"
         assert response["actions"] == ["Authorize"]
+        assert response["actions_truncated"] is False
 
     asyncio.run(exercise())

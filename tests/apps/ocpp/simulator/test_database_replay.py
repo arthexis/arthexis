@@ -10,6 +10,7 @@ from asgiref.sync import async_to_sync
 
 import apps.ocpp.simulator.database_replay as database_replay
 from apps.ocpp.simulator.database_replay import (
+    ReplayMetrics,
     ReplayPacing,
     iter_v16_inbound_request_replay,
     iter_v16_transaction_replay,
@@ -373,6 +374,195 @@ def test_live_replay_rejects_invalid_reconnect_checkpoint():
                 FakeReplayTransport(),
                 (),
                 reconnect_after=0,
+            )
+
+    async_to_sync(exercise)()
+
+
+def test_live_replay_collects_bounded_latency_and_throughput_metrics():
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.2, 3.0, 3.3, 4.0))
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
+
+        completed = await run_v16_live_replay_events(
+            FakeReplayTransport(transaction_id=77),
+            replay_events(),
+            metrics=metrics,
+        )
+
+        assert completed == (
+            "StartTransaction",
+            "MeterValues",
+            "StopTransaction",
+        )
+        summary = metrics.as_dict()
+        assert summary["attempted_requests"] == 3
+        assert summary["completed_requests"] == 3
+        assert summary["failed_requests"] == 0
+        assert summary["transport_failures"] == 0
+        assert summary["reconnect_attempts"] == 0
+        assert summary["reconnect_successes"] == 0
+        assert summary["reconnect_failures"] == 0
+        assert summary["elapsed_seconds"] == pytest.approx(4.0)
+        assert summary["throughput_requests_per_second"] == pytest.approx(0.75)
+        assert summary["mean_latency_seconds"] == pytest.approx(0.2)
+        assert summary["max_latency_seconds"] == pytest.approx(0.3)
+        assert summary["mean_reconnect_seconds"] == 0.0
+        assert summary["max_reconnect_seconds"] == 0.0
+        assert summary["error_counts"] == {}
+
+    async_to_sync(exercise)()
+
+
+def test_live_replay_counts_transport_errors_without_retaining_samples():
+    class FailingTransport(FakeReplayTransport):
+        async def call(self, action, payload):
+            if action == "MeterValues":
+                raise TimeoutError("simulated timeout")
+            return await super().call(action, payload)
+
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.4, 2.5))
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
+
+        with pytest.raises(TimeoutError, match="simulated timeout"):
+            await run_v16_live_replay_events(
+                FailingTransport(),
+                replay_events(),
+                metrics=metrics,
+            )
+
+        summary = metrics.as_dict()
+        assert summary["attempted_requests"] == 2
+        assert summary["completed_requests"] == 1
+        assert summary["failed_requests"] == 1
+        assert summary["transport_failures"] == 1
+        assert summary["elapsed_seconds"] == pytest.approx(2.5)
+        assert summary["mean_latency_seconds"] == pytest.approx(0.25)
+        assert summary["max_latency_seconds"] == pytest.approx(0.4)
+        assert summary["error_counts"] == {"TimeoutError": 1}
+
+    async_to_sync(exercise)()
+
+
+
+def test_live_replay_measures_successful_reconnect_cycle():
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.5, 3.0, 3.2, 4.0, 4.3, 5.0))
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
+        transport = FakeReplayTransport(transaction_id=77)
+
+        completed = await run_v16_live_replay_events(
+            transport,
+            replay_events(),
+            reconnect_after=1,
+            metrics=metrics,
+        )
+
+        assert completed == (
+            "StartTransaction",
+            "MeterValues",
+            "StopTransaction",
+        )
+        summary = metrics.as_dict()
+        assert transport.reconnects == 1
+        assert transport.boots == 1
+        assert summary["reconnect_attempts"] == 1
+        assert summary["reconnect_successes"] == 1
+        assert summary["reconnect_failures"] == 0
+        assert summary["mean_reconnect_seconds"] == pytest.approx(0.5)
+        assert summary["max_reconnect_seconds"] == pytest.approx(0.5)
+
+    async_to_sync(exercise)()
+
+
+def test_live_replay_measures_failed_reconnect_boot():
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.4, 2.5))
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
+
+        with pytest.raises(ValueError, match="not accepted"):
+            await run_v16_live_replay_events(
+                FakeReplayTransport(boot_status="Pending"),
+                replay_events(),
+                reconnect_after=1,
+                metrics=metrics,
+            )
+
+        summary = metrics.as_dict()
+        assert summary["attempted_requests"] == 1
+        assert summary["completed_requests"] == 1
+        assert summary["reconnect_attempts"] == 1
+        assert summary["reconnect_successes"] == 0
+        assert summary["reconnect_failures"] == 1
+        assert summary["mean_reconnect_seconds"] == pytest.approx(0.4)
+        assert summary["max_reconnect_seconds"] == pytest.approx(0.4)
+        assert summary["error_counts"] == {"ValueError": 1}
+
+    async_to_sync(exercise)()
+
+
+
+def test_live_replay_handles_100k_lazy_events_with_bounded_retained_state():
+    class CountingTransport:
+        def __init__(self):
+            self.calls = 0
+            self.reconnects = 0
+            self.boots = 0
+
+        async def call(self, action, payload):
+            self.calls += 1
+            return {}
+
+        async def reconnect(self):
+            self.reconnects += 1
+
+        async def boot(self):
+            self.boots += 1
+            return type("Boot", (), {"status": "Accepted"})()
+
+    def events():
+        for sequence in range(100_000):
+            yield ReplayEvent(
+                source_transaction_id=sequence,
+                occurred_at=f"synthetic-{sequence}",
+                action="Heartbeat",
+                payload={},
+            )
+
+    async def exercise():
+        transport = CountingTransport()
+        metrics = ReplayMetrics()
+
+        completed = await run_v16_live_replay_events(
+            transport,
+            events(),
+            reconnect_after=50_000,
+            metrics=metrics,
+            max_retained_actions=25,
+        )
+
+        assert transport.calls == 100_000
+        assert transport.reconnects == 1
+        assert transport.boots == 1
+        assert metrics.attempted_requests == 100_000
+        assert metrics.completed_requests == 100_000
+        assert metrics.failed_requests == 0
+        assert metrics.reconnect_successes == 1
+        assert len(completed) == 25
+        assert completed == ("Heartbeat",) * 25
+
+    async_to_sync(exercise)()
+
+
+@pytest.mark.parametrize("limit", [-1, -100])
+def test_live_replay_rejects_negative_retained_action_limit(limit):
+    async def exercise():
+        with pytest.raises(ValueError, match="max_retained_actions"):
+            await run_v16_live_replay_events(
+                FakeReplayTransport(),
+                (),
+                max_retained_actions=limit,
             )
 
     async_to_sync(exercise)()
