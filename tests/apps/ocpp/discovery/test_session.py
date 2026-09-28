@@ -30,6 +30,7 @@ def test_create_session_builds_report_layout_and_initial_event(tmp_path) -> None
     } == {
         "manifest.json",
         "events.jsonl",
+        "summary.json",
         "network",
         "traffic",
         "ocpp",
@@ -85,6 +86,87 @@ def test_record_preserves_sequence_and_evidence_category(tmp_path) -> None:
         "operator_note",
     ]
     assert inference["artifact_refs"] == ["network/trace.json"]
+
+
+def test_open_reads_existing_session_and_continues_sequence(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="open-test")
+    session.record("link_up")
+
+    reopened = DiscoverySession.open(tmp_path, "open-test")
+    event = reopened.record("dns_query")
+
+    assert reopened.created_at == session.created_at
+    assert event["sequence"] == 3
+    assert [item["event_type"] for item in reopened.events()] == [
+        "session_started",
+        "link_up",
+        "dns_query",
+    ]
+
+
+def test_summary_is_regenerated_from_authoritative_event_stream(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="summary-test")
+    session.record("dns_query")
+    session.record("csms_candidate", category="inference")
+    session.record("operator_note", category="operator_note")
+
+    stale_summary = {
+        "session_id": "summary-test",
+        "event_count": 999,
+    }
+    (session.path / "summary.json").write_text(
+        json.dumps(stale_summary),
+        encoding="utf-8",
+    )
+
+    summary = session.write_summary()
+
+    assert summary["event_count"] == 4
+    assert summary["last_sequence"] == 4
+    assert summary["event_counts"] == {
+        "session_started": 1,
+        "dns_query": 1,
+        "csms_candidate": 1,
+        "operator_note": 1,
+    }
+    assert summary["category_counts"] == {
+        "observation": 2,
+        "inference": 1,
+        "operator_note": 1,
+    }
+    persisted = json.loads(
+        (session.path / "summary.json").read_text(encoding="utf-8")
+    )
+    assert persisted == summary
+
+
+def test_list_returns_only_valid_session_manifests_in_creation_order(tmp_path) -> None:
+    DiscoverySession.create(
+        tmp_path,
+        session_id="later",
+        created_at=datetime(2026, 9, 28, 19, 0, tzinfo=timezone.utc),
+    )
+    DiscoverySession.create(
+        tmp_path,
+        session_id="earlier",
+        created_at=datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc),
+    )
+    ignored = tmp_path / "discovery" / "not-a-session"
+    ignored.mkdir()
+    (ignored / "junk.txt").write_text("ignored", encoding="utf-8")
+
+    assert DiscoverySession.list(tmp_path) == [
+        {
+            "session_id": "earlier",
+            "created_at": "2026-09-28T18:00:00Z",
+            "status": "active",
+        },
+        {
+            "session_id": "later",
+            "created_at": "2026-09-28T19:00:00Z",
+            "status": "active",
+        },
+    ]
 
 
 @pytest.mark.parametrize(
