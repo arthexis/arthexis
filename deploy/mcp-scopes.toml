@@ -17,3 +17,7 @@ operations = [
   "log.search",
 ]
 environment = []
+
+[scopes.full-access]
+operations = ["__all__"]
+environment = ["__all__"]
