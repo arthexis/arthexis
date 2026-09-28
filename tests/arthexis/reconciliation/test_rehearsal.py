@@ -234,3 +234,90 @@ def test_go_bundle_is_immutable_and_refuses_overwrite(tmp_path):
             migration_text_report=Path(result["text_report"]),
             resource_report=Path(result["resource_report"]),
         )
+
+
+@pytest.mark.reconciliation_e2e
+def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
+    legacy = tmp_path / "legacy"
+    _legacy_installation(legacy)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+            "--cutover",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["decision"] == "GO"
+    assert result["cutover"]["mode"] == "final-cutover"
+    assert result["cutover"]["no_missed_writes"] is True
+
+    bundle = Path(result["go_bundle"])
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cutover"]["mode"] == "final-cutover"
+    assert manifest["cutover"]["no_missed_writes"] is True
+    assert (bundle / "migration" / "cutover-proof.json").is_file()
+
+
+@pytest.mark.reconciliation_e2e
+def test_cutover_rehearsal_returns_no_go_if_live_source_changes(tmp_path, monkeypatch):
+    from arthexis.reconciliation import rehearsal
+
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    output = tmp_path / "rehearsal"
+
+    original = rehearsal.verify_cutover_source_unchanged
+
+    def mutate_then_verify(*args, **kwargs):
+        with sqlite3.connect(source_database) as connection:
+            connection.execute(
+                "INSERT INTO core_rfid(rfid, active) VALUES ('late-write', 1)"
+            )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        rehearsal,
+        "verify_cutover_source_unchanged",
+        mutate_then_verify,
+    )
+
+    from scripts import reconcile
+
+    arguments = reconcile._parser().parse_args(
+        [
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+            "--cutover",
+        ]
+    )
+    result_code = reconcile._rehearse(arguments)
+
+    assert result_code == 2
+    proof = json.loads((output / "cutover-proof.json").read_text(encoding="utf-8"))
+    assert proof["decision"] == "NO-GO"
+    assert proof["no_missed_writes"] is False
+    assert not any((output / "bundles").iterdir()) if (output / "bundles").exists() else True
