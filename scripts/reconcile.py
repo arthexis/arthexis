@@ -26,7 +26,7 @@ REHEARSE_DOC_URL = (
 
 
 def _rehearse_help() -> str:
-    return """Legacy satellite migration rehearsal
+    return f"""Legacy satellite migration rehearsal
 
 Usage:
   python scripts/reconcile.py rehearse <legacy-installation> [options]
@@ -52,9 +52,9 @@ Important options:
   --cutover                   final cutover rehearsal mode
 
 Operator procedure:
-  {doc_path}
-  {doc_url}
-""".format(doc_path=REHEARSE_DOC_PATH, doc_url=REHEARSE_DOC_URL)
+  {REHEARSE_DOC_PATH}
+  {REHEARSE_DOC_URL}
+"""
 
 
 def _parser() -> argparse.ArgumentParser:
