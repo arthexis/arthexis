@@ -18,7 +18,7 @@ def test_discover_uses_configured_data_root(monkeypatch, settings, tmp_path) -> 
         return FakeSession()
 
     settings.DATA_DIR = tmp_path
-    monkeypatch.setattr(discover_module, "TcpdumpObserver", FakeObserver)
+    monkeypatch.setattr(discover_module, "TsharkObserver", FakeObserver)
     monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
 
     result = discover_module.discover(interface="eth0", role="control")
