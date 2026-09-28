@@ -9,18 +9,37 @@ can ingest that command in the same way as other Arthexis management commands.
 
 ## GWAY-001 → GW004 field test
 
-On GWAY-001, install the same Arthexis build used for the simulator and open a
-connection to the GW004 OCPP listener. For a trusted isolated Ethernet test
-network, plaintext WebSocket must be opted into explicitly:
+The field-facing interface is endpoint-driven. GW001 behaves like a normal
+charger: it knows its own charger identity and the CSMS URL, but it does not
+need to know that the remote node happens to be GW004.
+
+With Arthexis mounted in Gway, the intended operator flow on GW001 is:
 
 ```console
-python manage.py ocpp_simulator open \
-  --url ws://192.168.129.10:9000 \
-  --charger GWAY001 \
-  --allow-insecure-ws
+gway arthexis ocpp simulator start ws://192.168.129.10:9000
+gway arthexis ocpp simulator authorize TEST001
+gway arthexis ocpp simulator replay reconciled.sqlite3
+gway arthexis ocpp simulator status
+gway arthexis ocpp simulator stop
 ```
 
-`open` establishes the WebSocket, negotiates `ocpp1.6`, sends
+`start` derives the simulated charger identity from
+`ARTHEXIS_OCPP_SIMULATOR_IDENTITY` when set, otherwise from the local short
+hostname. Pass `--charger ...` only when an explicit override is needed.
+
+For a literal private, loopback, or link-local IP address, `ws://` is accepted
+automatically for the direct field-test network. Plaintext WebSocket to a
+hostname or non-local address still requires explicit `--allow-insecure-ws`.
+Production-style endpoints should use `wss://`.
+
+The equivalent direct Django command remains available for debugging and
+backward compatibility:
+
+```console
+python manage.py ocpp_simulator start ws://192.168.129.10:9000
+```
+
+`start` establishes the WebSocket, negotiates `ocpp1.6`, sends
 `BootNotification`, requires an `Accepted` boot result, and leaves a local
 worker owning that same connection. Production-style endpoints should use
 `wss://`; insecure `ws://` is rejected unless explicitly allowed.
@@ -28,9 +47,7 @@ worker owning that same connection. Production-style endpoints should use
 Send an arbitrary RFID/idTag without predicting the authorization result:
 
 ```console
-python manage.py ocpp_simulator authorize \
-  --charger GWAY001 \
-  --id-tag TEST001
+python manage.py ocpp_simulator authorize TEST001
 ```
 
 The JSON response reports the actual OCPP authorization status returned by
@@ -82,9 +99,9 @@ observable rather than being duplicated in test code.
 Inspect or deliberately cycle the connection:
 
 ```console
-python manage.py ocpp_simulator status --charger GWAY001
-python manage.py ocpp_simulator reconnect --charger GWAY001
-python manage.py ocpp_simulator close --charger GWAY001
+python manage.py ocpp_simulator status
+python manage.py ocpp_simulator reconnect
+python manage.py ocpp_simulator stop
 ```
 
 `reconnect` closes the old transport, opens a new WebSocket for the same
@@ -134,9 +151,7 @@ finalized replay/capture package that resolves to one.
 Replay reconstructed transaction history at charger speed:
 
 ```console
-python manage.py ocpp_simulator replay \
-  --charger GWAY001 \
-  --source /path/to/reconciled.sqlite3 \
+python manage.py ocpp_simulator replay /path/to/reconciled.sqlite3 \
   --source-charger FIELD_CHARGER \
   --stream transactions \
   --pacing maximum
@@ -148,9 +163,7 @@ charger identity, performs `BootNotification`, requires `Accepted`, and then
 continues the same replay stream:
 
 ```console
-python manage.py ocpp_simulator replay \
-  --charger GWAY001 \
-  --source /path/to/reconciled.sqlite3 \
+python manage.py ocpp_simulator replay /path/to/reconciled.sqlite3 \
   --source-charger FIELD_CHARGER \
   --stream transactions \
   --reconnect-after 500
@@ -187,9 +200,7 @@ When the migrated database contains retained charger-originated
 directly instead of reconstructing transaction history:
 
 ```console
-python manage.py ocpp_simulator replay \
-  --charger GWAY001 \
-  --source /path/to/reconciled.sqlite3 \
+python manage.py ocpp_simulator replay /path/to/reconciled.sqlite3 \
   --source-charger FIELD_CHARGER \
   --stream inbound \
   --pacing maximum
