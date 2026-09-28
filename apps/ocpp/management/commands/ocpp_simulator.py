@@ -76,6 +76,15 @@ class Command(BaseCommand):
         replay_parser.add_argument("--charger", required=True)
         replay_parser.add_argument("--source", required=True)
         replay_parser.add_argument("--source-charger")
+        replay_parser.add_argument(
+            "--stream",
+            choices=("transactions", "inbound"),
+            default="transactions",
+            help=(
+                "Replay reconstructed transaction history or retained inbound "
+                "charger-originated OCPP requests."
+            ),
+        )
         replay_parser.add_argument("--batch-size", type=int, default=250)
         replay_parser.add_argument(
             "--pacing",
@@ -129,6 +138,7 @@ class Command(BaseCommand):
                     {
                         "source": options["source"],
                         "source_charger": options["source_charger"],
+                        "stream": options["stream"],
                         "batch_size": options["batch_size"],
                         "pacing": options["pacing"],
                         "interval_seconds": options["interval_seconds"],
