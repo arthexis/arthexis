@@ -137,7 +137,12 @@ def _verify_public_mutation_ceiling(bearer: str) -> None:
         raise RuntimeError("public query did not enforce mutation ceiling")
 
 
-def _verify_public_mcp(bearer: str) -> None:
+def _verify_public_mcp(
+    bearer: str,
+    *,
+    expected_tools: set[str],
+    query_command: str | None = None,
+) -> None:
     initialize = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -185,11 +190,22 @@ def _verify_public_mcp(bearer: str) -> None:
         tool.get("name"): tool
         for tool in listed.get("result", {}).get("tools", [])
     }
-    if set(tools) != {"gway", "query"}:
-        raise RuntimeError(f"unexpected MCP tool set: {sorted(tools)}")
-    annotations = tools["query"].get("annotations", {})
-    if annotations.get("readOnlyHint") is not True:
-        raise RuntimeError("MCP query tool is not advertised read-only")
+    if set(tools) != expected_tools:
+        raise RuntimeError(
+            f"unexpected MCP tool set: {sorted(tools)}, "
+            f"expected {sorted(expected_tools)}"
+        )
+    if "query" in tools:
+        annotations = tools["query"].get("annotations", {})
+        if annotations.get("readOnlyHint") is not True:
+            raise RuntimeError("MCP query tool is not advertised read-only")
+    if "gway" in tools:
+        annotations = tools["gway"].get("annotations", {})
+        if annotations.get("readOnlyHint") is not False:
+            raise RuntimeError("MCP gway tool is not advertised mutating")
+
+    if query_command is None:
+        return
 
     status, called, _ = _mcp_post(
         bearer,
@@ -199,7 +215,7 @@ def _verify_public_mcp(bearer: str) -> None:
             "method": "tools/call",
             "params": {
                 "name": "query",
-                "arguments": {"command": "log sources"},
+                "arguments": {"command": query_command},
             },
         },
         session_id=session_id,
@@ -243,7 +259,15 @@ def _verify_authenticated_public_surfaces() -> None:
 
         _verify_public_query(read_bearer)
         _verify_public_mutation_ceiling(mutate_bearer)
-        _verify_public_mcp(read_bearer)
+        _verify_public_mcp(
+            read_bearer,
+            expected_tools={"query"},
+            query_command="log sources",
+        )
+        _verify_public_mcp(
+            mutate_bearer,
+            expected_tools={"gway", "query"},
+        )
     finally:
         tokens.remove(read_token_name)
         tokens.remove(mutate_token_name)
