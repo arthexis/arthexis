@@ -27,6 +27,11 @@ _TSHARK_FIELD_ORDER = (
     "dns.qry.type",
     "dns.qry.name",
     "dns.a",
+    "http.request.method",
+    "http.host",
+    "http.request.uri",
+    "http.upgrade",
+    "http.sec_websocket_protocol",
 )
 
 
@@ -376,3 +381,101 @@ def test_unmatched_dns_response_does_not_invent_hostname() -> None:
 
     assert derived == []
     assert tracker.candidates()[0].hostnames == set()
+
+
+def test_tshark_parser_retains_plain_http_request_metadata() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "aa:bb:cc:dd:ee:ff",
+                "ip.src": "192.0.2.20",
+                "ip.dst": "198.51.100.40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "9000",
+                "http.request.method": "GET",
+                "http.host": "csms.example.com:9000",
+                "http.request.uri": "/health",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "http_request"
+    assert observation.metadata["method"] == "GET"
+    assert observation.metadata["hostname"] == "csms.example.com:9000"
+    assert observation.metadata["path"] == "/health"
+    assert "subprotocol" not in observation.metadata
+
+
+def test_tshark_parser_retains_websocket_upgrade_metadata() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "aa:bb:cc:dd:ee:ff",
+                "ip.src": "192.0.2.20",
+                "ip.dst": "198.51.100.40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "9000",
+                "http.request.method": "GET",
+                "http.host": "csms.example.com:9000",
+                "http.request.uri": "/ocpp/CP001",
+                "http.upgrade": "websocket",
+                "http.sec_websocket_protocol": "ocpp1.6",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "websocket_upgrade"
+    assert observation.metadata["hostname"] == "csms.example.com:9000"
+    assert observation.metadata["path"] == "/ocpp/CP001"
+    assert observation.metadata["subprotocol"] == "ocpp1.6"
+
+
+def test_websocket_evidence_enriches_candidate_even_without_fresh_arp() -> None:
+    tracker = CandidateTracker()
+
+    derived = tracker.consume(
+        NetworkObservation(
+            "websocket_upgrade",
+            {
+                "destination_ip": "198.51.100.40",
+                "destination_port": 9000,
+                "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "hostname": "csms.example.com:9000",
+                "path": "/ocpp/CP001",
+                "subprotocol": "ocpp1.6",
+            },
+        )
+    )
+
+    candidate = tracker.candidates()[0]
+    assert candidate.hostnames == {"csms.example.com:9000"}
+    assert candidate.websocket_paths == {"/ocpp/CP001"}
+    assert candidate.ocpp_subprotocols == {"ocpp1.6"}
+    assert candidate.mac_without_resolution is True
+    assert [item.event_type for item in derived] == [
+        "destination_mac_observed_without_resolution"
+    ]
+
+
+def test_http_request_does_not_invent_websocket_metadata() -> None:
+    tracker = CandidateTracker()
+    tracker.consume(
+        NetworkObservation(
+            "http_request",
+            {
+                "destination_ip": "198.51.100.40",
+                "destination_port": 9000,
+                "hostname": "csms.example.com",
+                "path": "/health",
+            },
+        )
+    )
+
+    candidate = tracker.candidates()[0]
+    assert candidate.hostnames == {"csms.example.com"}
+    assert candidate.websocket_paths == {"/health"}
+    assert candidate.ocpp_subprotocols == set()
