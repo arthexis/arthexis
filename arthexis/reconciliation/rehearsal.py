@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -288,7 +290,12 @@ def verify_cutover_source_unchanged(
     """Prove the live legacy DB did not advance beyond the accepted snapshot."""
 
     source_database = resolve_source(source, database=database).expanduser().resolve()
-    current_sha256 = _sha256(source_database)
+    with tempfile.TemporaryDirectory(prefix="arthexis-cutover-proof-") as temporary:
+        snapshot = Path(temporary) / "legacy.sqlite3"
+        with sqlite3.connect(f"file:{source_database}?mode=ro", uri=True) as origin:
+            with sqlite3.connect(snapshot) as target:
+                origin.backup(target)
+        current_sha256 = _sha256(snapshot)
     unchanged = current_sha256 == expected_database_sha256
     proof = {
         "format": CUTOVER_PROOF_FORMAT,
