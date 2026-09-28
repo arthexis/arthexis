@@ -2,7 +2,7 @@ name: python / Python compatibility
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.13']
+        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]') }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -42,11 +42,14 @@ jobs:
         continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
+          WORKFLOW_PR: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') }}
         run: |
-          if [[ "$PYTHON_VERSION" == "3.10" ]]; then
-            python -m pytest -q --durations=20
+          if [[ "$WORKFLOW_PR" == "true" ]]; then
+            python -m pytest -q --durations=20 -m workflow
+          elif [[ "$PYTHON_VERSION" == "3.10" ]]; then
+            python -m pytest -q --durations=20 -m "not workflow"
           else
-            python -m pytest -q --durations=20 -m "not reconciliation_e2e"
+            python -m pytest -q --durations=20 -m "not workflow and not reconciliation_e2e"
           fi
 
       - name: Require all validation checks
