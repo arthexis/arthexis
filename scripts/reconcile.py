@@ -97,6 +97,14 @@ def _parser() -> argparse.ArgumentParser:
         default=1024.0,
         help="minimum free disk required before capture in MiB (default: 1024)",
     )
+    parser.add_argument(
+        "--cutover",
+        action="store_true",
+        help=(
+            "treat rehearsal as the final cutover run and require proof that "
+            "the live legacy database did not change after the initial capture"
+        ),
+    )
     return parser
 
 
@@ -211,6 +219,7 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         create_go_bundle,
         evaluate_resources,
         preflight_disk,
+        verify_cutover_source_unchanged,
         write_resource_receipt,
     )
     from arthexis.reconciliation.verification import verify_reconciliation
@@ -278,6 +287,39 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         return 2
 
     verification = verify_reconciliation(fixture.path)
+    cutover_proof = None
+    if verification.decision == "GO" and arguments.cutover:
+        cutover_proof = verify_cutover_source_unchanged(
+            source,
+            rehearsal_root,
+            expected_database_sha256=capture_verification["database_sha256"],
+            database=arguments.database,
+        )
+        if cutover_proof["decision"] != "GO":
+            payload = {
+                "source": str(source),
+                "capture": {
+                    "capture_id": capture.capture_id,
+                    "path": str(capture.path),
+                    "manifest_sha256": capture_verification["manifest_sha256"],
+                    "database_sha256": capture_verification["database_sha256"],
+                },
+                "fixture": {
+                    "fixture_id": fixture.fixture_id,
+                    "path": str(fixture.path),
+                },
+                "destination_database": str(fixture.path / "reconciled.sqlite3"),
+                "decision": "NO-GO",
+                "reason": "cutover-source-changed",
+                "cutover": cutover_proof,
+                "resource_report": str(resource_receipt),
+                "resource_safety": resource_result,
+                "json_report": str(verification.json_path),
+                "text_report": str(verification.text_path),
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 2
+
     go_bundle = None
     if verification.decision == "GO":
         go_bundle = create_go_bundle(
@@ -287,6 +329,7 @@ def _rehearse(arguments: argparse.Namespace) -> int:
             migration_report=verification.json_path,
             migration_text_report=verification.text_path,
             resource_report=resource_receipt,
+            cutover=cutover_proof,
         )
     payload = {
         "source": str(source),
@@ -302,6 +345,7 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         },
         "destination_database": str(fixture.path / "reconciled.sqlite3"),
         "decision": verification.decision,
+        "cutover": cutover_proof,
         "go_bundle": str(go_bundle) if go_bundle is not None else None,
         "resource_report": str(resource_receipt),
         "resource_safety": resource_result,
