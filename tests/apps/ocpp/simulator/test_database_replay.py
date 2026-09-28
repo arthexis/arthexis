@@ -379,11 +379,10 @@ def test_live_replay_rejects_invalid_reconnect_checkpoint():
     async_to_sync(exercise)()
 
 
-def test_live_replay_collects_bounded_latency_and_throughput_metrics(monkeypatch):
+def test_live_replay_collects_bounded_latency_and_throughput_metrics():
     async def exercise():
         ticks = iter((1.0, 1.1, 2.0, 2.2, 3.0, 3.3, 4.0))
-        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
-        metrics = ReplayMetrics(_started_at=0.0)
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
 
         completed = await run_v16_live_replay_events(
             FakeReplayTransport(transaction_id=77),
@@ -415,7 +414,7 @@ def test_live_replay_collects_bounded_latency_and_throughput_metrics(monkeypatch
     async_to_sync(exercise)()
 
 
-def test_live_replay_counts_transport_errors_without_retaining_samples(monkeypatch):
+def test_live_replay_counts_transport_errors_without_retaining_samples():
     class FailingTransport(FakeReplayTransport):
         async def call(self, action, payload):
             if action == "MeterValues":
@@ -424,8 +423,7 @@ def test_live_replay_counts_transport_errors_without_retaining_samples(monkeypat
 
     async def exercise():
         ticks = iter((1.0, 1.1, 2.0, 2.4, 2.5))
-        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
-        metrics = ReplayMetrics(_started_at=0.0)
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
 
         with pytest.raises(TimeoutError, match="simulated timeout"):
             await run_v16_live_replay_events(
@@ -448,11 +446,10 @@ def test_live_replay_counts_transport_errors_without_retaining_samples(monkeypat
 
 
 
-def test_live_replay_measures_successful_reconnect_cycle(monkeypatch):
+def test_live_replay_measures_successful_reconnect_cycle():
     async def exercise():
         ticks = iter((1.0, 1.1, 2.0, 2.5, 3.0, 3.2, 4.0, 4.3, 5.0))
-        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
-        metrics = ReplayMetrics(_started_at=0.0)
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
         transport = FakeReplayTransport(transaction_id=77)
 
         completed = await run_v16_live_replay_events(
@@ -479,11 +476,10 @@ def test_live_replay_measures_successful_reconnect_cycle(monkeypatch):
     async_to_sync(exercise)()
 
 
-def test_live_replay_measures_failed_reconnect_boot(monkeypatch):
+def test_live_replay_measures_failed_reconnect_boot():
     async def exercise():
         ticks = iter((1.0, 1.1, 2.0, 2.4, 2.5))
-        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
-        metrics = ReplayMetrics(_started_at=0.0)
+        metrics = ReplayMetrics(_clock=lambda: next(ticks), _started_at=0.0)
 
         with pytest.raises(ValueError, match="not accepted"):
             await run_v16_live_replay_events(
