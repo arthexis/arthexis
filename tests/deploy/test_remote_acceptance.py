@@ -56,3 +56,13 @@ def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
     assert "gway --recipe deploy/remote-expose.rx" in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
+
+
+def test_remote_acceptance_validates_projected_mcp_tool_sets() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert 'expected_tools={"query"}' in script
+    assert 'query_command="log sources"' in script
+    assert 'expected_tools={"gway", "query"}' in script
+    assert 'if "gway" in tools:' in script
+    assert 'MCP gway tool is not advertised mutating' in script
