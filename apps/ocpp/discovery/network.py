@@ -28,6 +28,11 @@ _TSHARK_FIELDS = (
     "dns.qry.type",
     "dns.qry.name",
     "dns.a",
+    "http.request.method",
+    "http.host",
+    "http.request.uri",
+    "http.upgrade",
+    "http.sec_websocket_protocol",
 )
 
 
@@ -186,6 +191,11 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
     dns_name = fields["dns.qry.name"].rstrip(".")
     dns_type = fields["dns.qry.type"]
     dns_address = fields["dns.a"]
+    http_method = fields["http.request.method"]
+    http_host = fields["http.host"]
+    http_uri = fields["http.request.uri"]
+    http_upgrade = fields["http.upgrade"]
+    websocket_protocol = fields["http.sec_websocket_protocol"]
 
     metadata: dict[str, object] = {
         "source_ip": source_ip or None,
@@ -220,6 +230,19 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
             }
         )
         return NetworkObservation("dns_response", metadata)
+
+    if http_method and destination_ip and destination_port.isdigit():
+        metadata.update(
+            {
+                "method": http_method,
+                "hostname": http_host or None,
+                "path": http_uri or None,
+            }
+        )
+        if http_upgrade.casefold() == "websocket":
+            metadata["subprotocol"] = websocket_protocol or None
+            return NetworkObservation("websocket_upgrade", metadata)
+        return NetworkObservation("http_request", metadata)
 
     if destination_ip and destination_port.isdigit():
         return NetworkObservation("connection_attempt", metadata)
@@ -291,6 +314,7 @@ class CandidateTracker:
 
         if observation.event_type not in {
             "connection_attempt",
+            "http_request",
             "websocket_upgrade",
             "tls_client_hello",
         }:
@@ -311,13 +335,14 @@ class CandidateTracker:
         candidate.attempts += 1
         candidate.hostnames.update(self._dns_resolutions.get(destination_ip, set()))
 
+        derived: list[NetworkObservation] = []
         destination_mac = metadata.get("destination_mac")
         if isinstance(destination_mac, str):
             candidate.destination_mac = destination_mac
             resolved = self._resolved_neighbors.get(destination_ip)
             if resolved != destination_mac:
                 candidate.mac_without_resolution = True
-                return [
+                derived.append(
                     NetworkObservation(
                         "destination_mac_observed_without_resolution",
                         {
@@ -326,7 +351,7 @@ class CandidateTracker:
                             "destination_mac": destination_mac,
                         },
                     )
-                ]
+                )
 
         hostname = metadata.get("hostname")
         if isinstance(hostname, str):
@@ -340,7 +365,7 @@ class CandidateTracker:
         sni = metadata.get("sni")
         if isinstance(sni, str):
             candidate.tls_sni.add(sni)
-        return []
+        return derived
 
     def candidates(self) -> list[CsmsCandidate]:
         """Return candidates ranked by observed connection attempts."""
