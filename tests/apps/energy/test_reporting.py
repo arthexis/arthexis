@@ -421,3 +421,121 @@ def test_reporting_payload_rejects_unknown_enum_values():
         match="invalid meter_continuity",
     ):
         validate_reporting_payload(payload)
+
+
+
+def test_reporting_period_content_digest_is_reproducible():
+    selected_charger = charger("CP-DIGEST")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.2500"),
+    )
+    transaction(
+        selected_charger,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=2),
+        energy_kwh=Decimal("2.7500"),
+    )
+
+    first = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+    second = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert first.content_digest == second.content_digest
+    assert first.as_dict()["content_digest"] == first.content_digest
+    assert len(first.content_digest) == 64
+
+
+def test_reporting_period_content_digest_changes_with_report_content():
+    selected_charger = charger("CP-DIGEST-CHANGE")
+    start = timezone.now()
+    selected = transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    first = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    selected.energy_kwh = Decimal("2.0000")
+    selected.save(update_fields=("energy_kwh",))
+
+    second = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert first.content_digest != second.content_digest
+
+
+def test_reporting_payload_rejects_tampering_after_digest_is_created():
+    selected_charger = charger("CP-TAMPER")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-tamper",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    payload = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+    payload["sessions"][0]["energy_kwh"] = "999.0000"
+
+    with pytest.raises(
+        ReportingContractError,
+        match="content_digest does not match payload",
+    ):
+        validate_reporting_payload(payload)
+
+
+def test_meter_evidence_order_is_canonical():
+    selected_charger = charger("CP-EVIDENCE-ORDER")
+    start = timezone.now()
+    selected = transaction(
+        selected_charger,
+        "tx-evidence",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    later = MeterValue.objects.create(
+        transaction=selected,
+        sampled_at=start + timedelta(minutes=2),
+        value=Decimal("2000"),
+        source_fingerprint="later",
+    )
+    earlier = MeterValue.objects.create(
+        transaction=selected,
+        sampled_at=start + timedelta(minutes=1),
+        value=Decimal("1000"),
+        source_fingerprint="earlier",
+    )
+
+    result = project_charging_session(selected)
+
+    assert result.source_evidence[-2:] == (
+        SourceEvidence(kind="meter_value", reference=earlier.source_fingerprint),
+        SourceEvidence(kind="meter_value", reference=later.source_fingerprint),
+    )
