@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -274,4 +275,89 @@ def test_authorize_scenario_command_passes_operator_matrix_to_worker(
     )
 
     output = capsys.readouterr().out
-    assert '"scenario": "open-authorization-matrix"' in output
+    assert "Authorization scenario: open-authorization-matrix" in output
+    assert "Policy context: open" in output
+
+
+def test_authorize_scenario_json_output_is_machine_readable(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
+
+    async def fake_send_control(charger, request):
+        return {
+            "ok": True,
+            "charger": charger,
+            "scenario": "restricted-authorization-matrix",
+            "policy_context": "restricted",
+            "results": [
+                {
+                    "scenario": "restricted-authorization-matrix",
+                    "attempt": "known-authorized",
+                    "sequence": 1,
+                    "status": "Accepted",
+                    "error": None,
+                    "repeat_of": None,
+                    "policy_context": "restricted",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command(
+        "ocpp_simulator",
+        "authorize-scenario",
+        "--charger",
+        "GWAY001",
+        "--policy-context",
+        "restricted",
+        "--known-authorized",
+        "KNOWN-OK",
+        "--known-denied",
+        "KNOWN-NO",
+        "--unknown",
+        "UNKNOWN",
+        "--json",
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scenario"] == "restricted-authorization-matrix"
+    assert payload["results"][0]["status"] == "Accepted"
+    assert "id_tag" not in payload["results"][0]
+
+
+def test_authorization_scenario_human_output_shows_errors_and_repeats():
+    output = Command._format_authorization_scenario(
+        {
+            "charger": "GWAY001",
+            "scenario": "restricted-authorization-matrix",
+            "policy_context": "restricted",
+            "results": [
+                {
+                    "sequence": 1,
+                    "attempt": "known-authorized",
+                    "status": "Accepted",
+                    "error": None,
+                    "repeat_of": None,
+                },
+                {
+                    "sequence": 2,
+                    "attempt": "known-authorized-repeat",
+                    "status": None,
+                    "error": "connection receive failed",
+                    "repeat_of": "known-authorized",
+                },
+            ],
+        }
+    )
+
+    assert "1. known-authorized: Accepted" in output
+    assert (
+        "2. known-authorized-repeat: ERROR: connection receive failed "
+        "(repeat of known-authorized)"
+    ) in output
+    assert "KNOWN-OK" not in output
