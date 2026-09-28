@@ -179,6 +179,7 @@ def test_replay_command_forwards_source_pacing_and_reconnect(monkeypatch, capsys
             "action": "replay",
             "source": "/tmp/reconciled.sqlite3",
             "source_charger": "field-charger",
+            "stream": "transactions",
             "batch_size": 64,
             "pacing": "fixed",
             "interval_seconds": 0.5,
@@ -192,6 +193,7 @@ def test_replay_command_forwards_source_pacing_and_reconnect(monkeypatch, capsys
             "source_kind": "database",
             "capture_id": None,
             "source_charger": "field-charger",
+            "stream": "transactions",
             "events_completed": 3,
             "actions": ["StartTransaction", "MeterValues", "StopTransaction"],
             "pacing": "fixed",
@@ -225,3 +227,40 @@ def test_replay_command_forwards_source_pacing_and_reconnect(monkeypatch, capsys
     payload = json.loads(capsys.readouterr().out)
     assert payload["events_completed"] == 3
     assert payload["source_kind"] == "database"
+
+
+def test_replay_command_selects_inbound_stream(monkeypatch, capsys):
+    async def fake_send_control(charger, request):
+        assert request["stream"] == "inbound"
+        return {
+            "ok": True,
+            "charger": charger,
+            "source_kind": "database",
+            "capture_id": None,
+            "source_charger": None,
+            "stream": "inbound",
+            "events_completed": 1,
+            "actions": ["Authorize"],
+            "pacing": "maximum",
+            "reconnect_after": None,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command(
+        "ocpp_simulator",
+        "replay",
+        "--charger",
+        "GWAY001",
+        "--source",
+        "/tmp/reconciled.sqlite3",
+        "--stream",
+        "inbound",
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["stream"] == "inbound"
+    assert payload["actions"] == ["Authorize"]
