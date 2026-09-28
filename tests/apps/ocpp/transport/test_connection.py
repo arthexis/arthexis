@@ -41,8 +41,12 @@ def test_open_admission_enrolls_unknown_charger_without_credentials() -> None:
     assert selected.enrolled_at is not None
     assert selected.authority_cutover_at == selected.enrolled_at
     assert selected.connection_token_hash == ""
+    assert selected.protocol_mode == Charger.AuthorizationMode.OPEN
     assert selected.authorization_mode == Charger.AuthorizationMode.OPEN
-    assert OcppPolicy.load().charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
+    policy = OcppPolicy.load()
+    assert policy.charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
+    assert policy.protocol_mode == OcppPolicy.AdmissionMode.OPEN
+    assert policy.card_mode == OcppPolicy.AdmissionMode.OPEN
 
 
 @pytest.mark.django_db
@@ -116,6 +120,8 @@ def test_restricted_admission_requires_enrollment_credentials_for_unknown_charge
 
     assert enrolled is not None
     assert enrolled.connection_token_hash
+    assert enrolled.protocol_mode == Charger.AuthorizationMode.RESTRICTED
+    assert enrolled.authorization_mode == Charger.AuthorizationMode.RESTRICTED
     assert rejected is None
     assert not Charger.objects.filter(identity="charger-rejected").exists()
 
@@ -139,3 +145,26 @@ def test_restricted_admission_authenticates_existing_chargers() -> None:
 
     assert accepted == existing
     assert rejected is None
+
+
+
+@pytest.mark.django_db
+def test_operator_created_charger_defaults_to_strict_protocol_and_cards() -> None:
+    selected = Charger.objects.create(identity="operator-created")
+
+    assert selected.protocol_mode == Charger.AuthorizationMode.RESTRICTED
+    assert selected.authorization_mode == Charger.AuthorizationMode.RESTRICTED
+
+
+@pytest.mark.django_db
+def test_open_auto_enrollment_inherits_instance_protocol_and_card_defaults() -> None:
+    policy = OcppPolicy.load()
+    policy.protocol_mode = OcppPolicy.AdmissionMode.RESTRICTED
+    policy.card_mode = OcppPolicy.AdmissionMode.OPEN
+    policy.save(update_fields=("protocol_mode", "card_mode", "updated_at"))
+
+    selected = async_to_sync(load_or_enroll_charger)("policy-inherited", None)
+
+    assert selected is not None
+    assert selected.protocol_mode == Charger.AuthorizationMode.RESTRICTED
+    assert selected.authorization_mode == Charger.AuthorizationMode.OPEN
