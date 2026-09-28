@@ -4,6 +4,7 @@ from apps.ocpp.simulator.authorization import (
     AuthorizationAttempt,
     AuthorizationAttemptResult,
     AuthorizationScenario,
+    authorization_policy_scenario,
     run_live_authorization_scenario,
 )
 from apps.ocpp.simulator.network import LiveSimulatorError
@@ -152,3 +153,32 @@ def test_live_runner_keeps_per_attempt_transport_failures_structured():
     import asyncio
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("policy_context", ["open", "restricted"])
+def test_standard_policy_matrix_covers_roles_without_predicting_status(policy_context):
+    scenario = authorization_policy_scenario(
+        policy_context=policy_context,
+        known_authorized="KNOWN-OK",
+        known_denied="KNOWN-NO",
+        unknown="UNKNOWN",
+    )
+
+    assert scenario.policy_context == policy_context
+    assert [(attempt.name, attempt.repeat_of) for attempt in scenario.attempts] == [
+        ("known-authorized", None),
+        ("known-denied", None),
+        ("unknown", None),
+        ("known-authorized-repeat", "known-authorized"),
+    ]
+    assert not any(hasattr(attempt, "expected_status") for attempt in scenario.attempts)
+
+
+def test_standard_policy_matrix_rejects_unknown_policy_context():
+    with pytest.raises(ValueError, match="open or restricted"):
+        authorization_policy_scenario(
+            policy_context="custom",
+            known_authorized="KNOWN-OK",
+            known_denied="KNOWN-NO",
+            unknown="UNKNOWN",
+        )
