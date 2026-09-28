@@ -229,6 +229,7 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
                 "action": "replay",
                 "source": str(tmp_path / "package"),
                 "source_charger": "field-charger",
+                "stream": "transactions",
                 "batch_size": 50,
                 "pacing": "burst",
                 "interval_seconds": 0.25,
@@ -254,10 +255,76 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             "source_kind": "package",
             "capture_id": "capture-123",
             "source_charger": "field-charger",
+            "stream": "transactions",
             "events_completed": 2,
             "actions": ["StartTransaction", "MeterValues"],
             "pacing": "burst",
             "reconnect_after": 25,
         }
+
+    asyncio.run(exercise())
+
+
+def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
+    async def exercise():
+        fake = FakeSimulator()
+        worker = worker_with(fake)
+        await worker.connect_and_boot()
+
+        source = SimpleNamespace(
+            database=tmp_path / "replay.sqlite3",
+            kind="database",
+            capture_id=None,
+        )
+        seen = {}
+
+        monkeypatch.setattr(
+            "apps.ocpp.simulator.worker.resolve_replay_database",
+            lambda path: source,
+        )
+
+        def unexpected_transactions(*args, **kwargs):
+            raise AssertionError("transaction stream should not be selected")
+
+        def fake_inbound(database, *, charger_identity, batch_size):
+            seen["database"] = database
+            seen["source_charger"] = charger_identity
+            seen["batch_size"] = batch_size
+            return ("inbound-events",)
+
+        async def fake_run(transport, events, *, reconnect_after, pacing):
+            seen["events"] = events
+            return ("Authorize",)
+
+        monkeypatch.setattr(
+            "apps.ocpp.simulator.worker.iter_v16_transaction_replay",
+            unexpected_transactions,
+        )
+        monkeypatch.setattr(
+            "apps.ocpp.simulator.worker.iter_v16_inbound_request_replay",
+            fake_inbound,
+        )
+        monkeypatch.setattr(
+            "apps.ocpp.simulator.worker.run_v16_live_replay_events",
+            fake_run,
+        )
+
+        response = await worker.dispatch(
+            {
+                "action": "replay",
+                "source": str(tmp_path / "replay.sqlite3"),
+                "source_charger": "field-charger",
+                "stream": "inbound",
+                "batch_size": 25,
+                "pacing": "maximum",
+            }
+        )
+
+        assert seen["database"] == source.database
+        assert seen["source_charger"] == "field-charger"
+        assert seen["batch_size"] == 25
+        assert seen["events"] == ("inbound-events",)
+        assert response["stream"] == "inbound"
+        assert response["actions"] == ["Authorize"]
 
     asyncio.run(exercise())
