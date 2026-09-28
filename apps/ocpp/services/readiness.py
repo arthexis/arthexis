@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 
-from apps.ocpp.models import OcppPolicy
+from apps.ocpp.models import Charger, OcppPolicy
 from apps.ocpp.transport.listener import interface_addresses
 
 PERMISSIVE = "permissive"
@@ -61,15 +61,44 @@ def query_ocpp_readiness() -> dict[str, object]:
     }
 
 
+def query_charger_ocpp_readiness(identity: str) -> dict[str, object]:
+    """Describe effective OCPP readiness for one configured charger."""
+
+    try:
+        charger = Charger.objects.get(identity=identity)
+    except Charger.DoesNotExist as error:
+        raise ValueError(f"Unknown charger: {identity}") from error
+
+    instance = query_ocpp_readiness()
+    dimensions = {
+        "protocol": _mode(charger.protocol_mode),
+        "cards": _mode(charger.authorization_mode),
+    }
+    unique_modes = set(dimensions.values())
+    posture = next(iter(unique_modes)) if len(unique_modes) == 1 else PARTIAL
+
+    return {
+        "charger": charger.identity,
+        "ready": bool(instance["ready"] and charger.active),
+        "enabled": charger.active,
+        "posture": posture,
+        **dimensions,
+    }
+
+
 def evaluate_ocpp_readiness(
     dimension: str | None = None,
     mode: str | None = None,
-) -> bool | str:
+    *,
+    charger: str | None = None,
+) -> bool | str | dict[str, object]:
     """Return the compact result for the ready OCPP operation."""
 
-    if dimension is not None and dimension not in DIMENSIONS:
+    valid_dimensions = ("protocol", "cards") if charger else DIMENSIONS
+    if dimension is not None and dimension not in valid_dimensions:
         raise ValueError(
-            "OCPP readiness dimension must be one of: " + ", ".join(DIMENSIONS)
+            "OCPP readiness dimension must be one of: "
+            + ", ".join(valid_dimensions)
         )
     if mode is not None and mode not in MODES:
         raise ValueError(
@@ -78,9 +107,16 @@ def evaluate_ocpp_readiness(
     if mode is not None and dimension is None:
         raise ValueError("OCPP readiness mode requires a dimension.")
 
-    payload = query_ocpp_readiness()
+    payload = (
+        query_charger_ocpp_readiness(charger)
+        if charger
+        else query_ocpp_readiness()
+    )
     if not payload["ready"]:
         return False
+
+    if charger and dimension is None and mode is None:
+        return payload
 
     result = payload[dimension] if dimension else payload["posture"]
     if mode is None:
