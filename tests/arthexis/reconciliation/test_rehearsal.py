@@ -378,3 +378,27 @@ def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_p
     bundles = alternate_root / "bundles"
     assert not bundles.exists() or not any(bundles.iterdir())
 
+
+
+def test_rehearse_help_links_operator_migration_document():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            "--help",
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Legacy satellite migration rehearsal" in completed.stdout
+    assert "docs/legacy-satellite-migration.md" in completed.stdout
+    assert (
+        "https://github.com/arthexis/arthexis/blob/main/"
+        "docs/legacy-satellite-migration.md"
+    ) in completed.stdout
+    assert "--cutover" in completed.stdout
