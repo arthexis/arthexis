@@ -504,3 +504,69 @@ def test_live_replay_measures_failed_reconnect_boot(monkeypatch):
         assert summary["error_counts"] == {"ValueError": 1}
 
     async_to_sync(exercise)()
+
+
+
+def test_live_replay_handles_100k_lazy_events_with_bounded_retained_state():
+    class CountingTransport:
+        def __init__(self):
+            self.calls = 0
+            self.reconnects = 0
+            self.boots = 0
+
+        async def call(self, action, payload):
+            self.calls += 1
+            return {}
+
+        async def reconnect(self):
+            self.reconnects += 1
+
+        async def boot(self):
+            self.boots += 1
+            return type("Boot", (), {"status": "Accepted"})()
+
+    def events():
+        for sequence in range(100_000):
+            yield ReplayEvent(
+                source_transaction_id=sequence,
+                occurred_at=f"synthetic-{sequence}",
+                action="Heartbeat",
+                payload={},
+            )
+
+    async def exercise():
+        transport = CountingTransport()
+        metrics = ReplayMetrics()
+
+        completed = await run_v16_live_replay_events(
+            transport,
+            events(),
+            reconnect_after=50_000,
+            metrics=metrics,
+            max_retained_actions=25,
+        )
+
+        assert transport.calls == 100_000
+        assert transport.reconnects == 1
+        assert transport.boots == 1
+        assert metrics.attempted_requests == 100_000
+        assert metrics.completed_requests == 100_000
+        assert metrics.failed_requests == 0
+        assert metrics.reconnect_successes == 1
+        assert len(completed) == 25
+        assert completed == ("Heartbeat",) * 25
+
+    async_to_sync(exercise)()
+
+
+@pytest.mark.parametrize("limit", [-1, -100])
+def test_live_replay_rejects_negative_retained_action_limit(limit):
+    async def exercise():
+        with pytest.raises(ValueError, match="max_retained_actions"):
+            await run_v16_live_replay_events(
+                FakeReplayTransport(),
+                (),
+                max_retained_actions=limit,
+            )
+
+    async_to_sync(exercise)()
