@@ -4,10 +4,34 @@ from apps.ocpp.discovery.network import (
     CandidateTracker,
     DiscoveryPreflightError,
     NetworkObservation,
-    TcpdumpObserver,
-    parse_tcpdump_line,
+    TsharkObserver,
+    parse_tshark_line,
     run_passive_discovery,
 )
+
+
+
+_TSHARK_FIELD_ORDER = (
+    "eth.src",
+    "eth.dst",
+    "arp.opcode",
+    "arp.src.proto_ipv4",
+    "arp.dst.proto_ipv4",
+    "arp.src.hw_mac",
+    "ip.src",
+    "ip.dst",
+    "tcp.srcport",
+    "tcp.dstport",
+    "dns.id",
+    "dns.flags.response",
+    "dns.qry.type",
+    "dns.qry.name",
+    "dns.a",
+)
+
+
+def tshark_row(**fields) -> str:
+    return "\t".join(str(fields.get(name, "")) for name in _TSHARK_FIELD_ORDER)
 
 
 class FakeObserver:
@@ -176,11 +200,18 @@ def test_candidate_tracker_ranks_repeated_destination_first() -> None:
     ]
 
 
-def test_tcpdump_parser_retains_ethernet_and_ip_destination() -> None:
-    observation = parse_tcpdump_line(
-        "1790618400.000000 00:11:22:33:44:55 > aa:bb:cc:dd:ee:ff, "
-        "ethertype IPv4 (0x0800), length 74: "
-        "192.0.2.20.51000 > 198.51.100.40.9000: Flags [S]"
+def test_tshark_parser_retains_ethernet_and_ip_destination() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "aa:bb:cc:dd:ee:ff",
+                "ip.src": "192.0.2.20",
+                "ip.dst": "198.51.100.40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "9000",
+            }
+        )
     )
 
     assert observation is not None
@@ -190,11 +221,17 @@ def test_tcpdump_parser_retains_ethernet_and_ip_destination() -> None:
     assert observation.metadata["destination_mac"] == "aa:bb:cc:dd:ee:ff"
 
 
-def test_tcpdump_parser_retains_arp_resolution() -> None:
-    observation = parse_tcpdump_line(
-        "1790618400.000000 00:11:22:33:44:55 > ff:ff:ff:ff:ff:ff, "
-        "ethertype ARP (0x0806), length 42: "
-        "Request who-has 198.51.100.40 tell 192.0.2.20"
+def test_tshark_parser_retains_arp_resolution() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "ff:ff:ff:ff:ff:ff",
+                "arp.opcode": "1",
+                "arp.src.proto_ipv4": "192.0.2.20",
+                "arp.dst.proto_ipv4": "198.51.100.40",
+            }
+        )
     )
 
     assert observation is not None
@@ -202,34 +239,54 @@ def test_tcpdump_parser_retains_arp_resolution() -> None:
     assert observation.metadata["target_ip"] == "198.51.100.40"
 
 
-def test_tcpdump_preflight_has_friendly_missing_dependency_error() -> None:
-    observer = TcpdumpObserver(executable=None)
+def test_tshark_preflight_has_friendly_missing_dependency_error() -> None:
+    observer = TsharkObserver(executable=None)
     observer.executable = None
 
-    with pytest.raises(DiscoveryPreflightError, match="native packet-capture"):
+    with pytest.raises(DiscoveryPreflightError, match="TShark/Wireshark CLI"):
         observer.preflight("eth0")
 
 
-def test_tcpdump_parser_retains_dns_query_identity() -> None:
-    observation = parse_tcpdump_line(
-        "1790618400.000000 00:11:22:33:44:55 > aa:bb:cc:dd:ee:ff, "
-        "ethertype IPv4 (0x0800), length 78: "
-        "192.0.2.20.53000 > 192.0.2.53.53: 4242+ A? csms.example.com. (34)"
+def test_tshark_parser_retains_dns_query_identity() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "aa:bb:cc:dd:ee:ff",
+                "ip.src": "192.0.2.20",
+                "ip.dst": "192.0.2.53",
+                "dns.id": "4242",
+                "dns.flags.response": "0",
+                "dns.qry.type": "1",
+                "dns.qry.name": "csms.example.com",
+            }
+        )
     )
 
     assert observation is not None
     assert observation.event_type == "dns_query"
     assert observation.metadata["dns_id"] == 4242
+    assert observation.metadata["record_type"] == "A"
     assert observation.metadata["name"] == "csms.example.com"
     assert observation.metadata["client_ip"] == "192.0.2.20"
     assert observation.metadata["dns_server"] == "192.0.2.53"
 
 
-def test_tcpdump_parser_retains_dns_a_response() -> None:
-    observation = parse_tcpdump_line(
-        "1790618400.100000 aa:bb:cc:dd:ee:ff > 00:11:22:33:44:55, "
-        "ethertype IPv4 (0x0800), length 94: "
-        "192.0.2.53.53 > 192.0.2.20.53000: 4242 1/0/0 A 198.51.100.40 (50)"
+def test_tshark_parser_retains_dns_a_response() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "aa:bb:cc:dd:ee:ff",
+                "eth.dst": "00:11:22:33:44:55",
+                "ip.src": "192.0.2.53",
+                "ip.dst": "192.0.2.20",
+                "dns.id": "4242",
+                "dns.flags.response": "1",
+                "dns.qry.type": "1",
+                "dns.qry.name": "csms.example.com",
+                "dns.a": "198.51.100.40",
+            }
+        )
     )
 
     assert observation is not None
