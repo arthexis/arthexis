@@ -153,11 +153,11 @@ jobs:
       ARTHEXIS_DATA_DIR: /var/lib/arthexis
       ARTHEXIS_ALLOWED_HOSTS: arthexis.com
       PYTHONDONTWRITEBYTECODE: '1'
-      WATCHTOWER_STAGE: ${{ needs.classify.outputs.stage == 'release' && 'arthexis' || needs.classify.outputs.stage }}
+      WATCHTOWER_STAGE: ${{ needs.classify.outputs.stage }}
       RELEASE_INTENT: ${{ needs.classify.outputs.stage == 'release' && 'manual' || '' }}
     steps:
       - name: Clean privileged Python bytecode from runner workspace
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -167,7 +167,7 @@ jobs:
           fi
 
       - name: Resolve exact deployment pair
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         id: pair
         shell: bash
         env:
@@ -260,7 +260,7 @@ jobs:
           fi
 
       - name: Checkout exact Arthexis deployment SHA
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ steps.pair.outputs.arthexis_sha }}
@@ -269,7 +269,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify trusted invocation
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -278,7 +278,7 @@ jobs:
           sudo -n true
 
       - name: Install exact canonical Gway
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -303,7 +303,7 @@ jobs:
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
 
       - name: Verify exact deployment pair before mutation
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -312,7 +312,7 @@ jobs:
           echo "deployment_pair=stable_before_mutation"
 
       - name: Deploy Arthexis through Gway system scope
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -358,7 +358,7 @@ jobs:
           sudo -n test -f /opt/arthexis/install.sh
 
       - name: Prepare persistent Arthexis runtime
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -370,7 +370,7 @@ jobs:
           fi
 
       - name: Install canonical Watchtower Gway admin launcher
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -391,7 +391,7 @@ jobs:
           echo "canonical_gway_admin=ok"
 
       - name: Converge public Gway bootstrap
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -419,7 +419,7 @@ jobs:
           echo "gway_bootstrap=public_ready"
 
       - name: Install and start Arthexis systemd service
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -496,7 +496,7 @@ jobs:
           echo "service=active_independent_of_gway"
 
       - name: Preflight Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -515,7 +515,7 @@ jobs:
           echo "remote_listeners=end"
 
       - name: Converge Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -531,7 +531,7 @@ jobs:
             --public-ipv4 "${public_ipv4}"
 
       - name: Verify Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -553,7 +553,7 @@ jobs:
           echo "remote_acceptance=ok"
 
       - name: Preflight Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -574,7 +574,7 @@ jobs:
           echo "wire_listener=end"
 
       - name: Converge Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -588,7 +588,7 @@ jobs:
             --public-address "${public_ipv4}"
 
       - name: Verify Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote'
+        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -606,7 +606,7 @@ jobs:
           echo "wire_public_health=ok"
 
       - name: Verify deployed Arthexis
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -619,7 +619,7 @@ jobs:
 
 
       - name: Revalidate deployment pair before attestation
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -628,7 +628,7 @@ jobs:
           echo "deployment_pair=stable_for_attestation"
 
       - name: Record accepted Watchtower deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -660,6 +660,8 @@ jobs:
                   f'{os.environ["GITHUB_RUN_ID"]}'
               ),
               "accepted_at": datetime.now(timezone.utc).isoformat(),
+              "release_intent": os.environ.get("WATCHTOWER_RELEASE_INTENT") or None,
+              "stages": ["arthexis", "remote"] if os.environ.get("WATCHTOWER_RELEASE_INTENT") == "manual" else [os.environ.get("WATCHTOWER_STAGE", "arthexis")],
           }
 
           def request(method, path, payload=None):
@@ -712,7 +714,7 @@ jobs:
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Open next-version PR after accepted deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -803,7 +805,7 @@ jobs:
           echo "rollover_pr=approved number=$rollover_pr"
 
       - name: Reconcile Gway next-version PR after accepted deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -963,7 +965,7 @@ jobs:
           echo "gway_runtime_rollback=restored"
 
       - name: Reconcile certified package publisher handoff
-        if: env.WATCHTOWER_STAGE == 'arthexis'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -1038,8 +1040,8 @@ jobs:
               package = release["package"]
               version = release["version"]
 
-              # Release intent is durable PR metadata, not an implication of deployment.
-              # A retry can therefore rediscover intent after Watchtower acceptance.
+              # Release intent can come from durable PR metadata or from a manually
+              # certified Watchtower release run. Both remain rediscoverable on retry.
               _, pulls = request(
                   "GET",
                   f"{api}/repos/{release['repository']}/commits/{release['sha']}/pulls",
@@ -1053,7 +1055,8 @@ jobs:
                       for label in pull.get("labels", [])
                   )
               ]
-              if not release_prs:
+              manual_release = os.environ.get("WATCHTOWER_RELEASE_INTENT") == "manual"
+              if not release_prs and not manual_release:
                   print(f"{package}_publish=not_requested")
                   continue
 
