@@ -670,6 +670,12 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
         run: |
           set -Eeuo pipefail
+          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | index("on-hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
+          if [[ "$active_prs" != "0" ]]; then
+            echo "rollover=deferred active_prs=$active_prs repository=$GITHUB_REPOSITORY"
+            exit 0
+          fi
+
           released="$ARTHEXIS_EXPECTED_VERSION"
           next_version="$(python3 - "$released" <<'PY'
           import re, sys
@@ -747,6 +753,13 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
         run: |
           set -Eeuo pipefail
+          repository="arthexis/gway"
+          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | index("on-hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
+          if [[ "$active_prs" != "0" ]]; then
+            echo "rollover=deferred active_prs=$active_prs repository=$repository"
+            exit 0
+          fi
+
           released="$GWAY_EXPECTED_VERSION"
           next_version="$(python3 - "$released" <<'PY'
           import re, sys
@@ -757,7 +770,6 @@ jobs:
           print(f"{major}.{minor}.{patch + 1}")
           PY
           )"
-          repository="arthexis/gway"
           branch="release/advance-gway-v${released}"
 
           work="$(mktemp -d)"
