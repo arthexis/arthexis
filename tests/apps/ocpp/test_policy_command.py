@@ -15,7 +15,9 @@ def test_policy_defaults_to_open_charger_admission() -> None:
 
     call_command("ocpp_policy", stdout=output)
 
-    assert output.getvalue().strip() == "charger_admission=open"
+    assert output.getvalue().strip() == (
+        "admission=permissive protocol=permissive cards=permissive"
+    )
     assert OcppPolicy.load().charger_admission_mode == OcppPolicy.AdmissionMode.OPEN
 
 
@@ -25,7 +27,7 @@ def test_policy_command_can_restrict_instance_charger_admission() -> None:
     call_command("ocpp_policy", charger_admission="restricted", stdout=output)
 
     assert OcppPolicy.load().charger_admission_mode == OcppPolicy.AdmissionMode.RESTRICTED
-    assert "charger_admission=restricted" in output.getvalue()
+    assert "admission=strict" in output.getvalue()
 
 
 def test_policy_command_can_tighten_one_chargers_rfid_policy() -> None:
@@ -42,7 +44,8 @@ def test_policy_command_can_tighten_one_chargers_rfid_policy() -> None:
 
     selected.refresh_from_db()
     assert selected.authorization_mode == Charger.AuthorizationMode.RESTRICTED
-    assert "charger=charger-1 rfid=restricted" in output.getvalue()
+    assert "charger=charger-1" in output.getvalue()
+    assert "cards=strict" in output.getvalue()
 
 
 def test_rfid_policy_requires_a_charger_selection() -> None:
