@@ -82,3 +82,17 @@ def test_load_command_fails_when_live_probe_fails(load_charger, synthetic_result
             synthetic=True,
             max_live_latency=0.5,
         )
+
+
+@pytest.mark.django_db
+def test_load_command_rejects_invalid_reconnect_checkpoint(load_charger, synthetic_result) -> None:
+    load_charger("load-reconnect-invalid")
+    synthetic_result()
+
+    with pytest.raises(CommandError, match="--reconnect-after must be positive"):
+        call_command(
+            "ocpp_load",
+            charger="load-reconnect-invalid",
+            synthetic=True,
+            reconnect_after=0,
+        )
