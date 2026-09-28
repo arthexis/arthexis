@@ -661,7 +661,7 @@ jobs:
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Open next-version PR after accepted deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis' && env.ARTHEXIS_CHANGED == 'true'
+        if: env.WATCHTOWER_STAGE == 'arthexis'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
