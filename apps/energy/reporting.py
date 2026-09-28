@@ -7,14 +7,12 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from enum import Enum
 
-
 class SessionCompleteness(str, Enum):
     """Reporting completeness independent of charger/protocol implementation."""
 
     IN_PROGRESS = "in_progress"
     COMPLETE = "complete"
     INCOMPLETE = "incomplete"
-
 
 class MeterContinuity(str, Enum):
     """Whether retained meter boundaries can be treated as one continuous counter."""
@@ -23,13 +21,11 @@ class MeterContinuity(str, Enum):
     DISCONTINUOUS = "discontinuous"
     UNKNOWN = "unknown"
 
-
 class EnergyProvenance(str, Enum):
     """How normalized session energy entered the reporting contract."""
 
     RETAINED_NORMALIZED = "retained_normalized"
     UNRESOLVED = "unresolved"
-
 
 class ReportingCondition(str, Enum):
     """Conditions a downstream report/reconciliation step may need to surface."""
@@ -42,14 +38,12 @@ class ReportingCondition(str, Enum):
     MISSING_SITE = "missing_site"
     MISSING_VEHICLE = "missing_vehicle"
 
-
 @dataclass(frozen=True)
 class SourceEvidence:
     """Stable reference back to retained source evidence."""
 
     kind: str
     reference: str
-
 
 @dataclass(frozen=True)
 class ChargingSessionProjection:
@@ -78,11 +72,8 @@ class ChargingSessionProjection:
     source_evidence: tuple[SourceEvidence, ...]
     conditions: tuple[ReportingCondition, ...]
 
-
-
-
 REPORTING_SCHEMA_VERSION = 1
-
+REPORTING_SCHEMA_NAME = "arthexis.charging-session-report"
 
 @dataclass(frozen=True)
 class ReportingPeriodProjection:
@@ -120,6 +111,7 @@ class ReportingPeriodProjection:
         """Return deterministic JSON-compatible reporting data."""
 
         return {
+            "schema": REPORTING_SCHEMA_NAME,
             "schema_version": self.schema_version,
             "started_at": _serialize_scalar(self.started_at),
             "before": _serialize_scalar(self.before),
@@ -128,6 +120,115 @@ class ReportingPeriodProjection:
             "sessions": [_session_as_dict(session) for session in self.sessions],
         }
 
+class ReportingContractError(ValueError):
+    """Raised when a serialized reporting payload is incompatible or malformed."""
+
+def reporting_contract() -> dict[str, object]:
+    """Describe the stable transport contract without requiring a report run."""
+
+    return {
+        "schema": REPORTING_SCHEMA_NAME,
+        "schema_version": REPORTING_SCHEMA_VERSION,
+        "required_period_fields": (
+            "schema",
+            "schema_version",
+            "started_at",
+            "before",
+            "authority_nodes",
+            "total_energy_kwh",
+            "sessions",
+        ),
+        "required_session_fields": tuple(
+            field.name for field in ChargingSessionProjection.__dataclass_fields__.values()
+        ),
+        "enum_values": {
+            "energy_provenance": tuple(item.value for item in EnergyProvenance),
+            "completeness": tuple(item.value for item in SessionCompleteness),
+            "meter_continuity": tuple(item.value for item in MeterContinuity),
+            "conditions": tuple(item.value for item in ReportingCondition),
+        },
+    }
+
+def validate_reporting_payload(payload: object) -> dict[str, object]:
+    """Validate one serialized period payload against the current contract."""
+
+    if not isinstance(payload, dict):
+        raise ReportingContractError("reporting payload must be an object")
+
+    contract = reporting_contract()
+    for field_name in contract["required_period_fields"]:
+        if field_name not in payload:
+            raise ReportingContractError(
+                f"reporting payload is missing required field: {field_name}"
+            )
+
+    if payload["schema"] != REPORTING_SCHEMA_NAME:
+        raise ReportingContractError(
+            f"unsupported reporting schema: {payload['schema']!r}"
+        )
+    if payload["schema_version"] != REPORTING_SCHEMA_VERSION:
+        raise ReportingContractError(
+            f"unsupported reporting schema version: {payload['schema_version']!r}"
+        )
+    if not isinstance(payload["sessions"], list):
+        raise ReportingContractError("reporting sessions must be a list")
+    if not isinstance(payload["authority_nodes"], list):
+        raise ReportingContractError("reporting authority_nodes must be a list")
+
+    required_session_fields = contract["required_session_fields"]
+    enum_values = contract["enum_values"]
+    for index, session in enumerate(payload["sessions"]):
+        if not isinstance(session, dict):
+            raise ReportingContractError(f"session {index} must be an object")
+        for field_name in required_session_fields:
+            if field_name not in session:
+                raise ReportingContractError(
+                    f"session {index} is missing required field: {field_name}"
+                )
+
+        for field_name in (
+            "energy_provenance",
+            "completeness",
+            "meter_continuity",
+        ):
+            if session[field_name] not in enum_values[field_name]:
+                raise ReportingContractError(
+                    f"session {index} has invalid {field_name}: "
+                    f"{session[field_name]!r}"
+                )
+
+        conditions = session["conditions"]
+        if not isinstance(conditions, list):
+            raise ReportingContractError(
+                f"session {index} conditions must be a list"
+            )
+        unknown_conditions = [
+            item for item in conditions if item not in enum_values["conditions"]
+        ]
+        if unknown_conditions:
+            raise ReportingContractError(
+                f"session {index} has invalid condition: "
+                f"{unknown_conditions[0]!r}"
+            )
+
+        evidence = session["source_evidence"]
+        if not isinstance(evidence, list):
+            raise ReportingContractError(
+                f"session {index} source_evidence must be a list"
+            )
+        for evidence_index, item in enumerate(evidence):
+            if not isinstance(item, dict):
+                raise ReportingContractError(
+                    f"session {index} source_evidence {evidence_index} "
+                    "must be an object"
+                )
+            if not item.get("kind") or not item.get("reference"):
+                raise ReportingContractError(
+                    f"session {index} source_evidence {evidence_index} "
+                    "requires kind and reference"
+                )
+
+    return payload
 
 def _serialize_scalar(value):
     if isinstance(value, Decimal):
@@ -137,7 +238,6 @@ def _serialize_scalar(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
-
 
 def _session_as_dict(session: ChargingSessionProjection) -> dict[str, object]:
     payload = asdict(session)
@@ -151,7 +251,6 @@ def _session_as_dict(session: ChargingSessionProjection) -> dict[str, object]:
         )
         for key, value in payload.items()
     }
-
 
 def _source_evidence_as_dict(item: object) -> dict[str, object]:
     if isinstance(item, dict):
@@ -168,14 +267,12 @@ def _meter_continuity(meter_start: Decimal | None, meter_stop: Decimal | None) -
         return MeterContinuity.DISCONTINUOUS
     return MeterContinuity.CONTINUOUS
 
-
 def _completeness(transaction) -> SessionCompleteness:
     if transaction.stopped_at is None:
         return SessionCompleteness.IN_PROGRESS
     if transaction.energy_kwh is None:
         return SessionCompleteness.INCOMPLETE
     return SessionCompleteness.COMPLETE
-
 
 def _meter_evidence(transaction) -> Iterable[SourceEvidence]:
     manager = getattr(transaction, "meter_values", None)
@@ -189,8 +286,6 @@ def _meter_evidence(transaction) -> Iterable[SourceEvidence]:
         if reference:
             evidence.append(SourceEvidence(kind="meter_value", reference=reference))
     return evidence
-
-
 
 def _conditions(transaction, *, account_key: str | None) -> tuple[ReportingCondition, ...]:
     conditions: list[ReportingCondition] = []
@@ -216,7 +311,6 @@ def _conditions(transaction, *, account_key: str | None) -> tuple[ReportingCondi
     )
     return tuple(conditions)
 
-
 def projected_sessions_for_period(queryset, *, started_at, before):
     """Yield stable projections for sessions starting inside one reporting period."""
 
@@ -228,9 +322,6 @@ def projected_sessions_for_period(queryset, *, started_at, before):
     )
     for transaction in selected:
         yield project_charging_session(transaction)
-
-
-
 
 def project_reporting_period(queryset, *, started_at, before) -> ReportingPeriodProjection:
     """Materialize one versioned reporting-period envelope."""
@@ -246,7 +337,6 @@ def project_reporting_period(queryset, *, started_at, before) -> ReportingPeriod
             )
         ),
     )
-
 
 def project_charging_session(transaction) -> ChargingSessionProjection:
     """Project one retained OCPP transaction into the stable reporting contract."""
