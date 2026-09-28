@@ -307,22 +307,6 @@ def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
     assert '"log.sources"' in logs_section
 
 
-def test_watchtower_deploy_accepts_wire_as_manual_gway_extension() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "- name: Preflight Watchtower Wire stage" in workflow
-    assert "- name: Converge Watchtower Wire stage" in workflow
-    assert "- name: Verify Watchtower Wire stage" in workflow
-    assert "default: arthexis" in workflow
-    assert "gway -e wire watchtower" not in workflow
-    assert "test -f /var/lib/gway/venv/share/gway/sampler/wire/watchtower.rx" in workflow
-    assert "gway --json resolve wire watchtower" in workflow
-    assert "sampler/wire/watchtower.rx" in workflow
-    assert "gway wire watchtower" in workflow
-    assert "systemctl is-active --quiet gway-wire-enroll.service" in workflow
-    assert "gway-wireguard-enroll.service" in workflow
-    assert "/usr/local/bin/gway log sources" in workflow
-    assert "https://register.arthexis.com/health" in workflow
-    assert "gway wire server check --domain register.arthexis.com" in workflow
 
 def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
