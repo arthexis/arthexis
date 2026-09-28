@@ -265,6 +265,7 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             "stream": "transactions",
             "events_completed": 2,
             "actions": ["StartTransaction", "MeterValues"],
+            "actions_truncated": False,
             "pacing": "burst",
             "reconnect_after": 25,
             "metrics": {
@@ -349,5 +350,6 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
         assert seen["events"] == ("inbound-events",)
         assert response["stream"] == "inbound"
         assert response["actions"] == ["Authorize"]
+        assert response["actions_truncated"] is False
 
     asyncio.run(exercise())
