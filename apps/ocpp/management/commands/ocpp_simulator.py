@@ -49,7 +49,7 @@ class Command(BaseCommand):
             "authorize-scenario",
             help="Run the standard live authorization policy matrix.",
         )
-        scenario_parser.add_argument("--charger", required=True)
+        scenario_parser.add_argument("--charger")
         scenario_parser.add_argument(
             "--policy-context",
             required=True,
