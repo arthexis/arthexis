@@ -27,6 +27,16 @@ def local(
     return payload == {"status": "ok"}
 
 
+def ocpp(
+    dimension: str | None = None,
+    mode: str | None = None,
+) -> bool | str:
+    """Return OCPP intake readiness and permissiveness posture."""
+    from apps.ocpp.services.readiness import evaluate_ocpp_readiness
+
+    return evaluate_ocpp_readiness(dimension=dimension, mode=mode)
+
+
 def main(
     *,
     local: bool = False,
