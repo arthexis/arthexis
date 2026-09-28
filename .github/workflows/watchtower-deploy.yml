@@ -734,7 +734,7 @@ jobs:
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "rollover_pr=created number=$rollover_pr"
           fi
-          printf '%s\n' '{"labels":["approved"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+          printf '%s\n' '{"labels":["approved","version"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
@@ -821,7 +821,7 @@ jobs:
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "gway_rollover_pr=created number=$rollover_pr"
           fi
-          printf '%s\n' '{"labels":["approved"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+          printf '%s\n' '{"labels":["approved","version"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${repository}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
