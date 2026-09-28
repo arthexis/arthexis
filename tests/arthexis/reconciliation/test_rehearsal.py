@@ -321,3 +321,70 @@ def test_cutover_rehearsal_returns_no_go_if_live_source_changes(tmp_path, monkey
     assert proof["decision"] == "NO-GO"
     assert proof["no_missed_writes"] is False
     assert not any((output / "bundles").iterdir()) if (output / "bundles").exists() else True
+
+
+@pytest.mark.reconciliation_e2e
+def test_cutover_rehearsal_requires_unchanged_live_source(tmp_path):
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+            "--cutover",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["decision"] == "GO"
+    assert result["cutover"]["decision"] == "GO"
+    assert result["cutover"]["no_missed_writes"] is True
+    bundle = Path(result["go_bundle"])
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cutover"]["mode"] == "final-cutover"
+    assert manifest["cutover"]["no_missed_writes_proven"] is True
+    assert (bundle / "migration" / "cutover-proof.json").is_file()
+    assert _sha256(source_database) == result["capture"]["database_sha256"]
+
+
+def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
+    from arthexis.reconciliation.capture import capture_legacy_installation
+    from arthexis.reconciliation.rehearsal import verify_cutover_source_unchanged
+
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    capture = capture_legacy_installation(legacy, tmp_path / "captures")
+
+    with sqlite3.connect(source_database) as connection:
+        connection.execute(
+            "INSERT INTO core_rfid(rfid, active) VALUES ('post-capture-card', 1)"
+        )
+
+    proof = verify_cutover_source_unchanged(
+        legacy,
+        tmp_path / "rehearsal",
+        expected_database_sha256=_sha256(capture.database_path),
+    )
+
+    assert proof["decision"] == "NO-GO"
+    assert proof["no_missed_writes"] is False
+    assert proof["reason"] == "legacy-source-advanced-after-capture"
+    assert Path(proof["proof_path"]).is_file()
