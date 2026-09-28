@@ -32,6 +32,8 @@ _TSHARK_FIELD_ORDER = (
     "http.request.uri",
     "http.upgrade",
     "http.sec_websocket_protocol",
+    "tls.handshake.type",
+    "tls.handshake.extensions_server_name",
 )
 
 
@@ -481,3 +483,65 @@ def test_http_request_does_not_invent_websocket_metadata() -> None:
     assert candidate.http_paths == {"/health"}
     assert candidate.websocket_paths == set()
     assert candidate.ocpp_subprotocols == set()
+
+
+def test_tshark_parser_retains_tls_client_hello_sni() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": "00:11:22:33:44:55",
+                "eth.dst": "aa:bb:cc:dd:ee:ff",
+                "ip.src": "192.0.2.20",
+                "ip.dst": "198.51.100.40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "443",
+                "tls.handshake.type": "1",
+                "tls.handshake.extensions_server_name": "secure.example.com",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "tls_client_hello"
+    assert observation.metadata["destination_ip"] == "198.51.100.40"
+    assert observation.metadata["destination_port"] == 443
+    assert observation.metadata["sni"] == "secure.example.com"
+
+
+def test_tls_client_hello_without_sni_is_still_observed() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "ip.src": "192.0.2.20",
+                "ip.dst": "198.51.100.40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "443",
+                "tls.handshake.type": "1",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "tls_client_hello"
+    assert observation.metadata["sni"] is None
+
+
+def test_tls_sni_enriches_candidate_without_becoming_http_hostname() -> None:
+    tracker = CandidateTracker()
+
+    tracker.consume(
+        NetworkObservation(
+            "tls_client_hello",
+            {
+                "destination_ip": "198.51.100.40",
+                "destination_port": 443,
+                "sni": "secure.example.com",
+            },
+        )
+    )
+
+    candidate = tracker.candidates()[0]
+    assert candidate.tls_sni == {"secure.example.com"}
+    assert candidate.hostnames == set()
+    assert candidate.http_paths == set()
+    assert candidate.websocket_paths == set()
