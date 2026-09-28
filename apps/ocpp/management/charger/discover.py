@@ -4,7 +4,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from apps.ocpp.discovery.network import TcpdumpObserver, run_passive_discovery
+from apps.ocpp.discovery.network import TsharkObserver, run_passive_discovery
 
 
 def discover(
