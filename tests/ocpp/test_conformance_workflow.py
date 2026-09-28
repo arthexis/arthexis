@@ -1,4 +1,8 @@
+import pytest
 from pathlib import Path
+
+
+pytestmark = pytest.mark.workflow
 
 
 def test_ocpp_conformance_is_manual_and_off_production_runner() -> None:
