@@ -46,20 +46,17 @@ def _legacy_installation(root: Path) -> Path:
     return database
 
 
-@pytest.mark.reconciliation_e2e
-def test_rehearse_runs_from_live_source_through_go_report_without_mutating_source(
-    tmp_path,
-):
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    source_sha = _sha256(source_database)
-    output = tmp_path / "rehearsal"
-
+def _run_rehearsal(
+    legacy: Path,
+    output: Path,
+    *,
+    data_dir: Path,
+    *extra: str,
+) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment["ARTHEXIS_DATA_DIR"] = str(data_dir)
     environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
+    return subprocess.run(
         [
             sys.executable,
             str(PROJECT_ROOT / "scripts" / "reconcile.py"),
@@ -69,8 +66,7 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
             str(output),
             "--nice",
             "0",
-            "--batch-size",
-            "1",
+            *extra,
         ],
         cwd=PROJECT_ROOT,
         env=environment,
@@ -79,20 +75,47 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
         check=False,
     )
 
-    assert completed.returncode == 0, completed.stderr
-    assert _sha256(source_database) == source_sha
 
-    result = json.loads(completed.stdout)
-    assert result["decision"] == "GO"
-    assert result["source"] == str(legacy.resolve())
-    assert result["resource_safety"]["decision"] == "GO"
-    assert Path(result["resource_report"]).is_file()
-    bundle = Path(result["go_bundle"])
+def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    return json.loads(completed.stdout)
+
+
+def _assert_go_bundle(result: dict[str, object]) -> Path:
+    bundle = Path(str(result["go_bundle"]))
     assert bundle.is_dir()
     assert (bundle / "FINALIZED").is_file()
     assert (bundle / "manifest.json").is_file()
     assert (bundle / "checksums.sha256").is_file()
     assert (bundle / "database" / "reconciled.sqlite3").is_file()
+    return bundle
+
+
+@pytest.mark.reconciliation_e2e
+def test_rehearse_runs_from_live_source_through_go_report_without_mutating_source(
+    tmp_path,
+):
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    source_sha = _sha256(source_database)
+    output = tmp_path / "rehearsal"
+
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+        "--batch-size",
+        "1",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert _sha256(source_database) == source_sha
+
+    result = _json_result(completed)
+    assert result["decision"] == "GO"
+    assert result["source"] == str(legacy.resolve())
+    assert result["resource_safety"]["decision"] == "GO"
+    assert Path(result["resource_report"]).is_file()
+    _assert_go_bundle(result)
 
     capture = Path(result["capture"]["path"])
     fixture = Path(result["fixture"]["path"])
@@ -116,34 +139,18 @@ def test_rehearse_stops_with_no_go_when_resource_limit_is_exceeded(tmp_path):
     source_sha = _sha256(source_database)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-            "--max-workspace-mib",
-            "0.001",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+        "--max-workspace-mib",
+        "0.001",
     )
 
     assert completed.returncode == 2, completed.stderr
     assert _sha256(source_database) == source_sha
 
-    result = json.loads(completed.stdout)
+    result = _json_result(completed)
     assert result["decision"] == "NO-GO"
     assert result["reason"] == "resource-limit"
     assert result["resource_safety"]["decision"] == "NO-GO"
@@ -161,32 +168,18 @@ def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
     source_sha = _sha256(source_database)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--min-free-disk-mib",
-            "1000000000",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+        "--min-free-disk-mib",
+        "1000000000",
     )
 
     assert completed.returncode == 2
     assert _sha256(source_database) == source_sha
 
-    result = json.loads(completed.stdout)
+    result = _json_result(completed)
     assert result["decision"] == "NO-GO"
     assert result["reason"] == "resource-limit"
     assert result["resource_preflight"]["violations"]
@@ -201,29 +194,13 @@ def test_go_bundle_is_immutable_and_refuses_overwrite(tmp_path):
     _legacy_installation(legacy)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
     )
     assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    result = _json_result(completed)
 
     with pytest.raises(ValueError, match="already exists"):
         create_go_bundle(
@@ -242,31 +219,15 @@ def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
     _legacy_installation(legacy)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-            "--cutover",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+        "--cutover",
     )
 
     assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    result = _json_result(completed)
     assert result["decision"] == "GO"
     assert result["cutover"]["mode"] == "final-cutover"
     assert result["cutover"]["no_missed_writes"] is True
@@ -320,49 +281,7 @@ def test_cutover_rehearsal_returns_no_go_if_live_source_changes(tmp_path, monkey
     proof = json.loads((output / "cutover-proof.json").read_text(encoding="utf-8"))
     assert proof["decision"] == "NO-GO"
     assert proof["no_missed_writes"] is False
-    assert not any((output / "bundles").iterdir()) if (output / "bundles").exists() else True
-
-
-@pytest.mark.reconciliation_e2e
-def test_cutover_rehearsal_requires_unchanged_live_source(tmp_path):
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    output = tmp_path / "rehearsal"
-
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-            "--cutover",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
-    assert result["decision"] == "GO"
-    assert result["cutover"]["decision"] == "GO"
-    assert result["cutover"]["no_missed_writes"] is True
-    bundle = Path(result["go_bundle"])
-    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["cutover"]["mode"] == "final-cutover"
-    assert manifest["cutover"]["no_missed_writes_proven"] is True
-    assert (bundle / "migration" / "cutover-proof.json").is_file()
-    assert _sha256(source_database) == result["capture"]["database_sha256"]
+    assert not (output / "bundles").exists() or not any((output / "bundles").iterdir())
 
 
 def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
@@ -397,31 +316,16 @@ def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(tmp_path):
     source_sha = _sha256(source_database)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    def run_once():
-        return subprocess.run(
-            [
-                sys.executable,
-                str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-                "rehearse",
-                str(legacy),
-                "--output",
-                str(output),
-                "--nice",
-                "0",
-            ],
-            cwd=PROJECT_ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    first = run_once()
-    second = run_once()
+    first = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+    )
+    second = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
+    )
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
@@ -443,29 +347,13 @@ def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_p
     _legacy_installation(legacy)
     output = tmp_path / "rehearsal"
 
-    environment = os.environ.copy()
-    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
-    environment.pop("ARTHEXIS_DATABASE_PATH", None)
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-        ],
-        cwd=PROJECT_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
+    completed = _run_rehearsal(
+        legacy,
+        output,
+        data_dir=tmp_path / "current-data",
     )
     assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    result = _json_result(completed)
 
     no_go_report = tmp_path / "no-go-report.json"
     report = json.loads(Path(result["json_report"]).read_text(encoding="utf-8"))
