@@ -78,3 +78,25 @@ def test_ready_ocpp_predicate_returns_boolean_result() -> None:
         mode="strict",
         charger="CHARGER-001",
     )
+
+
+
+def test_ready_ocpp_delegates_fleet_selector() -> None:
+    expected = {
+        "ready": True,
+        "protocol": "partial",
+        "cards": "strict",
+        "chargers": [],
+    }
+    with patch(
+        "apps.ocpp.services.readiness.evaluate_ocpp_readiness",
+        return_value=expected,
+    ) as evaluator:
+        assert ocpp(chargers=True) == expected
+
+    evaluator.assert_called_once_with(
+        dimension=None,
+        mode=None,
+        charger=None,
+        chargers=True,
+    )
