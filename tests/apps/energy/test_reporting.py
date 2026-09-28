@@ -13,8 +13,10 @@ from apps.energy.reporting import (
     SessionCompleteness,
     SourceEvidence,
     project_charging_session,
+    project_reporting_period,
     projected_sessions_for_period,
 )
+from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import MeterValue
 from tests.apps.ocpp.builders import charger, connector, transaction
 
@@ -216,3 +218,89 @@ def test_stopped_session_with_missing_meter_boundaries_surfaces_source_gaps():
 
     assert ReportingCondition.MISSING_METER_START in result.conditions
     assert ReportingCondition.MISSING_METER_STOP in result.conditions
+
+
+
+def test_reporting_period_envelope_is_versioned_transport_safe_and_authoritative():
+    satellite = Node.objects.create(
+        identifier="gw004",
+        display_name="GW004",
+        role=NodeRole.SATELLITE,
+    )
+    selected_charger = charger("CP-ENVELOPE", node=satellite)
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.2500"),
+    )
+    transaction(
+        selected_charger,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=2),
+        energy_kwh=Decimal("2.7500"),
+    )
+
+    period = project_reporting_period(
+        type(selected_charger.transactions.first()).objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+    payload = period.as_dict()
+
+    assert period.authority_nodes == ("gw004",)
+    assert period.total_energy_kwh == Decimal("4.0000")
+    assert payload["schema_version"] == 1
+    assert payload["authority_nodes"] == ["gw004"]
+    assert payload["total_energy_kwh"] == "4.0000"
+    assert [item["source_protocol_transaction_id"] for item in payload["sessions"]] == [
+        "tx-a",
+        "tx-b",
+    ]
+    assert all(item["authority_node_key"] == "gw004" for item in payload["sessions"])
+    assert all(item["authority_node_role"] == "satellite" for item in payload["sessions"])
+    assert isinstance(payload["sessions"][0]["energy_kwh"], str)
+    assert isinstance(payload["sessions"][0]["conditions"], list)
+    assert isinstance(payload["sessions"][0]["source_evidence"], list)
+
+
+def test_reporting_period_can_aggregate_multiple_authoritative_satellites():
+    first_node = Node.objects.create(
+        identifier="gw004",
+        display_name="GW004",
+        role=NodeRole.SATELLITE,
+    )
+    second_node = Node.objects.create(
+        identifier="gw005",
+        display_name="GW005",
+        role=NodeRole.SATELLITE,
+    )
+    first = charger("CP-A", node=first_node)
+    second = charger("CP-B", node=second_node)
+    start = timezone.now()
+    transaction(
+        first,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    transaction(
+        second,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=1),
+        energy_kwh=Decimal("2.0000"),
+    )
+
+    period = project_reporting_period(
+        type(first.transactions.first()).objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert period.authority_nodes == ("gw004", "gw005")
+    assert period.total_energy_kwh == Decimal("3.0000")
