@@ -10,7 +10,6 @@ from apps.ocpp.discovery.network import (
 )
 
 
-
 _TSHARK_FIELD_ORDER = (
     "eth.src",
     "eth.dst",
@@ -37,8 +36,31 @@ _TSHARK_FIELD_ORDER = (
 )
 
 
+SOURCE_IP = SOURCE_IP
+DESTINATION_IP = DESTINATION_IP
+SOURCE_MAC = SOURCE_MAC
+DESTINATION_MAC = DESTINATION_MAC
+
+
 def tshark_row(**fields) -> str:
     return "\t".join(str(fields.get(name, "")) for name in _TSHARK_FIELD_ORDER)
+
+
+def destination_observation(
+    event_type: str = "connection_attempt",
+    *,
+    port: int = 9000,
+    **metadata,
+) -> NetworkObservation:
+    return NetworkObservation(
+        event_type,
+        {
+            "source_ip": SOURCE_IP,
+            "destination_ip": DESTINATION_IP,
+            "destination_port": port,
+            **metadata,
+        },
+    )
 
 
 class FakeObserver:
@@ -96,25 +118,13 @@ def test_dependency_preflight_runs_before_session_creation(tmp_path) -> None:
 def test_passive_discovery_correlates_ip_port_and_mac_without_arp(tmp_path) -> None:
     observer = FakeObserver(
         [
-            NetworkObservation(
-                "connection_attempt",
-                {
-                    "source_ip": "192.0.2.20",
-                    "destination_ip": "198.51.100.40",
-                    "destination_port": 9000,
-                    "source_mac": "00:11:22:33:44:55",
-                    "destination_mac": "aa:bb:cc:dd:ee:ff",
-                },
+            destination_observation(
+                source_mac=SOURCE_MAC,
+                destination_mac=DESTINATION_MAC,
             ),
-            NetworkObservation(
-                "connection_attempt",
-                {
-                    "source_ip": "192.0.2.20",
-                    "destination_ip": "198.51.100.40",
-                    "destination_port": 9000,
-                    "source_mac": "00:11:22:33:44:55",
-                    "destination_mac": "aa:bb:cc:dd:ee:ff",
-                },
+            destination_observation(
+                source_mac=SOURCE_MAC,
+                destination_mac=DESTINATION_MAC,
             ),
         ]
     )
@@ -138,9 +148,9 @@ def test_passive_discovery_correlates_ip_port_and_mac_without_arp(tmp_path) -> N
         event for event in events if event["event_type"] == "csms_candidate"
     )
     assert candidate["category"] == "inference"
-    assert candidate["metadata"]["destination_ip"] == "198.51.100.40"
+    assert candidate["metadata"]["destination_ip"] == DESTINATION_IP
     assert candidate["metadata"]["destination_port"] == 9000
-    assert candidate["metadata"]["destination_mac"] == "aa:bb:cc:dd:ee:ff"
+    assert candidate["metadata"]["destination_mac"] == DESTINATION_MAC
     assert candidate["metadata"]["attempts"] == 2
     assert (
         candidate["metadata"]["destination_mac_observed_without_resolution"]
@@ -154,16 +164,16 @@ def test_arp_reply_prevents_false_cached_neighbor_observation(tmp_path) -> None:
             NetworkObservation(
                 "arp_reply",
                 {
-                    "sender_ip": "198.51.100.40",
-                    "sender_mac": "aa:bb:cc:dd:ee:ff",
+                    "sender_ip": DESTINATION_IP,
+                    "sender_mac": DESTINATION_MAC,
                 },
             ),
             NetworkObservation(
                 "connection_attempt",
                 {
-                    "destination_ip": "198.51.100.40",
+                    "destination_ip": DESTINATION_IP,
                     "destination_port": 9000,
-                    "destination_mac": "aa:bb:cc:dd:ee:ff",
+                    "destination_mac": DESTINATION_MAC,
                 },
             ),
         ]
@@ -211,10 +221,10 @@ def test_tshark_parser_retains_ethernet_and_ip_destination() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
-                "eth.dst": "aa:bb:cc:dd:ee:ff",
-                "ip.src": "192.0.2.20",
-                "ip.dst": "198.51.100.40",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
                 "tcp.srcport": "51000",
                 "tcp.dstport": "9000",
             }
@@ -223,27 +233,27 @@ def test_tshark_parser_retains_ethernet_and_ip_destination() -> None:
 
     assert observation is not None
     assert observation.event_type == "connection_attempt"
-    assert observation.metadata["destination_ip"] == "198.51.100.40"
+    assert observation.metadata["destination_ip"] == DESTINATION_IP
     assert observation.metadata["destination_port"] == 9000
-    assert observation.metadata["destination_mac"] == "aa:bb:cc:dd:ee:ff"
+    assert observation.metadata["destination_mac"] == DESTINATION_MAC
 
 
 def test_tshark_parser_retains_arp_resolution() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
+                "eth.src": SOURCE_MAC,
                 "eth.dst": "ff:ff:ff:ff:ff:ff",
                 "arp.opcode": "1",
-                "arp.src.proto_ipv4": "192.0.2.20",
-                "arp.dst.proto_ipv4": "198.51.100.40",
+                "arp.src.proto_ipv4": SOURCE_IP,
+                "arp.dst.proto_ipv4": DESTINATION_IP,
             }
         )
     )
 
     assert observation is not None
     assert observation.event_type == "arp_request"
-    assert observation.metadata["target_ip"] == "198.51.100.40"
+    assert observation.metadata["target_ip"] == DESTINATION_IP
 
 
 def test_tshark_preflight_has_friendly_missing_dependency_error() -> None:
@@ -258,9 +268,9 @@ def test_tshark_parser_retains_dns_query_identity() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
-                "eth.dst": "aa:bb:cc:dd:ee:ff",
-                "ip.src": "192.0.2.20",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ip.src": SOURCE_IP,
                 "ip.dst": "192.0.2.53",
                 "dns.id": "4242",
                 "dns.flags.response": "0",
@@ -275,7 +285,7 @@ def test_tshark_parser_retains_dns_query_identity() -> None:
     assert observation.metadata["dns_id"] == 4242
     assert observation.metadata["record_type"] == "A"
     assert observation.metadata["name"] == "csms.example.com"
-    assert observation.metadata["client_ip"] == "192.0.2.20"
+    assert observation.metadata["client_ip"] == SOURCE_IP
     assert observation.metadata["dns_server"] == "192.0.2.53"
 
 
@@ -283,15 +293,15 @@ def test_tshark_parser_retains_dns_a_response() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "aa:bb:cc:dd:ee:ff",
-                "eth.dst": "00:11:22:33:44:55",
+                "eth.src": DESTINATION_MAC,
+                "eth.dst": SOURCE_MAC,
                 "ip.src": "192.0.2.53",
-                "ip.dst": "192.0.2.20",
+                "ip.dst": SOURCE_IP,
                 "dns.id": "4242",
                 "dns.flags.response": "1",
                 "dns.qry.type": "1",
                 "dns.qry.name": "csms.example.com",
-                "dns.a": "198.51.100.40",
+                "dns.a": DESTINATION_IP,
             }
         )
     )
@@ -299,8 +309,8 @@ def test_tshark_parser_retains_dns_a_response() -> None:
     assert observation is not None
     assert observation.event_type == "dns_response"
     assert observation.metadata["dns_id"] == 4242
-    assert observation.metadata["address"] == "198.51.100.40"
-    assert observation.metadata["client_ip"] == "192.0.2.20"
+    assert observation.metadata["address"] == DESTINATION_IP
+    assert observation.metadata["client_ip"] == SOURCE_IP
     assert observation.metadata["dns_server"] == "192.0.2.53"
 
 
@@ -313,7 +323,7 @@ def test_dns_resolution_is_evidence_and_enriches_later_candidate(tmp_path) -> No
                     "dns_id": 4242,
                     "record_type": "A",
                     "name": "csms.example.com",
-                    "client_ip": "192.0.2.20",
+                    "client_ip": SOURCE_IP,
                     "dns_server": "192.0.2.53",
                 },
             ),
@@ -321,16 +331,16 @@ def test_dns_resolution_is_evidence_and_enriches_later_candidate(tmp_path) -> No
                 "dns_response",
                 {
                     "dns_id": 4242,
-                    "address": "198.51.100.40",
-                    "client_ip": "192.0.2.20",
+                    "address": DESTINATION_IP,
+                    "client_ip": SOURCE_IP,
                     "dns_server": "192.0.2.53",
                 },
             ),
             NetworkObservation(
                 "connection_attempt",
                 {
-                    "source_ip": "192.0.2.20",
-                    "destination_ip": "198.51.100.40",
+                    "source_ip": SOURCE_IP,
+                    "destination_ip": DESTINATION_IP,
                     "destination_port": 9000,
                 },
             ),
@@ -350,7 +360,7 @@ def test_dns_resolution_is_evidence_and_enriches_later_candidate(tmp_path) -> No
     )
     assert resolution["category"] == "observation"
     assert resolution["metadata"]["name"] == "csms.example.com"
-    assert resolution["metadata"]["address"] == "198.51.100.40"
+    assert resolution["metadata"]["address"] == DESTINATION_IP
 
     candidate = next(
         event for event in events if event["event_type"] == "csms_candidate"
@@ -365,8 +375,8 @@ def test_unmatched_dns_response_does_not_invent_hostname() -> None:
             "dns_response",
             {
                 "dns_id": 4242,
-                "address": "198.51.100.40",
-                "client_ip": "192.0.2.20",
+                "address": DESTINATION_IP,
+                "client_ip": SOURCE_IP,
                 "dns_server": "192.0.2.53",
             },
         )
@@ -375,7 +385,7 @@ def test_unmatched_dns_response_does_not_invent_hostname() -> None:
         NetworkObservation(
             "connection_attempt",
             {
-                "destination_ip": "198.51.100.40",
+                "destination_ip": DESTINATION_IP,
                 "destination_port": 9000,
             },
         )
@@ -389,10 +399,10 @@ def test_tshark_parser_retains_plain_http_request_metadata() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
-                "eth.dst": "aa:bb:cc:dd:ee:ff",
-                "ip.src": "192.0.2.20",
-                "ip.dst": "198.51.100.40",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
                 "tcp.srcport": "51000",
                 "tcp.dstport": "9000",
                 "http.request.method": "GET",
@@ -414,10 +424,10 @@ def test_tshark_parser_retains_websocket_upgrade_metadata() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
-                "eth.dst": "aa:bb:cc:dd:ee:ff",
-                "ip.src": "192.0.2.20",
-                "ip.dst": "198.51.100.40",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
                 "tcp.srcport": "51000",
                 "tcp.dstport": "9000",
                 "http.request.method": "GET",
@@ -443,9 +453,9 @@ def test_websocket_evidence_enriches_candidate_even_without_fresh_arp() -> None:
         NetworkObservation(
             "websocket_upgrade",
             {
-                "destination_ip": "198.51.100.40",
+                "destination_ip": DESTINATION_IP,
                 "destination_port": 9000,
-                "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "destination_mac": DESTINATION_MAC,
                 "hostname": "csms.example.com:9000",
                 "path": "/ocpp/CP001",
                 "subprotocol": "ocpp1.6",
@@ -470,7 +480,7 @@ def test_http_request_does_not_invent_websocket_metadata() -> None:
         NetworkObservation(
             "http_request",
             {
-                "destination_ip": "198.51.100.40",
+                "destination_ip": DESTINATION_IP,
                 "destination_port": 9000,
                 "hostname": "csms.example.com",
                 "path": "/health",
@@ -489,10 +499,10 @@ def test_tshark_parser_retains_tls_client_hello_sni() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "eth.src": "00:11:22:33:44:55",
-                "eth.dst": "aa:bb:cc:dd:ee:ff",
-                "ip.src": "192.0.2.20",
-                "ip.dst": "198.51.100.40",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
                 "tcp.srcport": "51000",
                 "tcp.dstport": "443",
                 "tls.handshake.type": "1",
@@ -503,7 +513,7 @@ def test_tshark_parser_retains_tls_client_hello_sni() -> None:
 
     assert observation is not None
     assert observation.event_type == "tls_client_hello"
-    assert observation.metadata["destination_ip"] == "198.51.100.40"
+    assert observation.metadata["destination_ip"] == DESTINATION_IP
     assert observation.metadata["destination_port"] == 443
     assert observation.metadata["sni"] == "secure.example.com"
 
@@ -512,8 +522,8 @@ def test_tls_client_hello_without_sni_is_still_observed() -> None:
     observation = parse_tshark_line(
         tshark_row(
             **{
-                "ip.src": "192.0.2.20",
-                "ip.dst": "198.51.100.40",
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
                 "tcp.srcport": "51000",
                 "tcp.dstport": "443",
                 "tls.handshake.type": "1",
@@ -533,7 +543,7 @@ def test_tls_sni_enriches_candidate_without_becoming_http_hostname() -> None:
         NetworkObservation(
             "tls_client_hello",
             {
-                "destination_ip": "198.51.100.40",
+                "destination_ip": DESTINATION_IP,
                 "destination_port": 443,
                 "sni": "secure.example.com",
             },
