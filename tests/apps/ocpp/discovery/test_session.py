@@ -260,3 +260,24 @@ def test_list_returns_only_valid_session_manifests_in_creation_order(tmp_path) -
 def test_create_rejects_unsafe_session_ids(tmp_path, session_id: str) -> None:
     with pytest.raises(ValueError):
         DiscoverySession.create(tmp_path, session_id=session_id)
+
+
+
+def test_summary_derives_capture_status_from_event_stream(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="capture-summary")
+    session.record("capture_requested", metadata={"candidate_available": True})
+    session.record(
+        "capture_unavailable",
+        metadata={"reason": "capture_provider_unavailable"},
+    )
+
+    summary = session.write_summary()
+
+    assert summary["capture"] == {
+        "requested": True,
+        "available": False,
+        "attempted": False,
+        "succeeded": False,
+        "strategy": None,
+        "failure_reason": "capture_provider_unavailable",
+    }
