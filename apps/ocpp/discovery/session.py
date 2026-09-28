@@ -291,6 +291,9 @@ class DiscoverySession:
         capture_succeeded = False
         capture_strategy: str | None = None
         capture_failure_reason: str | None = None
+        capture_redirect_id: str | None = None
+        capture_active = False
+        capture_release_failure_reason: str | None = None
         for event in events:
             event_type = event["event_type"]
             category = event["category"]
@@ -312,12 +315,24 @@ class DiscoverySession:
                     capture_failure_reason = reason
             elif event_type in {"capture_started", "capture_failed", "capture_succeeded"}:
                 capture_attempted = True
-                if event_type == "capture_failed":
+                if event_type == "capture_started":
+                    redirect_id = metadata.get("redirect_id")
+                    if isinstance(redirect_id, str):
+                        capture_redirect_id = redirect_id
+                    capture_active = True
+                elif event_type == "capture_failed":
                     reason = metadata.get("reason")
                     if isinstance(reason, str):
                         capture_failure_reason = reason
                 elif event_type == "capture_succeeded":
                     capture_succeeded = True
+            elif event_type == "capture_released":
+                capture_active = False
+                capture_release_failure_reason = None
+            elif event_type == "capture_release_failed":
+                reason = metadata.get("reason")
+                if isinstance(reason, str):
+                    capture_release_failure_reason = reason
 
         capture = {
             "requested": capture_requested,
@@ -326,6 +341,9 @@ class DiscoverySession:
             "succeeded": capture_succeeded,
             "strategy": capture_strategy,
             "failure_reason": capture_failure_reason,
+            "redirect_id": capture_redirect_id,
+            "active": capture_active,
+            "release_failure_reason": capture_release_failure_reason,
         }
 
         return {
