@@ -50,6 +50,124 @@ class Ocpp16WebsocketFlowTests:
         assert OperationalStatusRecord.objects.count() == 2
 
 
+    def test_backlog_reconnect_resumes_transaction_over_websocket(self) -> None:
+        async_to_sync(self._run_backlog_reconnect_exchange)()
+
+        transaction = OcppTransaction.objects.get()
+        assert transaction.stopped_at is not None
+        assert transaction.meter_values.count() == 2
+        assert list(
+            transaction.meter_values.order_by("sampled_at", "id").values_list(
+                "value", flat=True
+            )
+        ) == [Decimal("125"), Decimal("150")]
+
+    async def _run_backlog_reconnect_exchange(self) -> None:
+        first = await connect_charger()
+
+        await first.send_json_to(
+            [
+                2,
+                "boot-backlog-1",
+                "BootNotification",
+                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
+            ]
+        )
+        assert (await first.receive_json_from())[2]["status"] == "Accepted"
+
+        await first.send_json_to(
+            [2, "authorize-backlog-1", "Authorize", {"idTag": "card-tag"}]
+        )
+        assert (await first.receive_json_from())[2]["idTagInfo"]["status"] == "Accepted"
+
+        await first.send_json_to(
+            [
+                2,
+                "start-backlog-1",
+                "StartTransaction",
+                {
+                    "connectorId": 1,
+                    "idTag": "card-tag",
+                    "meterStart": 100,
+                    "timestamp": "2026-01-01T00:00:00Z",
+                },
+            ]
+        )
+        started = await first.receive_json_from()
+        transaction_id = started[2]["transactionId"]
+        assert started[2]["idTagInfo"]["status"] == "Accepted"
+
+        await first.send_json_to(
+            [
+                2,
+                "meter-backlog-1",
+                "MeterValues",
+                {
+                    "transactionId": transaction_id,
+                    "meterValue": [
+                        {
+                            "timestamp": "2026-01-01T00:05:00Z",
+                            "sampledValue": [{"value": "125"}],
+                        }
+                    ],
+                },
+            ]
+        )
+        assert await first.receive_json_from() == [3, "meter-backlog-1", {}]
+        await first.disconnect()
+
+        second = await connect_charger()
+
+        await second.send_json_to(
+            [
+                2,
+                "boot-backlog-2",
+                "BootNotification",
+                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
+            ]
+        )
+        assert (await second.receive_json_from())[2]["status"] == "Accepted"
+
+        await second.send_json_to([2, "heartbeat-backlog-2", "Heartbeat", {}])
+        assert "currentTime" in (await second.receive_json_from())[2]
+
+        await second.send_json_to(
+            [
+                2,
+                "meter-backlog-2",
+                "MeterValues",
+                {
+                    "transactionId": transaction_id,
+                    "meterValue": [
+                        {
+                            "timestamp": "2026-01-01T00:10:00Z",
+                            "sampledValue": [{"value": "150"}],
+                        }
+                    ],
+                },
+            ]
+        )
+        assert await second.receive_json_from() == [3, "meter-backlog-2", {}]
+
+        await second.send_json_to(
+            [
+                2,
+                "stop-backlog-2",
+                "StopTransaction",
+                {
+                    "transactionId": transaction_id,
+                    "meterStop": 175,
+                    "timestamp": "2026-01-01T00:15:00Z",
+                },
+            ]
+        )
+        assert await second.receive_json_from() == [
+            3,
+            "stop-backlog-2",
+            {"idTagInfo": {"status": "Accepted"}},
+        ]
+        await second.disconnect()
+
     def test_restart_reconnect_reconciles_open_transaction_from_fresh_status(self) -> None:
         async_to_sync(self._run_reconnect_recovery_exchange)()
 
