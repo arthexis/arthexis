@@ -56,6 +56,7 @@ class CsmsCandidate:
     destination_port: int
     destination_mac: str | None = None
     hostnames: set[str] = field(default_factory=set)
+    http_paths: set[str] = field(default_factory=set)
     websocket_paths: set[str] = field(default_factory=set)
     ocpp_subprotocols: set[str] = field(default_factory=set)
     tls_sni: set[str] = field(default_factory=set)
@@ -70,6 +71,7 @@ class CsmsCandidate:
             "destination_port": self.destination_port,
             "destination_mac": self.destination_mac,
             "hostnames": sorted(self.hostnames),
+            "http_paths": sorted(self.http_paths),
             "websocket_paths": sorted(self.websocket_paths),
             "ocpp_subprotocols": sorted(self.ocpp_subprotocols),
             "tls_sni": sorted(self.tls_sni),
@@ -358,9 +360,14 @@ class CandidateTracker:
             candidate.hostnames.add(hostname)
         path = metadata.get("path")
         if isinstance(path, str):
-            candidate.websocket_paths.add(path)
+            candidate.http_paths.add(path)
+            if observation.event_type == "websocket_upgrade":
+                candidate.websocket_paths.add(path)
         subprotocol = metadata.get("subprotocol")
-        if isinstance(subprotocol, str):
+        if (
+            observation.event_type == "websocket_upgrade"
+            and isinstance(subprotocol, str)
+        ):
             candidate.ocpp_subprotocols.add(subprotocol)
         sni = metadata.get("sni")
         if isinstance(sni, str):
