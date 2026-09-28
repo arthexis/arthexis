@@ -128,3 +128,24 @@ def test_strict_card_mode_accepts_explicitly_trusted_card() -> None:
 
     assert result.accepted is True
     assert result.card == trusted
+
+
+
+def test_legacy_policy_keywords_remain_programmatically_compatible() -> None:
+    selected = Charger.objects.create(identity="legacy-policy")
+
+    call_command(
+        "ocpp_policy",
+        charger_admission="restricted",
+        stdout=StringIO(),
+    )
+    assert OcppPolicy.load().charger_admission_mode == OcppPolicy.AdmissionMode.RESTRICTED
+
+    call_command(
+        "ocpp_policy",
+        charger=selected.identity,
+        rfid="open",
+        stdout=StringIO(),
+    )
+    selected.refresh_from_db()
+    assert selected.authorization_mode == Charger.AuthorizationMode.OPEN
