@@ -6,9 +6,9 @@ import asyncio
 import json
 import sqlite3
 from collections.abc import Awaitable, Callable, Iterable, Iterator
-from typing import Protocol
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
