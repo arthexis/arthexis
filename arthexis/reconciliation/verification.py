@@ -140,8 +140,22 @@ def verify_reconciliation(fixture_path: Path) -> VerificationResult:
         else f"{len(violations)} foreign-key violation(s)",
     )
 
-    imported = reconciliation.get("reconciliation", {}).get("imported", {})
+    reconciliation_result = reconciliation.get("reconciliation", {})
+    historical_gaps = reconciliation_result.get("historical_gaps", [])
+    accepted_gap_resources = {
+        gap.get("resource")
+        for gap in historical_gaps
+        if gap.get("classification") in {"source-incomplete", "legacy-v0-gap"}
+        and gap.get("evidence")
+    }
+
+    imported = reconciliation_result.get("imported", {})
     for resource, expected in sorted(imported.items()):
+        if resource in accepted_gap_resources:
+            warnings.append(
+                f"{resource}: retained count check waived by evidence-backed historical gap."
+            )
+            continue
         table = RESOURCE_TABLES.get(resource)
         if table is None:
             warnings.append(
@@ -155,8 +169,6 @@ def verify_reconciliation(fixture_path: Path) -> VerificationResult:
             f"imported={expected}, destination={actual}",
         )
 
-    reconciliation_result = reconciliation.get("reconciliation", {})
-    historical_gaps = reconciliation_result.get("historical_gaps", [])
     accepted_gap_keys = {
         (gap.get("resource"), gap.get("reason"))
         for gap in historical_gaps
