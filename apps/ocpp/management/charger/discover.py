@@ -5,7 +5,6 @@ from pathlib import Path
 from django.conf import settings
 
 from apps.ocpp.discovery.capture import (
-    CaptureProvider,
     capture_request_from_candidate,
     default_capture_provider,
 )
@@ -18,8 +17,6 @@ def discover(
     role: str | None = None,
     root: str | None = None,
     capture: bool = False,
-    *,
-    capture_provider: CaptureProvider | None = None,
 ) -> dict[str, object]:
     """Observe a charger-facing interface and optionally prepare automatic capture."""
 
@@ -49,7 +46,7 @@ def discover(
                 metadata={"reason": "no_csms_candidate"},
             )
         else:
-            provider = capture_provider or default_capture_provider()
+            provider = default_capture_provider()
             if provider is None:
                 session.record(
                     "capture_unavailable",
