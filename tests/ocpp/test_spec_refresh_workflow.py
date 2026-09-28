@@ -1,4 +1,8 @@
+import pytest
 from pathlib import Path
+
+
+pytestmark = pytest.mark.workflow
 
 
 def test_ocpp_spec_refresh_is_manual_and_github_hosted() -> None:

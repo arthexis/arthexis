@@ -60,4 +60,5 @@ testpaths = ["tests"]
 addopts = ["--strict-config", "--strict-markers"]
 markers = [
     "reconciliation_e2e: slow end-to-end legacy reconciliation acceptance",
+    "workflow: CI and GitHub Actions workflow contract validation",
 ]

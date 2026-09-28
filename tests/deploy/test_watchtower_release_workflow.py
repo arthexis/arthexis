@@ -1,5 +1,9 @@
+import pytest
 import subprocess
 from pathlib import Path
+
+
+pytestmark = pytest.mark.workflow
 
 
 def test_watchtower_gway_version_awk_extracts_project_version():

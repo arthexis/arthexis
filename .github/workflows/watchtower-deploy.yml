@@ -20,7 +20,6 @@ on:
         options:
           - arthexis
           - remote
-          - wire
 
 concurrency:
   group: watchtower-deploy-main
@@ -60,7 +59,7 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stage="${{ inputs.stage }}"
           fi
-          if [[ "$stage" != "arthexis" && "$stage" != "remote" && "$stage" != "wire" ]]; then
+          if [[ "$stage" != "arthexis" && "$stage" != "remote" ]]; then
             echo "Unsupported deployment stage: $stage" >&2
             exit 1
           fi
@@ -501,8 +500,8 @@ jobs:
           echo "remote_services=active"
           echo "remote_acceptance=ok"
 
-      - name: Preflight Watchtower Wire stage
-        if: env.WATCHTOWER_STAGE == 'wire'
+      - name: Preflight Watchtower Wire capability
+        if: env.WATCHTOWER_STAGE == 'remote'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -522,8 +521,8 @@ jobs:
           sudo -n ss -ltnp '( sport = :8787 )' || true
           echo "wire_listener=end"
 
-      - name: Converge Watchtower Wire stage
-        if: env.WATCHTOWER_STAGE == 'wire'
+      - name: Converge Watchtower Wire capability
+        if: env.WATCHTOWER_STAGE == 'remote'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -536,8 +535,8 @@ jobs:
             --email "${ARTHEXIS_CERTBOT_EMAIL}" \
             --public-address "${public_ipv4}"
 
-      - name: Verify Watchtower Wire stage
-        if: env.WATCHTOWER_STAGE == 'wire'
+      - name: Verify Watchtower Wire capability
+        if: env.WATCHTOWER_STAGE == 'remote'
         shell: bash
         run: |
           set -Eeuo pipefail
