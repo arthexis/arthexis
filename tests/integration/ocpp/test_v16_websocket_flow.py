@@ -19,6 +19,58 @@ from tests.integration.ocpp.support import connect_charger
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+async def _call(communicator, unique_id: str, action: str, payload: dict) -> dict:
+    await communicator.send_json_to([2, unique_id, action, payload])
+    response = await communicator.receive_json_from()
+    assert response[:2] == [3, unique_id]
+    return response[2]
+
+
+async def _boot(communicator, unique_id: str) -> None:
+    response = await _call(
+        communicator,
+        unique_id,
+        "BootNotification",
+        {"chargePointVendor": "ACME", "chargePointModel": "Test"},
+    )
+    assert response["status"] == "Accepted"
+
+
+async def _authorize(communicator, unique_id: str) -> None:
+    response = await _call(
+        communicator,
+        unique_id,
+        "Authorize",
+        {"idTag": "card-tag"},
+    )
+    assert response["idTagInfo"]["status"] == "Accepted"
+
+
+async def _meter_value(
+    communicator,
+    unique_id: str,
+    *,
+    transaction_id: int,
+    timestamp: str,
+    value: str,
+) -> None:
+    response = await _call(
+        communicator,
+        unique_id,
+        "MeterValues",
+        {
+            "transactionId": transaction_id,
+            "meterValue": [
+                {
+                    "timestamp": timestamp,
+                    "sampledValue": [{"value": value}],
+                }
+            ],
+        },
+    )
+    assert response == {}
+
+
 
 class Ocpp16WebsocketFlowTests:
     def setup_method(self) -> None:
@@ -64,126 +116,63 @@ class Ocpp16WebsocketFlowTests:
 
     async def _run_backlog_reconnect_exchange(self) -> None:
         first = await connect_charger()
+        await _boot(first, "boot-backlog-1")
+        await _authorize(first, "authorize-backlog-1")
 
-        await first.send_json_to(
-            [
-                2,
-                "boot-backlog-1",
-                "BootNotification",
-                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
-            ]
+        started = await _call(
+            first,
+            "start-backlog-1",
+            "StartTransaction",
+            {
+                "connectorId": 1,
+                "idTag": "card-tag",
+                "meterStart": 100,
+                "timestamp": "2026-01-01T00:00:00Z",
+            },
         )
-        assert (await first.receive_json_from())[2]["status"] == "Accepted"
+        assert started["idTagInfo"]["status"] == "Accepted"
+        transaction_id = started["transactionId"]
 
-        await first.send_json_to(
-            [2, "authorize-backlog-1", "Authorize", {"idTag": "card-tag"}]
+        await _meter_value(
+            first,
+            "meter-backlog-1",
+            transaction_id=transaction_id,
+            timestamp="2026-01-01T00:05:00Z",
+            value="125",
         )
-        assert (await first.receive_json_from())[2]["idTagInfo"]["status"] == "Accepted"
-
-        await first.send_json_to(
-            [
-                2,
-                "start-backlog-1",
-                "StartTransaction",
-                {
-                    "connectorId": 1,
-                    "idTag": "card-tag",
-                    "meterStart": 100,
-                    "timestamp": "2026-01-01T00:00:00Z",
-                },
-            ]
-        )
-        started = await first.receive_json_from()
-        transaction_id = started[2]["transactionId"]
-        assert started[2]["idTagInfo"]["status"] == "Accepted"
-
-        await first.send_json_to(
-            [
-                2,
-                "meter-backlog-1",
-                "MeterValues",
-                {
-                    "transactionId": transaction_id,
-                    "meterValue": [
-                        {
-                            "timestamp": "2026-01-01T00:05:00Z",
-                            "sampledValue": [{"value": "125"}],
-                        }
-                    ],
-                },
-            ]
-        )
-        assert await first.receive_json_from() == [3, "meter-backlog-1", {}]
         await first.disconnect()
 
         second = await connect_charger()
+        await _boot(second, "boot-backlog-2")
+        heartbeat = await _call(second, "heartbeat-backlog-2", "Heartbeat", {})
+        assert "currentTime" in heartbeat
 
-        await second.send_json_to(
-            [
-                2,
-                "boot-backlog-2",
-                "BootNotification",
-                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
-            ]
+        await _meter_value(
+            second,
+            "meter-backlog-replay",
+            transaction_id=transaction_id,
+            timestamp="2026-01-01T00:05:00Z",
+            value="125",
         )
-        assert (await second.receive_json_from())[2]["status"] == "Accepted"
-
-        await second.send_json_to([2, "heartbeat-backlog-2", "Heartbeat", {}])
-        assert "currentTime" in (await second.receive_json_from())[2]
-
-        await second.send_json_to(
-            [
-                2,
-                "meter-backlog-replay",
-                "MeterValues",
-                {
-                    "transactionId": transaction_id,
-                    "meterValue": [
-                        {
-                            "timestamp": "2026-01-01T00:05:00Z",
-                            "sampledValue": [{"value": "125"}],
-                        }
-                    ],
-                },
-            ]
+        await _meter_value(
+            second,
+            "meter-backlog-2",
+            transaction_id=transaction_id,
+            timestamp="2026-01-01T00:10:00Z",
+            value="150",
         )
-        assert await second.receive_json_from() == [3, "meter-backlog-replay", {}]
 
-        await second.send_json_to(
-            [
-                2,
-                "meter-backlog-2",
-                "MeterValues",
-                {
-                    "transactionId": transaction_id,
-                    "meterValue": [
-                        {
-                            "timestamp": "2026-01-01T00:10:00Z",
-                            "sampledValue": [{"value": "150"}],
-                        }
-                    ],
-                },
-            ]
-        )
-        assert await second.receive_json_from() == [3, "meter-backlog-2", {}]
-
-        await second.send_json_to(
-            [
-                2,
-                "stop-backlog-2",
-                "StopTransaction",
-                {
-                    "transactionId": transaction_id,
-                    "meterStop": 175,
-                    "timestamp": "2026-01-01T00:15:00Z",
-                },
-            ]
-        )
-        assert await second.receive_json_from() == [
-            3,
+        stopped = await _call(
+            second,
             "stop-backlog-2",
-            {"idTagInfo": {"status": "Accepted"}},
-        ]
+            "StopTransaction",
+            {
+                "transactionId": transaction_id,
+                "meterStop": 175,
+                "timestamp": "2026-01-01T00:15:00Z",
+            },
+        )
+        assert stopped == {"idTagInfo": {"status": "Accepted"}}
         await second.disconnect()
 
     def test_restart_reconnect_reconciles_open_transaction_from_fresh_status(self) -> None:
@@ -202,61 +191,31 @@ class Ocpp16WebsocketFlowTests:
 
     async def _run_reconnect_recovery_exchange(self) -> None:
         first = await connect_charger()
+        await _boot(first, "boot-recovery-1")
+        await _authorize(first, "authorize-recovery-1")
 
-        await first.send_json_to(
-            [
-                2,
-                "boot-recovery-1",
-                "BootNotification",
-                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
-            ]
+        started = await _call(
+            first,
+            "start-recovery-1",
+            "StartTransaction",
+            {"connectorId": 1, "idTag": "card-tag", "meterStart": 100},
         )
-        assert (await first.receive_json_from())[2]["status"] == "Accepted"
-
-        await first.send_json_to(
-            [2, "authorize-recovery-1", "Authorize", {"idTag": "card-tag"}]
-        )
-        assert (await first.receive_json_from())[2]["idTagInfo"]["status"] == "Accepted"
-
-        await first.send_json_to(
-            [
-                2,
-                "start-recovery-1",
-                "StartTransaction",
-                {"connectorId": 1, "idTag": "card-tag", "meterStart": 100},
-            ]
-        )
-        started = await first.receive_json_from()
-        assert started[2]["idTagInfo"]["status"] == "Accepted"
-
+        assert started["idTagInfo"]["status"] == "Accepted"
         await first.disconnect()
 
         second = await connect_charger()
-
-        await second.send_json_to(
-            [
-                2,
-                "boot-recovery-2",
-                "BootNotification",
-                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
-            ]
+        await _boot(second, "boot-recovery-2")
+        status = await _call(
+            second,
+            "status-recovery-available",
+            "StatusNotification",
+            {
+                "connectorId": 1,
+                "status": "Available",
+                "timestamp": "2099-01-01T00:00:00Z",
+            },
         )
-        assert (await second.receive_json_from())[2]["status"] == "Accepted"
-
-        await second.send_json_to(
-            [
-                2,
-                "status-recovery-available",
-                "StatusNotification",
-                {
-                    "connectorId": 1,
-                    "status": "Available",
-                    "timestamp": "2099-01-01T00:00:00Z",
-                },
-            ]
-        )
-        assert await second.receive_json_from() == [3, "status-recovery-available", {}]
-
+        assert status == {}
         await second.disconnect()
 
     async def _run_exchange(self) -> None:
