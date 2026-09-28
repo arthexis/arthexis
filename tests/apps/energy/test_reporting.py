@@ -10,11 +10,14 @@ from apps.energy.reporting import (
     EnergyProvenance,
     MeterContinuity,
     ReportingCondition,
+    ReportingContractError,
     SessionCompleteness,
     SourceEvidence,
     project_charging_session,
     project_reporting_period,
     projected_sessions_for_period,
+    reporting_contract,
+    validate_reporting_payload,
 )
 from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import MeterValue, OcppTransaction
@@ -304,3 +307,117 @@ def test_reporting_period_can_aggregate_multiple_authoritative_satellites():
 
     assert period.authority_nodes == ("gw004", "gw005")
     assert period.total_energy_kwh == Decimal("3.0000")
+
+
+
+def test_reporting_contract_is_self_describing():
+    contract = reporting_contract()
+
+    assert contract["schema"] == "arthexis.charging-session-report"
+    assert contract["schema_version"] == 1
+    assert "sessions" in contract["required_period_fields"]
+    assert "source_evidence" in contract["required_session_fields"]
+    assert contract["enum_values"]["meter_continuity"] == (
+        "continuous",
+        "discontinuous",
+        "unknown",
+    )
+
+
+def test_serialized_period_validates_against_current_contract():
+    selected_charger = charger("CP-VALIDATE")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-valid",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    payload = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+
+    assert validate_reporting_payload(payload) == payload
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        ("schema", "other.schema", "unsupported reporting schema"),
+        ("schema_version", 999, "unsupported reporting schema version"),
+    ],
+)
+def test_reporting_payload_rejects_incompatible_contract(
+    field_name,
+    value,
+    message,
+):
+    selected_charger = charger(f"CP-{field_name}")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        f"tx-{field_name}",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    payload = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+    payload[field_name] = value
+
+    with pytest.raises(ReportingContractError, match=message):
+        validate_reporting_payload(payload)
+
+
+def test_reporting_payload_rejects_missing_session_fields():
+    selected_charger = charger("CP-MISSING-FIELD")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-missing-field",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    payload = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+    del payload["sessions"][0]["source_evidence"]
+
+    with pytest.raises(
+        ReportingContractError,
+        match="missing required field: source_evidence",
+    ):
+        validate_reporting_payload(payload)
+
+
+def test_reporting_payload_rejects_unknown_enum_values():
+    selected_charger = charger("CP-BAD-ENUM")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-bad-enum",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    payload = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+    payload["sessions"][0]["meter_continuity"] = "invented"
+
+    with pytest.raises(
+        ReportingContractError,
+        match="invalid meter_continuity",
+    ):
+        validate_reporting_payload(payload)
