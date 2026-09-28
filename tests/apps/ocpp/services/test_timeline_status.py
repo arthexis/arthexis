@@ -56,6 +56,9 @@ def test_snapshot_is_json_safe_and_read_only():
         "pending_work": 0,
         "oldest_pending_at": None,
         "oldest_pending_age_seconds": None,
+        "last_authorization_at": None,
+        "last_authorization_age_seconds": None,
+        "last_authorization_status": None,
         "connection_live": False,
         "connection_lease_remaining_seconds": None,
     }
@@ -210,17 +213,26 @@ def test_unknown_state_remains_unknown_even_with_recent_receipt():
     assert timeline_snapshot(progress, as_of=current)["condition"] == "unknown"
 
 
-def _inbound_request(selected, *, unique_id: str, status: str, response_kind: str = ""):
+def _inbound_request(
+    selected,
+    *,
+    unique_id: str,
+    status: str,
+    response_kind: str = "",
+    action: str = "Heartbeat",
+    response_payload=None,
+):
     return InboundProtocolRequest.objects.create(
         charger=selected,
         version=ProtocolVersion.OCPP_16.value,
         direction=Direction.CHARGE_POINT_TO_CSMS.value,
-        action="Heartbeat",
+        action=action,
         unique_id=unique_id,
         fingerprint=unique_id,
         identity_key=unique_id,
         status=status,
         response_kind=response_kind,
+        response_payload=response_payload,
     )
 
 
@@ -416,3 +428,89 @@ def test_processing_latency_ignores_incomplete_and_future_completions():
     assert snapshot["recent_completed_requests"] == 1
     assert snapshot["mean_processing_latency_seconds"] == 6.0
     assert snapshot["max_processing_latency_seconds"] == 6.0
+
+
+def test_snapshot_reports_latest_authorization_activity_without_exposing_id_tag():
+    selected = charger("timeline-authorization")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=ChargerTimelineProgress.State.LIVE,
+        newest_event_at=current,
+        last_received_at=current,
+    )
+
+    older = _inbound_request(
+        selected,
+        unique_id="authorize-old",
+        action="Authorize",
+        status=InboundProtocolRequest.Status.COMPLETED,
+        response_kind=InboundProtocolRequest.ResponseKind.RESULT,
+        response_payload={"idTagInfo": {"status": "Invalid"}},
+    )
+    latest = _inbound_request(
+        selected,
+        unique_id="authorize-new",
+        action="Authorize",
+        status=InboundProtocolRequest.Status.COMPLETED,
+        response_kind=InboundProtocolRequest.ResponseKind.RESULT,
+        response_payload={"idTagInfo": {"status": "Accepted"}},
+    )
+    InboundProtocolRequest.objects.filter(pk=older.pk).update(
+        received_at=current - timedelta(minutes=4),
+        completed_at=current - timedelta(minutes=4) + timedelta(seconds=1),
+    )
+    InboundProtocolRequest.objects.filter(pk=latest.pk).update(
+        received_at=current - timedelta(seconds=45),
+        completed_at=current - timedelta(seconds=44),
+    )
+
+    snapshot = timeline_snapshot(progress, as_of=current)
+
+    assert snapshot["last_authorization_at"] == (
+        current - timedelta(seconds=45)
+    ).isoformat()
+    assert snapshot["last_authorization_age_seconds"] == 45.0
+    assert snapshot["last_authorization_status"] == "Accepted"
+    assert "idTag" not in snapshot
+    assert "presented_id" not in snapshot
+
+
+def test_authorization_activity_reports_processing_and_excludes_future_requests():
+    selected = charger("timeline-authorization-as-of")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=ChargerTimelineProgress.State.LIVE,
+        newest_event_at=current,
+        last_received_at=current,
+    )
+
+    processing = _inbound_request(
+        selected,
+        unique_id="authorize-processing",
+        action="Authorize",
+        status=InboundProtocolRequest.Status.PROCESSING,
+    )
+    future = _inbound_request(
+        selected,
+        unique_id="authorize-future",
+        action="Authorize",
+        status=InboundProtocolRequest.Status.COMPLETED,
+        response_kind=InboundProtocolRequest.ResponseKind.RESULT,
+        response_payload={"idTagInfo": {"status": "Invalid"}},
+    )
+    InboundProtocolRequest.objects.filter(pk=processing.pk).update(
+        received_at=current - timedelta(seconds=30)
+    )
+    InboundProtocolRequest.objects.filter(pk=future.pk).update(
+        received_at=current + timedelta(seconds=1),
+        completed_at=current + timedelta(seconds=2),
+    )
+
+    snapshot = timeline_snapshot(progress, as_of=current)
+
+    assert snapshot["last_authorization_at"] == (
+        current - timedelta(seconds=30)
+    ).isoformat()
+    assert snapshot["last_authorization_status"] == InboundProtocolRequest.Status.PROCESSING
