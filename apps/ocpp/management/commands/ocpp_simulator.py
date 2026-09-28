@@ -121,13 +121,18 @@ class Command(BaseCommand):
             if action == "_worker":
                 self._run_worker(options)
                 return
-            if action == "open":
+            if action in {"open", "start"}:
                 self._open(options)
                 return
 
-            request = {"action": action}
+            charger = options.get("charger") or self._default_charger_identity()
+            request_action = "close" if action == "stop" else action
+            request = {"action": request_action}
             if action == "authorize":
-                request["id_tag"] = options["id_tag"]
+                id_tag = options.get("id_tag") or options.get("id_tag_value")
+                if not id_tag:
+                    raise CommandError("authorize requires an idTag")
+                request["id_tag"] = id_tag
             elif action == "authorize-scenario":
                 request.update(
                     {
@@ -138,9 +143,12 @@ class Command(BaseCommand):
                     }
                 )
             elif action == "replay":
+                source = options.get("source") or options.get("source_path")
+                if not source:
+                    raise CommandError("replay requires a migrated database or package")
                 request.update(
                     {
-                        "source": options["source"],
+                        "source": source,
                         "source_charger": options["source_charger"],
                         "stream": options["stream"],
                         "batch_size": options["batch_size"],
@@ -151,13 +159,60 @@ class Command(BaseCommand):
                         "reconnect_after": options["reconnect_after"],
                     }
                 )
-            result = asyncio.run(send_control(options["charger"], request))
+            result = asyncio.run(send_control(charger, request))
             if action == "authorize-scenario" and not options["json_output"]:
                 self.stdout.write(self._format_authorization_scenario(result))
             else:
                 self.stdout.write(json.dumps(result, sort_keys=True))
         except (LiveSimulatorError, OSError, ValueError, TimeoutError) as exc:
             raise CommandError(str(exc)) from exc
+
+    @staticmethod
+    def _default_charger_identity() -> str:
+        configured = os.environ.get("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "").strip()
+        if configured:
+            return configured
+        hostname = socket.gethostname().split(".", 1)[0].strip()
+        if not hostname:
+            raise CommandError(
+                "cannot derive simulator charger identity; pass --charger or "
+                "set ARTHEXIS_OCPP_SIMULATOR_IDENTITY"
+            )
+        return hostname
+
+    @staticmethod
+    def _allow_local_insecure_ws(endpoint: str) -> bool:
+        parsed = urlsplit(endpoint)
+        if parsed.scheme.lower() != "ws" or not parsed.hostname:
+            return False
+        try:
+            host = ipaddress.ip_address(parsed.hostname)
+        except ValueError:
+            return False
+        return host.is_private or host.is_loopback or host.is_link_local
+
+    @staticmethod
+    def _add_start_arguments(parser, *, legacy_url: bool) -> None:
+        if legacy_url:
+            parser.add_argument("--url", required=True)
+        else:
+            parser.add_argument("endpoint")
+            parser.add_argument("--url", help=argparse.SUPPRESS)
+        parser.add_argument("--charger")
+        parser.add_argument("--vendor", default="Arthexis")
+        parser.add_argument("--model", default="Gway Simulator")
+        parser.add_argument("--timeout", type=float, default=30.0)
+        parser.add_argument(
+            "--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT
+        )
+        parser.add_argument(
+            "--allow-insecure-ws",
+            action="store_true",
+            help=(
+                "Allow plaintext ws:// to a non-local endpoint. Private, loopback, "
+                "and link-local IP endpoints are allowed automatically for field tests."
+            ),
+        )
 
     @staticmethod
     def _format_authorization_scenario(result: dict[str, object]) -> str:
