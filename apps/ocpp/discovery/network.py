@@ -33,6 +33,8 @@ _TSHARK_FIELDS = (
     "http.request.uri",
     "http.upgrade",
     "http.sec_websocket_protocol",
+    "tls.handshake.type",
+    "tls.handshake.extensions_server_name",
 )
 
 
@@ -198,6 +200,8 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
     http_uri = fields["http.request.uri"]
     http_upgrade = fields["http.upgrade"]
     websocket_protocol = fields["http.sec_websocket_protocol"]
+    tls_handshake_type = fields["tls.handshake.type"]
+    tls_server_name = fields["tls.handshake.extensions_server_name"]
 
     metadata: dict[str, object] = {
         "source_ip": source_ip or None,
@@ -232,6 +236,14 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
             }
         )
         return NetworkObservation("dns_response", metadata)
+
+    if (
+        tls_handshake_type == "1"
+        and destination_ip
+        and destination_port.isdigit()
+    ):
+        metadata["sni"] = tls_server_name or None
+        return NetworkObservation("tls_client_hello", metadata)
 
     if http_method and destination_ip and destination_port.isdigit():
         metadata.update(
