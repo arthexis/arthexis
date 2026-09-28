@@ -1,43 +1,88 @@
-"""Read-only OCPP field-readiness diagnostics for trusted charger intake."""
+"""Read-only OCPP readiness and permissiveness evaluation."""
+
+from __future__ import annotations
 
 from django.conf import settings
 
 from apps.ocpp.models import OcppPolicy
 from apps.ocpp.transport.listener import interface_addresses
 
+PERMISSIVE = "permissive"
+STRICT = "strict"
+PARTIAL = "partial"
+DIMENSIONS = ("admission", "protocol", "cards")
+MODES = (PERMISSIVE, STRICT)
+
+
+def _mode(value: str) -> str:
+    """Translate persisted OPEN/RESTRICTED vocabulary into readiness vocabulary."""
+    if value == OcppPolicy.AdmissionMode.OPEN:
+        return PERMISSIVE
+    if value == OcppPolicy.AdmissionMode.RESTRICTED:
+        return STRICT
+    raise ValueError(f"Unsupported OCPP policy mode: {value}")
+
 
 def query_ocpp_readiness() -> dict[str, object]:
-    """Describe effective OCPP intake policy and bounded transport settings."""
+    """Describe instance OCPP readiness and its default policy posture."""
 
     interface = settings.OCPP_TRUSTED_CHARGER_INTERFACE
     addresses = sorted(interface_addresses(interface)) if interface else []
     policy = OcppPolicy.load()
-    trusted_enabled = bool(interface)
-    trusted_ready = trusted_enabled and bool(addresses)
 
-    if not trusted_enabled:
-        trusted_status = "disabled"
+    if not interface:
+        listener_status = "disabled"
     elif not addresses:
-        trusted_status = "unavailable"
+        listener_status = "unavailable"
     else:
-        trusted_status = "ready"
+        listener_status = "ready"
+
+    dimensions = {
+        "admission": _mode(policy.charger_admission_mode),
+        "protocol": _mode(policy.protocol_mode),
+        "cards": _mode(policy.card_mode),
+    }
+    unique_modes = set(dimensions.values())
+    posture = next(iter(unique_modes)) if len(unique_modes) == 1 else PARTIAL
 
     return {
+        "ready": listener_status == "ready",
+        "posture": posture,
+        **dimensions,
         "trusted_interface": interface or None,
         "trusted_interface_addresses": addresses,
-        "trusted_listener_status": trusted_status,
-        "trusted_listener_admission": "open" if trusted_ready else None,
-        "instance_charger_admission": policy.charger_admission_mode,
+        "trusted_listener_status": listener_status,
         "max_connections": settings.OCPP_MAX_CONNECTIONS,
-        "websocket_connect_timeout_seconds": (
-            settings.OCPP_WEBSOCKET_CONNECT_TIMEOUT_SECONDS
-        ),
-        "websocket_ping_interval_seconds": (
-            settings.OCPP_WEBSOCKET_PING_INTERVAL_SECONDS
-        ),
-        "websocket_ping_timeout_seconds": (
-            settings.OCPP_WEBSOCKET_PING_TIMEOUT_SECONDS
-        ),
+        "websocket_connect_timeout_seconds": settings.OCPP_WEBSOCKET_CONNECT_TIMEOUT_SECONDS,
+        "websocket_ping_interval_seconds": settings.OCPP_WEBSOCKET_PING_INTERVAL_SECONDS,
+        "websocket_ping_timeout_seconds": settings.OCPP_WEBSOCKET_PING_TIMEOUT_SECONDS,
         "event_dispatch_batch_size": settings.EVENT_DISPATCH_BATCH_SIZE,
         "network_boundary_owner": "gway",
     }
+
+
+def evaluate_ocpp_readiness(
+    dimension: str | None = None,
+    mode: str | None = None,
+) -> bool | str:
+    """Return the compact result for the ready OCPP operation."""
+
+    if dimension is not None and dimension not in DIMENSIONS:
+        raise ValueError(
+            "OCPP readiness dimension must be one of: " + ", ".join(DIMENSIONS)
+        )
+    if mode is not None and mode not in MODES:
+        raise ValueError(
+            "OCPP readiness mode must be one of: " + ", ".join(MODES)
+        )
+    if mode is not None and dimension is None:
+        raise ValueError("OCPP readiness mode requires a dimension.")
+
+    payload = query_ocpp_readiness()
+    if not payload["ready"]:
+        return False
+
+    result = payload[dimension] if dimension else payload["posture"]
+    if mode is None:
+        return result
+    return result == mode
