@@ -199,6 +199,17 @@ def create_go_bundle(
             shutil.copy2(source, target)
             checksums.append((relative, _sha256(target)))
 
+        if cutover is not None:
+            cutover_path = Path(str(cutover["proof_path"]))
+            if not cutover_path.is_file():
+                raise ValueError("Cutover GO bundle requires cutover proof evidence.")
+            if cutover.get("decision") != "GO" or not cutover.get("no_missed_writes"):
+                raise ValueError("Cutover GO bundle requires no-missed-writes proof.")
+            target = temporary / "migration" / "cutover-proof.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(cutover_path, target)
+            checksums.append(("migration/cutover-proof.json", _sha256(target)))
+
         manifest = {
             "format": GO_BUNDLE_FORMAT,
             "bundle_id": bundle_id,
