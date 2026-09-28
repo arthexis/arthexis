@@ -1,10 +1,10 @@
 {
-  "accepted_at": "2026-09-28T13:10:10.636154+00:00",
+  "accepted_at": "2026-09-28T14:21:58.757199+00:00",
   "arthexis_sha": "b771993e8f3a1493f19949116d1c14a1cdf8c357",
   "arthexis_version": "2.0.6",
-  "gway_sha": "8092c49cd8fa7b5e68190cd6ec60275888ee3c5f",
-  "gway_version": "0.4.61",
+  "gway_sha": "e8020ee1268b6a881c688a5ee273a19fa4936ec0",
+  "gway_version": "0.4.62",
   "run_attempt": "1",
-  "run_id": "36426539053",
-  "run_url": "https://github.com/arthexis/arthexis/actions/runs/36426539053"
+  "run_id": "36435248981",
+  "run_url": "https://github.com/arthexis/arthexis/actions/runs/36435248981"
 }
