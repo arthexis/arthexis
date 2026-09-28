@@ -49,9 +49,8 @@ def _legacy_installation(root: Path) -> Path:
 def _run_rehearsal(
     legacy: Path,
     output: Path,
-    *,
-    data_dir: Path,
     *extra: str,
+    data_dir: Path,
 ) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["ARTHEXIS_DATA_DIR"] = str(data_dir)
@@ -102,9 +101,9 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
     completed = _run_rehearsal(
         legacy,
         output,
-        data_dir=tmp_path / "current-data",
         "--batch-size",
         "1",
+        data_dir=tmp_path / "current-data",
     )
 
     assert completed.returncode == 0, completed.stderr
@@ -142,9 +141,9 @@ def test_rehearse_stops_with_no_go_when_resource_limit_is_exceeded(tmp_path):
     completed = _run_rehearsal(
         legacy,
         output,
-        data_dir=tmp_path / "current-data",
         "--max-workspace-mib",
         "0.001",
+        data_dir=tmp_path / "current-data",
     )
 
     assert completed.returncode == 2, completed.stderr
@@ -171,9 +170,9 @@ def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
     completed = _run_rehearsal(
         legacy,
         output,
-        data_dir=tmp_path / "current-data",
         "--min-free-disk-mib",
         "1000000000",
+        data_dir=tmp_path / "current-data",
     )
 
     assert completed.returncode == 2
@@ -222,8 +221,8 @@ def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
     completed = _run_rehearsal(
         legacy,
         output,
-        data_dir=tmp_path / "current-data",
         "--cutover",
+        data_dir=tmp_path / "current-data",
     )
 
     assert completed.returncode == 0, completed.stderr
