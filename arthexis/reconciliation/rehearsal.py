@@ -303,6 +303,7 @@ def verify_cutover_source_unchanged(
             else "legacy-source-advanced-after-capture"
         ),
     }
+    rehearsal_root.mkdir(parents=True, exist_ok=True)
     path = rehearsal_root / "cutover-proof.json"
     path.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     proof["proof_path"] = str(path)
