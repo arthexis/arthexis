@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-django>=4.8",
+    "pytest-xdist>=3.6",
 ]
 
 [project.scripts]
@@ -61,4 +62,5 @@ addopts = ["--strict-config", "--strict-markers"]
 markers = [
     "reconciliation_e2e: slow end-to-end legacy reconciliation acceptance",
     "workflow: CI and GitHub Actions workflow contract validation",
+    "xdist_group(name): serialize tests sharing external process or service resources",
 ]
