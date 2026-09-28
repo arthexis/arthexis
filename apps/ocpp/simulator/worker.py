@@ -135,7 +135,7 @@ class LiveSimulatorWorker:
         server = None
         idle_task = None
         heartbeat_task = None
-        await self._connect_and_boot()
+        await self.connect_and_boot()
         try:
             server = await asyncio.start_unix_server(
                 self._handle_client,
@@ -175,7 +175,8 @@ class LiveSimulatorWorker:
             await self._simulator.close()
             cleanup_session_artifacts(self.config.charger)
 
-    async def _connect_and_boot(self) -> None:
+    async def connect_and_boot(self) -> None:
+        """Connect the charger transport and require an accepted boot."""
         async with self._transport_lock:
             await self._simulator.connect()
             self._boot = await self._simulator.boot()
@@ -185,7 +186,8 @@ class LiveSimulatorWorker:
                 f"BootNotification was not accepted: {self._boot.status}"
             )
 
-    async def _reconnect(self) -> None:
+    async def reconnect(self) -> None:
+        """Replace the charger transport and require an accepted re-boot."""
         async with self._transport_lock:
             await self._simulator.reconnect()
             self._boot = await self._simulator.boot()
@@ -263,7 +265,7 @@ class LiveSimulatorWorker:
                 "authorization": status,
             }
         if action == "reconnect":
-            await self._reconnect()
+            await self.reconnect()
             return {
                 "ok": True,
                 "charger": self.config.charger,
