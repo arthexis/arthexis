@@ -285,11 +285,48 @@ class DiscoverySession:
 
         event_counts: dict[str, int] = {}
         category_counts: dict[str, int] = {}
+        capture_requested = False
+        capture_available: bool | None = None
+        capture_attempted = False
+        capture_succeeded = False
+        capture_strategy: str | None = None
+        capture_failure_reason: str | None = None
         for event in events:
             event_type = event["event_type"]
             category = event["category"]
             event_counts[event_type] = event_counts.get(event_type, 0) + 1
             category_counts[category] = category_counts.get(category, 0) + 1
+
+            metadata = event["metadata"]
+            if event_type == "capture_requested":
+                capture_requested = True
+            elif event_type == "capture_available":
+                capture_available = True
+                strategy = metadata.get("strategy")
+                if isinstance(strategy, str):
+                    capture_strategy = strategy
+            elif event_type == "capture_unavailable":
+                capture_available = False
+                reason = metadata.get("reason")
+                if isinstance(reason, str):
+                    capture_failure_reason = reason
+            elif event_type in {"capture_started", "capture_failed", "capture_succeeded"}:
+                capture_attempted = True
+                if event_type == "capture_failed":
+                    reason = metadata.get("reason")
+                    if isinstance(reason, str):
+                        capture_failure_reason = reason
+                elif event_type == "capture_succeeded":
+                    capture_succeeded = True
+
+        capture = {
+            "requested": capture_requested,
+            "available": capture_available if capture_requested else None,
+            "attempted": capture_attempted,
+            "succeeded": capture_succeeded,
+            "strategy": capture_strategy,
+            "failure_reason": capture_failure_reason,
+        }
 
         return {
             "format_version": 1,
@@ -301,6 +338,7 @@ class DiscoverySession:
             "category_counts": category_counts,
             "last_sequence": events[-1]["sequence"] if events else None,
             "last_event_at": events[-1]["timestamp"] if events else None,
+            "capture": capture,
         }
 
     def write_summary(self) -> dict[str, object]:
