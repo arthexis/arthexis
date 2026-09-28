@@ -63,9 +63,14 @@ def render_discovery_events(
             hostnames = candidate.get("hostnames")
             if isinstance(hostnames, list) and hostnames:
                 details.append("host=" + ",".join(str(item) for item in hostnames))
+            http_paths = candidate.get("http_paths")
+            if isinstance(http_paths, list) and http_paths:
+                details.append(
+                    "http=" + ",".join(str(item) for item in http_paths)
+                )
             paths = candidate.get("websocket_paths")
             if isinstance(paths, list) and paths:
-                details.append("path=" + ",".join(str(item) for item in paths))
+                details.append("ws=" + ",".join(str(item) for item in paths))
             protocols = candidate.get("ocpp_subprotocols")
             if isinstance(protocols, list) and protocols:
                 details.append(
