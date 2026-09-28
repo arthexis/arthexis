@@ -71,7 +71,6 @@ async def _meter_value(
     assert response == {}
 
 
-
 class Ocpp16WebsocketFlowTests:
     def setup_method(self) -> None:
         account = CustomerAccount.objects.create(
@@ -100,7 +99,6 @@ class Ocpp16WebsocketFlowTests:
         assert Connector.objects.get().status == "Preparing"
         assert NotificationRecord.objects.get().action == "DataTransfer"
         assert OperationalStatusRecord.objects.count() == 2
-
 
     def test_backlog_reconnect_resumes_transaction_over_websocket(self) -> None:
         async_to_sync(self._run_backlog_reconnect_exchange)()
@@ -220,83 +218,61 @@ class Ocpp16WebsocketFlowTests:
 
     async def _run_exchange(self) -> None:
         communicator = await connect_charger()
+        await _boot(communicator, "boot-1")
 
-        await communicator.send_json_to(
-            [
-                2,
-                "boot-1",
-                "BootNotification",
-                {"chargePointVendor": "ACME", "chargePointModel": "Test"},
-            ]
+        heartbeat = await _call(communicator, "heartbeat-1", "Heartbeat", {})
+        assert "currentTime" in heartbeat
+
+        status = await _call(
+            communicator,
+            "status-1",
+            "StatusNotification",
+            {"connectorId": 1, "status": "Preparing"},
         )
-        response = await communicator.receive_json_from()
-        assert response[2]["status"] == "Accepted"
+        assert status == {}
 
-        await communicator.send_json_to([2, "heartbeat-1", "Heartbeat", {}])
-        assert "currentTime" in (await communicator.receive_json_from())[2]
+        await _authorize(communicator, "authorize-1")
 
-        await communicator.send_json_to(
-            [
-                2,
-                "status-1",
-                "StatusNotification",
-                {"connectorId": 1, "status": "Preparing"},
-            ]
+        started = await _call(
+            communicator,
+            "start-1",
+            "StartTransaction",
+            {"connectorId": 1, "idTag": "card-tag", "meterStart": 100},
         )
-        assert await communicator.receive_json_from() == [3, "status-1", {}]
+        assert started["idTagInfo"]["status"] == "Accepted"
+        transaction_id = started["transactionId"]
 
-        await communicator.send_json_to(
-            [2, "authorize-1", "Authorize", {"idTag": "card-tag"}]
+        await _meter_value(
+            communicator,
+            "meter-1",
+            transaction_id=transaction_id,
+            timestamp="2026-01-01T00:05:00Z",
+            value="125",
         )
-        response = await communicator.receive_json_from()
-        assert response[2]["idTagInfo"]["status"] == "Accepted"
 
-        await communicator.send_json_to(
-            [
-                2,
-                "start-1",
-                "StartTransaction",
-                {"connectorId": 1, "idTag": "card-tag", "meterStart": 100},
-            ]
+        stopped = await _call(
+            communicator,
+            "stop-1",
+            "StopTransaction",
+            {"transactionId": transaction_id, "meterStop": 150},
         )
-        response = await communicator.receive_json_from()
-        transaction_id = response[2]["transactionId"]
-        assert response[2]["idTagInfo"]["status"] == "Accepted"
-
-        await communicator.send_json_to(
-            [
-                2,
-                "meter-1",
-                "MeterValues",
-                {
-                    "transactionId": transaction_id,
-                    "meterValue": [
-                        {
-                            "timestamp": "2026-01-01T00:05:00Z",
-                            "sampledValue": [{"value": "125"}],
-                        }
-                    ],
-                },
-            ]
-        )
-        assert await communicator.receive_json_from() == [3, "meter-1", {}]
-
-        await communicator.send_json_to(
-            [
-                2,
-                "stop-1",
-                "StopTransaction",
-                {"transactionId": transaction_id, "meterStop": 150},
-            ]
-        )
-        assert await communicator.receive_json_from() == [3, "stop-1", {"idTagInfo": {"status": "Accepted"}}]
+        assert stopped == {"idTagInfo": {"status": "Accepted"}}
 
         for unique_id, action, payload, expected in (
             ("transfer-1", "DataTransfer", {"vendorId": "ACME"}, {"status": "Accepted"}),
-            ("diagnostics-1", "DiagnosticsStatusNotification", {"status": "Uploaded"}, {}),
-            ("firmware-1", "FirmwareStatusNotification", {"status": "Downloaded"}, {}),
+            (
+                "diagnostics-1",
+                "DiagnosticsStatusNotification",
+                {"status": "Uploaded"},
+                {},
+            ),
+            (
+                "firmware-1",
+                "FirmwareStatusNotification",
+                {"status": "Downloaded"},
+                {},
+            ),
         ):
-            await communicator.send_json_to([2, unique_id, action, payload])
-            assert await communicator.receive_json_from() == [3, unique_id, expected]
+            assert await _call(communicator, unique_id, action, payload) == expected
 
         await communicator.disconnect()
