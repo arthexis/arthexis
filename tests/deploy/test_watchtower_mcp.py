@@ -36,9 +36,20 @@ def test_watchtower_mcp_policy_has_read_only_remote_scopes() -> None:
     assert '"log.read"' in policy
     assert '"log.tail"' in policy
     assert '"log.search"' in policy
-    assert "environment = []" in policy
-    for forbidden in ("clear", "service.", "security.", "__all__"):
-        assert forbidden not in policy
+    logs_section = policy.split("[scopes.chatgpt-logs]", 1)[1].split(
+        "[scopes.chatgpt-actions]", 1
+    )[0]
+    actions_section = policy.split("[scopes.chatgpt-actions]", 1)[1].split(
+        "[scopes.full-access]", 1
+    )[0]
+    for section in (logs_section, actions_section):
+        assert "environment = []" in section
+        for forbidden in ("clear", "service.", "security.", "__all__"):
+            assert forbidden not in section
+
+    full_access = policy.split("[scopes.full-access]", 1)[1]
+    assert 'operations = ["__all__"]' in full_access
+    assert 'environment = ["__all__"]' in full_access
 
 
 def test_remote_recipe_applies_checked_in_policy_without_creating_tokens() -> None:
