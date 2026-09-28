@@ -253,7 +253,10 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
     def _open(self, options) -> None:
-        charger = options["charger"]
+        charger = options.get("charger") or self._default_charger_identity()
+        endpoint = options.get("endpoint") or options.get("url")
+        if not endpoint:
+            raise CommandError("start requires a CSMS endpoint")
         try:
             load_session(charger)
         except LiveSimulatorError:
@@ -264,13 +267,16 @@ class Command(BaseCommand):
         if options["idle_timeout"] <= 0:
             raise CommandError("--idle-timeout must be greater than zero")
 
+        allow_insecure_ws = options["allow_insecure_ws"] or self._allow_local_insecure_ws(
+            endpoint
+        )
         config = LiveSimulatorConfig(
-            url=options["url"],
+            url=endpoint,
             charger=charger,
             vendor=options["vendor"],
             model=options["model"],
             timeout=options["timeout"],
-            allow_insecure_ws=options["allow_insecure_ws"],
+            allow_insecure_ws=allow_insecure_ws,
         )
         _ = config.endpoint
 
@@ -318,6 +324,7 @@ class Command(BaseCommand):
             json.dumps(
                 {
                     "charger": charger,
+                    "endpoint": endpoint,
                     "open": True,
                     "boot": metadata.get("boot"),
                     "idle_timeout": options["idle_timeout"],
