@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import time
 from collections.abc import Awaitable, Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -49,6 +50,60 @@ class ReplayPacing:
             raise ValueError("Replay pacing delays cannot be negative.")
         if self.burst_size < 1:
             raise ValueError("Replay burst size must be at least 1.")
+
+
+@dataclass
+class ReplayMetrics:
+    """Bounded aggregate measurements for one replay run."""
+
+    attempted_requests: int = 0
+    completed_requests: int = 0
+    failed_requests: int = 0
+    total_latency_seconds: float = 0.0
+    max_latency_seconds: float = 0.0
+    error_counts: dict[str, int] = field(default_factory=dict)
+    _started_at: float = field(default_factory=time.monotonic, repr=False)
+    elapsed_seconds: float = 0.0
+
+    def start_request(self) -> float:
+        self.attempted_requests += 1
+        return time.monotonic()
+
+    def record_success(self, started_at: float) -> None:
+        latency = time.monotonic() - started_at
+        self.completed_requests += 1
+        self.total_latency_seconds += latency
+        self.max_latency_seconds = max(self.max_latency_seconds, latency)
+
+    def record_failure(self, started_at: float, exc: Exception) -> None:
+        latency = time.monotonic() - started_at
+        self.failed_requests += 1
+        self.total_latency_seconds += latency
+        self.max_latency_seconds = max(self.max_latency_seconds, latency)
+        name = type(exc).__name__
+        self.error_counts[name] = self.error_counts.get(name, 0) + 1
+
+    def finish(self) -> None:
+        self.elapsed_seconds = max(0.0, time.monotonic() - self._started_at)
+
+    def as_dict(self) -> dict[str, object]:
+        measured = self.completed_requests + self.failed_requests
+        mean_latency = self.total_latency_seconds / measured if measured else 0.0
+        throughput = (
+            self.completed_requests / self.elapsed_seconds
+            if self.elapsed_seconds > 0
+            else 0.0
+        )
+        return {
+            "attempted_requests": self.attempted_requests,
+            "completed_requests": self.completed_requests,
+            "failed_requests": self.failed_requests,
+            "elapsed_seconds": self.elapsed_seconds,
+            "throughput_requests_per_second": throughput,
+            "mean_latency_seconds": mean_latency,
+            "max_latency_seconds": self.max_latency_seconds,
+            "error_counts": dict(sorted(self.error_counts.items())),
+        }
 
 
 @dataclass(frozen=True)
@@ -296,12 +351,14 @@ async def run_v16_replay_events(
     *,
     pacing: ReplayPacing | None = None,
     after_event: Callable[[int], Awaitable[None]] | None = None,
+    metrics: ReplayMetrics | None = None,
 ) -> tuple[str, ...]:
     """Replay ordered OCPP 1.6 events through an arbitrary live-style transport."""
     runtime_transactions: dict[int, object] = {}
     completed: list[str] = []
     pacing = pacing or ReplayPacing()
     pacing.validate()
+    metrics = metrics or ReplayMetrics()
 
     for event in events:
         await _pace(pacing, len(completed))
@@ -315,7 +372,14 @@ async def run_v16_replay_events(
                 )
             payload["transactionId"] = runtime_id
 
-        response = await transport.call(event.action, payload)
+        request_started = metrics.start_request()
+        try:
+            response = await transport.call(event.action, payload)
+        except Exception as exc:
+            metrics.record_failure(request_started, exc)
+            metrics.finish()
+            raise
+        metrics.record_success(request_started)
         if event.action == "StartTransaction":
             runtime_id = response.get("transactionId")
             if runtime_id is None:
@@ -325,6 +389,7 @@ async def run_v16_replay_events(
         if after_event is not None:
             await after_event(len(completed))
 
+    metrics.finish()
     return tuple(completed)
 
 
@@ -335,6 +400,7 @@ async def run_v16_live_replay_events(
     reconnect_after: int | None = None,
     pacing: ReplayPacing | None = None,
     after_event: Callable[[int], Awaitable[None]] | None = None,
+    metrics: ReplayMetrics | None = None,
 ) -> tuple[str, ...]:
     """Replay events and optionally reconnect the real charger mid-drain."""
     if reconnect_after is not None and reconnect_after < 1:
@@ -344,6 +410,7 @@ async def run_v16_live_replay_events(
     completed: list[str] = []
     pacing = pacing or ReplayPacing()
     pacing.validate()
+    metrics = metrics or ReplayMetrics()
 
     for event in events:
         if reconnect_after is not None and len(completed) == reconnect_after:
@@ -367,7 +434,14 @@ async def run_v16_live_replay_events(
                 )
             payload["transactionId"] = runtime_id
 
-        response = await transport.call(event.action, payload)
+        request_started = metrics.start_request()
+        try:
+            response = await transport.call(event.action, payload)
+        except Exception as exc:
+            metrics.record_failure(request_started, exc)
+            metrics.finish()
+            raise
+        metrics.record_success(request_started)
         if event.action == "StartTransaction":
             runtime_id = response.get("transactionId")
             if runtime_id is None:
@@ -378,6 +452,7 @@ async def run_v16_live_replay_events(
         if after_event is not None:
             await after_event(len(completed))
 
+    metrics.finish()
     return tuple(completed)
 
 
