@@ -63,6 +63,7 @@ def test_ready_ocpp_delegates_to_ocpp_readiness_evaluator() -> None:
         dimension="protocol",
         mode=None,
         charger=None,
+        chargers=False,
     )
 
 
@@ -77,6 +78,7 @@ def test_ready_ocpp_predicate_returns_boolean_result() -> None:
         dimension="cards",
         mode="strict",
         charger="CHARGER-001",
+        chargers=False,
     )
 
 
