@@ -48,6 +48,21 @@ class Command(BaseCommand):
             help="Allow ws:// only for a trusted local test network.",
         )
 
+        scenario_parser = actions.add_parser(
+            "authorize-scenario",
+            help="Run the standard live authorization policy matrix.",
+        )
+        scenario_parser.add_argument("--charger", required=True)
+        scenario_parser.add_argument(
+            "--policy-context",
+            required=True,
+            choices=("open", "restricted"),
+            help="Describe the remote charger's configured authorization mode.",
+        )
+        scenario_parser.add_argument("--known-authorized", required=True)
+        scenario_parser.add_argument("--known-denied", required=True)
+        scenario_parser.add_argument("--unknown", required=True)
+
         for name, help_text in (
             ("authorize", "Send Authorize on an existing live connection."),
             ("status", "Report the existing live simulator state."),
@@ -76,6 +91,15 @@ class Command(BaseCommand):
             request = {"action": action}
             if action == "authorize":
                 request["id_tag"] = options["id_tag"]
+            elif action == "authorize-scenario":
+                request.update(
+                    {
+                        "policy_context": options["policy_context"],
+                        "known_authorized": options["known_authorized"],
+                        "known_denied": options["known_denied"],
+                        "unknown": options["unknown"],
+                    }
+                )
             result = asyncio.run(send_control(options["charger"], request))
             self.stdout.write(json.dumps(result, sort_keys=True))
         except (LiveSimulatorError, OSError, ValueError, TimeoutError) as exc:
