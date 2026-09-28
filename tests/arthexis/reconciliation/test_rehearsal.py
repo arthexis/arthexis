@@ -87,6 +87,12 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
     assert result["source"] == str(legacy.resolve())
     assert result["resource_safety"]["decision"] == "GO"
     assert Path(result["resource_report"]).is_file()
+    bundle = Path(result["go_bundle"])
+    assert bundle.is_dir()
+    assert (bundle / "FINALIZED").is_file()
+    assert (bundle / "manifest.json").is_file()
+    assert (bundle / "checksums.sha256").is_file()
+    assert (bundle / "database" / "reconciled.sqlite3").is_file()
 
     capture = Path(result["capture"]["path"])
     fixture = Path(result["fixture"]["path"])
@@ -185,3 +191,46 @@ def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
     assert result["reason"] == "resource-limit"
     assert result["resource_preflight"]["violations"]
     assert not (output / "captures").exists()
+
+
+@pytest.mark.reconciliation_e2e
+def test_go_bundle_is_immutable_and_refuses_overwrite(tmp_path):
+    from arthexis.reconciliation.rehearsal import create_go_bundle
+
+    legacy = tmp_path / "legacy"
+    _legacy_installation(legacy)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    with pytest.raises(ValueError, match="already exists"):
+        create_go_bundle(
+            output,
+            capture_path=Path(result["capture"]["path"]),
+            fixture_path=Path(result["fixture"]["path"]),
+            migration_report=Path(result["json_report"]),
+            migration_text_report=Path(result["text_report"]),
+            resource_report=Path(result["resource_report"]),
+        )
