@@ -88,7 +88,8 @@ def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
 
     gate = workflow.split("queue-gate:", 1)[1].split("\n\n  deploy:", 1)[0]
     assert "arthexis/arthexis arthexis/gway" in gate
-    assert 'index("on-hold")' in gate
+    assert '. == "on-hold"' in gate
+    assert '. == "on hold"' in gate
     assert "draft" not in gate.lower()
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
 
