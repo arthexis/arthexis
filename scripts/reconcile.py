@@ -208,6 +208,7 @@ def _rehearse(arguments: argparse.Namespace) -> int:
     from arthexis.reconciliation.fixture import restore_fixture
     from arthexis.reconciliation.rehearsal import (
         ResourcePolicy,
+        create_go_bundle,
         evaluate_resources,
         preflight_disk,
         write_resource_receipt,
@@ -277,6 +278,16 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         return 2
 
     verification = verify_reconciliation(fixture.path)
+    go_bundle = None
+    if verification.decision == "GO":
+        go_bundle = create_go_bundle(
+            rehearsal_root,
+            capture_path=capture.path,
+            fixture_path=fixture.path,
+            migration_report=verification.json_path,
+            migration_text_report=verification.text_path,
+            resource_report=resource_receipt,
+        )
     payload = {
         "source": str(source),
         "capture": {
@@ -291,6 +302,7 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         },
         "destination_database": str(fixture.path / "reconciled.sqlite3"),
         "decision": verification.decision,
+        "go_bundle": str(go_bundle) if go_bundle is not None else None,
         "resource_report": str(resource_receipt),
         "resource_safety": resource_result,
         "json_report": str(verification.json_path),
