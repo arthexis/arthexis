@@ -5,6 +5,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.ocpp.models import ChargerTimelineProgress
+from apps.ocpp.services import display_status
 from apps.ocpp.services.display_status import query_display_status
 from tests.apps.ocpp.builders import charger
 
@@ -49,3 +50,36 @@ def test_display_status_command_emits_json():
     assert payload["charger"] == selected.identity
     assert payload["condition"] == "unknown"
     assert payload["connection_live"] is False
+
+
+def test_display_projection_only_queries_authoritative_snapshot(monkeypatch):
+    expected = {
+        "charger_identity": "isolated-display",
+        "condition": "ready",
+        "state": "ready",
+        "pending_work": 0,
+        "oldest_pending_age_seconds": None,
+        "processing_rate_per_minute": 0.0,
+        "max_processing_latency_seconds": None,
+        "recent_request_errors": 0,
+        "recent_outbound_errors": 0,
+        "recent_retry_attempts": 0,
+        "last_authorization_age_seconds": None,
+        "last_authorization_status": None,
+        "connection_live": True,
+        "as_of": "2026-09-28T03:00:00+00:00",
+    }
+    calls = []
+
+    def query(identity):
+        calls.append(identity)
+        return expected
+
+    monkeypatch.setattr(display_status, "query_timeline_status", query)
+
+    payload = display_status.query_display_status("isolated-display")
+
+    assert calls == ["isolated-display"]
+    assert payload["condition"] == "ready"
+    assert payload["pending_work"] == 0
+    assert payload["connection_live"] is True
