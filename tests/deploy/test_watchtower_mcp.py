@@ -422,6 +422,17 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'gway_runtime_rollback=restored' in workflow
 
 
+def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    step = workflow.split("- name: Open next-version PR after accepted deployment", 1)[1]
+    step = step.split("- name: Restore previous Gway runtime after failed deployment", 1)[0]
+    assert "if: env.WATCHTOWER_STAGE == 'arthexis'" in step
+    assert "ARTHEXIS_CHANGED" not in step
+    assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
+    assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
+
+
 def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
