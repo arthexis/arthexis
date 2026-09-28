@@ -119,7 +119,7 @@ jobs:
           fi
           active=0
           for repository in arthexis/arthexis arthexis/gway; do
-            prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | index("on-hold") or index("on hold")) | not) | [.number, .title] | @tsv')"
+            prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold")) | not) | [.number, .title] | @tsv')"
             if [[ -n "$prs" ]]; then
               echo "active_prs[$repository]=begin"
               printf '%s\n' "$prs"
@@ -720,7 +720,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
         run: |
           set -Eeuo pipefail
-          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | index("on-hold") or index("on hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
+          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
           if [[ "$active_prs" != "0" ]]; then
             echo "rollover=deferred active_prs=$active_prs repository=$GITHUB_REPOSITORY"
             exit 0
@@ -812,7 +812,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           repository="arthexis/gway"
-          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | index("on-hold") or index("on hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
+          active_prs="$(GH_TOKEN="$GH_TOKEN" gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '[.[] | select(([.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold")) | not)] | length' | awk '{total += $1} END {print total + 0}')"
           if [[ "$active_prs" != "0" ]]; then
             echo "rollover=deferred active_prs=$active_prs repository=$repository"
             exit 0
