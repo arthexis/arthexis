@@ -8,6 +8,7 @@ import io
 import json
 import os
 import sys
+import time
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -72,6 +73,30 @@ def _parser() -> argparse.ArgumentParser:
         default=10,
         help="POSIX process niceness increment for local reconciliation (default: 10)",
     )
+    parser.add_argument(
+        "--max-elapsed-seconds",
+        type=float,
+        default=1800.0,
+        help="hard rehearsal elapsed-time limit (default: 1800)",
+    )
+    parser.add_argument(
+        "--max-peak-rss-mib",
+        type=float,
+        default=512.0,
+        help="hard rehearsal peak-RSS limit in MiB (default: 512)",
+    )
+    parser.add_argument(
+        "--max-workspace-mib",
+        type=float,
+        default=2048.0,
+        help="hard rehearsal workspace-size limit in MiB (default: 2048)",
+    )
+    parser.add_argument(
+        "--min-free-disk-mib",
+        type=float,
+        default=1024.0,
+        help="minimum free disk required before capture in MiB (default: 1024)",
+    )
     return parser
 
 
@@ -90,6 +115,7 @@ def _require_source(source: Path | None) -> Path:
 
 def _reconcile_fixture(arguments: argparse.Namespace, *, emit: bool = True) -> int:
     source = _require_source(arguments.source).expanduser().resolve()
+    started = time.monotonic()
     if arguments.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1.")
     if arguments.nice < 0:
@@ -155,6 +181,14 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         raise SystemExit("--batch-size must be at least 1.")
     if arguments.nice < 0:
         raise SystemExit("--nice cannot be negative.")
+    resource_values = (
+        arguments.max_elapsed_seconds,
+        arguments.max_peak_rss_mib,
+        arguments.max_workspace_mib,
+        arguments.min_free_disk_mib,
+    )
+    if any(value <= 0 for value in resource_values):
+        raise SystemExit("Resource safety limits must be greater than zero.")
 
     data_dir = Path(
         os.environ.get("ARTHEXIS_DATA_DIR", str(PROJECT_ROOT / "var"))
@@ -172,7 +206,31 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         verify_capture,
     )
     from arthexis.reconciliation.fixture import restore_fixture
+    from arthexis.reconciliation.rehearsal import (
+        ResourcePolicy,
+        evaluate_resources,
+        preflight_disk,
+        write_resource_receipt,
+    )
     from arthexis.reconciliation.verification import verify_reconciliation
+
+    resource_policy = ResourcePolicy(
+        max_elapsed_seconds=arguments.max_elapsed_seconds,
+        max_peak_rss_mib=arguments.max_peak_rss_mib,
+        max_workspace_mib=arguments.max_workspace_mib,
+        min_free_disk_mib=arguments.min_free_disk_mib,
+    )
+    disk_preflight = preflight_disk(rehearsal_root, resource_policy)
+    if disk_preflight["violations"]:
+        payload = {
+            "source": str(source),
+            "decision": "NO-GO",
+            "reason": "resource-limit",
+            "resource_policy": resource_policy.as_dict(),
+            "resource_preflight": disk_preflight,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 2
 
     capture = capture_legacy_installation(
         source,
@@ -189,6 +247,35 @@ def _rehearse(arguments: argparse.Namespace) -> int:
     with redirect_stdout(io.StringIO()):
         _reconcile_fixture(arguments, emit=False)
 
+    resource_result = evaluate_resources(
+        rehearsal_root,
+        fixture.path / "reconciliation.json",
+        started=started,
+        policy=resource_policy,
+    )
+    resource_receipt = write_resource_receipt(rehearsal_root, resource_result)
+    if resource_result["decision"] == "NO-GO":
+        payload = {
+            "source": str(source),
+            "capture": {
+                "capture_id": capture.capture_id,
+                "path": str(capture.path),
+                "manifest_sha256": capture_verification["manifest_sha256"],
+                "database_sha256": capture_verification["database_sha256"],
+            },
+            "fixture": {
+                "fixture_id": fixture.fixture_id,
+                "path": str(fixture.path),
+            },
+            "destination_database": str(fixture.path / "reconciled.sqlite3"),
+            "decision": "NO-GO",
+            "reason": "resource-limit",
+            "resource_report": str(resource_receipt),
+            "resource_safety": resource_result,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 2
+
     verification = verify_reconciliation(fixture.path)
     payload = {
         "source": str(source),
@@ -204,6 +291,8 @@ def _rehearse(arguments: argparse.Namespace) -> int:
         },
         "destination_database": str(fixture.path / "reconciled.sqlite3"),
         "decision": verification.decision,
+        "resource_report": str(resource_receipt),
+        "resource_safety": resource_result,
         "json_report": str(verification.json_path),
         "text_report": str(verification.text_path),
     }
