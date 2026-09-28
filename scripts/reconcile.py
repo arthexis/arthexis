@@ -115,7 +115,6 @@ def _require_source(source: Path | None) -> Path:
 
 def _reconcile_fixture(arguments: argparse.Namespace, *, emit: bool = True) -> int:
     source = _require_source(arguments.source).expanduser().resolve()
-    started = time.monotonic()
     if arguments.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1.")
     if arguments.nice < 0:
@@ -176,6 +175,7 @@ def _reconcile_fixture(arguments: argparse.Namespace, *, emit: bool = True) -> i
 def _rehearse(arguments: argparse.Namespace) -> int:
     """Run capture -> restore -> reconcile -> verify from one live legacy source."""
 
+    started = time.monotonic()
     source = _require_source(arguments.source).expanduser().resolve()
     if arguments.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1.")
