@@ -208,3 +208,114 @@ def test_tcpdump_preflight_has_friendly_missing_dependency_error() -> None:
 
     with pytest.raises(DiscoveryPreflightError, match="native packet-capture"):
         observer.preflight("eth0")
+
+
+def test_tcpdump_parser_retains_dns_query_identity() -> None:
+    observation = parse_tcpdump_line(
+        "1790618400.000000 00:11:22:33:44:55 > aa:bb:cc:dd:ee:ff, "
+        "ethertype IPv4 (0x0800), length 78: "
+        "192.0.2.20.53000 > 192.0.2.53.53: 4242+ A? csms.example.com. (34)"
+    )
+
+    assert observation is not None
+    assert observation.event_type == "dns_query"
+    assert observation.metadata["dns_id"] == 4242
+    assert observation.metadata["name"] == "csms.example.com"
+    assert observation.metadata["client_ip"] == "192.0.2.20"
+    assert observation.metadata["dns_server"] == "192.0.2.53"
+
+
+def test_tcpdump_parser_retains_dns_a_response() -> None:
+    observation = parse_tcpdump_line(
+        "1790618400.100000 aa:bb:cc:dd:ee:ff > 00:11:22:33:44:55, "
+        "ethertype IPv4 (0x0800), length 94: "
+        "192.0.2.53.53 > 192.0.2.20.53000: 4242 1/0/0 A 198.51.100.40 (50)"
+    )
+
+    assert observation is not None
+    assert observation.event_type == "dns_response"
+    assert observation.metadata["dns_id"] == 4242
+    assert observation.metadata["address"] == "198.51.100.40"
+    assert observation.metadata["client_ip"] == "192.0.2.20"
+    assert observation.metadata["dns_server"] == "192.0.2.53"
+
+
+def test_dns_resolution_is_evidence_and_enriches_later_candidate(tmp_path) -> None:
+    observer = FakeObserver(
+        [
+            NetworkObservation(
+                "dns_query",
+                {
+                    "dns_id": 4242,
+                    "record_type": "A",
+                    "name": "csms.example.com",
+                    "client_ip": "192.0.2.20",
+                    "dns_server": "192.0.2.53",
+                },
+            ),
+            NetworkObservation(
+                "dns_response",
+                {
+                    "dns_id": 4242,
+                    "address": "198.51.100.40",
+                    "client_ip": "192.0.2.20",
+                    "dns_server": "192.0.2.53",
+                },
+            ),
+            NetworkObservation(
+                "connection_attempt",
+                {
+                    "source_ip": "192.0.2.20",
+                    "destination_ip": "198.51.100.40",
+                    "destination_port": 9000,
+                },
+            ),
+        ]
+    )
+
+    session = run_passive_discovery(
+        interface="eth0",
+        role="control",
+        root=tmp_path,
+        observer=observer,
+    )
+
+    events = session.events()
+    resolution = next(
+        event for event in events if event["event_type"] == "dns_resolution"
+    )
+    assert resolution["category"] == "observation"
+    assert resolution["metadata"]["name"] == "csms.example.com"
+    assert resolution["metadata"]["address"] == "198.51.100.40"
+
+    candidate = next(
+        event for event in events if event["event_type"] == "csms_candidate"
+    )
+    assert candidate["metadata"]["hostnames"] == ["csms.example.com"]
+
+
+def test_unmatched_dns_response_does_not_invent_hostname() -> None:
+    tracker = CandidateTracker()
+    derived = tracker.consume(
+        NetworkObservation(
+            "dns_response",
+            {
+                "dns_id": 4242,
+                "address": "198.51.100.40",
+                "client_ip": "192.0.2.20",
+                "dns_server": "192.0.2.53",
+            },
+        )
+    )
+    tracker.consume(
+        NetworkObservation(
+            "connection_attempt",
+            {
+                "destination_ip": "198.51.100.40",
+                "destination_port": 9000,
+            },
+        )
+    )
+
+    assert derived == []
+    assert tracker.candidates()[0].hostnames == set()
