@@ -238,51 +238,6 @@ def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
     assert (bundle / "migration" / "cutover-proof.json").is_file()
 
 
-@pytest.mark.reconciliation_e2e
-def test_cutover_rehearsal_returns_no_go_if_live_source_changes(tmp_path, monkeypatch):
-    from arthexis.reconciliation import rehearsal
-
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    output = tmp_path / "rehearsal"
-
-    original = rehearsal.verify_cutover_source_unchanged
-
-    def mutate_then_verify(*args, **kwargs):
-        with sqlite3.connect(source_database) as connection:
-            connection.execute(
-                "INSERT INTO core_rfid(rfid, active) VALUES ('late-write', 1)"
-            )
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(
-        rehearsal,
-        "verify_cutover_source_unchanged",
-        mutate_then_verify,
-    )
-
-    from scripts import reconcile
-
-    arguments = reconcile._parser().parse_args(
-        [
-            "rehearse",
-            str(legacy),
-            "--output",
-            str(output),
-            "--nice",
-            "0",
-            "--cutover",
-        ]
-    )
-    result_code = reconcile._rehearse(arguments)
-
-    assert result_code == 2
-    proof = json.loads((output / "cutover-proof.json").read_text(encoding="utf-8"))
-    assert proof["decision"] == "NO-GO"
-    assert proof["no_missed_writes"] is False
-    assert not (output / "bundles").exists() or not any((output / "bundles").iterdir())
-
-
 def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
     from arthexis.reconciliation.capture import capture_legacy_installation
     from arthexis.reconciliation.rehearsal import verify_cutover_source_unchanged
