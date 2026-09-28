@@ -121,6 +121,7 @@ class LiveSimulatorWorker:
         self._simulator = LiveOcpp16Simulator(self.config)
         self._boot = None
         self._reconnects = 0
+        self._transport_lock = asyncio.Lock()
 
     async def run(self) -> None:
         sock = socket_path(self.config.charger)
@@ -170,8 +171,9 @@ class LiveSimulatorWorker:
             cleanup_session_artifacts(self.config.charger)
 
     async def _connect_and_boot(self) -> None:
-        await self._simulator.connect()
-        self._boot = await self._simulator.boot()
+        async with self._transport_lock:
+            await self._simulator.connect()
+            self._boot = await self._simulator.boot()
         if self._boot.status != "Accepted":
             await self._simulator.close()
             raise LiveSimulatorError(
@@ -179,8 +181,9 @@ class LiveSimulatorWorker:
             )
 
     async def _reconnect(self) -> None:
-        await self._simulator.reconnect()
-        self._boot = await self._simulator.boot()
+        async with self._transport_lock:
+            await self._simulator.reconnect()
+            self._boot = await self._simulator.boot()
         if self._boot.status != "Accepted":
             raise LiveSimulatorError(
                 f"BootNotification was not accepted after reconnect: "
@@ -207,7 +210,8 @@ class LiveSimulatorWorker:
             if self._stop.is_set():
                 return
             try:
-                await self._simulator.call("Heartbeat", {})
+                async with self._transport_lock:
+                    await self._simulator.call("Heartbeat", {})
             except LiveSimulatorError:
                 self._stop.set()
                 return
@@ -240,7 +244,8 @@ class LiveSimulatorWorker:
             }
         if action == "authorize":
             id_tag = str(request.get("id_tag", ""))
-            status = await self._simulator.authorize(id_tag)
+            async with self._transport_lock:
+                status = await self._simulator.authorize(id_tag)
             return {
                 "ok": True,
                 "charger": self.config.charger,
