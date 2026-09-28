@@ -16,7 +16,7 @@ import pytest
 from arthexis.reconciliation.capture import capture_legacy_installation
 from arthexis.reconciliation.fixture import restore_fixture
 from arthexis.reconciliation.source import classify_database
-from arthexis.reconciliation.workspace import verify_fixture_source
+from arthexis.reconciliation.workspace import verify_fixture_source, write_failure_receipt
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -143,3 +143,20 @@ def test_fixture_verification_rejects_modified_source(tmp_path):
 
     with pytest.raises(ValueError, match="changed after restore"):
         verify_fixture_source(fixture.path)
+
+
+def test_reconciliation_failure_receipt_preserves_diagnostics_without_source_mutation(tmp_path):
+    fixture = _fixture(tmp_path)
+    source_sha = _sha256(fixture.database_path)
+
+    receipt = write_failure_receipt(
+        fixture.path,
+        RuntimeError("synthetic reconciliation failure"),
+    )
+
+    assert receipt is not None
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["error"]["type"] == "RuntimeError"
+    assert "synthetic reconciliation failure" in payload["error"]["message"]
+    assert _sha256(fixture.database_path) == source_sha
