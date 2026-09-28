@@ -56,9 +56,27 @@ class ReconciliationReport:
     dry_run: bool
     imported: dict[str, int] = field(default_factory=dict)
     skipped: dict[str, str] = field(default_factory=dict)
+    historical_gaps: list[dict[str, str]] = field(default_factory=list)
 
     def count(self, name: str, amount: int = 1) -> None:
         self.imported[name] = self.imported.get(name, 0) + amount
+
+    def gap(
+        self,
+        resource: str,
+        *,
+        classification: str,
+        reason: str,
+        evidence: str,
+    ) -> None:
+        self.historical_gaps.append(
+            {
+                "resource": resource,
+                "classification": classification,
+                "reason": reason,
+                "evidence": evidence,
+            }
+        )
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -69,6 +87,7 @@ class ReconciliationReport:
             "dry_run": self.dry_run,
             "imported": self.imported,
             "skipped": self.skipped,
+            "historical_gaps": self.historical_gaps,
         }
 
 
@@ -86,6 +105,12 @@ class _Importer:
         found, rows = self.source.rows(*tables)
         if found is None:
             self.report.skipped[label] = "source table absent"
+            self.report.gap(
+                label,
+                classification="source-incomplete",
+                reason="source table absent",
+                evidence="No candidate legacy source table exists in the captured database.",
+            )
         return rows
 
     def cards(self) -> None:
@@ -211,6 +236,15 @@ class _Importer:
             account = self.accounts.get(_first(row, "account_id"))
             if account is None:
                 self.report.skipped["ledger_entries"] = "account dependency absent"
+                self.report.gap(
+                    "ledger_entries",
+                    classification="source-incomplete",
+                    reason="account dependency absent",
+                    evidence=(
+                        "Legacy ledger row references an account that is absent from "
+                        "the captured source/imported legacy account set."
+                    ),
+                )
                 continue
             LedgerEntry.objects.update_or_create(
                 account=account,
@@ -339,6 +373,15 @@ class _Importer:
             charger = self.chargers.get(charger_id)
             if charger is None:
                 self.report.skipped["ocpp_transactions"] = "charger dependency absent"
+                self.report.gap(
+                    "ocpp_transactions",
+                    classification="source-incomplete",
+                    reason="charger dependency absent",
+                    evidence=(
+                        "Legacy transaction references a charger that is absent from "
+                        "the captured source/imported legacy charger set."
+                    ),
+                )
                 continue
             remote_id = str(
                 _first(row, "transaction_id", "remote_id", default=legacy_id)

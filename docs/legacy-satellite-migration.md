@@ -1,99 +1,235 @@
-# Legacy satellite migration safety contract
+# Legacy satellite migration rehearsal and cutover
 
-This document defines the field-safety contract for moving a deployed legacy
-Arthexis satellite to the current schema generation. It complements the
-cross-major reconciliation contract in #240.
+This document is the operator procedure and safety contract for moving a deployed
+legacy Arthexis satellite to the current schema generation. It complements the
+cross-major reconciliation contract in #240 and hands a verified final migration
+artifact to #278 for the authority switch.
 
-## Safety rule
+## Safety invariant
 
-The field satellite is authoritative. Never use the field node as the first
-place where a cross-major migration is attempted. Capture it, preserve the
-capture unchanged, rehearse migration off-node, verify the result, and only
-then decide whether the field node may be touched.
+The legacy satellite remains authoritative until #278 performs the explicit
+authority switch. Current Arthexis may run beside it as a secondary,
+non-authoritative instance.
 
-## Capture
+The migration tooling may read the legacy installation and take a consistent
+SQLite online-backup snapshot, but it must never reconcile directly from the
+changing live database. Restore, reconciliation, verification, reporting, and
+bundle creation operate from the finalized immutable capture.
 
-Before changing the satellite, record a migration bundle containing:
+A failed rehearsal or NO-GO must not modify the authoritative legacy source.
 
-- durable Arthexis database/state required by retained resources;
-- source Arthexis version, commit/schema generation when available;
-- node and charger identity needed to interpret the state;
-- relevant non-secret configuration and deployment metadata;
-- timestamps and enough provenance to identify the capture; and
-- a digest of every captured artifact.
+## Operator command
 
-Secrets, private keys, broker credentials, and physical card-sector keys are
-not migration payload. Record that such configuration must be reprovisioned
-when necessary rather than copying secrets into the reconciliation artifact.
+Run the migration tooling from the current Arthexis installation and point it at
+the still-running legacy Arthexis installation:
 
-The original capture is immutable. Rehearsal and conversion operate on copies.
+```bash
+python scripts/reconcile.py rehearse /path/to/legacy/arthexis
+```
 
-## Off-node rehearsal
+The command performs:
 
-Restore a working copy of the capture into an isolated migration fixture. The
-fixture must not connect to or command the production charger and must not
-publish production events.
+1. read-only legacy discovery;
+2. consistent SQLite online-backup capture;
+3. capture integrity verification and finalization;
+4. disposable database-only fixture restore;
+5. cross-major reconciliation into a fresh current-generation database;
+6. hard resource-safety evaluation;
+7. retained-domain verification and historical-gap classification;
+8. GO / NO-GO reporting; and
+9. immutable GO-bundle creation when every gate passes.
 
-Run the supported cross-major export/reconciliation/import path from #240
-against the fixture. Do not treat direct cross-major Django migration,
-`dumpdata`/`loaddata`, or modification of the source snapshot as an
-acceptable substitute.
+Operators do not manually copy or freeze the database before an ordinary
+rehearsal.
 
-Retain the reconciliation artifact and machine-readable verification evidence
-alongside a human-readable migration report.
+### Final cutover run
 
-## Verification
+For the final accepted run use:
 
-The report must identify the source, target generation, reconciliation result,
-warnings, and dispositions. Verification must cover the retained invariants
-defined by #240, including where applicable:
+```bash
+python scripts/reconcile.py rehearse /path/to/legacy/arthexis --cutover
+```
 
-- stable node and charger identities and topology;
-- authorization/card/account relationships;
-- charging transactions and their retained attribution;
-- meter-value/transaction relationships;
-- uniqueness and referential integrity;
-- resource counts/digests and explicit skipped/discarded records; and
-- domain totals for which #240 defines meaningful verification.
+The start of this run is the cutover boundary. Until an explicit incremental
+final-synchronization mechanism exists, the legacy database must not advance
+between its accepted capture and the final no-missed-writes proof.
 
-Warnings caused by incomplete historical information must be explicit. Missing
-data must never be silently invented.
+The current implementation enforces this conservatively: after reconciliation it
+re-hashes the live legacy database. If that hash differs from the captured
+database, the result is NO-GO with
+`legacy-source-advanced-after-capture`. Quiesce legacy writes and rerun rather
+than accepting a stale migrated database.
 
-## Reset and incomplete-history handling
+A successful `--cutover` run still does **not** switch production authority.
+It creates the exact artifact that #278 may consume.
 
-A charger or satellite reset is evidence of a discontinuity, not permission to
-fabricate continuity. Record the known boundary and classify affected
-relationships as verified, recoverable with an explicit transformation, or
-unverifiable.
+## Resource safety gates
 
-If an invariant required for safe reconciliation cannot be established, the
-migration is a no-go until an operator resolves or explicitly redesigns the
-reconciliation rule.
+Rehearsal resource limits are hard gates, not informational warnings. Defaults
+are:
 
-## Go / no-go gate
+- maximum elapsed time: 1800 seconds;
+- maximum peak RSS: 512 MiB;
+- maximum rehearsal workspace size: 2048 MiB; and
+- minimum free disk before capture: 1024 MiB.
 
-A field cutover is **GO** only when all of the following are true:
+They may be overridden with
+`--max-elapsed-seconds`, `--max-peak-rss-mib`,
+`--max-workspace-mib`, and `--min-free-disk-mib`.
 
-1. the immutable source capture and its digests are retained;
-2. an isolated restore can be reproduced;
-3. the supported reconciliation path completes without unresolved failures;
-4. all required retained-domain invariants verify;
-5. every material warning or historical discontinuity is documented and has an
-   accepted disposition;
-6. the report identifies the exact source and target versions/generations; and
-7. rollback can restore the original captured state or replace the node without
-   destroying the authoritative source evidence.
+A preflight disk failure stops before capture. A later threshold breach writes
+resource evidence and returns NO-GO with reason `resource-limit`. Exceeding a
+threshold means stop and reconsider or rework the migration path.
 
-The result is **NO-GO** when any required condition is absent, verification is
-ambiguous, reconciliation fails, source provenance is uncertain, or rollback
-evidence is insufficient. A no-go leaves the field node unchanged.
+## Historical incompleteness
 
-## Field cutover boundary
+Real charger and version-0 history may already be incomplete. Reconciliation
+must not manufacture missing history merely to make counts look complete.
 
-Approval of a rehearsal authorizes a deliberate field-upgrade procedure; it
-does not itself perform the upgrade. The manual upgrade, post-cutover
-verification, and rollback procedure belongs to the corresponding field
-upgrade work (#278).
+The report distinguishes evidence-backed historical gaps from migration loss:
 
-After cutover, retain the source capture, reconciliation artifact, report, and
-verification evidence as an auditable migration record.
+- `source-incomplete`: the captured legacy source itself lacks the required
+  table, record, or dependency;
+- `legacy-v0-gap`: an identified version-0 persistence/schema limitation; and
+- unclassified or migration-caused loss.
+
+The first two may produce **GO with warnings** only when concrete source evidence
+is present in the report. Missing evidence, unsupported classifications,
+destination count mismatches, integrity failures, or migration-caused loss are
+NO-GO.
+
+## Result and exit status
+
+The command writes one JSON result to standard output.
+
+A successful result contains `"decision": "GO"` and exits 0. A rejected
+migration contains `"decision": "NO-GO"` and exits 2 for expected safety-gate
+failures such as resource limits or a changed cutover source.
+
+Do not infer approval from the mere existence of a reconciled database. The
+authoritative result is the final decision plus its evidence.
+
+## Artifact layout
+
+With `--output /migration/rehearsal`, the workspace contains artifacts such as:
+
+```text
+/migration/rehearsal/
+  captures/
+    <capture-id>/
+      database/legacy.sqlite3
+      manifest.json
+      checksums.sha256
+      FINALIZED
+  fixtures/
+    <fixture-id>/
+      database.sqlite3
+      fixture.json
+      reconciled.sqlite3
+      reconciliation.json
+      migration-report.json
+      migration-report.txt
+  resource-report.json
+  cutover-proof.json          # final --cutover run only
+  bundles/
+    <bundle-id>/
+      database/reconciled.sqlite3
+      capture/manifest.json
+      capture/checksums.sha256
+      migration/reconciliation.json
+      migration/migration-report.json
+      migration/migration-report.txt
+      migration/resource-report.json
+      migration/cutover-proof.json   # final --cutover run only
+      manifest.json
+      checksums.sha256
+      FINALIZED
+```
+
+Capture IDs include sub-second time information so rapid repeated rehearsals do
+not collide. Existing captures, fixtures, and GO bundles are never overwritten.
+
+## GO bundle contract
+
+A GO bundle is the immutable handoff object. Its manifest binds together:
+
+- source capture identity and cryptographic digests;
+- detected legacy installation/version evidence;
+- reconciled current-generation database and digest;
+- reconciliation receipt;
+- machine-readable verification report;
+- human-readable migration summary;
+- accepted historical-gap classifications and evidence;
+- resource policy and measurements;
+- cutover no-missed-writes proof for a final `--cutover` run;
+- provenance linking derived artifacts back to the immutable capture; and
+- explicit GO status.
+
+The bundle is checksummed and finalized with a `FINALIZED` marker. A bundle
+cannot be overwritten.
+
+NO-GO runs do not create an accepted GO bundle.
+
+## Retention and cleanup
+
+Accepted migration evidence is retained indefinitely by default. Do not
+automatically prune finalized capture or GO bundles.
+
+If storage must later be reclaimed, cleanup is an explicit operator action.
+Prefer deleting disposable fixture/workspace material before deleting the
+finalized source capture or accepted GO bundle. Never delete the only recovery
+evidence while the migrated installation still depends on it.
+
+## Reruns and failures
+
+Rehearsals are repeatable. A rerun creates new capture and bundle identities and
+does not overwrite previous evidence.
+
+Expected failure behavior includes:
+
+- tampered/corrupt capture -> reject before downstream consumption;
+- reconciliation exception -> write a failure receipt when possible;
+- verification failure -> NO-GO and no GO bundle;
+- resource threshold breach -> NO-GO and resource report;
+- legacy source advances during final cutover -> NO-GO and cutover proof;
+- existing bundle identity -> refuse overwrite.
+
+In all cases the legacy source remains authoritative and is not repaired,
+rewritten, or rolled back by the rehearsal tooling.
+
+## Field acceptance for #276
+
+Before #276 is complete, exercise the complete workflow on **two real
+charger/satellite installations**.
+
+For each installation retain:
+
+- ordinary rehearsal evidence as useful during preparation;
+- the final `--cutover` GO bundle used for the handoff;
+- warnings documenting pre-existing charger/version-0 history gaps; and
+- any resource-limit or migration failures encountered while proving the path.
+
+The two field runs are acceptance work, not a reason to weaken the migration
+gates.
+
+## Handoff to #278
+
+#278 may begin the production authority-switch procedure only from a finalized
+GO bundle produced by the final `--cutover` run.
+
+The handoff consists of:
+
+1. the finalized GO bundle directory;
+2. the reconciled database inside that bundle;
+3. the immutable source capture identity/digests recorded by the bundle;
+4. successful retained-domain verification evidence;
+5. resource-safety evidence;
+6. accepted historical-gap dispositions; and
+7. successful no-missed-writes cutover proof.
+
+#278 owns stopping/replacing production legacy services, binding the current
+instance to production charger endpoints, switching authority, post-cutover
+verification, and rollback.
+
+A GO from #276 means **eligible for operator-controlled cutover**. It never means
+that authority has already switched.
