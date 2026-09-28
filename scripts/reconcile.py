@@ -18,6 +18,44 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from arthexis.reconciliation.source import inspect_source, resolve_source
 
+REHEARSE_DOC_PATH = "docs/legacy-satellite-migration.md"
+REHEARSE_DOC_URL = (
+    "https://github.com/arthexis/arthexis/blob/main/"
+    "docs/legacy-satellite-migration.md"
+)
+
+
+def _rehearse_help() -> str:
+    return """Legacy satellite migration rehearsal
+
+Usage:
+  python scripts/reconcile.py rehearse <legacy-installation> [options]
+  python scripts/reconcile.py rehearse <legacy-installation> --cutover [options]
+
+Ordinary rehearsal:
+  Captures a consistent read-only SQLite snapshot from the still-running legacy
+  installation, then restores, reconciles, verifies, and reports from the
+  immutable capture. The legacy installation remains authoritative.
+
+Final cutover rehearsal:
+  Add --cutover to require the no-missed-writes proof before a final GO bundle
+  can be accepted. The authority switch itself belongs to issue #278.
+
+Important options:
+  --output PATH               rehearsal workspace root
+  --database PATH             explicit legacy SQLite database
+  --batch-size N              reconciliation batch size
+  --max-elapsed-seconds N     hard elapsed-time safety limit
+  --max-peak-rss-mib N        hard peak-memory safety limit
+  --max-workspace-mib N       hard workspace-size safety limit
+  --min-free-disk-mib N       minimum free disk required before capture
+  --cutover                   final cutover rehearsal mode
+
+Operator procedure:
+  {doc_path}
+  {doc_url}
+""".format(doc_path=REHEARSE_DOC_PATH, doc_url=REHEARSE_DOC_URL)
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -356,6 +394,10 @@ def _rehearse(arguments: argparse.Namespace) -> int:
     return 0 if verification.decision == "GO" else 2
 
 def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1] == "rehearse" and sys.argv[2] in {"-h", "--help"}:
+        print(_rehearse_help())
+        return 0
+
     arguments = _parser().parse_args()
 
     if arguments.command == "reconcile-fixture":
