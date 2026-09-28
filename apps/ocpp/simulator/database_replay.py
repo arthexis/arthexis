@@ -68,15 +68,20 @@ class ReplayMetrics:
     total_reconnect_seconds: float = 0.0
     max_reconnect_seconds: float = 0.0
     error_counts: dict[str, int] = field(default_factory=dict)
-    _started_at: float = field(default_factory=time.monotonic, repr=False)
+    _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
+    _started_at: float | None = field(default=None, repr=False)
     elapsed_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self._started_at is None:
+            self._started_at = self._clock()
 
     def start_request(self) -> float:
         self.attempted_requests += 1
-        return time.monotonic()
+        return self._clock()
 
     def record_success(self, started_at: float) -> None:
-        latency = time.monotonic() - started_at
+        latency = self._clock() - started_at
         self.completed_requests += 1
         self.total_latency_seconds += latency
         self.max_latency_seconds = max(self.max_latency_seconds, latency)
@@ -95,7 +100,7 @@ class ReplayMetrics:
         return time.monotonic()
 
     def record_reconnect_success(self, started_at: float) -> None:
-        elapsed = time.monotonic() - started_at
+        elapsed = self._clock() - started_at
         self.reconnect_successes += 1
         self.total_reconnect_seconds += elapsed
         self.max_reconnect_seconds = max(self.max_reconnect_seconds, elapsed)
@@ -109,7 +114,8 @@ class ReplayMetrics:
         self.error_counts[name] = self.error_counts.get(name, 0) + 1
 
     def finish(self) -> None:
-        self.elapsed_seconds = max(0.0, time.monotonic() - self._started_at)
+        assert self._started_at is not None
+        self.elapsed_seconds = max(0.0, self._clock() - self._started_at)
 
     def as_dict(self) -> dict[str, object]:
         measured = self.completed_requests + self.failed_requests
