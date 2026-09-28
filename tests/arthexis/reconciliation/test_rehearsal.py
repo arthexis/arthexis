@@ -85,6 +85,8 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
     result = json.loads(completed.stdout)
     assert result["decision"] == "GO"
     assert result["source"] == str(legacy.resolve())
+    assert result["resource_safety"]["decision"] == "GO"
+    assert Path(result["resource_report"]).is_file()
 
     capture = Path(result["capture"]["path"])
     fixture = Path(result["fixture"]["path"])
@@ -99,3 +101,87 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
     report = json.loads(Path(result["json_report"]).read_text(encoding="utf-8"))
     assert report["decision"] == "GO"
     assert report["source_capture_id"] == result["capture"]["capture_id"]
+
+
+@pytest.mark.reconciliation_e2e
+def test_rehearse_stops_with_no_go_when_resource_limit_is_exceeded(tmp_path):
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    source_sha = _sha256(source_database)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+            "--max-workspace-mib",
+            "0.001",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2, completed.stderr
+    assert _sha256(source_database) == source_sha
+
+    result = json.loads(completed.stdout)
+    assert result["decision"] == "NO-GO"
+    assert result["reason"] == "resource-limit"
+    assert result["resource_safety"]["decision"] == "NO-GO"
+    assert any(
+        violation["resource"] == "workspace_mib"
+        for violation in result["resource_safety"]["violations"]
+    )
+    assert Path(result["resource_report"]).is_file()
+    assert not Path(result["fixture"]["path"], "migration-report.json").exists()
+
+
+def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    source_sha = _sha256(source_database)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--min-free-disk-mib",
+            "1000000000",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert _sha256(source_database) == source_sha
+
+    result = json.loads(completed.stdout)
+    assert result["decision"] == "NO-GO"
+    assert result["reason"] == "resource-limit"
+    assert result["resource_preflight"]["violations"]
+    assert not (output / "captures").exists()
