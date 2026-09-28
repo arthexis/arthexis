@@ -261,10 +261,13 @@ def test_public_remote_verifier_exercises_query_and_mcp_product_contract() -> No
         '"mutation_not_allowed"',
         '"method": "initialize"',
         '"method": "tools/list"',
-        'set(tools) != {"gway", "query"}',
+        "if set(tools) != expected_tools:",
+        'expected_tools={"query"}',
+        'expected_tools={"gway", "query"}',
         'annotations.get("readOnlyHint") is not True',
+        'annotations.get("readOnlyHint") is not False',
         '"name": "query"',
-        '"arguments": {"command": "log sources"}',
+        'query_command="log sources"',
     ):
         assert marker in verifier
 
