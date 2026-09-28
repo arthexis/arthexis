@@ -9,7 +9,8 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -112,13 +113,17 @@ async def send_control(charger: str, request: dict[str, Any]) -> dict[str, Any]:
 class LiveSimulatorWorker:
     config: LiveSimulatorConfig
     idle_timeout: float = DEFAULT_IDLE_TIMEOUT
+    simulator_factory: Callable[[LiveSimulatorConfig], LiveOcpp16Simulator] = field(
+        default=LiveOcpp16Simulator,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if self.idle_timeout <= 0:
             raise ValueError("idle_timeout must be greater than zero")
         self._last_control_activity = time.monotonic()
         self._stop = asyncio.Event()
-        self._simulator = LiveOcpp16Simulator(self.config)
+        self._simulator = self.simulator_factory(self.config)
         self._boot = None
         self._reconnects = 0
         self._transport_lock = asyncio.Lock()
@@ -210,8 +215,7 @@ class LiveSimulatorWorker:
             if self._stop.is_set():
                 return
             try:
-                async with self._transport_lock:
-                    await self._simulator.call("Heartbeat", {})
+                await self.heartbeat()
             except LiveSimulatorError:
                 self._stop.set()
                 return
@@ -221,7 +225,7 @@ class LiveSimulatorWorker:
             raw = await reader.readline()
             request = json.loads(raw)
             self._last_control_activity = time.monotonic()
-            response = await self._dispatch(request)
+            response = await self.dispatch(request)
         except Exception as exc:
             response = {"ok": False, "error": str(exc)}
         writer.write((json.dumps(response) + "\n").encode())
@@ -229,7 +233,13 @@ class LiveSimulatorWorker:
         writer.close()
         await writer.wait_closed()
 
-    async def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def heartbeat(self) -> None:
+        """Send one heartbeat without racing another transport operation."""
+        async with self._transport_lock:
+            await self._simulator.call("Heartbeat", {})
+
+    async def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Handle one local control request against the persistent connection."""
         action = request.get("action")
         if action == "status":
             return {
