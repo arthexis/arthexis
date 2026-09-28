@@ -7,6 +7,7 @@ import contextlib
 import json
 import uuid
 from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -57,8 +58,14 @@ class LiveOcpp16Simulator:
 
     subprotocol = "ocpp1.6"
 
-    def __init__(self, config: LiveSimulatorConfig) -> None:
+    def __init__(
+        self,
+        config: LiveSimulatorConfig,
+        *,
+        connection_factory: Callable[..., Awaitable[Any]] = connect,
+    ) -> None:
         self.config = config
+        self.connection_factory = connection_factory
         self._connection: Any | None = None
         self._receive_task: asyncio.Task | None = None
         self._pending: dict[str, asyncio.Future[dict[str, object]]] = {}
@@ -71,7 +78,7 @@ class LiveOcpp16Simulator:
         if self.connected:
             return
         try:
-            connection = await connect(
+            connection = await self.connection_factory(
                 self.config.endpoint,
                 subprotocols=[self.subprotocol],
                 open_timeout=self.config.timeout,
