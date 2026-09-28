@@ -9,10 +9,21 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping
+from typing import Iterable, Mapping
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _EVENT_CATEGORIES = frozenset({"observation", "inference", "operator_note"})
+_REQUIRED_EVENT_KEYS = frozenset(
+    {
+        "session_id",
+        "sequence",
+        "timestamp",
+        "event_type",
+        "category",
+        "metadata",
+        "artifact_refs",
+    }
+)
 
 
 def _utc_timestamp(value: datetime | None = None) -> str:
@@ -36,6 +47,58 @@ def _read_json(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path.name} must contain a JSON object")
     return payload
+
+
+def _validate_event(
+    event: object,
+    *,
+    session_id: str,
+    expected_sequence: int,
+    line_number: int,
+) -> dict[str, object]:
+    if not isinstance(event, dict):
+        raise ValueError(
+            f"events.jsonl line {line_number} must contain a JSON object"
+        )
+    missing = _REQUIRED_EVENT_KEYS - event.keys()
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise ValueError(
+            f"events.jsonl line {line_number} is missing required keys: {names}"
+        )
+    if event["session_id"] != session_id:
+        raise ValueError(
+            f"events.jsonl line {line_number} belongs to another session"
+        )
+    if event["sequence"] != expected_sequence:
+        raise ValueError(
+            f"events.jsonl line {line_number} must have sequence "
+            f"{expected_sequence}"
+        )
+    if not isinstance(event["timestamp"], str) or not event["timestamp"]:
+        raise ValueError(
+            f"events.jsonl line {line_number} must have a timestamp"
+        )
+    if not isinstance(event["event_type"], str) or not event["event_type"].strip():
+        raise ValueError(
+            f"events.jsonl line {line_number} must have an event_type"
+        )
+    if event["category"] not in _EVENT_CATEGORIES:
+        raise ValueError(
+            f"events.jsonl line {line_number} has an invalid category"
+        )
+    if not isinstance(event["metadata"], dict):
+        raise ValueError(
+            f"events.jsonl line {line_number} metadata must be an object"
+        )
+    artifact_refs = event["artifact_refs"]
+    if not isinstance(artifact_refs, list) or not all(
+        isinstance(reference, str) for reference in artifact_refs
+    ):
+        raise ValueError(
+            f"events.jsonl line {line_number} artifact_refs must be strings"
+        )
+    return event
 
 
 @dataclass
@@ -91,7 +154,7 @@ class DiscoverySession:
 
     @classmethod
     def open(cls, root: Path, session_id: str) -> "DiscoverySession":
-        """Open an existing session for inspection or continued appends."""
+        """Open an existing session, repairing only an interrupted final append."""
 
         cls._validate_session_id(session_id)
         path = Path(root) / "discovery" / session_id
@@ -102,19 +165,16 @@ class DiscoverySession:
         if not isinstance(created_at, str) or not created_at:
             raise ValueError("manifest created_at must be a non-empty string")
 
-        events = list(cls._read_events_file(path / "events.jsonl"))
-        next_sequence = 1
-        if events:
-            sequences = [event.get("sequence") for event in events]
-            if not all(isinstance(sequence, int) for sequence in sequences):
-                raise ValueError("event sequence values must be integers")
-            next_sequence = max(sequences) + 1
-
+        events = cls._load_events(
+            path / "events.jsonl",
+            session_id=session_id,
+            repair_truncated_tail=True,
+        )
         return cls(
             session_id=session_id,
             path=path,
             created_at=created_at,
-            _next_sequence=next_sequence,
+            _next_sequence=len(events) + 1,
         )
 
     @classmethod
@@ -160,22 +220,58 @@ class DiscoverySession:
             )
 
     @staticmethod
-    def _read_events_file(path: Path) -> Iterator[dict[str, object]]:
-        with path.open(encoding="utf-8") as stream:
-            for line_number, line in enumerate(stream, start=1):
-                if not line.strip():
+    def _load_events(
+        path: Path,
+        *,
+        session_id: str,
+        repair_truncated_tail: bool = False,
+    ) -> list[dict[str, object]]:
+        raw = path.read_bytes()
+        lines = raw.splitlines(keepends=True)
+        events: list[dict[str, object]] = []
+        committed_bytes = 0
+
+        for index, raw_line in enumerate(lines):
+            line_number = index + 1
+            is_final = index == len(lines) - 1
+            has_newline = raw_line.endswith((b"\n", b"\r"))
+
+            try:
+                text = raw_line.decode("utf-8")
+                if not text.strip():
+                    committed_bytes += len(raw_line)
                     continue
-                event = json.loads(line)
-                if not isinstance(event, dict):
-                    raise ValueError(
-                        f"events.jsonl line {line_number} must contain a JSON object"
-                    )
-                yield event
+                payload = json.loads(text)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                if is_final and not has_newline:
+                    if repair_truncated_tail:
+                        with path.open("r+b") as stream:
+                            stream.truncate(committed_bytes)
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                    break
+                raise ValueError(
+                    f"events.jsonl line {line_number} is corrupt"
+                ) from exc
+
+            event = _validate_event(
+                payload,
+                session_id=session_id,
+                expected_sequence=len(events) + 1,
+                line_number=line_number,
+            )
+            events.append(event)
+            committed_bytes += len(raw_line)
+
+        return events
 
     def events(self) -> list[dict[str, object]]:
-        """Return persisted events in authoritative stream order."""
+        """Return all valid committed events in authoritative stream order."""
 
-        return list(self._read_events_file(self.path / "events.jsonl"))
+        return self._load_events(
+            self.path / "events.jsonl",
+            session_id=self.session_id,
+        )
 
     def summary(self) -> dict[str, object]:
         """Derive a machine-readable summary from manifest and event evidence."""
@@ -186,14 +282,12 @@ class DiscoverySession:
         event_counts: dict[str, int] = {}
         category_counts: dict[str, int] = {}
         for event in events:
-            event_type = event.get("event_type")
-            category = event.get("category")
-            if isinstance(event_type, str):
-                event_counts[event_type] = event_counts.get(event_type, 0) + 1
-            if isinstance(category, str):
-                category_counts[category] = category_counts.get(category, 0) + 1
+            event_type = event["event_type"]
+            category = event["category"]
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+            category_counts[category] = category_counts.get(category, 0) + 1
 
-        summary: dict[str, object] = {
+        return {
             "format_version": 1,
             "session_id": self.session_id,
             "created_at": manifest.get("created_at"),
@@ -201,10 +295,9 @@ class DiscoverySession:
             "event_count": len(events),
             "event_counts": event_counts,
             "category_counts": category_counts,
-            "last_sequence": events[-1].get("sequence") if events else None,
-            "last_event_at": events[-1].get("timestamp") if events else None,
+            "last_sequence": events[-1]["sequence"] if events else None,
+            "last_event_at": events[-1]["timestamp"] if events else None,
         }
-        return summary
 
     def write_summary(self) -> dict[str, object]:
         """Regenerate summary.json from the authoritative event stream."""

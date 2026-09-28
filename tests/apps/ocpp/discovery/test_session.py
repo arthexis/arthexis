@@ -104,6 +104,70 @@ def test_open_reads_existing_session_and_continues_sequence(tmp_path) -> None:
     ]
 
 
+def test_open_repairs_only_a_truncated_final_append(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="interrupted")
+    session.record("link_up")
+    events_path = session.path / "events.jsonl"
+
+    with events_path.open("ab") as stream:
+        stream.write(b'{"session_id":"interrupted","sequence":3,"timestamp":"2026-')
+        stream.flush()
+
+    reopened = DiscoverySession.open(tmp_path, "interrupted")
+    recovered = reopened.record("dns_query")
+
+    assert recovered["sequence"] == 3
+    assert [event["event_type"] for event in reopened.events()] == [
+        "session_started",
+        "link_up",
+        "dns_query",
+    ]
+    assert events_path.read_bytes().endswith(b"\n")
+
+
+def test_open_rejects_corruption_inside_committed_stream(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="corrupt-middle")
+    events_path = session.path / "events.jsonl"
+    original = events_path.read_text(encoding="utf-8")
+    events_path.write_text(
+        original + "{not-json}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="line 2 is corrupt"):
+        DiscoverySession.open(tmp_path, "corrupt-middle")
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda event: event.update(session_id="other-session"),
+            "belongs to another session",
+        ),
+        (
+            lambda event: event.update(sequence=9),
+            "must have sequence 1",
+        ),
+        (
+            lambda event: event.update(category="guess"),
+            "invalid category",
+        ),
+    ],
+)
+def test_open_rejects_inconsistent_committed_events(
+    tmp_path, mutate, message: str
+) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="invalid-event")
+    events_path = session.path / "events.jsonl"
+    event = json.loads(events_path.read_text(encoding="utf-8"))
+    mutate(event)
+    events_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        DiscoverySession.open(tmp_path, "invalid-event")
+
+
 def test_summary_is_regenerated_from_authoritative_event_stream(tmp_path) -> None:
     session = DiscoverySession.create(tmp_path, session_id="summary-test")
     session.record("dns_query")
@@ -138,6 +202,26 @@ def test_summary_is_regenerated_from_authoritative_event_stream(tmp_path) -> Non
         (session.path / "summary.json").read_text(encoding="utf-8")
     )
     assert persisted == summary
+
+
+@pytest.mark.parametrize("summary_contents", [None, "{broken-json"])
+def test_summary_can_be_rebuilt_when_missing_or_corrupt(
+    tmp_path, summary_contents: str | None
+) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="summary-recovery")
+    session.record("dns_query")
+    summary_path = session.path / "summary.json"
+
+    if summary_contents is None:
+        summary_path.unlink()
+    else:
+        summary_path.write_text(summary_contents, encoding="utf-8")
+
+    reopened = DiscoverySession.open(tmp_path, "summary-recovery")
+    rebuilt = reopened.write_summary()
+
+    assert rebuilt["event_count"] == 2
+    assert json.loads(summary_path.read_text(encoding="utf-8")) == rebuilt
 
 
 def test_list_returns_only_valid_session_manifests_in_creation_order(tmp_path) -> None:
