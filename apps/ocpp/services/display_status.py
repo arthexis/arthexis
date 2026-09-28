@@ -2,6 +2,23 @@
 
 from apps.ocpp.services.timeline_status import query_timeline_status
 
+DISPLAY_STATUS_FIELDS = (
+    "charger",
+    "condition",
+    "state",
+    "pending_work",
+    "oldest_pending_age_seconds",
+    "processing_rate_per_minute",
+    "max_processing_latency_seconds",
+    "recent_request_errors",
+    "recent_outbound_errors",
+    "recent_retry_attempts",
+    "last_authorization_age_seconds",
+    "last_authorization_status",
+    "connection_live",
+    "as_of",
+)
+
 
 def query_display_status(identity: str) -> dict[str, object]:
     """Return a compact observer payload suitable for local displays."""
