@@ -14,6 +14,7 @@ from apps.ocpp.services.compatibility import record_compatibility_evidence
 from apps.ocpp.services.discovery_handoff import claim_and_record_discovery_handoff
 from apps.ocpp.services.presence import touch_connection
 from apps.ocpp.transport.connection import (
+    ConnectionRejected,
     basic_credentials,
     load_or_enroll_charger,
     negotiate_subprotocol,
@@ -35,8 +36,6 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self) -> None:
         offered_subprotocols = self.scope.get("subprotocols", [])
-        self.subprotocol, self.version = negotiate_subprotocol(offered_subprotocols)
-
         identity = self.scope["url_route"]["kwargs"]["charger_identity"]
         credentials = basic_credentials(self.scope.get("headers", []))
         self.charger = await load_or_enroll_charger(
@@ -46,6 +45,24 @@ class CSMSConsumer(AsyncJsonWebsocketConsumer):
         )
         if self.charger is None:
             await self.close(code=4401)
+            return
+
+        permissive_protocol = (
+            self.charger.protocol_mode
+            == self.charger.AuthorizationMode.OPEN
+        )
+        try:
+            self.subprotocol, self.version = negotiate_subprotocol(
+                offered_subprotocols,
+                permissive=permissive_protocol,
+            )
+        except ConnectionRejected:
+            await sync_to_async(record_compatibility_evidence)(
+                kind="protocol_rejected",
+                charger=self.charger,
+                details={"offered_subprotocols": offered_subprotocols},
+            )
+            await self.close(code=4406)
             return
 
         protocol_fallback = self.subprotocol not in offered_subprotocols
