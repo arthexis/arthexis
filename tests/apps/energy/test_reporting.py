@@ -58,6 +58,23 @@ def charging_session():
     return selected, fallback_sample
 
 
+def reporting_payload(identity: str, remote_id: str = "tx-report"):
+    selected_charger = charger(identity)
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        remote_id,
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    return project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+
+
 def test_projection_is_charger_independent_and_auditable(charging_session):
     selected, fallback_sample = charging_session
 
@@ -193,7 +210,7 @@ def test_period_projection_is_stable_and_includes_live_and_historical_sessions()
 
     projected = list(
         projected_sessions_for_period(
-            type(earlier).objects.all(),
+            OcppTransaction.objects.all(),
             started_at=start,
             before=start + timedelta(hours=1),
         )
@@ -221,7 +238,6 @@ def test_stopped_session_with_missing_meter_boundaries_surfaces_source_gaps():
 
     assert ReportingCondition.MISSING_METER_START in result.conditions
     assert ReportingCondition.MISSING_METER_STOP in result.conditions
-
 
 
 def test_reporting_period_envelope_is_versioned_transport_safe_and_authoritative():
@@ -309,7 +325,6 @@ def test_reporting_period_can_aggregate_multiple_authoritative_satellites():
     assert period.total_energy_kwh == Decimal("3.0000")
 
 
-
 def test_reporting_contract_is_self_describing():
     contract = reporting_contract()
 
@@ -325,20 +340,7 @@ def test_reporting_contract_is_self_describing():
 
 
 def test_serialized_period_validates_against_current_contract():
-    selected_charger = charger("CP-VALIDATE")
-    start = timezone.now()
-    transaction(
-        selected_charger,
-        "tx-valid",
-        started_at=start,
-        stopped_at=start,
-        energy_kwh=Decimal("1.0000"),
-    )
-    payload = project_reporting_period(
-        OcppTransaction.objects.all(),
-        started_at=start,
-        before=start + timedelta(hours=1),
-    ).as_dict()
+    payload = reporting_payload("CP-VALIDATE", "tx-valid")
 
     assert validate_reporting_payload(payload) == payload
 
@@ -355,20 +357,7 @@ def test_reporting_payload_rejects_incompatible_contract(
     value,
     message,
 ):
-    selected_charger = charger(f"CP-{field_name}")
-    start = timezone.now()
-    transaction(
-        selected_charger,
-        f"tx-{field_name}",
-        started_at=start,
-        stopped_at=start,
-        energy_kwh=Decimal("1.0000"),
-    )
-    payload = project_reporting_period(
-        OcppTransaction.objects.all(),
-        started_at=start,
-        before=start + timedelta(hours=1),
-    ).as_dict()
+    payload = reporting_payload(f"CP-{field_name}", f"tx-{field_name}")
     payload[field_name] = value
 
     with pytest.raises(ReportingContractError, match=message):
@@ -376,20 +365,7 @@ def test_reporting_payload_rejects_incompatible_contract(
 
 
 def test_reporting_payload_rejects_missing_session_fields():
-    selected_charger = charger("CP-MISSING-FIELD")
-    start = timezone.now()
-    transaction(
-        selected_charger,
-        "tx-missing-field",
-        started_at=start,
-        stopped_at=start,
-        energy_kwh=Decimal("1.0000"),
-    )
-    payload = project_reporting_period(
-        OcppTransaction.objects.all(),
-        started_at=start,
-        before=start + timedelta(hours=1),
-    ).as_dict()
+    payload = reporting_payload("CP-MISSING-FIELD", "tx-missing-field")
     del payload["sessions"][0]["source_evidence"]
 
     with pytest.raises(
@@ -400,20 +376,7 @@ def test_reporting_payload_rejects_missing_session_fields():
 
 
 def test_reporting_payload_rejects_unknown_enum_values():
-    selected_charger = charger("CP-BAD-ENUM")
-    start = timezone.now()
-    transaction(
-        selected_charger,
-        "tx-bad-enum",
-        started_at=start,
-        stopped_at=start,
-        energy_kwh=Decimal("1.0000"),
-    )
-    payload = project_reporting_period(
-        OcppTransaction.objects.all(),
-        started_at=start,
-        before=start + timedelta(hours=1),
-    ).as_dict()
+    payload = reporting_payload("CP-BAD-ENUM", "tx-bad-enum")
     payload["sessions"][0]["meter_continuity"] = "invented"
 
     with pytest.raises(
@@ -421,7 +384,6 @@ def test_reporting_payload_rejects_unknown_enum_values():
         match="invalid meter_continuity",
     ):
         validate_reporting_payload(payload)
-
 
 
 def test_reporting_period_content_digest_is_reproducible():
@@ -487,20 +449,7 @@ def test_reporting_period_content_digest_changes_with_report_content():
 
 
 def test_reporting_payload_rejects_tampering_after_digest_is_created():
-    selected_charger = charger("CP-TAMPER")
-    start = timezone.now()
-    transaction(
-        selected_charger,
-        "tx-tamper",
-        started_at=start,
-        stopped_at=start,
-        energy_kwh=Decimal("1.0000"),
-    )
-    payload = project_reporting_period(
-        OcppTransaction.objects.all(),
-        started_at=start,
-        before=start + timedelta(hours=1),
-    ).as_dict()
+    payload = reporting_payload("CP-TAMPER", "tx-tamper")
     payload["sessions"][0]["energy_kwh"] = "999.0000"
 
     with pytest.raises(
