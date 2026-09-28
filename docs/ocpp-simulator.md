@@ -164,9 +164,17 @@ loading the complete history into memory.
 
 Every replay result includes a bounded `metrics` object with attempted,
 completed, and failed request counts; elapsed wall-clock time; completed-request
-throughput; mean and maximum OCPP request latency; and error counts grouped by
-exception type. Each request is timed individually, but latency samples are not
-retained, so metrics memory usage does not grow with replay size.
+throughput; mean and maximum OCPP request latency; generic transport-failure
+count; and error counts grouped by exception type. Each request is timed
+individually, but latency samples are not retained, so metrics memory usage does
+not grow with replay size.
+
+When `--reconnect-after` actually reaches its checkpoint, the same metrics
+also report reconnect attempts, successes, failures, and mean/maximum reconnect
+duration. A rejected post-reconnect `BootNotification` is counted as a failed
+reconnect. Ordinary request failures remain generic transport failures unless
+the transport can prove a reconnect cycle occurred; the simulator does not
+infer a disconnect by parsing exception text.
 
 When the migrated database contains retained charger-originated
 `InboundProtocolRequest` payloads, replay those protocol-realistic requests
