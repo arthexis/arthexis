@@ -449,7 +449,8 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert 'GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}' in workflow
     assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
     assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
-    assert 'push --force-with-lease origin "$branch"' in workflow
+    assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in workflow
+    assert '--force-with-lease="refs/heads/$branch:"' in workflow
     push_line = next(
         line for line in workflow.splitlines()
         if 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in line
@@ -474,10 +475,18 @@ def test_watchtower_rollover_push_command_executes_against_local_remote(tmp_path
     command = """
 set -Eeuo pipefail
 branch=release/next-arthexis
-auth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"
 git checkout -B "$branch"
-git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
-  push --force-with-lease origin "$branch"
+remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
+auth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"
+if [[ -n "$remote_branch_sha" ]]; then
+  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
+    push --force-with-lease="refs/heads/$branch:$remote_branch_sha" \\
+    origin "HEAD:refs/heads/$branch"
+else
+  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
+    push --force-with-lease="refs/heads/$branch:" \\
+    origin "HEAD:refs/heads/$branch"
+fi
 """
     subprocess.run(["bash", "-c", command], cwd=work, check=True, capture_output=True, text=True)
     remote_branch = subprocess.run(

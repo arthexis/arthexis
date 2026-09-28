@@ -752,9 +752,17 @@ jobs:
           git checkout -B "$branch"
           git add VERSION pyproject.toml
           git commit -m "chore(release): advance arthexis to v${next_version}"
+          remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
           auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            push --force-with-lease origin "$branch"
+          if [[ -n "$remote_branch_sha" ]]; then
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              push --force-with-lease="refs/heads/$branch:$remote_branch_sha" \
+              origin "HEAD:refs/heads/$branch"
+          else
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              push --force-with-lease="refs/heads/$branch:" \
+              origin "HEAD:refs/heads/$branch"
+          fi
           unset auth_header
 
           existing="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number // empty')"
@@ -774,8 +782,8 @@ jobs:
             --input - >/dev/null
           echo "rollover_pr=approved number=$rollover_pr"
 
-      - name: Open Gway next-version PR after accepted deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_CHANGED == 'true'
+      - name: Reconcile Gway next-version PR after accepted deployment
+        if: env.WATCHTOWER_STAGE == 'arthexis'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -805,7 +813,7 @@ jobs:
             rm -rf "$work"
           }
           trap cleanup EXIT
-          git clone --quiet --depth=1 https://github.com/arthexis/gway.git "$work"
+          git clone --quiet --depth=2 https://github.com/arthexis/gway.git "$work"
           cd "$work"
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
@@ -823,6 +831,13 @@ jobs:
           )"
           if [[ "$current" != "$released" ]]; then
             echo "gway_rollover=already_advanced current=$current accepted=$released"
+            exit 0
+          fi
+
+          if git rev-parse HEAD^ >/dev/null 2>&1 &&
+             python3 "$GITHUB_WORKSPACE/.github/scripts/is_gway_version_only_rollover.py" \
+               "$work" HEAD^ HEAD; then
+            echo "gway_rollover=suppressed_version_only sha=$(git rev-parse HEAD) version=$current"
             exit 0
           fi
 
@@ -845,9 +860,17 @@ jobs:
           git add pyproject.toml
           test "$(git diff --cached --name-only)" = "pyproject.toml"
           git commit -m "chore(release): advance gway to v${next_version}"
+          remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
           auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            push --force-with-lease origin "$branch"
+          if [[ -n "$remote_branch_sha" ]]; then
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              push --force-with-lease="refs/heads/$branch:$remote_branch_sha" \
+              origin "HEAD:refs/heads/$branch"
+          else
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              push --force-with-lease="refs/heads/$branch:" \
+              origin "HEAD:refs/heads/$branch"
+          fi
           unset auth_header
 
           existing="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number // empty')"
