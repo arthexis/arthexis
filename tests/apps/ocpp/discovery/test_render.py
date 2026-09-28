@@ -31,9 +31,10 @@ def test_render_discovery_events_uses_structured_evidence() -> None:
                     "destination_port": 9000,
                     "destination_mac": "aa:bb:cc:dd:ee:ff",
                     "hostnames": ["csms.example.com"],
+                    "http_paths": ["/ocpp/CP001"],
                     "websocket_paths": ["/ocpp/CP001"],
                     "ocpp_subprotocols": ["ocpp1.6"],
-                    "tls_sni": [],
+                    "tls_sni": ["secure.example.com"],
                     "attempts": 3,
                 },
             },
@@ -51,8 +52,9 @@ def test_render_discovery_events_uses_structured_evidence() -> None:
         "CSMS candidates:",
         (
             "  1. 198.51.100.40:9000 attempts=3 "
-            "(host=csms.example.com; path=/ocpp/CP001; "
-            "protocol=ocpp1.6; mac=aa:bb:cc:dd:ee:ff)"
+            "(host=csms.example.com; http=/ocpp/CP001; ws=/ocpp/CP001; "
+            "protocol=ocpp1.6; sni=secure.example.com; "
+            "mac=aa:bb:cc:dd:ee:ff)"
         ),
     ]
 
