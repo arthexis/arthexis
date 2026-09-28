@@ -77,6 +77,42 @@ def discover(
                         "local_port": request.local_port,
                     },
                 )
+                try:
+                    applied = provider.apply(plan)
+                except Exception as error:
+                    session.record(
+                        "capture_failed",
+                        metadata={
+                            "reason": "redirect_apply_failed",
+                            "detail": str(error),
+                            "provider": plan.provider,
+                            "strategy": plan.strategy,
+                        },
+                    )
+                else:
+                    redirect_id = applied.get("id")
+                    if not isinstance(redirect_id, str) or not redirect_id:
+                        session.record(
+                            "capture_failed",
+                            metadata={
+                                "reason": "invalid_redirect_handle",
+                                "provider": plan.provider,
+                                "strategy": plan.strategy,
+                            },
+                        )
+                    else:
+                        session.record(
+                            "capture_started",
+                            metadata={
+                                "provider": plan.provider,
+                                "strategy": plan.strategy,
+                                "redirect_id": redirect_id,
+                                "destination_ip": request.destination_ip,
+                                "destination_port": request.destination_port,
+                                "local_host": request.local_host,
+                                "local_port": request.local_port,
+                            },
+                        )
 
     summary = session.write_summary()
     return {
