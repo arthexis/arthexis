@@ -453,6 +453,7 @@ def test_websocket_evidence_enriches_candidate_even_without_fresh_arp() -> None:
 
     candidate = tracker.candidates()[0]
     assert candidate.hostnames == {"csms.example.com:9000"}
+    assert candidate.http_paths == {"/ocpp/CP001"}
     assert candidate.websocket_paths == {"/ocpp/CP001"}
     assert candidate.ocpp_subprotocols == {"ocpp1.6"}
     assert candidate.mac_without_resolution is True
@@ -477,5 +478,6 @@ def test_http_request_does_not_invent_websocket_metadata() -> None:
 
     candidate = tracker.candidates()[0]
     assert candidate.hostnames == {"csms.example.com"}
-    assert candidate.websocket_paths == {"/health"}
+    assert candidate.http_paths == {"/health"}
+    assert candidate.websocket_paths == set()
     assert candidate.ocpp_subprotocols == set()
