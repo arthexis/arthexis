@@ -66,6 +66,33 @@ def test_arthexis_deploy_uses_current_gway_main(watchtower_deploy_workflow: str)
     assert 'gway_sha="${previous_gway:-$current_gway}"' not in workflow
 
 
+
+
+def test_watchtower_deploy_label_bypasses_shared_queue(
+    watchtower_deploy_workflow: str,
+) -> None:
+    workflow = watchtower_deploy_workflow
+
+    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in workflow
+    assert 'grep -Fxq deploy <<<"$labels"' in workflow
+    assert "github.event.client_payload.force_deploy || 'false'" in workflow
+    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in workflow
+    assert 'if [[ "$FORCE_DEPLOY" == "true" ]]; then' in workflow
+    assert "watchtower_deploy=forced_by_deploy_label" in workflow
+
+
+def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
+    watchtower_deploy_workflow: str,
+) -> None:
+    workflow = watchtower_deploy_workflow
+
+    gate = workflow.split("queue-gate:", 1)[1].split("\n\n  deploy:", 1)[0]
+    assert "arthexis/arthexis arthexis/gway" in gate
+    assert 'index("on-hold")' in gate
+    assert "draft" not in gate.lower()
+    assert "watchtower_deploy=coalesced_active_pr_queue" in gate
+
+
 def _commit_pyproject(repo: Path, version: str, *, extra: str = "") -> str:
     pyproject = repo / "pyproject.toml"
     pyproject.write_text(
