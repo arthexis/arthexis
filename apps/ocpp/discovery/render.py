@@ -66,6 +66,13 @@ def render_discovery_events(
             if endpoint:
                 suffix = f" [SNI {sni}]" if sni else ""
                 lines.append(f"TLS: {endpoint}{suffix}")
+        elif event_type == "capture_available":
+            strategy = metadata.get("strategy") or "unknown"
+            provider = metadata.get("provider") or "unknown"
+            lines.append(f"Capture: available via {provider} ({strategy})")
+        elif event_type == "capture_unavailable":
+            reason = metadata.get("reason") or "unknown"
+            lines.append(f"Capture: unavailable ({reason})")
         elif event_type == "csms_candidate":
             candidates.append(metadata)
 
