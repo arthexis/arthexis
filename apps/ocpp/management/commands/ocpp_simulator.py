@@ -69,6 +69,24 @@ class Command(BaseCommand):
             help="Emit the complete privacy-safe scenario result as JSON.",
         )
 
+        replay_parser = actions.add_parser(
+            "replay",
+            help="Replay migrated OCPP 1.6 transaction history over the live connection.",
+        )
+        replay_parser.add_argument("--charger", required=True)
+        replay_parser.add_argument("--source", required=True)
+        replay_parser.add_argument("--source-charger")
+        replay_parser.add_argument("--batch-size", type=int, default=250)
+        replay_parser.add_argument(
+            "--pacing",
+            choices=("maximum", "fixed", "burst"),
+            default="maximum",
+        )
+        replay_parser.add_argument("--interval-seconds", type=float, default=0.0)
+        replay_parser.add_argument("--burst-size", type=int, default=100)
+        replay_parser.add_argument("--burst-pause-seconds", type=float, default=0.0)
+        replay_parser.add_argument("--reconnect-after", type=int)
+
         for name, help_text in (
             ("authorize", "Send Authorize on an existing live connection."),
             ("status", "Report the existing live simulator state."),
@@ -104,6 +122,19 @@ class Command(BaseCommand):
                         "known_authorized": options["known_authorized"],
                         "known_denied": options["known_denied"],
                         "unknown": options["unknown"],
+                    }
+                )
+            elif action == "replay":
+                request.update(
+                    {
+                        "source": options["source"],
+                        "source_charger": options["source_charger"],
+                        "batch_size": options["batch_size"],
+                        "pacing": options["pacing"],
+                        "interval_seconds": options["interval_seconds"],
+                        "burst_size": options["burst_size"],
+                        "burst_pause_seconds": options["burst_pause_seconds"],
+                        "reconnect_after": options["reconnect_after"],
                     }
                 )
             result = asyncio.run(send_control(options["charger"], request))
