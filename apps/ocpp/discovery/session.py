@@ -117,7 +117,7 @@ class DiscoverySession:
         *,
         session_id: str | None = None,
         created_at: datetime | None = None,
-    ) -> "DiscoverySession":
+    ) -> DiscoverySession:
         """Create a new discovery report directory and its initial event."""
 
         identifier = session_id or f"discovery-{uuid.uuid4().hex}"
@@ -153,7 +153,7 @@ class DiscoverySession:
         return session
 
     @classmethod
-    def open(cls, root: Path, session_id: str) -> "DiscoverySession":
+    def open(cls, root: Path, session_id: str) -> DiscoverySession:
         """Open an existing session, repairing only an interrupted final append."""
 
         cls._validate_session_id(session_id)
