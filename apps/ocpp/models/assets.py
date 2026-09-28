@@ -84,9 +84,14 @@ class Charger(models.Model):
     connection_token_hash = models.CharField(max_length=128, blank=True)
     enrolled_at = models.DateTimeField(null=True, blank=True)
     authority_cutover_at = models.DateTimeField(null=True, blank=True)
+    protocol_mode = models.CharField(
+        choices=AuthorizationMode.choices,
+        default=AuthorizationMode.RESTRICTED,
+        max_length=16,
+    )
     authorization_mode = models.CharField(
         choices=AuthorizationMode.choices,
-        default=AuthorizationMode.OPEN,
+        default=AuthorizationMode.RESTRICTED,
         max_length=16,
     )
     station_model = models.ForeignKey(
