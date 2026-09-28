@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -34,19 +37,13 @@ class Command(BaseCommand):
         open_parser = actions.add_parser(
             "open", help="Open, boot, and retain a live charger connection."
         )
-        open_parser.add_argument("--url", required=True)
-        open_parser.add_argument("--charger", required=True)
-        open_parser.add_argument("--vendor", default="Arthexis")
-        open_parser.add_argument("--model", default="Gway Simulator")
-        open_parser.add_argument("--timeout", type=float, default=30.0)
-        open_parser.add_argument(
-            "--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT
+        self._add_start_arguments(open_parser, legacy_url=True)
+
+        start_parser = actions.add_parser(
+            "start",
+            help="Start a charger session pointed at a CSMS endpoint.",
         )
-        open_parser.add_argument(
-            "--allow-insecure-ws",
-            action="store_true",
-            help="Allow ws:// only for a trusted local test network.",
-        )
+        self._add_start_arguments(start_parser, legacy_url=False)
 
         scenario_parser = actions.add_parser(
             "authorize-scenario",
