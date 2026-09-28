@@ -52,6 +52,7 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.candidate_sha || '' }}
           BEFORE_SHA: ${{ github.event.before || '' }}
           AFTER_SHA: ${{ inputs.candidate_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           deploy=true
