@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from decimal import Decimal
 from enum import Enum
 
@@ -57,6 +57,8 @@ class ChargingSessionProjection:
 
     session_id: str
     charger_identity: str
+    authority_node_key: str | None
+    authority_node_role: str | None
     connector_number: int | None
     account_key: str | None
     customer_key: str | None
@@ -76,6 +78,88 @@ class ChargingSessionProjection:
     source_evidence: tuple[SourceEvidence, ...]
     conditions: tuple[ReportingCondition, ...]
 
+
+
+
+REPORTING_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class ReportingPeriodProjection:
+    """Versioned, transport-safe envelope for a reporting interval."""
+
+    started_at: object
+    before: object
+    sessions: tuple[ChargingSessionProjection, ...]
+    schema_version: int = REPORTING_SCHEMA_VERSION
+
+    @property
+    def authority_nodes(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    session.authority_node_key
+                    for session in self.sessions
+                    if session.authority_node_key is not None
+                }
+            )
+        )
+
+    @property
+    def total_energy_kwh(self) -> Decimal:
+        return sum(
+            (
+                session.energy_kwh
+                for session in self.sessions
+                if session.energy_kwh is not None
+            ),
+            Decimal("0"),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        """Return deterministic JSON-compatible reporting data."""
+
+        return {
+            "schema_version": self.schema_version,
+            "started_at": _serialize_scalar(self.started_at),
+            "before": _serialize_scalar(self.before),
+            "authority_nodes": list(self.authority_nodes),
+            "total_energy_kwh": str(self.total_energy_kwh),
+            "sessions": [_session_as_dict(session) for session in self.sessions],
+        }
+
+
+def _serialize_scalar(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, Enum):
+        return value.value
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _session_as_dict(session: ChargingSessionProjection) -> dict[str, object]:
+    payload = asdict(session)
+    return {
+        key: (
+            [_source_evidence_as_dict(item) for item in value]
+            if key == "source_evidence"
+            else [_serialize_scalar(item) for item in value]
+            if key == "conditions"
+            else _serialize_scalar(value)
+        )
+        for key, value in payload.items()
+    }
+
+
+def _source_evidence_as_dict(item: object) -> dict[str, object]:
+    if isinstance(item, dict):
+        return item
+    return {
+        "kind": getattr(item, "kind"),
+        "reference": getattr(item, "reference"),
+    }
 
 def _meter_continuity(meter_start: Decimal | None, meter_stop: Decimal | None) -> MeterContinuity:
     if meter_start is None or meter_stop is None:
@@ -138,7 +222,7 @@ def projected_sessions_for_period(queryset, *, started_at, before):
 
     selected = (
         queryset.filter(started_at__gte=started_at, started_at__lt=before)
-        .select_related("charger", "connector", "account")
+        .select_related("charger", "charger__node", "connector", "account")
         .prefetch_related("meter_values")
         .order_by("started_at", "pk")
     )
@@ -146,10 +230,29 @@ def projected_sessions_for_period(queryset, *, started_at, before):
         yield project_charging_session(transaction)
 
 
+
+
+def project_reporting_period(queryset, *, started_at, before) -> ReportingPeriodProjection:
+    """Materialize one versioned reporting-period envelope."""
+
+    return ReportingPeriodProjection(
+        started_at=started_at,
+        before=before,
+        sessions=tuple(
+            projected_sessions_for_period(
+                queryset,
+                started_at=started_at,
+                before=before,
+            )
+        ),
+    )
+
+
 def project_charging_session(transaction) -> ChargingSessionProjection:
     """Project one retained OCPP transaction into the stable reporting contract."""
 
     charger = transaction.charger
+    node = getattr(charger, "node", None)
     connector = getattr(transaction, "connector", None)
     account = getattr(transaction, "account", None)
     account_key = getattr(account, "key", None)
@@ -166,6 +269,8 @@ def project_charging_session(transaction) -> ChargingSessionProjection:
     return ChargingSessionProjection(
         session_id=f"{charger.identity}:{remote_id}",
         charger_identity=charger.identity,
+        authority_node_key=getattr(node, "identifier", None),
+        authority_node_role=getattr(node, "role", None),
         connector_number=getattr(connector, "number", None),
         account_key=account_key,
         customer_key=account_key,
