@@ -165,3 +165,201 @@ def default_capture_provider() -> CaptureProvider | None:
         return provider if provider.available() else None
     except RuntimeError:
         return None
+
+
+
+def active_redirect(events) -> dict[str, object] | None:
+    """Return the latest redirect still owned by this discovery session."""
+
+    active = None
+    for event in events:
+        event_type = event.get("event_type")
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        if event_type == "capture_started":
+            active = metadata
+        elif event_type == "capture_released":
+            active = None
+    return active
+
+
+def start_capture(
+    session,
+    *,
+    interface: str,
+    provider: CaptureProvider | None = None,
+    local_host: str = "127.0.0.1",
+    local_port: int = 9000,
+) -> dict[str, object]:
+    """Apply one optional provider redirect and persist Arthexis ownership."""
+
+    events = session.events()
+    existing = active_redirect(events)
+    if existing is not None:
+        return dict(existing)
+
+    candidate = next(
+        (
+            event["metadata"]
+            for event in events
+            if event.get("event_type") == "csms_candidate"
+            and isinstance(event.get("metadata"), dict)
+        ),
+        None,
+    )
+    session.record(
+        "capture_requested",
+        metadata={"interface": interface, "candidate_available": candidate is not None},
+    )
+    if not isinstance(candidate, dict):
+        session.record(
+            "capture_unavailable",
+            metadata={"reason": "no_csms_candidate"},
+        )
+        return {"active": False, "reason": "no_csms_candidate"}
+
+    selected = provider or default_capture_provider()
+    if selected is None:
+        session.record(
+            "capture_unavailable",
+            metadata={
+                "reason": "capture_provider_unavailable",
+                "detail": (
+                    "Automatic capture requires the optional Gway network "
+                    "capture capability. Passive discovery completed normally."
+                ),
+            },
+        )
+        return {"active": False, "reason": "capture_provider_unavailable"}
+
+    request = capture_request_from_candidate(
+        interface=interface,
+        candidate=candidate,
+        local_host=local_host,
+        local_port=local_port,
+    )
+    plan = selected.plan(request)
+    session.record(
+        "capture_available",
+        metadata={
+            "provider": plan.provider,
+            "strategy": plan.strategy,
+            "destination_ip": request.destination_ip,
+            "destination_port": request.destination_port,
+            "local_host": request.local_host,
+            "local_port": request.local_port,
+        },
+    )
+    try:
+        applied = selected.apply(plan)
+    except Exception as error:
+        session.record(
+            "capture_failed",
+            metadata={
+                "reason": "redirect_apply_failed",
+                "detail": str(error),
+                "provider": plan.provider,
+                "strategy": plan.strategy,
+            },
+        )
+        return {"active": False, "reason": "redirect_apply_failed"}
+
+    redirect_id = applied.get("id")
+    if not isinstance(redirect_id, str) or not redirect_id:
+        session.record(
+            "capture_failed",
+            metadata={
+                "reason": "invalid_redirect_handle",
+                "provider": plan.provider,
+                "strategy": plan.strategy,
+            },
+        )
+        return {"active": False, "reason": "invalid_redirect_handle"}
+
+    ownership = {
+        "provider": plan.provider,
+        "strategy": plan.strategy,
+        "redirect_id": redirect_id,
+        "destination_ip": request.destination_ip,
+        "destination_port": request.destination_port,
+        "local_host": request.local_host,
+        "local_port": request.local_port,
+    }
+    session.record("capture_started", metadata=ownership)
+    return {**ownership, "active": True}
+
+
+def release_capture(
+    session,
+    *,
+    provider: CaptureProvider | None = None,
+) -> dict[str, object]:
+    """Release the redirect currently owned by one discovery session."""
+
+    ownership = active_redirect(session.events())
+    if ownership is None:
+        return {"active": False, "changed": False}
+
+    redirect_id = ownership.get("redirect_id")
+    if not isinstance(redirect_id, str) or not redirect_id:
+        session.record(
+            "capture_release_failed",
+            metadata={"reason": "missing_redirect_handle"},
+        )
+        return {
+            "active": True,
+            "changed": False,
+            "reason": "missing_redirect_handle",
+        }
+
+    session.record(
+        "capture_release_requested",
+        metadata={"redirect_id": redirect_id},
+    )
+    selected = provider or default_capture_provider()
+    if selected is None:
+        session.record(
+            "capture_release_failed",
+            metadata={
+                "reason": "capture_provider_unavailable",
+                "redirect_id": redirect_id,
+            },
+        )
+        return {
+            "active": True,
+            "changed": False,
+            "reason": "capture_provider_unavailable",
+            "redirect_id": redirect_id,
+        }
+
+    try:
+        result = selected.release(redirect_id)
+    except Exception as error:
+        session.record(
+            "capture_release_failed",
+            metadata={
+                "reason": "redirect_remove_failed",
+                "detail": str(error),
+                "redirect_id": redirect_id,
+            },
+        )
+        return {
+            "active": True,
+            "changed": False,
+            "reason": "redirect_remove_failed",
+            "redirect_id": redirect_id,
+        }
+
+    session.record(
+        "capture_released",
+        metadata={
+            "redirect_id": redirect_id,
+            "changed": bool(result.get("changed", False)),
+        },
+    )
+    return {
+        "active": False,
+        "changed": bool(result.get("changed", False)),
+        "redirect_id": redirect_id,
+    }
