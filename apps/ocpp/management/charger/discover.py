@@ -1,0 +1,23 @@
+"""Foreground passive charger discovery operation."""
+
+from pathlib import Path
+
+from django.conf import settings
+
+from apps.ocpp.discovery.network import TcpdumpObserver, run_passive_discovery
+
+
+def discover(
+    interface: str,
+    role: str | None = None,
+    root: str | None = None,
+) -> dict[str, object]:
+    """Observe a charger-facing interface without transmitting or mutating networking."""
+
+    session = run_passive_discovery(
+        interface=interface,
+        role=role,
+        root=Path(root) if root else Path(settings.DATA_DIR),
+        observer=TcpdumpObserver(),
+    )
+    return session.write_summary()
