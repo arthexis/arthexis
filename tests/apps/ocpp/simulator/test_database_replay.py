@@ -400,10 +400,16 @@ def test_live_replay_collects_bounded_latency_and_throughput_metrics(monkeypatch
         assert summary["attempted_requests"] == 3
         assert summary["completed_requests"] == 3
         assert summary["failed_requests"] == 0
+        assert summary["transport_failures"] == 0
+        assert summary["reconnect_attempts"] == 0
+        assert summary["reconnect_successes"] == 0
+        assert summary["reconnect_failures"] == 0
         assert summary["elapsed_seconds"] == pytest.approx(4.0)
         assert summary["throughput_requests_per_second"] == pytest.approx(0.75)
         assert summary["mean_latency_seconds"] == pytest.approx(0.2)
         assert summary["max_latency_seconds"] == pytest.approx(0.3)
+        assert summary["mean_reconnect_seconds"] == 0.0
+        assert summary["max_reconnect_seconds"] == 0.0
         assert summary["error_counts"] == {}
 
     async_to_sync(exercise)()
@@ -432,9 +438,69 @@ def test_live_replay_counts_transport_errors_without_retaining_samples(monkeypat
         assert summary["attempted_requests"] == 2
         assert summary["completed_requests"] == 1
         assert summary["failed_requests"] == 1
+        assert summary["transport_failures"] == 1
         assert summary["elapsed_seconds"] == pytest.approx(2.5)
         assert summary["mean_latency_seconds"] == pytest.approx(0.25)
         assert summary["max_latency_seconds"] == pytest.approx(0.4)
         assert summary["error_counts"] == {"TimeoutError": 1}
+
+    async_to_sync(exercise)()
+
+
+
+def test_live_replay_measures_successful_reconnect_cycle(monkeypatch):
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.5, 3.0, 3.2, 4.0, 4.3, 5.0))
+        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
+        metrics = ReplayMetrics(_started_at=0.0)
+        transport = FakeReplayTransport(transaction_id=77)
+
+        completed = await run_v16_live_replay_events(
+            transport,
+            replay_events(),
+            reconnect_after=1,
+            metrics=metrics,
+        )
+
+        assert completed == (
+            "StartTransaction",
+            "MeterValues",
+            "StopTransaction",
+        )
+        summary = metrics.as_dict()
+        assert transport.reconnects == 1
+        assert transport.boots == 1
+        assert summary["reconnect_attempts"] == 1
+        assert summary["reconnect_successes"] == 1
+        assert summary["reconnect_failures"] == 0
+        assert summary["mean_reconnect_seconds"] == pytest.approx(0.5)
+        assert summary["max_reconnect_seconds"] == pytest.approx(0.5)
+
+    async_to_sync(exercise)()
+
+
+def test_live_replay_measures_failed_reconnect_boot(monkeypatch):
+    async def exercise():
+        ticks = iter((1.0, 1.1, 2.0, 2.4, 2.5))
+        monkeypatch.setattr(database_replay.time, "monotonic", lambda: next(ticks))
+        metrics = ReplayMetrics(_started_at=0.0)
+
+        with pytest.raises(ValueError, match="not accepted"):
+            await run_v16_live_replay_events(
+                FakeReplayTransport(boot_status="Pending"),
+                replay_events(),
+                reconnect_after=1,
+                metrics=metrics,
+            )
+
+        summary = metrics.as_dict()
+        assert summary["attempted_requests"] == 1
+        assert summary["completed_requests"] == 1
+        assert summary["reconnect_attempts"] == 1
+        assert summary["reconnect_successes"] == 0
+        assert summary["reconnect_failures"] == 1
+        assert summary["mean_reconnect_seconds"] == pytest.approx(0.4)
+        assert summary["max_reconnect_seconds"] == pytest.approx(0.4)
+        assert summary["error_counts"] == {"ValueError": 1}
 
     async_to_sync(exercise)()
