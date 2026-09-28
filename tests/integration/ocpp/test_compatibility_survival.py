@@ -80,45 +80,78 @@ class OcppCompatibilitySurvivalTests:
         await _heartbeat(communicator, "heartbeat-after-malformed")
         await communicator.disconnect()
 
-    def test_unknown_subprotocol_falls_back_without_echo_and_remains_operational(
+    @pytest.mark.parametrize(
+        ("identity", "subprotocols"),
+        [
+            ("quirk-protocol-unknown", ["vendor-ocpp"]),
+            ("quirk-protocol-missing", []),
+        ],
+    )
+    def test_missing_or_unknown_subprotocol_falls_back_without_echo_and_survives(
         self,
+        identity: str,
+        subprotocols: list[str],
     ) -> None:
-        async_to_sync(self._unknown_subprotocol_flow)()
+        async_to_sync(self._fallback_protocol_flow)(identity, subprotocols)
 
         evidence = CompatibilityEvidence.objects.get(
-            charger_identity="quirk-protocol",
+            charger_identity=identity,
             kind="protocol_fallback",
         )
         assert evidence.protocol == "ocpp1.6"
-        assert evidence.details["offered_subprotocols"] == ["vendor-ocpp"]
+        assert evidence.details["offered_subprotocols"] == subprotocols
 
-    async def _unknown_subprotocol_flow(self) -> None:
+    async def _fallback_protocol_flow(
+        self,
+        identity: str,
+        subprotocols: list[str],
+    ) -> None:
         communicator = await _connect(
-            identity="quirk-protocol",
-            subprotocols=["vendor-ocpp"],
+            identity=identity,
+            subprotocols=subprotocols,
         )
-        await _heartbeat(communicator, "heartbeat-after-fallback")
+        await _heartbeat(communicator, f"heartbeat-after-{identity}")
         await communicator.disconnect()
 
+    @pytest.mark.parametrize(
+        ("identity", "frame", "frame_type"),
+        [
+            (
+                "quirk-orphan-error",
+                [4, "orphan-error", "VendorError", "unexpected", {"vendor": "ACME"}],
+                "CallError",
+            ),
+            (
+                "quirk-orphan-result",
+                [3, "orphan-result", {"vendor": "ACME"}],
+                "CallResult",
+            ),
+        ],
+    )
     def test_unmatched_response_is_evidence_and_does_not_break_connection(
         self,
+        identity: str,
+        frame: list[object],
+        frame_type: str,
     ) -> None:
-        async_to_sync(self._unmatched_response_flow)()
+        async_to_sync(self._unmatched_response_flow)(identity, frame)
 
         evidence = CompatibilityEvidence.objects.get(
-            charger_identity="quirk-orphan",
+            charger_identity=identity,
             kind="unmatched_response",
         )
-        assert evidence.unique_id == "orphan-1"
-        assert evidence.details["frame_type"] == "CallError"
+        assert evidence.unique_id == frame[1]
+        assert evidence.details["frame_type"] == frame_type
 
-    async def _unmatched_response_flow(self) -> None:
+    async def _unmatched_response_flow(
+        self,
+        identity: str,
+        frame: list[object],
+    ) -> None:
         communicator = await _connect(
-            identity="quirk-orphan",
+            identity=identity,
             subprotocols=["ocpp1.6"],
         )
-        await communicator.send_json_to(
-            [4, "orphan-1", "VendorError", "unexpected", {"vendor": "ACME"}]
-        )
-        await _heartbeat(communicator, "heartbeat-after-orphan")
+        await communicator.send_json_to(frame)
+        await _heartbeat(communicator, f"heartbeat-after-{identity}")
         await communicator.disconnect()
