@@ -52,19 +52,23 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.candidate_sha || '' }}
           BEFORE_SHA: ${{ github.event.before || '' }}
           AFTER_SHA: ${{ inputs.candidate_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           deploy=true
           stage="arthexis"
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stage="${{ inputs.stage }}"
+          elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            stage="${{ github.event.client_payload.stage || 'arthexis' }}"
+          elif [[ "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
+            if grep -Fxq remote <<<"$labels"; then
+              stage="remote"
+            fi
           fi
           if [[ "$stage" != "arthexis" && "$stage" != "remote" ]]; then
             echo "Unsupported deployment stage: $stage" >&2
-            exit 1
-          fi
-          if [[ "$stage" != "arthexis" && "$EVENT_NAME" != "workflow_dispatch" ]]; then
-            echo "$stage stage is manual-only." >&2
             exit 1
           fi
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]] &&
