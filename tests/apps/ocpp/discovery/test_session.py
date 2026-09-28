@@ -1,0 +1,96 @@
+import json
+from datetime import datetime, timezone
+
+import pytest
+
+from apps.ocpp.discovery import DiscoverySession
+
+
+def read_events(session: DiscoverySession) -> list[dict[str, object]]:
+    return [
+        json.loads(line)
+        for line in (session.path / "events.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+
+
+def test_create_session_builds_report_layout_and_initial_event(tmp_path) -> None:
+    created_at = datetime(2026, 9, 28, 18, 0, tzinfo=timezone.utc)
+
+    session = DiscoverySession.create(
+        tmp_path,
+        session_id="field-test-001",
+        created_at=created_at,
+    )
+
+    assert session.path == tmp_path / "discovery" / "field-test-001"
+    assert {
+        child.name for child in session.path.iterdir()
+    } == {
+        "manifest.json",
+        "events.jsonl",
+        "network",
+        "traffic",
+        "ocpp",
+        "notes",
+    }
+
+    manifest = json.loads(
+        (session.path / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest == {
+        "created_at": "2026-09-28T18:00:00Z",
+        "format_version": 1,
+        "session_id": "field-test-001",
+        "status": "active",
+    }
+
+    events = read_events(session)
+    assert len(events) == 1
+    assert events[0]["session_id"] == "field-test-001"
+    assert events[0]["sequence"] == 1
+    assert events[0]["event_type"] == "session_started"
+    assert events[0]["category"] == "observation"
+
+
+def test_record_preserves_sequence_and_evidence_category(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="sequence-test")
+
+    observation = session.record(
+        "dns_query",
+        metadata={"name": "csms.example.test"},
+    )
+    inference = session.record(
+        "csms_candidate",
+        category="inference",
+        metadata={"destination": "192.0.2.10:9000"},
+        artifact_refs=("network/trace.json",),
+    )
+    note = session.record(
+        "operator_note",
+        category="operator_note",
+        metadata={"text": "charger retried after link reset"},
+    )
+
+    assert [observation["sequence"], inference["sequence"], note["sequence"]] == [
+        2,
+        3,
+        4,
+    ]
+    assert [event["category"] for event in read_events(session)] == [
+        "observation",
+        "observation",
+        "inference",
+        "operator_note",
+    ]
+    assert inference["artifact_refs"] == ["network/trace.json"]
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    ("../escape", "with/slash", "", "contains space"),
+)
+def test_create_rejects_unsafe_session_ids(tmp_path, session_id: str) -> None:
+    with pytest.raises(ValueError):
+        DiscoverySession.create(tmp_path, session_id=session_id)
