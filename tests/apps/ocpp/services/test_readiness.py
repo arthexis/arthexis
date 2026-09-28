@@ -1,5 +1,4 @@
 import pytest
-from django.test import override_settings
 
 from apps.ocpp.models import Charger, OcppPolicy
 from apps.ocpp.services import readiness
@@ -11,14 +10,38 @@ from apps.ocpp.services.readiness import (
 pytestmark = pytest.mark.django_db
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_default_instance_ocpp_posture_is_permissive(monkeypatch) -> None:
+@pytest.fixture
+def ready_listener(settings, monkeypatch) -> None:
+    settings.OCPP_TRUSTED_CHARGER_INTERFACE = "eth0"
     monkeypatch.setattr(
         readiness,
         "interface_addresses",
         lambda interface: {"192.0.2.10"} if interface == "eth0" else set(),
     )
 
+
+@pytest.fixture
+def unavailable_listener(settings, monkeypatch) -> None:
+    settings.OCPP_TRUSTED_CHARGER_INTERFACE = "eth0"
+    monkeypatch.setattr(readiness, "interface_addresses", lambda interface: set())
+
+
+def configured_charger(
+    identity: str,
+    *,
+    protocol: str = Charger.AuthorizationMode.OPEN,
+    cards: str = Charger.AuthorizationMode.OPEN,
+    active: bool = True,
+) -> Charger:
+    return Charger.objects.create(
+        identity=identity,
+        protocol_mode=protocol,
+        authorization_mode=cards,
+        active=active,
+    )
+
+
+def test_default_instance_ocpp_posture_is_permissive(ready_listener) -> None:
     payload = query_ocpp_readiness()
 
     assert payload["ready"] is True
@@ -29,13 +52,7 @@ def test_default_instance_ocpp_posture_is_permissive(monkeypatch) -> None:
     assert evaluate_ocpp_readiness() == "permissive"
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_mixed_instance_policy_reports_partial(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
+def test_mixed_instance_policy_reports_partial(ready_listener) -> None:
     policy = OcppPolicy.load()
     policy.protocol_mode = OcppPolicy.AdmissionMode.RESTRICTED
     policy.save(update_fields=("protocol_mode", "updated_at"))
@@ -46,22 +63,14 @@ def test_mixed_instance_policy_reports_partial(monkeypatch) -> None:
     assert evaluate_ocpp_readiness("cards") == "permissive"
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_dimension_mode_form_is_boolean_predicate(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
-
+def test_dimension_mode_form_is_boolean_predicate(ready_listener) -> None:
     assert evaluate_ocpp_readiness("protocol", "permissive") is True
     assert evaluate_ocpp_readiness("protocol", "strict") is False
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_not_ready_returns_false_even_when_policy_is_permissive(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "interface_addresses", lambda interface: set())
-
+def test_not_ready_returns_false_even_when_policy_is_permissive(
+    unavailable_listener,
+) -> None:
     assert evaluate_ocpp_readiness() is False
     assert evaluate_ocpp_readiness("admission") is False
     assert evaluate_ocpp_readiness("cards", "permissive") is False
@@ -84,18 +93,10 @@ def test_invalid_ready_ocpp_selector_is_rejected(
         evaluate_ocpp_readiness(dimension, mode)
 
 
-
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_single_charger_readiness_reports_protocol_and_cards(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
-    selected = Charger.objects.create(
-        identity="charger-one",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+def test_single_charger_readiness_reports_protocol_and_cards(ready_listener) -> None:
+    selected = configured_charger(
+        "charger-one",
+        cards=Charger.AuthorizationMode.RESTRICTED,
     )
 
     payload = evaluate_ocpp_readiness(charger=selected.identity)
@@ -110,17 +111,10 @@ def test_single_charger_readiness_reports_protocol_and_cards(monkeypatch) -> Non
     }
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_single_charger_dimension_and_mode_predicates(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
-    selected = Charger.objects.create(
-        identity="charger-predicate",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+def test_single_charger_dimension_and_mode_predicates(ready_listener) -> None:
+    selected = configured_charger(
+        "charger-predicate",
+        cards=Charger.AuthorizationMode.RESTRICTED,
     )
 
     assert (
@@ -144,19 +138,8 @@ def test_single_charger_dimension_and_mode_predicates(monkeypatch) -> None:
     ) is True
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_disabled_charger_is_not_ready(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
-    selected = Charger.objects.create(
-        identity="charger-disabled",
-        active=False,
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.OPEN,
-    )
+def test_disabled_charger_is_not_ready(ready_listener) -> None:
+    selected = configured_charger("charger-disabled", active=False)
 
     assert evaluate_ocpp_readiness(charger=selected.identity) is False
     assert evaluate_ocpp_readiness(
@@ -166,28 +149,16 @@ def test_disabled_charger_is_not_ready(monkeypatch) -> None:
     ) is False
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
 def test_single_charger_is_not_ready_when_ocpp_listener_is_unavailable(
-    monkeypatch,
+    unavailable_listener,
 ) -> None:
-    monkeypatch.setattr(readiness, "interface_addresses", lambda interface: set())
-    selected = Charger.objects.create(
-        identity="charger-no-listener",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.OPEN,
-    )
+    selected = configured_charger("charger-no-listener")
 
     assert evaluate_ocpp_readiness(charger=selected.identity) is False
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_single_charger_rejects_admission_dimension(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
-    )
-    selected = Charger.objects.create(identity="charger-admission")
+def test_single_charger_rejects_admission_dimension(ready_listener) -> None:
+    selected = configured_charger("charger-admission")
 
     with pytest.raises(ValueError, match="dimension must be one of: protocol, cards"):
         evaluate_ocpp_readiness("admission", charger=selected.identity)
@@ -198,31 +169,19 @@ def test_single_charger_rejects_unknown_identity() -> None:
         evaluate_ocpp_readiness(charger="missing")
 
 
-
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
 def test_chargers_returns_ordered_breakdown_and_partial_aggregates(
-    monkeypatch,
+    ready_listener,
 ) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
+    configured_charger(
+        "charger-b",
+        protocol=Charger.AuthorizationMode.RESTRICTED,
     )
-    Charger.objects.create(
-        identity="charger-b",
-        protocol_mode=Charger.AuthorizationMode.RESTRICTED,
-        authorization_mode=Charger.AuthorizationMode.OPEN,
-    )
-    Charger.objects.create(
-        identity="charger-a",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.OPEN,
-    )
-    Charger.objects.create(
-        identity="charger-c",
+    configured_charger("charger-a")
+    configured_charger(
+        "charger-c",
+        protocol=Charger.AuthorizationMode.RESTRICTED,
+        cards=Charger.AuthorizationMode.RESTRICTED,
         active=False,
-        protocol_mode=Charger.AuthorizationMode.RESTRICTED,
-        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
     )
 
     payload = evaluate_ocpp_readiness(chargers=True)
@@ -248,22 +207,14 @@ def test_chargers_returns_ordered_breakdown_and_partial_aggregates(
     assert payload["chargers"][2]["enabled"] is False
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_chargers_dimension_and_mode_use_fleet_aggregate(monkeypatch) -> None:
-    monkeypatch.setattr(
-        readiness,
-        "interface_addresses",
-        lambda interface: {"192.0.2.10"},
+def test_chargers_dimension_and_mode_use_fleet_aggregate(ready_listener) -> None:
+    configured_charger(
+        "charger-one",
+        cards=Charger.AuthorizationMode.RESTRICTED,
     )
-    Charger.objects.create(
-        identity="charger-one",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
-    )
-    Charger.objects.create(
-        identity="charger-two",
-        protocol_mode=Charger.AuthorizationMode.OPEN,
-        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+    configured_charger(
+        "charger-two",
+        cards=Charger.AuthorizationMode.RESTRICTED,
     )
 
     assert evaluate_ocpp_readiness("protocol", chargers=True) == "permissive"
@@ -280,10 +231,10 @@ def test_chargers_dimension_and_mode_use_fleet_aggregate(monkeypatch) -> None:
     ) is False
 
 
-@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
-def test_chargers_returns_false_when_listener_is_unavailable(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "interface_addresses", lambda interface: set())
-    Charger.objects.create(identity="charger-one")
+def test_chargers_returns_false_when_listener_is_unavailable(
+    unavailable_listener,
+) -> None:
+    configured_charger("charger-one")
 
     assert evaluate_ocpp_readiness(chargers=True) is False
 
