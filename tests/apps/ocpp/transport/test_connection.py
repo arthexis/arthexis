@@ -6,6 +6,7 @@ from django.test import override_settings
 from apps.ocpp.models import Charger, OcppPolicy
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.transport.connection import (
+    ConnectionRejected,
     basic_credentials,
     load_or_enroll_charger,
     negotiate_subprotocol,
@@ -24,6 +25,12 @@ def test_negotiation_falls_back_to_ocpp_16j_when_protocol_is_missing_or_unknown(
     offered,
 ) -> None:
     assert negotiate_subprotocol(offered) == ("ocpp1.6", ProtocolVersion.OCPP_16)
+
+
+@pytest.mark.parametrize("offered", [[], ["ocpp1.5"], ["vendor-protocol"]])
+def test_strict_negotiation_rejects_missing_or_unknown_protocol(offered) -> None:
+    with pytest.raises(ConnectionRejected):
+        negotiate_subprotocol(offered, permissive=False)
 
 
 def test_basic_credentials_are_parsed_without_retaining_headers() -> None:
