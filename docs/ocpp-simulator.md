@@ -122,3 +122,67 @@ Malformed or uncorrelated server frames do not satisfy pending calls. Matching
 OCPP `CallError` frames are returned to the operator as command errors.
 Server-initiated actions not implemented by the simulator receive
 `NotSupported` rather than being silently ignored.
+
+
+## Field backlog replay
+
+Use the same persistent live simulator connection for field-derived backlog
+reproduction. Replay sources are read-only and must already be migrated to the
+current-generation Arthexis schema, either as a bare SQLite database or a
+finalized replay/capture package that resolves to one.
+
+Replay reconstructed transaction history at charger speed:
+
+```console
+python manage.py ocpp_simulator replay \
+  --charger GWAY001 \
+  --source /path/to/reconciled.sqlite3 \
+  --source-charger FIELD_CHARGER \
+  --stream transactions \
+  --pacing maximum
+```
+
+To reproduce an interrupted drain, reconnect after a fixed number of delivered
+events. The simulator closes the live WebSocket, opens a new one for the same
+charger identity, performs `BootNotification`, requires `Accepted`, and then
+continues the same replay stream:
+
+```console
+python manage.py ocpp_simulator replay \
+  --charger GWAY001 \
+  --source /path/to/reconciled.sqlite3 \
+  --source-charger FIELD_CHARGER \
+  --stream transactions \
+  --reconnect-after 500
+```
+
+Historical payload timestamps remain intact where retained by the replay source;
+delivery timing is independent. Use `--pacing fixed --interval-seconds ...`
+for a fixed rate, or `--pacing burst --burst-size ... --burst-pause-seconds ...`
+for burst delivery. `--batch-size` controls SQLite fetch size rather than
+loading the complete history into memory.
+
+When the migrated database contains retained charger-originated
+`InboundProtocolRequest` payloads, replay those protocol-realistic requests
+directly instead of reconstructing transaction history:
+
+```console
+python manage.py ocpp_simulator replay \
+  --charger GWAY001 \
+  --source /path/to/reconciled.sqlite3 \
+  --source-charger FIELD_CHARGER \
+  --stream inbound \
+  --pacing maximum
+```
+
+The two streams have different purposes. `transactions` reconstructs valid
+StartTransaction/MeterValues/StopTransaction traffic from retained domain
+records and rebinds the remote runtime transaction ID. `inbound` sends only
+retained OCPP 1.6 charger-to-CSMS requests whose original request payload was
+captured. Neither stream replays CSMS-to-charger operations or invents messages
+from incomplete evidence.
+
+For the GWAY-001 → GW004 field test, watch GW004's OCPP/operator status while
+the drain runs. A reconnect test is successful only when the post-reconnect
+BootNotification is accepted and the remaining backlog continues through the
+real GW004 ingress path.
