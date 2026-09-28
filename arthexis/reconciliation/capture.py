@@ -177,7 +177,7 @@ def _copy_safe_metadata(
 
 
 def _capture_id(now: datetime, database_sha256: str) -> str:
-    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+    stamp = now.strftime("%Y%m%dT%H%M%S%fZ")
     return f"{stamp}-{database_sha256[:12]}"
 
 
