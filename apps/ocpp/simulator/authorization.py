@@ -113,3 +113,29 @@ async def run_live_authorization_scenario(
             )
         )
     return tuple(results)
+
+
+def authorization_policy_scenario(
+    *,
+    policy_context: str,
+    known_authorized: str,
+    known_denied: str,
+    unknown: str,
+) -> AuthorizationScenario:
+    """Build the standard policy-neutral authorization matrix."""
+    if policy_context not in {"open", "restricted"}:
+        raise ValueError("policy_context must be open or restricted")
+    return AuthorizationScenario(
+        name=f"{policy_context}-authorization-matrix",
+        policy_context=policy_context,
+        attempts=(
+            AuthorizationAttempt(name="known-authorized", id_tag=known_authorized),
+            AuthorizationAttempt(name="known-denied", id_tag=known_denied),
+            AuthorizationAttempt(name="unknown", id_tag=unknown),
+            AuthorizationAttempt(
+                name="known-authorized-repeat",
+                id_tag=known_authorized,
+                repeat_of="known-authorized",
+            ),
+        ),
+    )
