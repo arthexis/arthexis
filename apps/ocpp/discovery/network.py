@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 from collections.abc import Iterable, Iterator, Mapping
@@ -13,28 +12,22 @@ from typing import Protocol
 from apps.ocpp.discovery.session import DiscoverySession
 
 _ALLOWED_ROLES = frozenset({"control", "satellite"})
-_MAC = r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}"
-_IP = r"(?:\d{1,3}\.){3}\d{1,3}"
-_ETHERNET_RE = re.compile(
-    rf"^(?P<timestamp>\d+(?:\.\d+)?)\s+"
-    rf"(?P<src_mac>{_MAC})\s+>\s+(?P<dst_mac>{_MAC}),"
-)
-_FLOW_RE = re.compile(
-    rf"(?P<src_ip>{_IP})\.(?P<src_port>\d+)\s+>\s+"
-    rf"(?P<dst_ip>{_IP})\.(?P<dst_port>\d+):"
-)
-_ARP_REQUEST_RE = re.compile(
-    rf"Request who-has (?P<target_ip>{_IP}) tell (?P<sender_ip>{_IP})"
-)
-_ARP_REPLY_RE = re.compile(
-    rf"Reply (?P<sender_ip>{_IP}) is-at (?P<sender_mac>{_MAC})"
-)
-_DNS_QUERY_RE = re.compile(
-    r":\s+(?P<dns_id>\d+)\+?\s+.*?\b(?P<record_type>A|AAAA)\?\s+"
-    r"(?P<name>[A-Za-z0-9_.-]+)\.?"
-)
-_DNS_RESPONSE_RE = re.compile(
-    rf":\s+(?P<dns_id>\d+)\s+.*?\bA\s+(?P<address>{_IP})(?:\s|$)"
+_TSHARK_FIELDS = (
+    "eth.src",
+    "eth.dst",
+    "arp.opcode",
+    "arp.src.proto_ipv4",
+    "arp.dst.proto_ipv4",
+    "arp.src.hw_mac",
+    "ip.src",
+    "ip.dst",
+    "tcp.srcport",
+    "tcp.dstport",
+    "dns.id",
+    "dns.flags.response",
+    "dns.qry.type",
+    "dns.qry.name",
+    "dns.a",
 )
 
 
@@ -92,37 +85,43 @@ class PassiveObserver(Protocol):
         """Yield passive observations without initiating charger traffic."""
 
 
-class TcpdumpObserver:
-    """Read passive Ethernet metadata from the native tcpdump capability."""
+class TsharkObserver:
+    """Read structured passive packet fields from the native TShark capability."""
 
     def __init__(self, executable: str | None = None) -> None:
-        self.executable = executable or shutil.which("tcpdump")
+        self.executable = executable or shutil.which("tshark")
 
     def preflight(self, interface: str) -> None:
-        """Require tcpdump and a non-empty interface before session creation."""
+        """Require TShark and a non-empty interface before session creation."""
 
         if not interface.strip():
             raise DiscoveryPreflightError("A charger-facing interface is required.")
         if not self.executable:
             raise DiscoveryPreflightError(
-                "Passive charger discovery requires the native packet-capture "
-                "capability (tcpdump). Provision the Control/Satellite Box profile "
-                "or install the required native capture dependency."
+                "Passive charger discovery requires the native packet-analysis "
+                "capability (TShark/Wireshark CLI). Provision the Control/Satellite "
+                "Box profile or install the required native capture dependency."
             )
 
     def observations(self, interface: str) -> Iterator[NetworkObservation]:
-        """Stream metadata from tcpdump; never transmit or mutate networking."""
+        """Stream selected TShark fields; never transmit or mutate networking."""
 
         command = [
             self.executable,
             "-l",
-            "-nn",
-            "-e",
-            "-tt",
-            "-vv",
+            "-n",
             "-i",
             interface,
+            "-T",
+            "fields",
+            "-E",
+            "separator=/t",
+            "-E",
+            "occurrence=f",
         ]
+        for field_name in _TSHARK_FIELDS:
+            command.extend(["-e", field_name])
+
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -133,7 +132,7 @@ class TcpdumpObserver:
         assert process.stdout is not None
         try:
             for line in process.stdout:
-                observation = parse_tcpdump_line(line)
+                observation = parse_tshark_line(line)
                 if observation is not None:
                     yield observation
         finally:
@@ -145,75 +144,86 @@ class TcpdumpObserver:
                 process.wait()
 
 
-def parse_tcpdump_line(line: str) -> NetworkObservation | None:
-    """Parse the passive metadata we can safely retain from one tcpdump line."""
+def parse_tshark_line(line: str) -> NetworkObservation | None:
+    """Map one tab-separated TShark fields row into structured evidence."""
 
-    ethernet = _ETHERNET_RE.search(line)
-    source_mac = ethernet.group("src_mac").lower() if ethernet else None
-    destination_mac = ethernet.group("dst_mac").lower() if ethernet else None
+    values = line.rstrip("\n").split("\t")
+    values.extend([""] * (len(_TSHARK_FIELDS) - len(values)))
+    fields = dict(zip(_TSHARK_FIELDS, values, strict=False))
 
-    request = _ARP_REQUEST_RE.search(line)
-    if request:
+    source_mac = fields["eth.src"].lower() or None
+    destination_mac = fields["eth.dst"].lower() or None
+    arp_opcode = fields["arp.opcode"]
+
+    if arp_opcode == "1":
         return NetworkObservation(
             "arp_request",
             {
-                "sender_ip": request.group("sender_ip"),
-                "target_ip": request.group("target_ip"),
+                "sender_ip": fields["arp.src.proto_ipv4"] or None,
+                "target_ip": fields["arp.dst.proto_ipv4"] or None,
                 "source_mac": source_mac,
                 "destination_mac": destination_mac,
             },
         )
 
-    reply = _ARP_REPLY_RE.search(line)
-    if reply:
+    if arp_opcode == "2":
         return NetworkObservation(
             "arp_reply",
             {
-                "sender_ip": reply.group("sender_ip"),
-                "sender_mac": reply.group("sender_mac").lower(),
+                "sender_ip": fields["arp.src.proto_ipv4"] or None,
+                "sender_mac": (fields["arp.src.hw_mac"].lower() or source_mac),
                 "source_mac": source_mac,
                 "destination_mac": destination_mac,
             },
         )
 
-    flow = _FLOW_RE.search(line)
-    if not flow:
-        return None
+    source_ip = fields["ip.src"]
+    destination_ip = fields["ip.dst"]
+    source_port = fields["tcp.srcport"]
+    destination_port = fields["tcp.dstport"]
+    dns_id = fields["dns.id"]
+    dns_response = fields["dns.flags.response"]
+    dns_name = fields["dns.qry.name"].rstrip(".")
+    dns_type = fields["dns.qry.type"]
+    dns_address = fields["dns.a"]
 
     metadata: dict[str, object] = {
-        "source_ip": flow.group("src_ip"),
-        "source_port": int(flow.group("src_port")),
-        "destination_ip": flow.group("dst_ip"),
-        "destination_port": int(flow.group("dst_port")),
+        "source_ip": source_ip or None,
+        "source_port": int(source_port) if source_port.isdigit() else None,
+        "destination_ip": destination_ip or None,
+        "destination_port": (
+            int(destination_port) if destination_port.isdigit() else None
+        ),
         "source_mac": source_mac,
         "destination_mac": destination_mac,
     }
-    dns_query = _DNS_QUERY_RE.search(line)
-    if dns_query:
+
+    if dns_id.isdigit() and dns_response == "0" and dns_name:
         metadata.update(
             {
-                "dns_id": int(dns_query.group("dns_id")),
-                "record_type": dns_query.group("record_type"),
-                "name": dns_query.group("name").rstrip("."),
-                "client_ip": flow.group("src_ip"),
-                "dns_server": flow.group("dst_ip"),
+                "dns_id": int(dns_id),
+                "record_type": {"1": "A", "28": "AAAA"}.get(dns_type, dns_type),
+                "name": dns_name,
+                "client_ip": source_ip,
+                "dns_server": destination_ip,
             }
         )
         return NetworkObservation("dns_query", metadata)
 
-    dns_response = _DNS_RESPONSE_RE.search(line)
-    if dns_response and int(flow.group("src_port")) == 53:
+    if dns_id.isdigit() and dns_response == "1" and dns_address:
         metadata.update(
             {
-                "dns_id": int(dns_response.group("dns_id")),
-                "address": dns_response.group("address"),
-                "client_ip": flow.group("dst_ip"),
-                "dns_server": flow.group("src_ip"),
+                "dns_id": int(dns_id),
+                "address": dns_address,
+                "client_ip": destination_ip,
+                "dns_server": source_ip,
             }
         )
         return NetworkObservation("dns_response", metadata)
 
-    return NetworkObservation("connection_attempt", metadata)
+    if destination_ip and destination_port.isdigit():
+        return NetworkObservation("connection_attempt", metadata)
+    return None
 
 
 class CandidateTracker:
