@@ -134,6 +134,24 @@ class Ocpp16WebsocketFlowTests:
         await second.send_json_to(
             [
                 2,
+                "meter-backlog-replay",
+                "MeterValues",
+                {
+                    "transactionId": transaction_id,
+                    "meterValue": [
+                        {
+                            "timestamp": "2026-01-01T00:05:00Z",
+                            "sampledValue": [{"value": "125"}],
+                        }
+                    ],
+                },
+            ]
+        )
+        assert await second.receive_json_from() == [3, "meter-backlog-replay", {}]
+
+        await second.send_json_to(
+            [
+                2,
                 "meter-backlog-2",
                 "MeterValues",
                 {
