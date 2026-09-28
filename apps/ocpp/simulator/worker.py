@@ -20,6 +20,7 @@ from apps.ocpp.simulator.authorization import (
 )
 from apps.ocpp.simulator.database_replay import (
     ReplayPacing,
+    iter_v16_inbound_request_replay,
     iter_v16_transaction_replay,
     run_v16_live_replay_events,
 )
@@ -308,7 +309,14 @@ class LiveSimulatorWorker:
                     request.get("burst_pause_seconds", 0.0)
                 ),
             )
-            events = iter_v16_transaction_replay(
+            replay_stream = str(request.get("stream", "transactions"))
+            if replay_stream == "transactions":
+                event_source = iter_v16_transaction_replay
+            elif replay_stream == "inbound":
+                event_source = iter_v16_inbound_request_replay
+            else:
+                raise ValueError("replay stream must be transactions or inbound")
+            events = event_source(
                 source.database,
                 charger_identity=(
                     str(request["source_charger"])
@@ -330,6 +338,7 @@ class LiveSimulatorWorker:
                 "source_kind": source.kind,
                 "capture_id": source.capture_id,
                 "source_charger": request.get("source_charger"),
+                "stream": replay_stream,
                 "events_completed": len(completed),
                 "actions": list(completed),
                 "pacing": pacing.mode,
