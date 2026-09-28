@@ -17,7 +17,7 @@ from apps.energy.reporting import (
     projected_sessions_for_period,
 )
 from apps.nodes.models import Node, NodeRole
-from apps.ocpp.models import MeterValue
+from apps.ocpp.models import MeterValue, OcppTransaction
 from tests.apps.ocpp.builders import charger, connector, transaction
 
 pytestmark = pytest.mark.django_db
@@ -245,7 +245,7 @@ def test_reporting_period_envelope_is_versioned_transport_safe_and_authoritative
     )
 
     period = project_reporting_period(
-        type(selected_charger.transactions.first()).objects.all(),
+        OcppTransaction.objects.all(),
         started_at=start,
         before=start + timedelta(hours=1),
     )
@@ -297,7 +297,7 @@ def test_reporting_period_can_aggregate_multiple_authoritative_satellites():
     )
 
     period = project_reporting_period(
-        type(first.transactions.first()).objects.all(),
+        OcppTransaction.objects.all(),
         started_at=start,
         before=start + timedelta(hours=1),
     )
