@@ -725,10 +725,10 @@ jobs:
             rollover_pr="$existing"
             echo "rollover_pr=existing number=$rollover_pr"
           else
-            rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+            GH_TOKEN="$GH_TOKEN" gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
               --title "Advance Arthexis to ${next_version} after accepted ${released} deployment" \
-              --body "Watchtower successfully accepted Arthexis \`${released}\` at \`${ARTHEXIS_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers." \
-              --json number --jq '.number')"
+              --body "Watchtower successfully accepted Arthexis \`${released}\` at \`${ARTHEXIS_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
+            rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "rollover_pr=created number=$rollover_pr"
           fi
           GH_TOKEN="$GH_TOKEN" gh pr edit "$rollover_pr" --repo "$GITHUB_REPOSITORY" --add-label approved
