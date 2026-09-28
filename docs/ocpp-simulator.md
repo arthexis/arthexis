@@ -176,6 +176,12 @@ reconnect. Ordinary request failures remain generic transport failures unless
 the transport can prove a reconnect cycle occurred; the simulator does not
 infer a disconnect by parsing exception text.
 
+For high-volume runs, the worker retains at most 1,000 action names in the JSON
+response. `events_completed` and the metrics counters still report the full
+run, while `actions_truncated` indicates whether the `actions` array is only
+a prefix. This keeps the operator response bounded even for 100k+ streamed
+events.
+
 When the migrated database contains retained charger-originated
 `InboundProtocolRequest` payloads, replay those protocol-realistic requests
 directly instead of reconstructing transaction history:
