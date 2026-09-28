@@ -179,3 +179,99 @@ def test_reconnect_waits_for_inflight_heartbeat():
         assert response["reconnects"] == 1
 
     asyncio.run(exercise())
+
+
+def test_worker_authorization_scenario_returns_privacy_safe_matrix():
+    class MatrixSimulator(FakeSimulator):
+        def __init__(self):
+            super().__init__()
+            self.outcomes = iter(["Accepted", "Blocked", "Invalid", "Accepted"])
+
+        async def authorize(self, id_tag):
+            self.calls.append(("Authorize", id_tag))
+            return next(self.outcomes)
+
+    async def exercise():
+        fake = MatrixSimulator()
+        worker = worker_with(fake)
+        await worker.connect_and_boot()
+
+        response = await worker.dispatch(
+            {
+                "action": "authorize-scenario",
+                "policy_context": "restricted",
+                "known_authorized": "KNOWN-OK",
+                "known_denied": "KNOWN-NO",
+                "unknown": "UNKNOWN",
+            }
+        )
+
+        assert response["scenario"] == "restricted-authorization-matrix"
+        assert response["policy_context"] == "restricted"
+        assert [item["status"] for item in response["results"]] == [
+            "Accepted",
+            "Blocked",
+            "Invalid",
+            "Accepted",
+        ]
+        assert [item["attempt"] for item in response["results"]] == [
+            "known-authorized",
+            "known-denied",
+            "unknown",
+            "known-authorized-repeat",
+        ]
+        assert all("id_tag" not in item for item in response["results"])
+        assert fake.calls == [
+            ("Authorize", "KNOWN-OK"),
+            ("Authorize", "KNOWN-NO"),
+            ("Authorize", "UNKNOWN"),
+            ("Authorize", "KNOWN-OK"),
+        ]
+
+    asyncio.run(exercise())
+
+
+def test_authorize_scenario_command_passes_operator_matrix_to_worker(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
+
+    async def fake_send_control(charger, request):
+        assert charger == "GWAY001"
+        assert request == {
+            "action": "authorize-scenario",
+            "policy_context": "open",
+            "known_authorized": "KNOWN-OK",
+            "known_denied": "KNOWN-NO",
+            "unknown": "UNKNOWN",
+        }
+        return {
+            "ok": True,
+            "charger": charger,
+            "scenario": "open-authorization-matrix",
+            "policy_context": "open",
+            "results": [],
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command(
+        "ocpp_simulator",
+        "authorize-scenario",
+        "--charger",
+        "GWAY001",
+        "--policy-context",
+        "open",
+        "--known-authorized",
+        "KNOWN-OK",
+        "--known-denied",
+        "KNOWN-NO",
+        "--unknown",
+        "UNKNOWN",
+    )
+
+    output = capsys.readouterr().out
+    assert '"scenario": "open-authorization-matrix"' in output
