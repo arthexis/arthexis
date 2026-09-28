@@ -21,6 +21,53 @@ from apps.ocpp.simulator.database_replay import (
 from tests.apps.ocpp.builders import charger
 
 
+class FakeReplayTransport:
+    def __init__(self, *, transaction_id=91, boot_status="Accepted"):
+        self.transaction_id = transaction_id
+        self.boot_status = boot_status
+        self.calls = []
+        self.reconnects = 0
+        self.boots = 0
+
+    async def call(self, action, payload):
+        self.calls.append((action, dict(payload)))
+        if action == "StartTransaction":
+            return {"transactionId": self.transaction_id}
+        return {}
+
+    async def reconnect(self):
+        self.reconnects += 1
+
+    async def boot(self):
+        self.boots += 1
+        return type("Boot", (), {"status": self.boot_status})()
+
+
+def replay_events():
+    return (
+        ReplayEvent(
+            source_transaction_id=10,
+            occurred_at="2024-01-01T00:00:00+00:00",
+            action="StartTransaction",
+            payload={"connectorId": 1, "idTag": "tag-a", "meterStart": 0},
+        ),
+        ReplayEvent(
+            source_transaction_id=10,
+            occurred_at="2024-01-01T00:10:00+00:00",
+            action="MeterValues",
+            payload={"meterValue": []},
+            requires_runtime_transaction_id=True,
+        ),
+        ReplayEvent(
+            source_transaction_id=10,
+            occurred_at="2024-01-01T01:00:00+00:00",
+            action="StopTransaction",
+            payload={"meterStop": 10},
+            requires_runtime_transaction_id=True,
+        ),
+    )
+
+
 def _database(path: Path) -> Path:
     with sqlite3.connect(path) as connection:
         connection.executescript(
@@ -252,50 +299,10 @@ def test_database_replay_rejects_invalid_reconnect_checkpoint(tmp_path) -> None:
 
 
 def test_transport_neutral_replay_preserves_order_and_rebinds_transaction_id():
-    class FakeLiveTransport:
-        def __init__(self):
-            self.calls = []
-
-        async def call(self, action, payload):
-            self.calls.append((action, dict(payload)))
-            if action == "StartTransaction":
-                return {"transactionId": 91}
-            return {}
-
     async def exercise():
-        transport = FakeLiveTransport()
-        events = (
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:00:00+00:00",
-                action="StartTransaction",
-                payload={
-                    "connectorId": 1,
-                    "idTag": "tag-a",
-                    "meterStart": 100,
-                    "timestamp": "2024-01-01T00:00:00+00:00",
-                },
-            ),
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:10:00+00:00",
-                action="MeterValues",
-                payload={"meterValue": []},
-                requires_runtime_transaction_id=True,
-            ),
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T01:00:00+00:00",
-                action="StopTransaction",
-                payload={
-                    "meterStop": 300,
-                    "timestamp": "2024-01-01T01:00:00+00:00",
-                },
-                requires_runtime_transaction_id=True,
-            ),
-        )
+        transport = FakeReplayTransport(transaction_id=91)
 
-        completed = await run_v16_replay_events(transport, events)
+        completed = await run_v16_replay_events(transport, replay_events())
 
         assert completed == (
             "StartTransaction",
@@ -310,77 +317,27 @@ def test_transport_neutral_replay_preserves_order_and_rebinds_transaction_id():
 
 
 def test_transport_neutral_replay_rejects_missing_runtime_transaction_id():
-    class FakeLiveTransport:
-        async def call(self, action, payload):
-            return {}
-
     async def exercise():
-        events = (
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:10:00+00:00",
-                action="MeterValues",
-                payload={"meterValue": []},
-                requires_runtime_transaction_id=True,
-            ),
+        event = ReplayEvent(
+            source_transaction_id=10,
+            occurred_at="2024-01-01T00:10:00+00:00",
+            action="MeterValues",
+            payload={"meterValue": []},
+            requires_runtime_transaction_id=True,
         )
         with pytest.raises(ValueError, match="runtime transaction ID"):
-            await run_v16_replay_events(FakeLiveTransport(), events)
+            await run_v16_replay_events(FakeReplayTransport(), (event,))
 
     async_to_sync(exercise)()
 
 
 def test_live_replay_reconnects_reboots_and_resumes_same_transaction():
-    class Boot:
-        status = "Accepted"
-
-    class FakeReconnectableTransport:
-        def __init__(self):
-            self.calls = []
-            self.reconnects = 0
-            self.boots = 0
-
-        async def call(self, action, payload):
-            self.calls.append((action, dict(payload)))
-            if action == "StartTransaction":
-                return {"transactionId": 77}
-            return {}
-
-        async def reconnect(self):
-            self.reconnects += 1
-
-        async def boot(self):
-            self.boots += 1
-            return Boot()
-
     async def exercise():
-        transport = FakeReconnectableTransport()
-        events = (
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:00:00+00:00",
-                action="StartTransaction",
-                payload={"connectorId": 1, "idTag": "tag-a", "meterStart": 0},
-            ),
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:10:00+00:00",
-                action="MeterValues",
-                payload={"meterValue": []},
-                requires_runtime_transaction_id=True,
-            ),
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T01:00:00+00:00",
-                action="StopTransaction",
-                payload={"meterStop": 10},
-                requires_runtime_transaction_id=True,
-            ),
-        )
+        transport = FakeReplayTransport(transaction_id=77)
 
         completed = await run_v16_live_replay_events(
             transport,
-            events,
+            replay_events(),
             reconnect_after=1,
         )
 
@@ -398,40 +355,11 @@ def test_live_replay_reconnects_reboots_and_resumes_same_transaction():
 
 
 def test_live_replay_rejects_nonaccepted_boot_after_reconnect():
-    class Boot:
-        status = "Pending"
-
-    class FakeReconnectableTransport:
-        async def call(self, action, payload):
-            return {"transactionId": 77}
-
-        async def reconnect(self):
-            return None
-
-        async def boot(self):
-            return Boot()
-
     async def exercise():
-        events = (
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:00:00+00:00",
-                action="StartTransaction",
-                payload={"connectorId": 1, "idTag": "tag-a", "meterStart": 0},
-            ),
-            ReplayEvent(
-                source_transaction_id=10,
-                occurred_at="2024-01-01T00:10:00+00:00",
-                action="MeterValues",
-                payload={"meterValue": []},
-                requires_runtime_transaction_id=True,
-            ),
-        )
-
         with pytest.raises(ValueError, match="not accepted"):
             await run_v16_live_replay_events(
-                FakeReconnectableTransport(),
-                events,
+                FakeReplayTransport(boot_status="Pending"),
+                replay_events(),
                 reconnect_after=1,
             )
 
@@ -439,20 +367,10 @@ def test_live_replay_rejects_nonaccepted_boot_after_reconnect():
 
 
 def test_live_replay_rejects_invalid_reconnect_checkpoint():
-    class FakeReconnectableTransport:
-        async def call(self, action, payload):
-            return {}
-
-        async def reconnect(self):
-            return None
-
-        async def boot(self):
-            return None
-
     async def exercise():
         with pytest.raises(ValueError, match="reconnect_after must be positive"):
             await run_v16_live_replay_events(
-                FakeReconnectableTransport(),
+                FakeReplayTransport(),
                 (),
                 reconnect_after=0,
             )
