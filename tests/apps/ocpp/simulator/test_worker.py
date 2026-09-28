@@ -114,3 +114,56 @@ def test_startup_failure_terminates_worker_and_cleans_artifacts(
     assert not session_path(charger).exists()
     assert not socket_path(charger).exists()
     assert not error_path(charger).exists()
+
+
+def test_reconnect_waits_for_inflight_heartbeat():
+    async def exercise():
+        worker = LiveSimulatorWorker(
+            insecure_config(url="ws://example.test", charger="GWAY001")
+        )
+        worker._boot = SimpleNamespace(status="Accepted", interval=60)
+
+        heartbeat_started = asyncio.Event()
+        release_heartbeat = asyncio.Event()
+        events = []
+
+        async def call(action, payload):
+            assert action == "Heartbeat"
+            events.append("heartbeat-start")
+            heartbeat_started.set()
+            await release_heartbeat.wait()
+            events.append("heartbeat-end")
+            return {"currentTime": "now"}
+
+        async def reconnect():
+            events.append("reconnect")
+
+        async def boot():
+            return SimpleNamespace(status="Accepted", interval=60)
+
+        worker._simulator.call = call
+        worker._simulator.reconnect = reconnect
+        worker._simulator.boot = boot
+
+        async with worker._transport_lock:
+            pass
+
+        async def heartbeat_once():
+            async with worker._transport_lock:
+                await worker._simulator.call("Heartbeat", {})
+
+        heartbeat_task = asyncio.create_task(heartbeat_once())
+        await heartbeat_started.wait()
+        reconnect_task = asyncio.create_task(worker._reconnect())
+
+        await asyncio.sleep(0)
+        assert events == ["heartbeat-start"]
+
+        release_heartbeat.set()
+        await heartbeat_task
+        await reconnect_task
+
+        assert events == ["heartbeat-start", "heartbeat-end", "reconnect"]
+        assert worker._reconnects == 1
+
+    asyncio.run(exercise())
