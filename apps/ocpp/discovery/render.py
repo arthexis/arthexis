@@ -73,6 +73,15 @@ def render_discovery_events(
         elif event_type == "capture_unavailable":
             reason = metadata.get("reason") or "unknown"
             lines.append(f"Capture: unavailable ({reason})")
+        elif event_type == "capture_started":
+            redirect_id = metadata.get("redirect_id") or "unknown"
+            lines.append(f"Capture: active ({redirect_id})")
+        elif event_type == "capture_released":
+            redirect_id = metadata.get("redirect_id") or "unknown"
+            lines.append(f"Capture: released ({redirect_id})")
+        elif event_type == "capture_release_failed":
+            reason = metadata.get("reason") or "unknown"
+            lines.append(f"Capture release: failed ({reason})")
         elif event_type == "csms_candidate":
             candidates.append(metadata)
 
