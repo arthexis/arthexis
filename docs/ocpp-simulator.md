@@ -217,3 +217,46 @@ For the GWAY-001 → GW004 field test, watch GW004's OCPP/operator status while
 the drain runs. A reconnect test is successful only when the post-reconnect
 BootNotification is accepted and the remaining backlog continues through the
 real GW004 ingress path.
+
+
+## GW001 → GW004 field validation handoff
+
+Use a direct Ethernet link with GW004 already running the normal Arthexis OCPP
+satellite/listener. GW001 should have no special knowledge of the GW004 node
+name; only the listener endpoint is configured.
+
+Recommended operator sequence on GW001:
+
+```console
+gway arthexis ocpp simulator start ws://192.168.129.10:9000
+gway arthexis ocpp simulator status
+gway arthexis ocpp simulator authorize TEST001
+gway arthexis ocpp simulator replay reconciled.sqlite3
+gway arthexis ocpp simulator stop
+```
+
+For interrupted-drain validation:
+
+```console
+gway arthexis ocpp simulator replay reconciled.sqlite3 --reconnect-after 500
+```
+
+A field run is accepted when:
+
+1. `start` returns an accepted BootNotification and the derived GW001 charger
+   identity is visible on GW004.
+2. `authorize` traverses the real Ethernet/WebSocket OCPP path and GW004
+   reports the corresponding authorization activity without simulator-side
+   database, Redis, Celery, or event injection.
+3. replay consumes the migrated/current-generation source read-only, preserves
+   deterministic ordering, and reports the full event count plus bounded
+   performance/resilience metrics.
+4. the reconnect rehearsal records one successful reconnect, GW004 accepts the
+   new BootNotification, and replay continues after the checkpoint.
+5. GW004 remains responsive to live/operator processing while the historical
+   drain is active; physical display/e-paper verification can be recorded as
+   the final hardware observation.
+6. `stop` closes the GW001 simulator session cleanly.
+
+If the GW001 hostname is not the desired OCPP charger identity, set
+`ARTHEXIS_OCPP_SIMULATOR_IDENTITY` or pass `--charger` to `start`.
