@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -27,11 +29,12 @@ def _parser() -> argparse.ArgumentParser:
             "preserve",
             "reconcile-fixture",
             "verify-migration",
+            "rehearse",
             "inspect",
             "dry-run",
             "import",
         ),
-        help="capture/restore a legacy source or run reconciliation",
+        help="capture/restore a legacy source, run a rehearsal, or run reconciliation",
     )
     parser.add_argument(
         "source",
@@ -85,7 +88,7 @@ def _require_source(source: Path | None) -> Path:
     return source
 
 
-def _reconcile_fixture(arguments: argparse.Namespace) -> int:
+def _reconcile_fixture(arguments: argparse.Namespace, *, emit: bool = True) -> int:
     source = _require_source(arguments.source).expanduser().resolve()
     if arguments.batch_size < 1:
         raise SystemExit("--batch-size must be at least 1.")
@@ -127,26 +130,94 @@ def _reconcile_fixture(arguments: argparse.Namespace) -> int:
             print(f"Reconciliation diagnostic: {diagnostic}", file=sys.stderr)
         raise
 
-    print(
-        json.dumps(
-            {
-                "fixture": str(source),
-                "destination_database": str(destination),
-                "receipt": str(receipt),
-                "reconciliation": report.as_dict(),
-            },
-            indent=2,
-            sort_keys=True,
+    if emit:
+        print(
+            json.dumps(
+                {
+                    "fixture": str(source),
+                    "destination_database": str(destination),
+                    "receipt": str(receipt),
+                    "reconciliation": report.as_dict(),
+                },
+                indent=2,
+                sort_keys=True,
+            )
         )
-    )
     return 0
 
+
+
+def _rehearse(arguments: argparse.Namespace) -> int:
+    """Run capture -> restore -> reconcile -> verify from one live legacy source."""
+
+    source = _require_source(arguments.source).expanduser().resolve()
+    if arguments.batch_size < 1:
+        raise SystemExit("--batch-size must be at least 1.")
+    if arguments.nice < 0:
+        raise SystemExit("--nice cannot be negative.")
+
+    data_dir = Path(
+        os.environ.get("ARTHEXIS_DATA_DIR", str(PROJECT_ROOT / "var"))
+    ).expanduser().resolve()
+    rehearsal_root = (
+        arguments.output.expanduser().resolve()
+        if arguments.output
+        else data_dir / "migration" / "rehearsals"
+    )
+    captures = rehearsal_root / "captures"
+    fixtures = rehearsal_root / "fixtures"
+
+    from arthexis.reconciliation.capture import (
+        capture_legacy_installation,
+        verify_capture,
+    )
+    from arthexis.reconciliation.fixture import restore_fixture
+    from arthexis.reconciliation.verification import verify_reconciliation
+
+    capture = capture_legacy_installation(
+        source,
+        captures,
+        database=arguments.database,
+    )
+    capture_verification = verify_capture(capture.path)
+    fixture = restore_fixture(capture.path, fixtures)
+
+    arguments.source = fixture.path
+    arguments.destination_database = fixture.path / "reconciled.sqlite3"
+    # Rehearsal stdout is a machine-readable JSON contract. Some Django
+    # management commands emit informational text, so contain that output here.
+    with redirect_stdout(io.StringIO()):
+        _reconcile_fixture(arguments, emit=False)
+
+    verification = verify_reconciliation(fixture.path)
+    payload = {
+        "source": str(source),
+        "capture": {
+            "capture_id": capture.capture_id,
+            "path": str(capture.path),
+            "manifest_sha256": capture_verification["manifest_sha256"],
+            "database_sha256": capture_verification["database_sha256"],
+        },
+        "fixture": {
+            "fixture_id": fixture.fixture_id,
+            "path": str(fixture.path),
+        },
+        "destination_database": str(fixture.path / "reconciled.sqlite3"),
+        "decision": verification.decision,
+        "json_report": str(verification.json_path),
+        "text_report": str(verification.text_path),
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if verification.decision == "GO" else 2
 
 def main() -> int:
     arguments = _parser().parse_args()
 
     if arguments.command == "reconcile-fixture":
         return _reconcile_fixture(arguments)
+
+    if arguments.command == "rehearse":
+        return _rehearse(arguments)
 
     if arguments.command == "verify-migration":
         source = _require_source(arguments.source)
