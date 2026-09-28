@@ -30,7 +30,11 @@ _ARP_REPLY_RE = re.compile(
     rf"Reply (?P<sender_ip>{_IP}) is-at (?P<sender_mac>{_MAC})"
 )
 _DNS_QUERY_RE = re.compile(
-    r"\b(?:A|AAAA)\?\s+(?P<name>[A-Za-z0-9_.-]+)\.?"
+    r":\s+(?P<dns_id>\d+)\+?\s+.*?\b(?P<record_type>A|AAAA)\?\s+"
+    r"(?P<name>[A-Za-z0-9_.-]+)\.?"
+)
+_DNS_RESPONSE_RE = re.compile(
+    rf":\s+(?P<dns_id>\d+)\s+.*?\bA\s+(?P<address>{_IP})(?:\s|$)"
 )
 
 
@@ -184,10 +188,31 @@ def parse_tcpdump_line(line: str) -> NetworkObservation | None:
         "source_mac": source_mac,
         "destination_mac": destination_mac,
     }
-    dns = _DNS_QUERY_RE.search(line)
-    if dns:
-        metadata["name"] = dns.group("name").rstrip(".")
+    dns_query = _DNS_QUERY_RE.search(line)
+    if dns_query:
+        metadata.update(
+            {
+                "dns_id": int(dns_query.group("dns_id")),
+                "record_type": dns_query.group("record_type"),
+                "name": dns_query.group("name").rstrip("."),
+                "client_ip": flow.group("src_ip"),
+                "dns_server": flow.group("dst_ip"),
+            }
+        )
         return NetworkObservation("dns_query", metadata)
+
+    dns_response = _DNS_RESPONSE_RE.search(line)
+    if dns_response and int(flow.group("src_port")) == 53:
+        metadata.update(
+            {
+                "dns_id": int(dns_response.group("dns_id")),
+                "address": dns_response.group("address"),
+                "client_ip": flow.group("dst_ip"),
+                "dns_server": flow.group("src_ip"),
+            }
+        )
+        return NetworkObservation("dns_response", metadata)
+
     return NetworkObservation("connection_attempt", metadata)
 
 
@@ -196,7 +221,8 @@ class CandidateTracker:
 
     def __init__(self) -> None:
         self._resolved_neighbors: dict[str, str] = {}
-        self._dns_names: set[str] = set()
+        self._pending_dns: dict[tuple[str, str, int], str] = {}
+        self._dns_resolutions: dict[str, set[str]] = {}
         self._candidates: dict[tuple[str, int], CsmsCandidate] = {}
 
     def consume(
@@ -214,8 +240,43 @@ class CandidateTracker:
 
         if observation.event_type == "dns_query":
             name = metadata.get("name")
-            if isinstance(name, str):
-                self._dns_names.add(name)
+            client_ip = metadata.get("client_ip")
+            dns_server = metadata.get("dns_server")
+            dns_id = metadata.get("dns_id")
+            if (
+                isinstance(name, str)
+                and isinstance(client_ip, str)
+                and isinstance(dns_server, str)
+                and isinstance(dns_id, int)
+            ):
+                self._pending_dns[(client_ip, dns_server, dns_id)] = name
+            return []
+
+        if observation.event_type == "dns_response":
+            client_ip = metadata.get("client_ip")
+            dns_server = metadata.get("dns_server")
+            dns_id = metadata.get("dns_id")
+            address = metadata.get("address")
+            if (
+                isinstance(client_ip, str)
+                and isinstance(dns_server, str)
+                and isinstance(dns_id, int)
+                and isinstance(address, str)
+            ):
+                name = self._pending_dns.pop((client_ip, dns_server, dns_id), None)
+                if name is not None:
+                    self._dns_resolutions.setdefault(address, set()).add(name)
+                    return [
+                        NetworkObservation(
+                            "dns_resolution",
+                            {
+                                "name": name,
+                                "address": address,
+                                "dns_server": dns_server,
+                                "dns_id": dns_id,
+                            },
+                        )
+                    ]
             return []
 
         if observation.event_type not in {
@@ -238,6 +299,7 @@ class CandidateTracker:
             CsmsCandidate(destination_ip, destination_port),
         )
         candidate.attempts += 1
+        candidate.hostnames.update(self._dns_resolutions.get(destination_ip, set()))
 
         destination_mac = metadata.get("destination_mac")
         if isinstance(destination_mac, str):
