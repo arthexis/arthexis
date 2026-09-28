@@ -7,18 +7,35 @@ from apps.ocpp.management.commands.ocpp_load import Command
 from apps.ocpp.models import Charger
 
 
-@pytest.mark.django_db
-def test_load_command_marks_live_latency_success(monkeypatch) -> None:
-    Charger.objects.create(identity="load-pass", authority_cutover_at="2026-09-27T12:00:00Z")
-    monkeypatch.setattr(
-        Command,
-        "_run_synthetic",
-        lambda self, charger, options: {
+@pytest.fixture
+def load_charger():
+    def create(identity: str) -> Charger:
+        return Charger.objects.create(
+            identity=identity,
+            authority_cutover_at="2026-09-27T12:00:00Z",
+        )
+
+    return create
+
+
+@pytest.fixture
+def synthetic_result(monkeypatch):
+    def set_result(**overrides):
+        result = {
             "source": "synthetic",
             "live_failures": 0,
             "max_live_latency_seconds": 0.1,
-        },
-    )
+        }
+        result.update(overrides)
+        monkeypatch.setattr(Command, "_run_synthetic", lambda self, charger, options: result)
+
+    return set_result
+
+
+@pytest.mark.django_db
+def test_load_command_marks_live_latency_success(load_charger, synthetic_result) -> None:
+    load_charger("load-pass")
+    synthetic_result()
     output = StringIO()
 
     call_command(
@@ -35,17 +52,9 @@ def test_load_command_marks_live_latency_success(monkeypatch) -> None:
 
 
 @pytest.mark.django_db
-def test_load_command_fails_when_live_latency_exceeds_threshold(monkeypatch) -> None:
-    Charger.objects.create(identity="load-fail", authority_cutover_at="2026-09-27T12:00:00Z")
-    monkeypatch.setattr(
-        Command,
-        "_run_synthetic",
-        lambda self, charger, options: {
-            "source": "synthetic",
-            "live_failures": 0,
-            "max_live_latency_seconds": 0.75,
-        },
-    )
+def test_load_command_fails_when_live_latency_exceeds_threshold(load_charger, synthetic_result) -> None:
+    load_charger("load-fail")
+    synthetic_result(max_live_latency_seconds=0.75)
     output = StringIO()
 
     with pytest.raises(CommandError, match="Live OCPP health threshold failed"):
@@ -62,17 +71,9 @@ def test_load_command_fails_when_live_latency_exceeds_threshold(monkeypatch) -> 
 
 
 @pytest.mark.django_db
-def test_load_command_fails_when_live_probe_fails(monkeypatch) -> None:
-    Charger.objects.create(identity="load-error", authority_cutover_at="2026-09-27T12:00:00Z")
-    monkeypatch.setattr(
-        Command,
-        "_run_synthetic",
-        lambda self, charger, options: {
-            "source": "synthetic",
-            "live_failures": 1,
-            "max_live_latency_seconds": 0.1,
-        },
-    )
+def test_load_command_fails_when_live_probe_fails(load_charger, synthetic_result) -> None:
+    load_charger("load-error")
+    synthetic_result(live_failures=1)
 
     with pytest.raises(CommandError, match="Live OCPP health threshold failed"):
         call_command(
