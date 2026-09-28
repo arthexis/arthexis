@@ -36,6 +36,7 @@ jobs:
     outputs:
       deploy: ${{ steps.change.outputs.deploy }}
       stage: ${{ steps.change.outputs.stage }}
+      force_deploy: ${{ steps.change.outputs.force_deploy }}
     steps:
       - uses: actions/checkout@v7
         if: github.event_name != 'repository_dispatch'
@@ -57,14 +58,21 @@ jobs:
           set -Eeuo pipefail
           deploy=true
           stage="arthexis"
+          force_deploy=false
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stage="${{ inputs.stage }}"
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             stage="${{ github.event.client_payload.stage || 'arthexis' }}"
+            if [[ "${{ github.event.client_payload.force_deploy || 'false' }}" == "true" ]]; then
+              force_deploy=true
+            fi
           elif [[ "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
             if grep -Fxq remote <<<"$labels"; then
               stage="remote"
+            fi
+            if grep -Fxq deploy <<<"$labels"; then
+              force_deploy=true
             fi
           fi
           if [[ "$stage" != "arthexis" && "$stage" != "remote" ]]; then
@@ -83,7 +91,8 @@ jobs:
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
           echo "stage=$stage" >> "$GITHUB_OUTPUT"
-          echo "deploy=$deploy stage=$stage"
+          echo "force_deploy=$force_deploy" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy stage=$stage force_deploy=$force_deploy"
 
 
   queue-gate:
@@ -98,9 +107,15 @@ jobs:
         id: queue
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}
         shell: bash
         run: |
           set -Eeuo pipefail
+          if [[ "$FORCE_DEPLOY" == "true" ]]; then
+            echo "watchtower_deploy=forced_by_deploy_label"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           active=0
           for repository in arthexis/arthexis arthexis/gway; do
             prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | index("on-hold")) | not) | [.number, .title] | @tsv')"
