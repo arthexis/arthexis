@@ -75,3 +75,51 @@ def test_render_discovery_events_handles_no_candidate() -> None:
         "Interface: eth1 (control)\n"
         "No CSMS candidates observed."
     )
+
+
+
+def test_render_discovery_events_includes_link_dhcp_and_retry_cadence() -> None:
+    output = render_discovery_events(
+        "field-003",
+        [
+            {
+                "event_type": "interface_selected",
+                "metadata": {"interface": "eth0", "role": "control"},
+            },
+            {
+                "event_type": "link_state",
+                "metadata": {"interface": "eth0", "state": "up"},
+            },
+            {
+                "event_type": "dhcp",
+                "metadata": {
+                    "message_type": 3,
+                    "requested_address": "192.0.2.20",
+                    "offered_address": None,
+                },
+            },
+            {
+                "event_type": "csms_candidate",
+                "metadata": {
+                    "destination_ip": "198.51.100.40",
+                    "destination_port": 9000,
+                    "hostnames": [],
+                    "http_paths": [],
+                    "websocket_paths": [],
+                    "ocpp_subprotocols": [],
+                    "tls_sni": [],
+                    "attempts": 3,
+                    "retry_intervals_seconds": [2.5, 4.5],
+                },
+            },
+        ],
+    )
+
+    assert output.splitlines() == [
+        "Discovery session field-003",
+        "Interface: eth0 (control)",
+        "Link: eth0 up",
+        "DHCP: type=3 (requested=192.0.2.20)",
+        "CSMS candidates:",
+        "  1. 198.51.100.40:9000 attempts=3 (retry=2.5s,4.5s)",
+    ]
