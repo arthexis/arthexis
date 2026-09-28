@@ -2,7 +2,7 @@ import pytest
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 
-from apps.ocpp.models import CompatibilityEvidence
+from apps.ocpp.models import Charger, CompatibilityEvidence
 from arthexis.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -155,3 +155,45 @@ class OcppCompatibilitySurvivalTests:
         await communicator.send_json_to(frame)
         await _heartbeat(communicator, f"heartbeat-after-{identity}")
         await communicator.disconnect()
+
+
+
+class OcppStrictProtocolTests:
+    @pytest.mark.parametrize(
+        ("identity", "subprotocols"),
+        [
+            ("strict-protocol-unknown", ["vendor-ocpp"]),
+            ("strict-protocol-missing", []),
+        ],
+    )
+    def test_strict_charger_rejects_missing_or_unknown_subprotocol(
+        self,
+        identity: str,
+        subprotocols: list[str],
+    ) -> None:
+        Charger.objects.create(
+            identity=identity,
+            protocol_mode=Charger.AuthorizationMode.RESTRICTED,
+            authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+        )
+
+        async_to_sync(self._rejected_flow)(identity, subprotocols)
+
+        evidence = CompatibilityEvidence.objects.get(
+            charger_identity=identity,
+            kind="protocol_rejected",
+        )
+        assert evidence.details["offered_subprotocols"] == subprotocols
+
+    async def _rejected_flow(
+        self,
+        identity: str,
+        subprotocols: list[str],
+    ) -> None:
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/ocpp/{identity}/",
+            subprotocols=subprotocols,
+        )
+        connected, _ = await communicator.connect(timeout=5)
+        assert connected is False
