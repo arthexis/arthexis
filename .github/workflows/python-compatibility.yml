@@ -12,32 +12,45 @@ jobs:
   tests:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    env:
+      VERSION_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'version') }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]') }}
+        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'version') && fromJSON('["3.13"]') || (contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]')) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+      - name: Validate version-only PR
+        if: env.VERSION_PR == 'true'
+        run: python3 .github/scripts/validate_version_only_pr.py "$BASE_SHA" "$HEAD_SHA"
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        if: env.VERSION_PR != 'true'
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install test runtime
+        if: env.VERSION_PR != 'true'
         run: python -m pip install -e '.[dev]'
 
       - name: Compile rebuilt source
+        if: env.VERSION_PR != 'true'
         id: compile
         continue-on-error: true
         run: python -m compileall -q apps arthexis scripts tests manage.py
 
       - name: Django startup check
+        if: env.VERSION_PR != 'true'
         id: django_check
         continue-on-error: true
         run: python manage.py check --fail-level ERROR
 
       - name: Run test suite
+        if: env.VERSION_PR != 'true'
         id: tests
         continue-on-error: true
         env:
@@ -60,7 +73,7 @@ jobs:
           fi
 
       - name: Require all validation checks
-        if: always()
+        if: always() && env.VERSION_PR != 'true'
         env:
           COMPILE_OUTCOME: ${{ steps.compile.outcome }}
           DJANGO_CHECK_OUTCOME: ${{ steps.django_check.outcome }}

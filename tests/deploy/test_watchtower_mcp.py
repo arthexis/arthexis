@@ -426,7 +426,9 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert "ARTHEXIS_CHANGED" not in step
     assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
     assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
-    assert 'gh pr edit "$rollover_pr" --repo "$GITHUB_REPOSITORY" --add-label approved' in step
+    assert 'gh api --method POST' in step
+    assert '{"labels":["approved","version"]}' in step
+    assert '/issues/${rollover_pr}/labels' in step
     assert 'rollover_pr=approved number=$rollover_pr' in step
 
 
