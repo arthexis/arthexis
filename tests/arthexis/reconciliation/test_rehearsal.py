@@ -228,13 +228,13 @@ def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
     assert completed.returncode == 0, completed.stderr
     result = _json_result(completed)
     assert result["decision"] == "GO"
-    assert result["cutover"]["mode"] == "final-cutover"
+    assert result["cutover"]["decision"] == "GO"
     assert result["cutover"]["no_missed_writes"] is True
 
-    bundle = Path(result["go_bundle"])
+    bundle = _assert_go_bundle(result)
     manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["cutover"]["mode"] == "final-cutover"
-    assert manifest["cutover"]["no_missed_writes"] is True
+    assert manifest["cutover"]["no_missed_writes_proven"] is True
     assert (bundle / "migration" / "cutover-proof.json").is_file()
 
 
@@ -295,6 +295,7 @@ def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
         connection.execute(
             "INSERT INTO core_rfid(rfid, active) VALUES ('post-capture-card', 1)"
         )
+    changed_sha = _sha256(source_database)
 
     proof = verify_cutover_source_unchanged(
         legacy,
@@ -306,6 +307,7 @@ def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
     assert proof["no_missed_writes"] is False
     assert proof["reason"] == "legacy-source-advanced-after-capture"
     assert Path(proof["proof_path"]).is_file()
+    assert _sha256(source_database) == changed_sha
 
 
 @pytest.mark.reconciliation_e2e
@@ -330,8 +332,8 @@ def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(tmp_path):
     assert second.returncode == 0, second.stderr
     assert _sha256(source_database) == source_sha
 
-    first_result = json.loads(first.stdout)
-    second_result = json.loads(second.stdout)
+    first_result = _json_result(first)
+    second_result = _json_result(second)
     assert first_result["capture"]["capture_id"] != second_result["capture"]["capture_id"]
     assert first_result["go_bundle"] != second_result["go_bundle"]
     assert Path(first_result["go_bundle"]).is_dir()
@@ -376,26 +378,3 @@ def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_p
     bundles = alternate_root / "bundles"
     assert not bundles.exists() or not any(bundles.iterdir())
 
-
-def test_cutover_proof_failure_does_not_modify_legacy_source(tmp_path):
-    from arthexis.reconciliation.capture import capture_legacy_installation
-    from arthexis.reconciliation.rehearsal import verify_cutover_source_unchanged
-
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    capture = capture_legacy_installation(legacy, tmp_path / "captures")
-
-    with sqlite3.connect(source_database) as connection:
-        connection.execute(
-            "INSERT INTO core_rfid(rfid, active) VALUES ('late-write', 1)"
-        )
-    changed_sha = _sha256(source_database)
-
-    proof = verify_cutover_source_unchanged(
-        legacy,
-        tmp_path / "rehearsal",
-        expected_database_sha256=_sha256(capture.database_path),
-    )
-
-    assert proof["decision"] == "NO-GO"
-    assert _sha256(source_database) == changed_sha
