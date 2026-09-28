@@ -205,8 +205,10 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             reconnect_after,
             pacing,
             metrics,
+            max_retained_actions,
         ):
             seen["transport"] = transport
+            seen["max_retained_actions"] = max_retained_actions
             seen["metrics"] = metrics
             seen["events"] = events
             seen["reconnect_after"] = reconnect_after
@@ -256,6 +258,7 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
         assert seen["pacing"].mode == "burst"
         assert seen["pacing"].burst_size == 10
         assert seen["pacing"].burst_pause_seconds == 1.5
+        assert seen["max_retained_actions"] == 1000
         assert response == {
             "ok": True,
             "charger": "GWAY001",
@@ -316,8 +319,17 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
             seen["batch_size"] = batch_size
             return ("inbound-events",)
 
-        async def fake_run(transport, events, *, reconnect_after, pacing, metrics):
+        async def fake_run(
+            transport,
+            events,
+            *,
+            reconnect_after,
+            pacing,
+            metrics,
+            max_retained_actions,
+        ):
             seen["events"] = events
+            seen["max_retained_actions"] = max_retained_actions
             return ("Authorize",)
 
         monkeypatch.setattr(
@@ -348,6 +360,7 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
         assert seen["source_charger"] == "field-charger"
         assert seen["batch_size"] == 25
         assert seen["events"] == ("inbound-events",)
+        assert seen["max_retained_actions"] == 1000
         assert response["stream"] == "inbound"
         assert response["actions"] == ["Authorize"]
         assert response["actions_truncated"] is False
