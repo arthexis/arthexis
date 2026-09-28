@@ -75,7 +75,7 @@ def test_gway_provider_uses_json_cli_for_apply_status_and_release() -> None:
                     "strategy": "destination-redirect",
                 }
             )
-        if command[1:3] == ["network", "redirect"]:
+        if command[1:3] == ["network", "capture"]:
             return Completed({"id": "abc123def456", "active": True})
         if command[1:3] == ["network", "status"]:
             return Completed({"id": "abc123def456", "active": True})
@@ -105,7 +105,7 @@ def test_gway_provider_uses_json_cli_for_apply_status_and_release() -> None:
     assert redirect[:4] == [
         "/usr/bin/gway",
         "network",
-        "redirect",
+        "capture",
         "eth0",
     ]
     assert "--sudo" in redirect
