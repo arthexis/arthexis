@@ -59,8 +59,14 @@ class ReplayMetrics:
     attempted_requests: int = 0
     completed_requests: int = 0
     failed_requests: int = 0
+    transport_failures: int = 0
+    reconnect_attempts: int = 0
+    reconnect_successes: int = 0
+    reconnect_failures: int = 0
     total_latency_seconds: float = 0.0
     max_latency_seconds: float = 0.0
+    total_reconnect_seconds: float = 0.0
+    max_reconnect_seconds: float = 0.0
     error_counts: dict[str, int] = field(default_factory=dict)
     _started_at: float = field(default_factory=time.monotonic, repr=False)
     elapsed_seconds: float = 0.0
@@ -78,8 +84,27 @@ class ReplayMetrics:
     def record_failure(self, started_at: float, exc: Exception) -> None:
         latency = time.monotonic() - started_at
         self.failed_requests += 1
+        self.transport_failures += 1
         self.total_latency_seconds += latency
         self.max_latency_seconds = max(self.max_latency_seconds, latency)
+        name = type(exc).__name__
+        self.error_counts[name] = self.error_counts.get(name, 0) + 1
+
+    def start_reconnect(self) -> float:
+        self.reconnect_attempts += 1
+        return time.monotonic()
+
+    def record_reconnect_success(self, started_at: float) -> None:
+        elapsed = time.monotonic() - started_at
+        self.reconnect_successes += 1
+        self.total_reconnect_seconds += elapsed
+        self.max_reconnect_seconds = max(self.max_reconnect_seconds, elapsed)
+
+    def record_reconnect_failure(self, started_at: float, exc: Exception) -> None:
+        elapsed = time.monotonic() - started_at
+        self.reconnect_failures += 1
+        self.total_reconnect_seconds += elapsed
+        self.max_reconnect_seconds = max(self.max_reconnect_seconds, elapsed)
         name = type(exc).__name__
         self.error_counts[name] = self.error_counts.get(name, 0) + 1
 
@@ -94,14 +119,25 @@ class ReplayMetrics:
             if self.elapsed_seconds > 0
             else 0.0
         )
+        mean_reconnect = (
+            self.total_reconnect_seconds / self.reconnect_attempts
+            if self.reconnect_attempts
+            else 0.0
+        )
         return {
             "attempted_requests": self.attempted_requests,
             "completed_requests": self.completed_requests,
             "failed_requests": self.failed_requests,
+            "transport_failures": self.transport_failures,
+            "reconnect_attempts": self.reconnect_attempts,
+            "reconnect_successes": self.reconnect_successes,
+            "reconnect_failures": self.reconnect_failures,
             "elapsed_seconds": self.elapsed_seconds,
             "throughput_requests_per_second": throughput,
             "mean_latency_seconds": mean_latency,
             "max_latency_seconds": self.max_latency_seconds,
+            "mean_reconnect_seconds": mean_reconnect,
+            "max_reconnect_seconds": self.max_reconnect_seconds,
             "error_counts": dict(sorted(self.error_counts.items())),
         }
 
@@ -414,14 +450,21 @@ async def run_v16_live_replay_events(
 
     for event in events:
         if reconnect_after is not None and len(completed) == reconnect_after:
-            await transport.reconnect()
-            boot = await transport.boot()
-            status = getattr(boot, "status", None)
-            if status != "Accepted":
-                raise ValueError(
-                    "BootNotification was not accepted after replay reconnect: "
-                    f"{status}"
-                )
+            reconnect_started = metrics.start_reconnect()
+            try:
+                await transport.reconnect()
+                boot = await transport.boot()
+                status = getattr(boot, "status", None)
+                if status != "Accepted":
+                    raise ValueError(
+                        "BootNotification was not accepted after replay reconnect: "
+                        f"{status}"
+                    )
+            except Exception as exc:
+                metrics.record_reconnect_failure(reconnect_started, exc)
+                metrics.finish()
+                raise
+            metrics.record_reconnect_success(reconnect_started)
 
         await _pace(pacing, len(completed))
         payload = dict(event.payload)
