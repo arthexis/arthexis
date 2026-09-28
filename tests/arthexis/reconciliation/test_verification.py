@@ -115,7 +115,7 @@ def test_verify_migration_accepts_source_dependency_gap_with_warning(
     receipt["reconciliation"]["skipped"]["ledger_entries"] = (
         "account dependency absent"
     )
-    receipt["reconciliation"]["historical_gaps"] = [
+    receipt["reconciliation"].setdefault("historical_gaps", []).append(
         {
             "resource": "ledger_entries",
             "classification": "source-incomplete",
@@ -124,7 +124,7 @@ def test_verify_migration_accepts_source_dependency_gap_with_warning(
                 "Legacy ledger row references an account absent from the captured source."
             ),
         }
-    ]
+    )
     receipt_path.write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -202,14 +202,14 @@ def test_verify_migration_accepts_legacy_v0_gap_with_warning(
     receipt["reconciliation"]["skipped"]["legacy_sessions"] = (
         "version 0 did not persist complete session history"
     )
-    receipt["reconciliation"]["historical_gaps"] = [
+    receipt["reconciliation"].setdefault("historical_gaps", []).append(
         {
             "resource": "legacy_sessions",
             "classification": "legacy-v0-gap",
             "reason": "version 0 did not persist complete session history",
             "evidence": "Captured source schema has no durable session-history table.",
         }
-    ]
+    )
     receipt_path.write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
