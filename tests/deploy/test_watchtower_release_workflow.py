@@ -40,10 +40,8 @@ in_project && /^[[:space:]]*version[[:space:]]*=/ {
     assert result.stdout.strip() == "0.4.59"
 
 
-def test_watchtower_release_handoff_is_recoverable_without_gh_cli():
-    from pathlib import Path
-
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+def test_watchtower_release_handoff_is_recoverable_without_gh_cli(watchtower_deploy_workflow: str):
+    workflow = watchtower_deploy_workflow
 
     assert "gh workflow run" not in workflow
     assert ".watchtower/releases/{package}/{version}.json" in workflow
@@ -53,18 +51,16 @@ def test_watchtower_release_handoff_is_recoverable_without_gh_cli():
     assert '_publish=dispatched' in workflow
 
 
-def test_watchtower_requires_release_label_before_dispatch():
-    from pathlib import Path
-
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+def test_watchtower_requires_release_label_before_dispatch(watchtower_deploy_workflow: str):
+    workflow = watchtower_deploy_workflow
 
     assert "_publish=not_requested" in workflow
     assert "/commits/{release['sha']}/pulls" in workflow
     assert 'label.get("name") == "release"' in workflow
 
 
-def test_arthexis_deploy_uses_current_gway_main() -> None:
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text(encoding="utf-8")
+def test_arthexis_deploy_uses_current_gway_main(watchtower_deploy_workflow: str) -> None:
+    workflow = watchtower_deploy_workflow
 
     assert 'gway_sha="$current_gway"' in workflow
     assert 'gway_sha="${previous_gway:-$current_gway}"' not in workflow
