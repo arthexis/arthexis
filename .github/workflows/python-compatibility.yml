@@ -73,8 +73,7 @@ jobs:
           fi
 
       - name: Require all validation checks
-        if: env.VERSION_PR != 'true'
-        if: always()
+        if: always() && env.VERSION_PR != 'true'
         env:
           COMPILE_OUTCOME: ${{ steps.compile.outcome }}
           DJANGO_CHECK_OUTCOME: ${{ steps.django_check.outcome }}
