@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from asgiref.sync import async_to_sync
 
+import apps.ocpp.simulator.database_replay as database_replay
 from apps.ocpp.simulator.database_replay import (
     ReplayPacing,
     iter_v16_inbound_request_replay,
@@ -196,3 +197,52 @@ def test_inbound_request_replay_only_returns_v16_charger_originated_requests(tmp
 def test_replay_pacing_rejects_invalid_configuration(pacing: ReplayPacing) -> None:
     with pytest.raises(ValueError):
         pacing.validate()
+
+
+@pytest.mark.django_db
+def test_database_replay_reconnects_and_resumes_mid_transaction(tmp_path, monkeypatch) -> None:
+    database = _database(tmp_path / "replay.sqlite3")
+    target = charger("replay-reconnect-target", authorization_mode="open")
+    real_simulator = database_replay.OcppSimulator
+    instances = []
+
+    def build_simulator(*, charger, version):
+        simulator = real_simulator(charger=charger, version=version)
+        instances.append(simulator)
+        return simulator
+
+    monkeypatch.setattr(database_replay, "OcppSimulator", build_simulator)
+
+    completed = async_to_sync(run_v16_database_replay)(
+        target,
+        database,
+        source_charger_identity="charger-a",
+        batch_size=1,
+        reconnect_after=2,
+    )
+
+    assert completed == (
+        "StartTransaction",
+        "MeterValues",
+        "MeterValues",
+        "StopTransaction",
+    )
+    assert len(instances) == 2
+    assert target.transactions.count() == 1
+    transaction = target.transactions.get()
+    assert transaction.stopped_at is not None
+    assert transaction.meter_values.count() == 2
+
+
+@pytest.mark.django_db
+def test_database_replay_rejects_invalid_reconnect_checkpoint(tmp_path) -> None:
+    database = _database(tmp_path / "replay.sqlite3")
+    target = charger("replay-reconnect-invalid", authorization_mode="open")
+
+    with pytest.raises(ValueError, match="reconnect_after must be positive"):
+        async_to_sync(run_v16_database_replay)(
+            target,
+            database,
+            source_charger_identity="charger-a",
+            reconnect_after=0,
+        )

@@ -278,6 +278,7 @@ async def run_v16_database_replay(
     source_charger_identity: str | None = None,
     batch_size: int = 250,
     pacing: ReplayPacing | None = None,
+    reconnect_after: int | None = None,
     after_event: Callable[[int], Awaitable[None]] | None = None,
 ) -> tuple[str, ...]:
     """Replay migrated transaction history back-to-back at charger speed."""
@@ -287,12 +288,16 @@ async def run_v16_database_replay(
     completed: list[str] = []
     pacing = pacing or ReplayPacing()
     pacing.validate()
+    if reconnect_after is not None and reconnect_after < 1:
+        raise ValueError("reconnect_after must be positive")
 
     for event in iter_v16_transaction_replay(
         database,
         charger_identity=source_charger_identity,
         batch_size=batch_size,
     ):
+        if reconnect_after is not None and len(completed) == reconnect_after:
+            client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
         await _pace(pacing, len(completed))
         payload = dict(event.payload)
         if event.requires_runtime_transaction_id:

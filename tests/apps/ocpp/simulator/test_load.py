@@ -96,3 +96,39 @@ def test_historical_backlog_load_injects_live_probes() -> None:
     assert result.live_failures == 0
     assert result.mean_live_latency_seconds > 0
     assert result.max_live_latency_seconds >= result.mean_live_latency_seconds
+
+
+def test_historical_backlog_reconnects_mid_transaction_without_duplication() -> None:
+    cutover = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    target = charger("backlog-load-reconnect")
+    target.authority_cutover_at = cutover
+    target.save(update_fields=("authority_cutover_at",))
+
+    result = async_to_sync(run_v16_historical_backlog)(
+        target,
+        meter_values=4,
+        start_at=cutover - timedelta(days=1),
+        reconnect_after=3,
+    )
+
+    assert result.reconnects == 1
+    assert result.failed == 0
+    assert OcppTransaction.objects.filter(charger=target).count() == 1
+    transaction = OcppTransaction.objects.get(charger=target)
+    assert transaction.stopped_at is not None
+    assert MeterValue.objects.filter(transaction=transaction).count() == 4
+
+
+def test_historical_backlog_rejects_invalid_reconnect_checkpoint() -> None:
+    cutover = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    target = charger("backlog-load-reconnect-invalid")
+    target.authority_cutover_at = cutover
+    target.save(update_fields=("authority_cutover_at",))
+
+    with pytest.raises(ValueError, match="reconnect_after must be positive"):
+        async_to_sync(run_v16_historical_backlog)(
+            target,
+            meter_values=1,
+            start_at=cutover - timedelta(days=1),
+            reconnect_after=0,
+        )

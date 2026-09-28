@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]') }}
+        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]') }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -43,8 +43,14 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           WORKFLOW_PR: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') }}
+          INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
         run: |
-          if [[ "$WORKFLOW_PR" == "true" ]]; then
+          if [[ "$INTEGRATION_PR" == "true" ]]; then
+            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not reconciliation_e2e"
+            if [[ "$PYTHON_VERSION" == "3.10" ]]; then
+              python -m pytest -q --durations=20 -m reconciliation_e2e
+            fi
+          elif [[ "$WORKFLOW_PR" == "true" ]]; then
             python -m pytest -q --durations=20 -m workflow
           elif [[ "$PYTHON_VERSION" == "3.10" ]]; then
             python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e"

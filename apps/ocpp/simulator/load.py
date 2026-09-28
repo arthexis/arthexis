@@ -28,6 +28,7 @@ class BacklogLoadResult:
     live_failures: int = 0
     mean_live_latency_seconds: float = 0.0
     max_live_latency_seconds: float = 0.0
+    reconnects: int = 0
 
 
 async def run_v16_historical_backlog(
@@ -38,6 +39,7 @@ async def run_v16_historical_backlog(
     spacing: timedelta = timedelta(seconds=1),
     live_every: int = 0,
     live_action: str = "Heartbeat",
+    reconnect_after: int | None = None,
     clock: Clock = perf_counter,
 ) -> BacklogLoadResult:
     """Drain one deterministic historical transaction through real OCPP handlers."""
@@ -49,6 +51,8 @@ async def run_v16_historical_backlog(
         raise ValueError("spacing must be positive")
     if live_every < 0:
         raise ValueError("live_every cannot be negative")
+    if reconnect_after is not None and reconnect_after < 1:
+        raise ValueError("reconnect_after must be positive")
     if charger.authority_cutover_at is None:
         raise ValueError("historical backlog load requires authority_cutover_at")
     stop_at = start_at + spacing * (meter_values + 1)
@@ -63,6 +67,8 @@ async def run_v16_historical_backlog(
     succeeded = 0
     failed = 0
     live_failures = 0
+    reconnects = 0
+    completed_backlog_events = 0
     run_started = clock()
 
     async def call(action: str, payload: dict[str, object]):
@@ -90,6 +96,12 @@ async def run_v16_historical_backlog(
         finally:
             live_latencies.append(max(0.0, clock() - started))
 
+    def reconnect_if_due() -> None:
+        nonlocal client, reconnects
+        if reconnect_after is not None and completed_backlog_events == reconnect_after:
+            client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+            reconnects += 1
+
     started = await call(
         "StartTransaction",
         {
@@ -100,8 +112,10 @@ async def run_v16_historical_backlog(
         },
     )
     transaction_id = started.payload["transactionId"]
+    completed_backlog_events += 1
 
     for index in range(meter_values):
+        reconnect_if_due()
         observed_at = start_at + spacing * (index + 1)
         await call(
             "MeterValues",
@@ -121,9 +135,11 @@ async def run_v16_historical_backlog(
                 ],
             },
         )
+        completed_backlog_events += 1
         if live_every and (index + 1) % live_every == 0:
             await probe()
 
+    reconnect_if_due()
     await call(
         "StopTransaction",
         {
@@ -149,6 +165,7 @@ async def run_v16_historical_backlog(
             sum(live_latencies) / len(live_latencies) if live_latencies else 0.0
         ),
         max_live_latency_seconds=max(live_latencies, default=0.0),
+        reconnects=reconnects,
     )
 
 
