@@ -280,4 +280,38 @@ def test_summary_derives_capture_status_from_event_stream(tmp_path) -> None:
         "succeeded": False,
         "strategy": None,
         "failure_reason": "capture_provider_unavailable",
+        "redirect_id": None,
+        "active": False,
+        "release_failure_reason": None,
     }
+
+
+
+def test_summary_tracks_active_redirect_until_release(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="capture-active")
+    session.record("capture_requested", metadata={"candidate_available": True})
+    session.record(
+        "capture_available",
+        metadata={"provider": "gway", "strategy": "destination-redirect"},
+    )
+    session.record(
+        "capture_started",
+        metadata={
+            "provider": "gway",
+            "strategy": "destination-redirect",
+            "redirect_id": "abc123def456",
+        },
+    )
+
+    active = session.write_summary()["capture"]
+    assert active["active"] is True
+    assert active["redirect_id"] == "abc123def456"
+
+    session.record(
+        "capture_released",
+        metadata={"redirect_id": "abc123def456", "changed": True},
+    )
+
+    released = session.write_summary()["capture"]
+    assert released["active"] is False
+    assert released["redirect_id"] == "abc123def456"
