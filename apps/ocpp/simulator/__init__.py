@@ -15,6 +15,8 @@ from apps.ocpp.simulator.database_replay import (
     iter_v16_transaction_replay,
     run_v16_database_replay,
     run_v16_inbound_request_replay,
+    run_v16_live_replay_events,
+    run_v16_replay_events,
 )
 from apps.ocpp.simulator.load import BacklogLoadResult, run_v16_historical_backlog
 from apps.ocpp.simulator.network import (
@@ -48,6 +50,8 @@ __all__ = [
     "iter_v16_inbound_request_replay",
     "iter_v16_transaction_replay",
     "run_v16_database_replay",
+    "run_v16_live_replay_events",
+    "run_v16_replay_events",
     "run_v16_historical_backlog",
     "run_v16_inbound_request_replay",
     "run_v16_authorization_scenario",

@@ -18,6 +18,13 @@ from apps.ocpp.simulator.authorization import (
     authorization_policy_scenario,
     run_live_authorization_scenario,
 )
+from apps.ocpp.simulator.database_replay import (
+    ReplayPacing,
+    iter_v16_inbound_request_replay,
+    iter_v16_transaction_replay,
+    run_v16_live_replay_events,
+)
+from apps.ocpp.simulator.sources import resolve_replay_database
 from apps.ocpp.simulator.network import (
     LiveOcpp16Simulator,
     LiveSimulatorConfig,
@@ -286,6 +293,56 @@ class LiveSimulatorWorker:
                 "scenario": scenario.name,
                 "policy_context": scenario.policy_context,
                 "results": [asdict(result) for result in results],
+            }
+        if action == "replay":
+            source = resolve_replay_database(Path(str(request.get("source", ""))))
+            batch_size = int(request.get("batch_size", 250))
+            reconnect_after_raw = request.get("reconnect_after")
+            reconnect_after = (
+                int(reconnect_after_raw) if reconnect_after_raw is not None else None
+            )
+            pacing = ReplayPacing(
+                mode=str(request.get("pacing", "maximum")),
+                interval_seconds=float(request.get("interval_seconds", 0.0)),
+                burst_size=int(request.get("burst_size", 100)),
+                burst_pause_seconds=float(
+                    request.get("burst_pause_seconds", 0.0)
+                ),
+            )
+            replay_stream = str(request.get("stream", "transactions"))
+            if replay_stream == "transactions":
+                event_source = iter_v16_transaction_replay
+            elif replay_stream == "inbound":
+                event_source = iter_v16_inbound_request_replay
+            else:
+                raise ValueError("replay stream must be transactions or inbound")
+            events = event_source(
+                source.database,
+                charger_identity=(
+                    str(request["source_charger"])
+                    if request.get("source_charger")
+                    else None
+                ),
+                batch_size=batch_size,
+            )
+            async with self._transport_lock:
+                completed = await run_v16_live_replay_events(
+                    self._simulator,
+                    events,
+                    reconnect_after=reconnect_after,
+                    pacing=pacing,
+                )
+            return {
+                "ok": True,
+                "charger": self.config.charger,
+                "source_kind": source.kind,
+                "capture_id": source.capture_id,
+                "source_charger": request.get("source_charger"),
+                "stream": replay_stream,
+                "events_completed": len(completed),
+                "actions": list(completed),
+                "pacing": pacing.mode,
+                "reconnect_after": reconnect_after,
             }
         if action == "reconnect":
             await self.reconnect()

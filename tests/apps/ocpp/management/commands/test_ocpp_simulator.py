@@ -8,6 +8,20 @@ from apps.ocpp.management.commands.ocpp_simulator import Command
 from apps.ocpp.simulator.worker import error_path, session_path, socket_path
 
 
+def replay_args(*, stream="transactions"):
+    args = [
+        "ocpp_simulator",
+        "replay",
+        "--charger",
+        "GWAY001",
+        "--source",
+        "/tmp/reconciled.sqlite3",
+    ]
+    if stream != "transactions":
+        args.extend(["--stream", stream])
+    return args
+
+
 def scenario_args(*, policy_context="open", json_output=False):
     args = [
         "ocpp_simulator",
@@ -170,3 +184,83 @@ def test_authorization_scenario_human_output_shows_errors_and_repeats():
         "(repeat of known-authorized)"
     ) in output
     assert "KNOWN-OK" not in output
+
+
+def test_replay_command_forwards_source_pacing_and_reconnect(monkeypatch, capsys):
+    async def fake_send_control(charger, request):
+        assert charger == "GWAY001"
+        assert request == {
+            "action": "replay",
+            "source": "/tmp/reconciled.sqlite3",
+            "source_charger": "field-charger",
+            "stream": "transactions",
+            "batch_size": 64,
+            "pacing": "fixed",
+            "interval_seconds": 0.5,
+            "burst_size": 100,
+            "burst_pause_seconds": 0.0,
+            "reconnect_after": 20,
+        }
+        return {
+            "ok": True,
+            "charger": charger,
+            "source_kind": "database",
+            "capture_id": None,
+            "source_charger": "field-charger",
+            "stream": "transactions",
+            "events_completed": 3,
+            "actions": ["StartTransaction", "MeterValues", "StopTransaction"],
+            "pacing": "fixed",
+            "reconnect_after": 20,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command(
+        *replay_args(),
+        "--source-charger",
+        "field-charger",
+        "--batch-size",
+        "64",
+        "--pacing",
+        "fixed",
+        "--interval-seconds",
+        "0.5",
+        "--reconnect-after",
+        "20",
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["events_completed"] == 3
+    assert payload["source_kind"] == "database"
+
+
+def test_replay_command_selects_inbound_stream(monkeypatch, capsys):
+    async def fake_send_control(charger, request):
+        assert request["stream"] == "inbound"
+        return {
+            "ok": True,
+            "charger": charger,
+            "source_kind": "database",
+            "capture_id": None,
+            "source_charger": None,
+            "stream": "inbound",
+            "events_completed": 1,
+            "actions": ["Authorize"],
+            "pacing": "maximum",
+            "reconnect_after": None,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command(*replay_args(stream="inbound"))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["stream"] == "inbound"
+    assert payload["actions"] == ["Authorize"]

@@ -5,13 +5,32 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from apps.ocpp.models import Charger
 from apps.ocpp.protocol.contracts import ProtocolVersion
 from apps.ocpp.simulator.client import OcppSimulator
+
+
+class ReplayTransport(Protocol):
+    """Minimal transport used by replay execution."""
+
+    def call(
+        self,
+        action: str,
+        payload: dict[str, object],
+    ) -> Awaitable[dict[str, object]]: ...
+
+
+class ReconnectableReplayTransport(ReplayTransport, Protocol):
+    """Replay transport that can cycle its live connection and boot again."""
+
+    def reconnect(self) -> Awaitable[None]: ...
+
+    def boot(self) -> Awaitable[object]: ...
 
 
 @dataclass(frozen=True)
@@ -271,6 +290,112 @@ def iter_v16_inbound_request_replay(
                 )
 
 
+async def run_v16_replay_events(
+    transport: ReplayTransport,
+    events: Iterable[ReplayEvent],
+    *,
+    pacing: ReplayPacing | None = None,
+    after_event: Callable[[int], Awaitable[None]] | None = None,
+) -> tuple[str, ...]:
+    """Replay ordered OCPP 1.6 events through an arbitrary live-style transport."""
+    runtime_transactions: dict[int, object] = {}
+    completed: list[str] = []
+    pacing = pacing or ReplayPacing()
+    pacing.validate()
+
+    for event in events:
+        await _pace(pacing, len(completed))
+        payload = dict(event.payload)
+        if event.requires_runtime_transaction_id:
+            runtime_id = runtime_transactions.get(event.source_transaction_id)
+            if runtime_id is None:
+                raise ValueError(
+                    "Replay event requires a runtime transaction ID before "
+                    f"transaction {event.source_transaction_id} was started."
+                )
+            payload["transactionId"] = runtime_id
+
+        response = await transport.call(event.action, payload)
+        if event.action == "StartTransaction":
+            runtime_id = response.get("transactionId")
+            if runtime_id is None:
+                raise ValueError("StartTransaction response is missing transactionId")
+            runtime_transactions[event.source_transaction_id] = runtime_id
+        completed.append(event.action)
+        if after_event is not None:
+            await after_event(len(completed))
+
+    return tuple(completed)
+
+
+async def run_v16_live_replay_events(
+    transport: ReconnectableReplayTransport,
+    events: Iterable[ReplayEvent],
+    *,
+    reconnect_after: int | None = None,
+    pacing: ReplayPacing | None = None,
+    after_event: Callable[[int], Awaitable[None]] | None = None,
+) -> tuple[str, ...]:
+    """Replay events and optionally reconnect the real charger mid-drain."""
+    if reconnect_after is not None and reconnect_after < 1:
+        raise ValueError("reconnect_after must be positive")
+
+    runtime_transactions: dict[int, object] = {}
+    completed: list[str] = []
+    pacing = pacing or ReplayPacing()
+    pacing.validate()
+
+    for event in events:
+        if reconnect_after is not None and len(completed) == reconnect_after:
+            await transport.reconnect()
+            boot = await transport.boot()
+            status = getattr(boot, "status", None)
+            if status != "Accepted":
+                raise ValueError(
+                    "BootNotification was not accepted after replay reconnect: "
+                    f"{status}"
+                )
+
+        await _pace(pacing, len(completed))
+        payload = dict(event.payload)
+        if event.requires_runtime_transaction_id:
+            runtime_id = runtime_transactions.get(event.source_transaction_id)
+            if runtime_id is None:
+                raise ValueError(
+                    "Replay event requires a runtime transaction ID before "
+                    f"transaction {event.source_transaction_id} was started."
+                )
+            payload["transactionId"] = runtime_id
+
+        response = await transport.call(event.action, payload)
+        if event.action == "StartTransaction":
+            runtime_id = response.get("transactionId")
+            if runtime_id is None:
+                raise ValueError("StartTransaction response is missing transactionId")
+            runtime_transactions[event.source_transaction_id] = runtime_id
+
+        completed.append(event.action)
+        if after_event is not None:
+            await after_event(len(completed))
+
+    return tuple(completed)
+
+
+class _InProcessReplayTransport:
+    """Adapt the retained in-process simulator to the replay transport contract."""
+
+    def __init__(self, client: OcppSimulator) -> None:
+        self.client = client
+
+    async def call(
+        self,
+        action: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        response = await self.client.call(action, payload)
+        return response.payload
+
+
 async def run_v16_database_replay(
     charger: Charger,
     database: Path,
@@ -283,21 +408,39 @@ async def run_v16_database_replay(
 ) -> tuple[str, ...]:
     """Replay migrated transaction history back-to-back at charger speed."""
 
-    client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
-    runtime_transactions: dict[int, object] = {}
-    completed: list[str] = []
-    pacing = pacing or ReplayPacing()
-    pacing.validate()
     if reconnect_after is not None and reconnect_after < 1:
         raise ValueError("reconnect_after must be positive")
 
-    for event in iter_v16_transaction_replay(
+    events = iter_v16_transaction_replay(
         database,
         charger_identity=source_charger_identity,
         batch_size=batch_size,
-    ):
-        if reconnect_after is not None and len(completed) == reconnect_after:
-            client = OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    )
+    if reconnect_after is None:
+        transport = _InProcessReplayTransport(
+            OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+        )
+        return await run_v16_replay_events(
+            transport,
+            events,
+            pacing=pacing,
+            after_event=after_event,
+        )
+
+    # Preserve the historical in-process reconnect behavior until the live
+    # reconnect-and-drain chunk replaces this seam with a real WebSocket cycle.
+    runtime_transactions: dict[int, object] = {}
+    completed: list[str] = []
+    active = _InProcessReplayTransport(
+        OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+    )
+    pacing = pacing or ReplayPacing()
+    pacing.validate()
+    for event in events:
+        if len(completed) == reconnect_after:
+            active = _InProcessReplayTransport(
+                OcppSimulator(charger=charger, version=ProtocolVersion.OCPP_16)
+            )
         await _pace(pacing, len(completed))
         payload = dict(event.payload)
         if event.requires_runtime_transaction_id:
@@ -308,17 +451,15 @@ async def run_v16_database_replay(
                     f"transaction {event.source_transaction_id} was started."
                 )
             payload["transactionId"] = runtime_id
-
-        response = await client.call(event.action, payload)
+        response = await active.call(event.action, payload)
         if event.action == "StartTransaction":
-            runtime_id = response.payload.get("transactionId")
+            runtime_id = response.get("transactionId")
             if runtime_id is None:
                 raise ValueError("StartTransaction response is missing transactionId")
             runtime_transactions[event.source_transaction_id] = runtime_id
         completed.append(event.action)
         if after_event is not None:
             await after_event(len(completed))
-
     return tuple(completed)
 
 
