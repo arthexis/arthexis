@@ -4,6 +4,7 @@ from apps.ocpp.simulator.authorization import (
     AuthorizationAttempt,
     AuthorizationAttemptResult,
     AuthorizationScenario,
+    run_live_authorization_scenario,
 )
 from apps.ocpp.simulator.client import OcppSimulator
 from apps.ocpp.simulator.database_replay import (
@@ -33,6 +34,7 @@ __all__ = [
     "AuthorizationAttemptResult",
     "AuthorizationScenario",
     "AuthorizationScenarioResult",
+    "run_live_authorization_scenario",
     "BacklogLoadResult",
     "BootResult",
     "LiveOcpp16Simulator",
