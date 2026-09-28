@@ -516,3 +516,14 @@ def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
 
     assert gate < deploy < runner
     assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
+
+
+def test_approved_auto_merge_serializes_and_reconciles_watchtower_handoff() -> None:
+    workflow = Path(".github/workflows/approved-auto-merge.yml").read_text(encoding="utf-8")
+
+    assert "group: approved-auto-merge-" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert 'issues/$PR_NUMBER/comments' in workflow
+    assert 'select(.body ==' in workflow
+    assert "post_merge_handoff=already_accepted" in workflow
+    assert workflow.index("post_merge_handoff=already_accepted") < workflow.index("gh workflow run watchtower-deploy.yml")
