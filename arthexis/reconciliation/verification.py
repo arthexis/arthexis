@@ -10,7 +10,7 @@ from pathlib import Path
 from arthexis.reconciliation.source import inspect_source
 from arthexis.reconciliation.workspace import verify_fixture_source
 
-REPORT_FORMAT = "arthexis-migration-report-v1"
+REPORT_FORMAT = "arthexis-migration-report-v2"
 
 RESOURCE_TABLES = {
     "card_credentials": "cards_cardcredential",
@@ -67,6 +67,13 @@ def _render_text(report: dict[str, object]) -> str:
     for check in report["checks"]:
         status = "PASS" if check["passed"] else "FAIL"
         lines.append(f"- [{status}] {check['name']}: {check['detail']}")
+    if report["historical_gaps"]:
+        lines.extend(["", "Accepted historical gaps:"])
+        for gap in report["historical_gaps"]:
+            lines.append(
+                f"- {gap['resource']} [{gap['classification']}]: "
+                f"{gap['reason']} ({gap['evidence']})"
+            )
     if report["warnings"]:
         lines.extend(["", "Warnings:"])
         lines.extend(f"- {warning}" for warning in report["warnings"])
@@ -148,12 +155,40 @@ def verify_reconciliation(fixture_path: Path) -> VerificationResult:
             f"imported={expected}, destination={actual}",
         )
 
-    skipped = reconciliation.get("reconciliation", {}).get("skipped", {})
+    reconciliation_result = reconciliation.get("reconciliation", {})
+    historical_gaps = reconciliation_result.get("historical_gaps", [])
+    accepted_gap_keys = {
+        (gap.get("resource"), gap.get("reason"))
+        for gap in historical_gaps
+        if gap.get("classification") in {"source-incomplete", "legacy-v0-gap"}
+        and gap.get("evidence")
+    }
+
+    for gap in historical_gaps:
+        classification = gap.get("classification")
+        resource = gap.get("resource")
+        reason = gap.get("reason")
+        evidence = gap.get("evidence")
+        if classification not in {"source-incomplete", "legacy-v0-gap"}:
+            failures.append(
+                f"{resource}: unsupported historical gap classification "
+                f"{classification!r} ({reason})."
+            )
+            continue
+        if not evidence:
+            failures.append(
+                f"{resource}: historical gap {classification!r} lacks source evidence."
+            )
+            continue
+        warnings.append(
+            f"{resource}: accepted {classification} gap ({reason}); {evidence}"
+        )
+
+    skipped = reconciliation_result.get("skipped", {})
     for resource, reason in sorted(skipped.items()):
-        if reason == "source table absent":
-            warnings.append(f"{resource}: source table absent; no history was manufactured.")
-        else:
-            failures.append(f"{resource}: reconciliation skipped retained data ({reason}).")
+        if (resource, reason) in accepted_gap_keys:
+            continue
+        failures.append(f"{resource}: reconciliation skipped retained data ({reason}).")
 
     decision = "GO" if not failures else "NO-GO"
     report = {
@@ -164,6 +199,7 @@ def verify_reconciliation(fixture_path: Path) -> VerificationResult:
         "source_database": str(source_database),
         "destination_database": str(destination),
         "checks": checks,
+        "historical_gaps": historical_gaps,
         "warnings": warnings,
         "failures": failures,
         "resource_usage": reconciliation.get("resource_usage", {}),
