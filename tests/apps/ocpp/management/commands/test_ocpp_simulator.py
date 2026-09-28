@@ -8,6 +8,20 @@ from apps.ocpp.management.commands.ocpp_simulator import Command
 from apps.ocpp.simulator.worker import error_path, session_path, socket_path
 
 
+def replay_args(*, stream="transactions"):
+    args = [
+        "ocpp_simulator",
+        "replay",
+        "--charger",
+        "GWAY001",
+        "--source",
+        "/tmp/reconciled.sqlite3",
+    ]
+    if stream != "transactions":
+        args.extend(["--stream", stream])
+    return args
+
+
 def scenario_args(*, policy_context="open", json_output=False):
     args = [
         "ocpp_simulator",
@@ -206,12 +220,7 @@ def test_replay_command_forwards_source_pacing_and_reconnect(monkeypatch, capsys
     )
 
     call_command(
-        "ocpp_simulator",
-        "replay",
-        "--charger",
-        "GWAY001",
-        "--source",
-        "/tmp/reconciled.sqlite3",
+        *replay_args(),
         "--source-charger",
         "field-charger",
         "--batch-size",
@@ -250,16 +259,7 @@ def test_replay_command_selects_inbound_stream(monkeypatch, capsys):
         fake_send_control,
     )
 
-    call_command(
-        "ocpp_simulator",
-        "replay",
-        "--charger",
-        "GWAY001",
-        "--source",
-        "/tmp/reconciled.sqlite3",
-        "--stream",
-        "inbound",
-    )
+    call_command(*replay_args(stream="inbound"))
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["stream"] == "inbound"
