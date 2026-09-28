@@ -54,6 +54,14 @@ meter traffic cannot reactivate it; genuinely newer charger evidence may.
 See the [OCPP recovery architecture](ocpp-recovery.md) for durable protocol
 operation lifecycle and automatic-retry boundaries.
 
+## Legacy satellite migration
+
+For cross-major field migration from a legacy satellite, use the
+[legacy satellite migration rehearsal and cutover procedure](legacy-satellite-migration.md).
+It defines the single `rehearse` command, hard GO/NO-GO gates, immutable evidence
+bundle, final `--cutover` no-missed-writes proof, retention policy, and the exact
+handoff consumed by #278.
+
 ## Documentation navigation
 
 Operator documentation uses ordinary Markdown links. Linking another repository Markdown file from this guide makes that document part of the public Markdown site; unlinked Markdown files remain unavailable over HTTP.
