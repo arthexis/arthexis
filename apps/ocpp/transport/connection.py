@@ -77,6 +77,16 @@ def load_or_enroll_charger(
                 connection_token_hash=_connection_token_hash(identity, credentials),
                 enrolled_at=enrolled_at,
                 authority_cutover_at=enrolled_at,
+                protocol_mode=(
+                    policy.protocol_mode
+                    if open_admission
+                    else Charger.AuthorizationMode.RESTRICTED
+                ),
+                authorization_mode=(
+                    policy.card_mode
+                    if open_admission
+                    else Charger.AuthorizationMode.RESTRICTED
+                ),
             )
     except IntegrityError:
         charger = Charger.objects.filter(identity=identity, active=True).first()
