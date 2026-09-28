@@ -2,7 +2,7 @@ name: python / Package
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 permissions:
@@ -12,32 +12,47 @@ jobs:
   package:
     name: python / Package
     runs-on: ubuntu-latest
+    env:
+      VERSION_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'version') }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
+      - name: Validate version-only PR
+        if: env.VERSION_PR == 'true'
+        run: python3 .github/scripts/validate_version_only_pr.py "$BASE_SHA" "$HEAD_SHA"
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        if: env.VERSION_PR != 'true'
         with:
           python-version: '3.13'
           cache: pip
       - name: Install build tooling
+        if: env.VERSION_PR != 'true'
         run: python -m pip install --upgrade pip build
       - name: Build distributions
+        if: env.VERSION_PR != 'true'
         run: python -m build
       - name: Check distributions exist
+        if: env.VERSION_PR != 'true'
         run: test -n "$(find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print -quit)"
       - name: Clean wheel install
+        if: env.VERSION_PR != 'true'
         run: |
           python -m venv /tmp/arthexis-package-install
           /tmp/arthexis-package-install/bin/python -m pip install --upgrade pip
           /tmp/arthexis-package-install/bin/python -m pip install dist/*.whl
           /tmp/arthexis-package-install/bin/python -m pip check
       - name: Installed package smoke check
+        if: env.VERSION_PR != 'true'
         run: |
           /tmp/arthexis-package-install/bin/python -c "import arthexis; import django; print(django.get_version())"
 
   clean-install:
     name: python / Clean install
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'version') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
