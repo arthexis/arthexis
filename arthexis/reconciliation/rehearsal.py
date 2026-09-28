@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import shutil
 import time
 from dataclasses import asdict, dataclass
@@ -112,3 +114,139 @@ def write_resource_receipt(
     path = rehearsal_root / "resource-report.json"
     path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+GO_BUNDLE_FORMAT = "arthexis-migration-go-bundle-v1"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def create_go_bundle(
+    rehearsal_root: Path,
+    *,
+    capture_path: Path,
+    fixture_path: Path,
+    migration_report: Path,
+    migration_text_report: Path,
+    resource_report: Path,
+) -> Path:
+    """Create one immutable, checksummed handoff bundle for an accepted GO."""
+
+    capture_manifest_path = capture_path / "manifest.json"
+    reconciliation_path = fixture_path / "reconciliation.json"
+    destination_database = fixture_path / "reconciled.sqlite3"
+
+    required = (
+        capture_manifest_path,
+        reconciliation_path,
+        destination_database,
+        migration_report,
+        migration_text_report,
+        resource_report,
+    )
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise ValueError(f"GO bundle inputs are incomplete: {', '.join(missing)}")
+
+    capture_manifest = json.loads(capture_manifest_path.read_text(encoding="utf-8"))
+    verification = json.loads(migration_report.read_text(encoding="utf-8"))
+    resources = json.loads(resource_report.read_text(encoding="utf-8"))
+    if verification.get("decision") != "GO":
+        raise ValueError("GO bundle requires a successful migration verification.")
+    if resources.get("decision") != "GO":
+        raise ValueError("GO bundle requires resource safety decision GO.")
+
+    destination_sha256 = _sha256(destination_database)
+    capture_id = str(capture_manifest["capture_id"])
+    bundle_id = f"{capture_id}-{destination_sha256[:12]}"
+    bundles_root = rehearsal_root / "bundles"
+    bundles_root.mkdir(parents=True, exist_ok=True)
+    final_path = bundles_root / bundle_id
+    if final_path.exists():
+        raise ValueError(f"GO bundle already exists: {final_path}")
+
+    temporary = bundles_root / f".bundle-{os.getpid()}"
+    if temporary.exists():
+        raise ValueError(f"GO bundle staging path already exists: {temporary}")
+    temporary.mkdir()
+
+    try:
+        payloads = {
+            "capture/manifest.json": capture_manifest_path,
+            "capture/checksums.sha256": capture_path / "checksums.sha256",
+            "migration/reconciliation.json": reconciliation_path,
+            "migration/migration-report.json": migration_report,
+            "migration/migration-report.txt": migration_text_report,
+            "migration/resource-report.json": resource_report,
+            "database/reconciled.sqlite3": destination_database,
+        }
+        checksums: list[tuple[str, str]] = []
+        for relative, source in payloads.items():
+            target = temporary / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            checksums.append((relative, _sha256(target)))
+
+        manifest = {
+            "format": GO_BUNDLE_FORMAT,
+            "bundle_id": bundle_id,
+            "decision": "GO",
+            "source": {
+                "capture_id": capture_id,
+                "capture_manifest_sha256": _sha256(capture_manifest_path),
+                "database_sha256": capture_manifest["database"]["sha256"],
+                "installation": capture_manifest.get("source", {}),
+            },
+            "destination": {
+                "database_path": "database/reconciled.sqlite3",
+                "database_sha256": destination_sha256,
+                "classification": "v2",
+            },
+            "verification": {
+                "report_path": "migration/migration-report.json",
+                "historical_gaps": verification.get("historical_gaps", []),
+                "warnings": verification.get("warnings", []),
+            },
+            "resources": {
+                "report_path": "migration/resource-report.json",
+                "policy": resources.get("policy", {}),
+                "usage": resources.get("usage", {}),
+            },
+            "provenance": {
+                "reconciliation_receipt": "migration/reconciliation.json",
+                "capture_manifest": "capture/manifest.json",
+            },
+        }
+        manifest_path = temporary / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        checksums.append(("manifest.json", _sha256(manifest_path)))
+        (temporary / "checksums.sha256").write_text(
+            "".join(f"{digest}  {relative}\n" for relative, digest in checksums),
+            encoding="utf-8",
+        )
+        (temporary / "FINALIZED").write_text(
+            json.dumps(
+                {
+                    "format": GO_BUNDLE_FORMAT,
+                    "bundle_id": bundle_id,
+                    "manifest_sha256": _sha256(manifest_path),
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        temporary.rename(final_path)
+        return final_path
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
