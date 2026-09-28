@@ -204,11 +204,18 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             *,
             reconnect_after,
             pacing,
+            metrics,
         ):
             seen["transport"] = transport
+            seen["metrics"] = metrics
             seen["events"] = events
             seen["reconnect_after"] = reconnect_after
             seen["pacing"] = pacing
+            metrics.attempted_requests = 2
+            metrics.completed_requests = 2
+            metrics.elapsed_seconds = 0.5
+            metrics.total_latency_seconds = 0.2
+            metrics.max_latency_seconds = 0.15
             return ("StartTransaction", "MeterValues")
 
         monkeypatch.setattr(
@@ -260,6 +267,16 @@ def test_worker_replay_resolves_source_and_runs_live_transport(monkeypatch, tmp_
             "actions": ["StartTransaction", "MeterValues"],
             "pacing": "burst",
             "reconnect_after": 25,
+            "metrics": {
+                "attempted_requests": 2,
+                "completed_requests": 2,
+                "failed_requests": 0,
+                "elapsed_seconds": 0.5,
+                "throughput_requests_per_second": 4.0,
+                "mean_latency_seconds": 0.1,
+                "max_latency_seconds": 0.15,
+                "error_counts": {},
+            },
         }
 
     asyncio.run(exercise())
@@ -292,7 +309,7 @@ def test_worker_replay_selects_retained_inbound_stream(monkeypatch, tmp_path):
             seen["batch_size"] = batch_size
             return ("inbound-events",)
 
-        async def fake_run(transport, events, *, reconnect_after, pacing):
+        async def fake_run(transport, events, *, reconnect_after, pacing, metrics):
             seen["events"] = events
             return ("Authorize",)
 
