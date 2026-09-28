@@ -77,8 +77,8 @@ def test_watchtower_deploy_label_bypasses_shared_queue(
     assert 'grep -Fxq deploy <<<"$labels"' in workflow
     assert "github.event.client_payload.force_deploy || 'false'" in workflow
     assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in workflow
-    assert 'if [[ "$FORCE_DEPLOY" == "true" ]]; then' in workflow
-    assert "watchtower_deploy=forced_by_deploy_label" in workflow
+    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in workflow
+    assert "watchtower_deploy=forced_by_release_or_deploy_label" in workflow
 
 
 def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
