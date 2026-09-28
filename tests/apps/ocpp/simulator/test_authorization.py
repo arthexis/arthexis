@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 from apps.ocpp.simulator.authorization import (
@@ -121,8 +122,6 @@ def test_live_runner_preserves_order_repeats_and_actual_statuses():
         ]
         assert all(r.policy_context == "restricted" for r in results)
 
-    import asyncio
-
     asyncio.run(exercise())
 
 
@@ -149,8 +148,6 @@ def test_live_runner_keeps_per_attempt_transport_failures_structured():
         assert [r.status for r in results] == ["Accepted", None, "Blocked"]
         assert results[1].error == "connection receive failed"
         assert [r.attempt for r in results] == ["first", "second", "third"]
-
-    import asyncio
 
     asyncio.run(exercise())
 
