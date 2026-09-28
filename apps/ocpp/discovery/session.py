@@ -7,9 +7,9 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _EVENT_CATEGORIES = frozenset({"observation", "inference", "operator_note"})
