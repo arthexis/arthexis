@@ -47,9 +47,9 @@ jobs:
           if [[ "$WORKFLOW_PR" == "true" ]]; then
             python -m pytest -q --durations=20 -m workflow
           elif [[ "$PYTHON_VERSION" == "3.10" ]]; then
-            python -m pytest -q --durations=20 -m "not workflow"
+            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e"\n            python -m pytest -q --durations=20 -m reconciliation_e2e
           else
-            python -m pytest -q --durations=20 -m "not workflow and not reconciliation_e2e"
+            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e"
           fi
 
       - name: Require all validation checks
