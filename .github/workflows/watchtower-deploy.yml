@@ -734,8 +734,497 @@ jobs:
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "rollover_pr=created number=$rollover_pr"
           fi
-          GH_TOKEN="$GH_TOKEN" gh pr edit "$rollover_pr" --repo "$GITHUB_REPOSITORY" --add-label approved
+          printf '%s\n' '{"labels":["approved"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/issues/${rollover_pr}/labels" \
+            --input - >/dev/null
           echo "rollover_pr=approved number=$rollover_pr"
+
+      - name: Open Gway next-version PR after accepted deployment
+        if: env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_CHANGED == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          released="$GWAY_EXPECTED_VERSION"
+          next_version="$(python3 - "$released" <<'PY'
+          import re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit(f"Automatic Gway rollover requires X.Y.Z, got {sys.argv[1]!r}")
+          major, minor, patch = map(int, match.groups())
+          print(f"{major}.{minor}.{patch + 1}")
+          PY
+          )"
+          repository="arthexis/gway"
+          branch="release/advance-gway-v${released}"
+
+          work="$(mktemp -d)"
+          cleanup() {
+            rm -rf "$work"
+          }
+          trap cleanup EXIT
+          git clone --quiet --depth=1 https://github.com/arthexis/gway.git "$work"
+          cd "$work"
+
+          current="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*
+        if: ${{ failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${GWAY_RUNTIME_ROLLBACK_AVAILABLE:-false}" != "true" ]] ||
+             ! sudo -n test -d /var/lib/gway/venv.previous; then
+            echo "gway_runtime_rollback=unavailable"
+            exit 0
+          fi
+
+          echo "gway_runtime_rollback=starting"
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          if sudo -n test -d /var/lib/gway/venv; then
+            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.failed
+          fi
+          sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv
+          sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+
+          sudo -n systemctl daemon-reload
+          sudo -n systemctl restart gway-mcp-server.service
+          sudo -n systemctl restart gway-remote-auth.service
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          sudo -n systemctl is-active --quiet gway-remote-auth.service
+
+          for port in 8000 8001; do
+            ready=false
+            for attempt in $(seq 1 20); do
+              if python3 - "$port" <<'PY'
+          import socket
+          import sys
+
+          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+              pass
+          PY
+              then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$ready" != "true" ]]; then
+              echo "gway_runtime_rollback=service_port_failed port=$port" >&2
+              exit 1
+            fi
+          done
+
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          echo "gway_runtime_rollback=restored"
+
+      - name: Reconcile certified package publisher handoff
+        if: env.WATCHTOWER_STAGE == 'arthexis'
+        shell: bash
+        env:
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          WATCHTOWER_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$RELEASE_AUTOMATION_TOKEN" ]]; then
+            echo "RELEASE_AUTOMATION_TOKEN is required to dispatch certified publishers." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          token = os.environ["RELEASE_AUTOMATION_TOKEN"]
+          watchtower_run = os.environ["WATCHTOWER_RUN"]
+
+          releases = (
+              {
+                  "package": "gway",
+                  "repository": "arthexis/gway",
+                  "workflow": "release.yml",
+                  "version": os.environ["GWAY_EXPECTED_VERSION"],
+                  "sha": os.environ["GWAY_EXPECTED_SHA"],
+                  "companion_sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+              },
+              {
+                  "package": "arthexis",
+                  "repository": "arthexis/arthexis",
+                  "workflow": "publish.yml",
+                  "version": os.environ["ARTHEXIS_EXPECTED_VERSION"],
+                  "sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+                  "companion_sha": os.environ["GWAY_EXPECTED_SHA"],
+              },
+          )
+
+          def request(method, url, payload=None, *, raw=False):
+              data = None if payload is None else json.dumps(payload).encode()
+              accept = (
+                  "application/vnd.github.raw+json"
+                  if raw
+                  else "application/vnd.github+json"
+              )
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": accept,
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      body = response.read()
+                      if not body:
+                          return response.status, None
+                      return response.status, (
+                          body.decode() if raw else json.loads(body)
+                      )
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, None
+                  raise
+
+          for release in releases:
+              package = release["package"]
+              version = release["version"]
+
+              # Release intent is durable PR metadata, not an implication of deployment.
+              # A retry can therefore rediscover intent after Watchtower acceptance.
+              _, pulls = request(
+                  "GET",
+                  f"{api}/repos/{release['repository']}/commits/{release['sha']}/pulls",
+              )
+              release_prs = [
+                  pull
+                  for pull in (pulls or [])
+                  if pull.get("merge_commit_sha") == release["sha"]
+                  and any(
+                      label.get("name") == "release"
+                      for label in pull.get("labels", [])
+                  )
+              ]
+              if not release_prs:
+                  print(f"{package}_publish=not_requested")
+                  continue
+
+              target = f".watchtower/releases/{package}/{version}.json"
+              status, body = request(
+                  "GET",
+                  (
+                      f"{api}/repos/arthexis/arthexis/contents/{target}"
+                      "?ref=watchtower-state"
+                  ),
+                  raw=True,
+              )
+
+              if status != 404:
+                  manifest = json.loads(body)
+                  expected = {
+                      "package": package,
+                      "version": version,
+                      "sha": release["sha"],
+                      "companion_sha": release["companion_sha"],
+                  }
+                  mismatches = {
+                      key: (manifest.get(key), value)
+                      for key, value in expected.items()
+                      if manifest.get(key) != value
+                  }
+                  publication = manifest.get("publication", {})
+                  incomplete = [
+                      name
+                      for name in ("pypi", "git_tag", "github_release")
+                      if publication.get(name, {}).get("state") != "published"
+                  ]
+                  if mismatches or incomplete:
+                      raise SystemExit(
+                          f"Release evidence conflict for {target}: "
+                          f"mismatches={mismatches!r} incomplete={incomplete!r}"
+                      )
+                  print(f"{package}_publish=already_recorded")
+                  continue
+
+              dispatch_url = (
+                  f"{api}/repos/{release['repository']}/actions/workflows/"
+                  f"{release['workflow']}/dispatches"
+              )
+              request(
+                  "POST",
+                  dispatch_url,
+                  {
+                      "ref": "main",
+                      "inputs": {
+                          "deployed_sha": release["sha"],
+                          "companion_sha": release["companion_sha"],
+                          "watchtower_run": watchtower_run,
+                      },
+                  },
+              )
+              print(f"{package}_publish=dispatched")
+          PY
+, text)
+          if not match:
+              raise SystemExit("project.version not found")
+          print(match.group(1))
+          PY
+          )"
+          if [[ "$current" != "$released" ]]; then
+            echo "gway_rollover=already_advanced current=$current accepted=$released"
+            exit 0
+          fi
+
+          python3 - "$released" "$next_version" <<'PY'
+          from pathlib import Path
+          import re, sys
+          released, nxt = sys.argv[1:]
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          pattern = r'(?m)^version\s*=\s*"' + re.escape(released) + r'"\s*
+        if: ${{ failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${GWAY_RUNTIME_ROLLBACK_AVAILABLE:-false}" != "true" ]] ||
+             ! sudo -n test -d /var/lib/gway/venv.previous; then
+            echo "gway_runtime_rollback=unavailable"
+            exit 0
+          fi
+
+          echo "gway_runtime_rollback=starting"
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          if sudo -n test -d /var/lib/gway/venv; then
+            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.failed
+          fi
+          sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv
+          sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+
+          sudo -n systemctl daemon-reload
+          sudo -n systemctl restart gway-mcp-server.service
+          sudo -n systemctl restart gway-remote-auth.service
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          sudo -n systemctl is-active --quiet gway-remote-auth.service
+
+          for port in 8000 8001; do
+            ready=false
+            for attempt in $(seq 1 20); do
+              if python3 - "$port" <<'PY'
+          import socket
+          import sys
+
+          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+              pass
+          PY
+              then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$ready" != "true" ]]; then
+              echo "gway_runtime_rollback=service_port_failed port=$port" >&2
+              exit 1
+            fi
+          done
+
+          sudo -n rm -rf /var/lib/gway/venv.failed
+          echo "gway_runtime_rollback=restored"
+
+      - name: Reconcile certified package publisher handoff
+        if: env.WATCHTOWER_STAGE == 'arthexis'
+        shell: bash
+        env:
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          WATCHTOWER_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$RELEASE_AUTOMATION_TOKEN" ]]; then
+            echo "RELEASE_AUTOMATION_TOKEN is required to dispatch certified publishers." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          token = os.environ["RELEASE_AUTOMATION_TOKEN"]
+          watchtower_run = os.environ["WATCHTOWER_RUN"]
+
+          releases = (
+              {
+                  "package": "gway",
+                  "repository": "arthexis/gway",
+                  "workflow": "release.yml",
+                  "version": os.environ["GWAY_EXPECTED_VERSION"],
+                  "sha": os.environ["GWAY_EXPECTED_SHA"],
+                  "companion_sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+              },
+              {
+                  "package": "arthexis",
+                  "repository": "arthexis/arthexis",
+                  "workflow": "publish.yml",
+                  "version": os.environ["ARTHEXIS_EXPECTED_VERSION"],
+                  "sha": os.environ["ARTHEXIS_EXPECTED_SHA"],
+                  "companion_sha": os.environ["GWAY_EXPECTED_SHA"],
+              },
+          )
+
+          def request(method, url, payload=None, *, raw=False):
+              data = None if payload is None else json.dumps(payload).encode()
+              accept = (
+                  "application/vnd.github.raw+json"
+                  if raw
+                  else "application/vnd.github+json"
+              )
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": accept,
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      body = response.read()
+                      if not body:
+                          return response.status, None
+                      return response.status, (
+                          body.decode() if raw else json.loads(body)
+                      )
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, None
+                  raise
+
+          for release in releases:
+              package = release["package"]
+              version = release["version"]
+
+              # Release intent is durable PR metadata, not an implication of deployment.
+              # A retry can therefore rediscover intent after Watchtower acceptance.
+              _, pulls = request(
+                  "GET",
+                  f"{api}/repos/{release['repository']}/commits/{release['sha']}/pulls",
+              )
+              release_prs = [
+                  pull
+                  for pull in (pulls or [])
+                  if pull.get("merge_commit_sha") == release["sha"]
+                  and any(
+                      label.get("name") == "release"
+                      for label in pull.get("labels", [])
+                  )
+              ]
+              if not release_prs:
+                  print(f"{package}_publish=not_requested")
+                  continue
+
+              target = f".watchtower/releases/{package}/{version}.json"
+              status, body = request(
+                  "GET",
+                  (
+                      f"{api}/repos/arthexis/arthexis/contents/{target}"
+                      "?ref=watchtower-state"
+                  ),
+                  raw=True,
+              )
+
+              if status != 404:
+                  manifest = json.loads(body)
+                  expected = {
+                      "package": package,
+                      "version": version,
+                      "sha": release["sha"],
+                      "companion_sha": release["companion_sha"],
+                  }
+                  mismatches = {
+                      key: (manifest.get(key), value)
+                      for key, value in expected.items()
+                      if manifest.get(key) != value
+                  }
+                  publication = manifest.get("publication", {})
+                  incomplete = [
+                      name
+                      for name in ("pypi", "git_tag", "github_release")
+                      if publication.get(name, {}).get("state") != "published"
+                  ]
+                  if mismatches or incomplete:
+                      raise SystemExit(
+                          f"Release evidence conflict for {target}: "
+                          f"mismatches={mismatches!r} incomplete={incomplete!r}"
+                      )
+                  print(f"{package}_publish=already_recorded")
+                  continue
+
+              dispatch_url = (
+                  f"{api}/repos/{release['repository']}/actions/workflows/"
+                  f"{release['workflow']}/dispatches"
+              )
+              request(
+                  "POST",
+                  dispatch_url,
+                  {
+                      "ref": "main",
+                      "inputs": {
+                          "deployed_sha": release["sha"],
+                          "companion_sha": release["companion_sha"],
+                          "watchtower_run": watchtower_run,
+                      },
+                  },
+              )
+              print(f"{package}_publish=dispatched")
+          PY
+
+          updated, count = re.subn(pattern, f'version = "{nxt}"', text, count=1)
+          if count != 1:
+              raise SystemExit("project.version does not match accepted version")
+          path.write_text(updated, encoding="utf-8")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add pyproject.toml
+          test "$(git diff --cached --name-only)" = "pyproject.toml"
+          git commit -m "chore(release): advance gway to v${next_version}"
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            push --force-with-lease origin "$branch"
+          unset auth_header
+
+          existing="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            rollover_pr="$existing"
+            echo "gway_rollover_pr=existing number=$rollover_pr"
+          else
+            GH_TOKEN="$GH_TOKEN" gh pr create --repo "$repository" --base main --head "$branch" \
+              --title "Advance Gway to ${next_version} after accepted ${released} deployment" \
+              --body "Watchtower successfully accepted Gway `${released}` at `${GWAY_EXPECTED_SHA}`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
+            rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number')"
+            echo "gway_rollover_pr=created number=$rollover_pr"
+          fi
+          printf '%s\n' '{"labels":["approved"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${repository}/issues/${rollover_pr}/labels" \
+            --input - >/dev/null
+          echo "gway_rollover_pr=approved number=$rollover_pr"
 
 
       - name: Restore previous Gway runtime after failed deployment
