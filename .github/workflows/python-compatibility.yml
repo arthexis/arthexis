@@ -17,13 +17,13 @@ jobs:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     env:
-      VERSION_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'version') }}
+      VERSION_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'version-only') }}
       BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'version') && fromJSON('["3.13"]') || (contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]')) }}
+        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'version-only') && fromJSON('["3.13"]') || (contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]')) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
