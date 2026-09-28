@@ -16,6 +16,10 @@ on:
         required: true
         type: number
 
+concurrency:
+  group: approved-auto-merge-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -255,11 +259,17 @@ jobs:
             exit 0
           fi
 
+          message="✅ Watchtower deploy handoff accepted for merge \`$merge_sha\` via \`watchtower-deploy.yml\`."
+          existing="$(GH_TOKEN="$READ_TOKEN" gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --jq ".[] | select(.body == \\\"$message\\\") | .id" | head -n 1)"
+          if [[ -n "$existing" ]]; then
+            echo "post_merge_handoff=already_accepted sha=$merge_sha comment_id=$existing"
+            exit 0
+          fi
+
           if GH_TOKEN="$READ_TOKEN" gh workflow run watchtower-deploy.yml \
             --repo "$REPOSITORY" \
             --ref main \
             -f candidate_sha="$merge_sha"; then
-            message="✅ Watchtower deploy handoff accepted for merge \`$merge_sha\` via \`watchtower-deploy.yml\`."
             GH_TOKEN="$READ_TOKEN" gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body "$message"
             echo "post_merge_handoff=accepted sha=$merge_sha workflow=watchtower-deploy.yml"
           else
