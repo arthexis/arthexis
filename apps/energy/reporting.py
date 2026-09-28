@@ -107,8 +107,8 @@ class ReportingPeriodProjection:
             Decimal("0"),
         )
 
-    def as_dict(self) -> dict[str, object]:
-        """Return deterministic JSON-compatible reporting data."""
+    def _content_dict(self) -> dict[str, object]:
+        """Return canonical report content before identity is attached."""
 
         return {
             "schema": REPORTING_SCHEMA_NAME,
@@ -118,6 +118,26 @@ class ReportingPeriodProjection:
             "authority_nodes": list(self.authority_nodes),
             "total_energy_kwh": str(self.total_energy_kwh),
             "sessions": [_session_as_dict(session) for session in self.sessions],
+        }
+
+    @property
+    def content_digest(self) -> str:
+        """Identify canonical report content independent of transport/storage."""
+
+        encoded = json.dumps(
+            self._content_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return sha256(encoded).hexdigest()
+
+    def as_dict(self) -> dict[str, object]:
+        """Return deterministic JSON-compatible reporting data."""
+
+        return {
+            **self._content_dict(),
+            "content_digest": self.content_digest,
         }
 
 class ReportingContractError(ValueError):
@@ -137,6 +157,7 @@ def reporting_contract() -> dict[str, object]:
             "authority_nodes",
             "total_energy_kwh",
             "sessions",
+            "content_digest",
         ),
         "required_session_fields": tuple(
             field.name for field in fields(ChargingSessionProjection)
@@ -170,6 +191,24 @@ def validate_reporting_payload(payload: object) -> dict[str, object]:
         raise ReportingContractError(
             f"unsupported reporting schema version: {payload['schema_version']!r}"
         )
+    digest = payload["content_digest"]
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ReportingContractError("reporting content_digest must be a sha256 hex digest")
+
+    canonical_content = {
+        key: value for key, value in payload.items() if key != "content_digest"
+    }
+    expected_digest = sha256(
+        json.dumps(
+            canonical_content,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if digest != expected_digest:
+        raise ReportingContractError("reporting content_digest does not match payload")
+
     if not isinstance(payload["sessions"], list):
         raise ReportingContractError("reporting sessions must be a list")
     if not isinstance(payload["authority_nodes"], list):
@@ -279,6 +318,8 @@ def _meter_evidence(transaction) -> Iterable[SourceEvidence]:
     if manager is None:
         return ()
     values = manager.all() if hasattr(manager, "all") else manager
+    if hasattr(values, "order_by"):
+        values = values.order_by("sampled_at", "pk")
     evidence: list[SourceEvidence] = []
     for value in values:
         fingerprint = getattr(value, "source_fingerprint", "") or ""
