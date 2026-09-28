@@ -4,9 +4,15 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
-from apps.ocpp.models import Charger, ChargerTimelineProgress
+from apps.ocpp.models import (
+    Charger,
+    ChargerTimelineProgress,
+    InboundProtocolRequest,
+    ProtocolOperation,
+)
 
 STALE_AFTER = timedelta(minutes=15)
+METRIC_WINDOW = timedelta(minutes=5)
 
 
 def query_timeline_status(
@@ -35,7 +41,7 @@ def timeline_snapshot(
     """Return a JSON-safe status payload for displays and other observers."""
     current = as_of or progress.last_received_at or timezone.now()
     receipt_age = _age(current, progress.last_received_at)
-    return {
+    snapshot = {
         "charger_id": progress.charger_id,
         "charger_identity": progress.charger.identity,
         "state": progress.state,
@@ -48,6 +54,8 @@ def timeline_snapshot(
         "historical_events_seen": progress.historical_events_seen,
         "observed_events": progress.observed_events,
     }
+    snapshot.update(_operational_metrics(progress.charger, as_of=current))
+    return snapshot
 
 
 def operator_condition(
@@ -83,7 +91,131 @@ def _empty_snapshot(*, charger: Charger, as_of: datetime) -> dict[str, object]:
         "receipt_age_seconds": None,
         "historical_events_seen": 0,
         "observed_events": 0,
+        **_operational_metrics(charger, as_of=as_of),
     }
+
+
+def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, object]:
+    window_start = as_of - METRIC_WINDOW
+    recent_inbound = charger.inbound_protocol_requests.filter(
+        received_at__gte=window_start,
+        received_at__lte=as_of,
+    )
+    completed_requests = recent_inbound.filter(
+        status=InboundProtocolRequest.Status.COMPLETED,
+        completed_at__isnull=False,
+        completed_at__lte=as_of,
+    )
+    completed = completed_requests.count()
+    request_errors = recent_inbound.filter(
+        response_kind=InboundProtocolRequest.ResponseKind.ERROR
+    ).count()
+    latencies = [
+        max(0.0, (completed_at - received_at).total_seconds())
+        for received_at, completed_at in completed_requests.values_list(
+            "received_at", "completed_at"
+        )
+    ]
+    inbound_pending = charger.inbound_protocol_requests.filter(
+        status=InboundProtocolRequest.Status.PROCESSING,
+        received_at__lte=as_of,
+    )
+    inbound_processing = inbound_pending.count()
+
+    pressure_statuses = (
+        ProtocolOperation.Status.PENDING,
+        ProtocolOperation.Status.DELIVERING,
+        ProtocolOperation.Status.RECOVERY_REQUIRED,
+    )
+    outbound_pending = charger.protocol_operations.filter(
+        status__in=pressure_statuses,
+        created_at__lte=as_of,
+    )
+    outbound_pressure = outbound_pending.count()
+    recent_outbound = charger.protocol_operations.filter(
+        created_at__gte=window_start,
+        created_at__lte=as_of,
+    )
+    outbound_errors = recent_outbound.filter(
+        status__in=(
+            ProtocolOperation.Status.ERRORED,
+            ProtocolOperation.Status.TIMED_OUT,
+            ProtocolOperation.Status.DISCONNECTED,
+        )
+    ).count()
+    retry_attempts = sum(
+        max(0, attempt_count - 1)
+        for attempt_count in recent_outbound.values_list("attempt_count", flat=True)
+    )
+
+    oldest_inbound = inbound_pending.order_by("received_at").values_list(
+        "received_at", flat=True
+    ).first()
+    oldest_outbound = outbound_pending.order_by("created_at").values_list(
+        "created_at", flat=True
+    ).first()
+    oldest_pending = min(
+        (value for value in (oldest_inbound, oldest_outbound) if value is not None),
+        default=None,
+    )
+
+    recent_authorization = charger.inbound_protocol_requests.filter(
+        action="Authorize",
+        received_at__lte=as_of,
+    ).order_by("-received_at").first()
+    authorization_status = _authorization_status(recent_authorization)
+
+    connection = getattr(charger, "connection", None)
+    lease_remaining = (
+        max(0.0, (connection.lease_expires_at - as_of).total_seconds())
+        if connection is not None
+        else None
+    )
+    return {
+        "metric_window_seconds": METRIC_WINDOW.total_seconds(),
+        "recent_requests": recent_inbound.count(),
+        "recent_completed_requests": completed,
+        "processing_rate_per_minute": completed / (METRIC_WINDOW.total_seconds() / 60),
+        "mean_processing_latency_seconds": (
+            sum(latencies) / len(latencies) if latencies else None
+        ),
+        "max_processing_latency_seconds": max(latencies, default=None),
+        "recent_request_errors": request_errors,
+        "recent_outbound_errors": outbound_errors,
+        "recent_retry_attempts": retry_attempts,
+        "inbound_processing": inbound_processing,
+        "outbound_pressure": outbound_pressure,
+        "pending_work": inbound_processing + outbound_pressure,
+        "oldest_pending_at": _iso(oldest_pending),
+        "oldest_pending_age_seconds": _age(as_of, oldest_pending),
+        "last_authorization_at": _iso(
+            recent_authorization.received_at if recent_authorization is not None else None
+        ),
+        "last_authorization_age_seconds": _age(
+            as_of,
+            recent_authorization.received_at if recent_authorization is not None else None,
+        ),
+        "last_authorization_status": authorization_status,
+        "connection_live": bool(connection and connection.lease_expires_at >= as_of),
+        "connection_lease_remaining_seconds": lease_remaining,
+    }
+
+
+def _authorization_status(request: InboundProtocolRequest | None) -> str | None:
+    if request is None:
+        return None
+    if request.status != InboundProtocolRequest.Status.COMPLETED:
+        return request.status
+    if request.response_kind == InboundProtocolRequest.ResponseKind.ERROR:
+        return "error"
+    payload = request.response_payload
+    if isinstance(payload, dict):
+        id_tag_info = payload.get("idTagInfo")
+        if isinstance(id_tag_info, dict):
+            status = id_tag_info.get("status")
+            if isinstance(status, str) and status:
+                return status
+    return "completed"
 
 
 def _age(current: datetime, value: datetime | None) -> float | None:
