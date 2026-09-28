@@ -78,6 +78,9 @@ class GwayCaptureProvider:
             raise RuntimeError("Gway network capture returned invalid JSON") from error
         if not isinstance(value, dict):
             raise RuntimeError("Gway network capture must return a JSON object")
+        result = value.get("result")
+        if isinstance(result, dict):
+            return result
         return value
 
     def available(self) -> bool:
@@ -97,7 +100,7 @@ class GwayCaptureProvider:
         request = plan.request
         return self._call(
             "network",
-            "redirect",
+            "capture",
             request.interface,
             request.destination_ip,
             str(request.destination_port),
