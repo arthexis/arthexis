@@ -105,18 +105,22 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
     request_errors = recent_inbound.filter(
         response_kind=InboundProtocolRequest.ResponseKind.ERROR
     ).count()
-    inbound_processing = charger.inbound_protocol_requests.filter(
-        status=InboundProtocolRequest.Status.PROCESSING
-    ).count()
+    inbound_pending = charger.inbound_protocol_requests.filter(
+        status=InboundProtocolRequest.Status.PROCESSING,
+        received_at__lte=as_of,
+    )
+    inbound_processing = inbound_pending.count()
 
     pressure_statuses = (
         ProtocolOperation.Status.PENDING,
         ProtocolOperation.Status.DELIVERING,
         ProtocolOperation.Status.RECOVERY_REQUIRED,
     )
-    outbound_pressure = charger.protocol_operations.filter(
-        status__in=pressure_statuses
-    ).count()
+    outbound_pending = charger.protocol_operations.filter(
+        status__in=pressure_statuses,
+        created_at__lte=as_of,
+    )
+    outbound_pressure = outbound_pending.count()
     recent_outbound = charger.protocol_operations.filter(
         created_at__gte=window_start,
         created_at__lte=as_of,
@@ -131,6 +135,17 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
     retry_attempts = sum(
         max(0, attempt_count - 1)
         for attempt_count in recent_outbound.values_list("attempt_count", flat=True)
+    )
+
+    oldest_inbound = inbound_pending.order_by("received_at").values_list(
+        "received_at", flat=True
+    ).first()
+    oldest_outbound = outbound_pending.order_by("created_at").values_list(
+        "created_at", flat=True
+    ).first()
+    oldest_pending = min(
+        (value for value in (oldest_inbound, oldest_outbound) if value is not None),
+        default=None,
     )
 
     connection = getattr(charger, "connection", None)
@@ -149,6 +164,9 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
         "recent_retry_attempts": retry_attempts,
         "inbound_processing": inbound_processing,
         "outbound_pressure": outbound_pressure,
+        "pending_work": inbound_processing + outbound_pressure,
+        "oldest_pending_at": _iso(oldest_pending),
+        "oldest_pending_age_seconds": _age(as_of, oldest_pending),
         "connection_live": bool(connection and connection.lease_expires_at >= as_of),
         "connection_lease_remaining_seconds": lease_remaining,
     }
