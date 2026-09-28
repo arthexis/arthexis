@@ -33,6 +33,7 @@ from apps.ocpp.simulator.network import (
 )
 
 DEFAULT_IDLE_TIMEOUT = 300.0
+MAX_REPLAY_ACTIONS_IN_RESPONSE = 1000
 
 
 def runtime_dir() -> Path:
@@ -334,6 +335,7 @@ class LiveSimulatorWorker:
                     reconnect_after=reconnect_after,
                     pacing=pacing,
                     metrics=metrics,
+                    max_retained_actions=MAX_REPLAY_ACTIONS_IN_RESPONSE,
                 )
             return {
                 "ok": True,
@@ -342,8 +344,9 @@ class LiveSimulatorWorker:
                 "capture_id": source.capture_id,
                 "source_charger": request.get("source_charger"),
                 "stream": replay_stream,
-                "events_completed": len(completed),
+                "events_completed": metrics.completed_requests,
                 "actions": list(completed),
+                "actions_truncated": metrics.completed_requests > len(completed),
                 "pacing": pacing.mode,
                 "reconnect_after": reconnect_after,
                 "metrics": metrics.as_dict(),
