@@ -388,3 +388,127 @@ def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
     assert proof["no_missed_writes"] is False
     assert proof["reason"] == "legacy-source-advanced-after-capture"
     assert Path(proof["proof_path"]).is_file()
+
+
+@pytest.mark.reconciliation_e2e
+def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(tmp_path):
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    source_sha = _sha256(source_database)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    def run_once():
+        return subprocess.run(
+            [
+                sys.executable,
+                str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+                "rehearse",
+                str(legacy),
+                "--output",
+                str(output),
+                "--nice",
+                "0",
+            ],
+            cwd=PROJECT_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    first = run_once()
+    second = run_once()
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert _sha256(source_database) == source_sha
+
+    first_result = json.loads(first.stdout)
+    second_result = json.loads(second.stdout)
+    assert first_result["capture"]["capture_id"] != second_result["capture"]["capture_id"]
+    assert first_result["go_bundle"] != second_result["go_bundle"]
+    assert Path(first_result["go_bundle"]).is_dir()
+    assert Path(second_result["go_bundle"]).is_dir()
+
+
+@pytest.mark.reconciliation_e2e
+def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_path):
+    from arthexis.reconciliation.rehearsal import create_go_bundle
+
+    legacy = tmp_path / "legacy"
+    _legacy_installation(legacy)
+    output = tmp_path / "rehearsal"
+
+    environment = os.environ.copy()
+    environment["ARTHEXIS_DATA_DIR"] = str(tmp_path / "current-data")
+    environment.pop("ARTHEXIS_DATABASE_PATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "reconcile.py"),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
+            "--nice",
+            "0",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+
+    no_go_report = tmp_path / "no-go-report.json"
+    report = json.loads(Path(result["json_report"]).read_text(encoding="utf-8"))
+    report["decision"] = "NO-GO"
+    no_go_report.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    alternate_root = tmp_path / "alternate-bundle-root"
+    with pytest.raises(ValueError, match="successful migration verification"):
+        create_go_bundle(
+            alternate_root,
+            capture_path=Path(result["capture"]["path"]),
+            fixture_path=Path(result["fixture"]["path"]),
+            migration_report=no_go_report,
+            migration_text_report=Path(result["text_report"]),
+            resource_report=Path(result["resource_report"]),
+        )
+
+    bundles = alternate_root / "bundles"
+    assert not bundles.exists() or not any(bundles.iterdir())
+
+
+def test_cutover_proof_failure_does_not_modify_legacy_source(tmp_path):
+    from arthexis.reconciliation.capture import capture_legacy_installation
+    from arthexis.reconciliation.rehearsal import verify_cutover_source_unchanged
+
+    legacy = tmp_path / "legacy"
+    source_database = _legacy_installation(legacy)
+    capture = capture_legacy_installation(legacy, tmp_path / "captures")
+
+    with sqlite3.connect(source_database) as connection:
+        connection.execute(
+            "INSERT INTO core_rfid(rfid, active) VALUES ('late-write', 1)"
+        )
+    changed_sha = _sha256(source_database)
+
+    proof = verify_cutover_source_unchanged(
+        legacy,
+        tmp_path / "rehearsal",
+        expected_database_sha256=_sha256(capture.database_path),
+    )
+
+    assert proof["decision"] == "NO-GO"
+    assert _sha256(source_database) == changed_sha
