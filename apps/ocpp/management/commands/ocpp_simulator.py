@@ -70,8 +70,9 @@ class Command(BaseCommand):
             "replay",
             help="Replay migrated OCPP 1.6 transaction history over the live connection.",
         )
-        replay_parser.add_argument("--charger", required=True)
-        replay_parser.add_argument("--source", required=True)
+        replay_parser.add_argument("source_path", nargs="?")
+        replay_parser.add_argument("--charger")
+        replay_parser.add_argument("--source")
         replay_parser.add_argument("--source-charger")
         replay_parser.add_argument(
             "--stream",
@@ -100,9 +101,15 @@ class Command(BaseCommand):
             ("close", "Close the existing live simulator."),
         ):
             action_parser = actions.add_parser(name, help=help_text)
-            action_parser.add_argument("--charger", required=True)
+            action_parser.add_argument("--charger")
             if name == "authorize":
-                action_parser.add_argument("--id-tag", required=True)
+                action_parser.add_argument("id_tag_value", nargs="?")
+                action_parser.add_argument("--id-tag")
+
+        stop_parser = actions.add_parser(
+            "stop", help="Stop the existing live simulator session."
+        )
+        stop_parser.add_argument("--charger")
 
         worker_parser = actions.add_parser("_worker", help=argparse.SUPPRESS)
         worker_parser.add_argument("--config", required=True)
