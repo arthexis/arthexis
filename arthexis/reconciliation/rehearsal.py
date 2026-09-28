@@ -8,8 +8,9 @@ import os
 import shutil
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
+
+from arthexis.reconciliation.source import resolve_source
 
 DEFAULT_MAX_ELAPSED_SECONDS = 1800.0
 DEFAULT_MAX_PEAK_RSS_MIB = 512.0
@@ -136,7 +137,7 @@ def create_go_bundle(
     migration_report: Path,
     migration_text_report: Path,
     resource_report: Path,
-    cutover_report: Path | None = None,
+    cutover: dict[str, object] | None = None,
 ) -> Path:
     """Create one immutable, checksummed handoff bundle for an accepted GO."""
 
@@ -152,8 +153,6 @@ def create_go_bundle(
         migration_text_report,
         resource_report,
     ]
-    if cutover_report is not None:
-        required.append(cutover_report)
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise ValueError(f"GO bundle inputs are incomplete: {', '.join(missing)}")
@@ -190,8 +189,6 @@ def create_go_bundle(
             "migration/resource-report.json": resource_report,
             "database/reconciled.sqlite3": destination_database,
         }
-        if cutover_report is not None:
-            payloads["migration/cutover-report.json"] = cutover_report
         checksums: list[tuple[str, str]] = []
         for relative, source in payloads.items():
             target = temporary / relative
@@ -237,11 +234,11 @@ def create_go_bundle(
             },
             "cutover": (
                 {
-                    "report_path": "migration/cutover-report.json",
+                    "report_path": "migration/cutover-proof.json",
                     "mode": "final-cutover",
                     "no_missed_writes_proven": True,
                 }
-                if cutover_report is not None
+                if cutover is not None
                 else {"mode": "ordinary-rehearsal"}
             ),
             "provenance": {
@@ -278,28 +275,27 @@ def create_go_bundle(
         raise
 
 
-CUTOVER_REPORT_FORMAT = "arthexis-migration-cutover-v1"
+CUTOVER_PROOF_FORMAT = "arthexis-migration-cutover-proof-v1"
 
 
-def verify_cutover_source(
-    source_database: Path,
-    *,
-    captured_database_sha256: str,
-    started_at: datetime,
+def verify_cutover_source_unchanged(
+    source: Path,
     rehearsal_root: Path,
+    *,
+    expected_database_sha256: str,
+    database: Path | None = None,
 ) -> dict[str, object]:
-    """Prove that no legacy writes occurred after the accepted cutover snapshot."""
+    """Prove the live legacy DB did not advance beyond the accepted snapshot."""
 
+    source_database = resolve_source(source, database=database).expanduser().resolve()
     current_sha256 = _sha256(source_database)
-    unchanged = current_sha256 == captured_database_sha256
-    result = {
-        "format": CUTOVER_REPORT_FORMAT,
-        "cutover_started_at": started_at.astimezone(timezone.utc).isoformat(),
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+    unchanged = current_sha256 == expected_database_sha256
+    proof = {
+        "format": CUTOVER_PROOF_FORMAT,
         "source_database": str(source_database),
-        "captured_database_sha256": captured_database_sha256,
+        "captured_database_sha256": expected_database_sha256,
         "current_database_sha256": current_sha256,
-        "no_missed_writes_proven": unchanged,
+        "no_missed_writes": unchanged,
         "decision": "GO" if unchanged else "NO-GO",
         "reason": (
             "source-unchanged-since-capture"
@@ -307,7 +303,7 @@ def verify_cutover_source(
             else "legacy-source-advanced-after-capture"
         ),
     }
-    path = rehearsal_root / "cutover-report.json"
-    path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    result["report_path"] = str(path)
-    return result
+    path = rehearsal_root / "cutover-proof.json"
+    path.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    proof["proof_path"] = str(path)
+    return proof
