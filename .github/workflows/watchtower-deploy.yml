@@ -767,6 +767,9 @@ jobs:
           trap cleanup EXIT
           git clone --quiet --depth=1 https://github.com/arthexis/gway.git "$work"
           cd "$work"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          fi
 
           current="$(python3 - <<'PY'
           from pathlib import Path
@@ -814,7 +817,7 @@ jobs:
           else
             GH_TOKEN="$GH_TOKEN" gh pr create --repo "$repository" --base main --head "$branch" \
               --title "Advance Gway to ${next_version} after accepted ${released} deployment" \
-              --body "Watchtower successfully accepted Gway `${released}` at `${GWAY_EXPECTED_SHA}`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
+              --body "Watchtower successfully accepted Gway \`${released}\` at \`${GWAY_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "gway_rollover_pr=created number=$rollover_pr"
           fi
