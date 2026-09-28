@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from decimal import Decimal
 from enum import Enum
 
@@ -139,7 +139,7 @@ def reporting_contract() -> dict[str, object]:
             "sessions",
         ),
         "required_session_fields": tuple(
-            field.name for field in ChargingSessionProjection.__dataclass_fields__.values()
+            field.name for field in fields(ChargingSessionProjection)
         ),
         "enum_values": {
             "energy_provenance": tuple(item.value for item in EnergyProvenance),
