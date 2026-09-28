@@ -159,6 +159,12 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
         default=None,
     )
 
+    recent_authorization = charger.inbound_protocol_requests.filter(
+        action="Authorize",
+        received_at__lte=as_of,
+    ).order_by("-received_at").first()
+    authorization_status = _authorization_status(recent_authorization)
+
     connection = getattr(charger, "connection", None)
     lease_remaining = (
         max(0.0, (connection.lease_expires_at - as_of).total_seconds())
@@ -182,9 +188,34 @@ def _operational_metrics(charger: Charger, *, as_of: datetime) -> dict[str, obje
         "pending_work": inbound_processing + outbound_pressure,
         "oldest_pending_at": _iso(oldest_pending),
         "oldest_pending_age_seconds": _age(as_of, oldest_pending),
+        "last_authorization_at": _iso(
+            recent_authorization.received_at if recent_authorization is not None else None
+        ),
+        "last_authorization_age_seconds": _age(
+            as_of,
+            recent_authorization.received_at if recent_authorization is not None else None,
+        ),
+        "last_authorization_status": authorization_status,
         "connection_live": bool(connection and connection.lease_expires_at >= as_of),
         "connection_lease_remaining_seconds": lease_remaining,
     }
+
+
+def _authorization_status(request: InboundProtocolRequest | None) -> str | None:
+    if request is None:
+        return None
+    if request.status != InboundProtocolRequest.Status.COMPLETED:
+        return request.status
+    if request.response_kind == InboundProtocolRequest.ResponseKind.ERROR:
+        return "error"
+    payload = request.response_payload
+    if isinstance(payload, dict):
+        id_tag_info = payload.get("idTagInfo")
+        if isinstance(id_tag_info, dict):
+            status = id_tag_info.get("status")
+            if isinstance(status, str) and status:
+                return status
+    return "completed"
 
 
 def _age(current: datetime, value: datetime | None) -> float | None:
