@@ -120,7 +120,7 @@ class DiscoverySession:
     ) -> DiscoverySession:
         """Create a new discovery report directory and its initial event."""
 
-        identifier = session_id or f"discovery-{uuid.uuid4().hex}"
+        identifier = (\n            session_id\n            if session_id is not None\n            else f"discovery-{uuid.uuid4().hex}"\n        )
         cls._validate_session_id(identifier)
 
         reports_root = Path(root) / "discovery"
