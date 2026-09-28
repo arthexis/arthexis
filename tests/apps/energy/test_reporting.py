@@ -1,16 +1,26 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+
 from django.utils import timezone
 
 from apps.energy.models import CustomerAccount
 from apps.energy.reporting import (
+    EnergyProvenance,
     MeterContinuity,
+    ReportingCondition,
+    ReportingContractError,
     SessionCompleteness,
     SourceEvidence,
     project_charging_session,
+    project_reporting_period,
+    projected_sessions_for_period,
+    reporting_contract,
+    validate_reporting_payload,
 )
-from apps.ocpp.models import MeterValue
+from apps.nodes.models import Node, NodeRole
+from apps.ocpp.models import MeterValue, OcppTransaction
 from tests.apps.ocpp.builders import charger, connector, transaction
 
 pytestmark = pytest.mark.django_db
@@ -48,6 +58,23 @@ def charging_session():
     return selected, fallback_sample
 
 
+def reporting_payload(identity: str, remote_id: str = "tx-report"):
+    selected_charger = charger(identity)
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        remote_id,
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    return project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    ).as_dict()
+
+
 def test_projection_is_charger_independent_and_auditable(charging_session):
     selected, fallback_sample = charging_session
 
@@ -57,8 +84,12 @@ def test_projection_is_charger_independent_and_auditable(charging_session):
     assert result.charger_identity == "CP001"
     assert result.connector_number == 2
     assert result.account_key == "customer-a"
+    assert result.customer_key == "customer-a"
+    assert result.site_key is None
+    assert result.vehicle_key is None
     assert result.id_tag == "RFID-1"
     assert result.energy_kwh == Decimal("3.5000")
+    assert result.energy_provenance is EnergyProvenance.RETAINED_NORMALIZED
     assert result.completeness is SessionCompleteness.COMPLETE
     assert result.meter_continuity is MeterContinuity.CONTINUOUS
     assert result.source_protocol_transaction_id == "tx-44"
@@ -66,6 +97,10 @@ def test_projection_is_charger_independent_and_auditable(charging_session):
         SourceEvidence(kind="ocpp_transaction", reference="tx-44"),
         SourceEvidence(kind="meter_value", reference="sample-a"),
         SourceEvidence(kind="meter_value", reference=str(fallback_sample.pk)),
+    )
+    assert result.conditions == (
+        ReportingCondition.MISSING_SITE,
+        ReportingCondition.MISSING_VEHICLE,
     )
 
 
@@ -82,6 +117,7 @@ def test_open_transaction_projects_as_in_progress():
 
     assert result.completeness is SessionCompleteness.IN_PROGRESS
     assert result.meter_continuity is MeterContinuity.UNKNOWN
+    assert result.energy_provenance is EnergyProvenance.UNRESOLVED
 
 
 def test_stopped_session_without_resolved_energy_is_incomplete():
@@ -99,6 +135,7 @@ def test_stopped_session_without_resolved_energy_is_incomplete():
     result = project_charging_session(selected)
 
     assert result.completeness is SessionCompleteness.INCOMPLETE
+    assert ReportingCondition.UNRESOLVED_ENERGY in result.conditions
 
 
 def test_counter_reset_is_explicit_instead_of_becoming_negative_energy():
@@ -118,6 +155,7 @@ def test_counter_reset_is_explicit_instead_of_becoming_negative_energy():
     assert result.meter_continuity is MeterContinuity.DISCONTINUOUS
     assert result.energy_kwh is None
     assert result.completeness is SessionCompleteness.INCOMPLETE
+    assert ReportingCondition.METER_DISCONTINUITY in result.conditions
 
 
 def test_missing_optional_attribution_remains_explicitly_unresolved():
@@ -135,6 +173,318 @@ def test_missing_optional_attribution_remains_explicitly_unresolved():
 
     assert result.connector_number is None
     assert result.account_key is None
+    assert result.customer_key is None
     assert result.site_key is None
     assert result.vehicle_key is None
     assert result.id_tag is None
+    assert ReportingCondition.MISSING_CUSTOMER in result.conditions
+    assert ReportingCondition.MISSING_SITE in result.conditions
+    assert ReportingCondition.MISSING_VEHICLE in result.conditions
+
+
+def test_period_projection_is_stable_and_includes_live_and_historical_sessions():
+    selected_charger = charger("CP-PERIOD")
+    start = timezone.now()
+    earlier = transaction(
+        selected_charger,
+        "tx-live",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    later = transaction(
+        selected_charger,
+        "tx-history",
+        started_at=start + timedelta(minutes=5),
+        stopped_at=start + timedelta(minutes=6),
+        historical=True,
+        energy_kwh=Decimal("2.0000"),
+    )
+    transaction(
+        selected_charger,
+        "tx-outside",
+        started_at=start + timedelta(hours=2),
+        stopped_at=start + timedelta(hours=2),
+        energy_kwh=Decimal("3.0000"),
+    )
+
+    projected = list(
+        projected_sessions_for_period(
+            OcppTransaction.objects.all(),
+            started_at=start,
+            before=start + timedelta(hours=1),
+        )
+    )
+
+    assert [item.source_protocol_transaction_id for item in projected] == [
+        "tx-live",
+        "tx-history",
+    ]
+    assert [item.historical for item in projected] == [False, True]
+
+
+def test_stopped_session_with_missing_meter_boundaries_surfaces_source_gaps():
+    selected_charger = charger("CP-GAPS")
+    started_at = timezone.now()
+    selected = transaction(
+        selected_charger,
+        "tx-gaps",
+        started_at=started_at,
+        stopped_at=started_at,
+        energy_kwh=Decimal("1.0000"),
+    )
+
+    result = project_charging_session(selected)
+
+    assert ReportingCondition.MISSING_METER_START in result.conditions
+    assert ReportingCondition.MISSING_METER_STOP in result.conditions
+
+
+def test_reporting_period_envelope_is_versioned_transport_safe_and_authoritative():
+    satellite = Node.objects.create(
+        identifier="gw004",
+        display_name="GW004",
+        role=NodeRole.SATELLITE,
+    )
+    selected_charger = charger("CP-ENVELOPE", node=satellite)
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.2500"),
+    )
+    transaction(
+        selected_charger,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=2),
+        energy_kwh=Decimal("2.7500"),
+    )
+
+    period = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+    payload = period.as_dict()
+
+    assert period.authority_nodes == ("gw004",)
+    assert period.total_energy_kwh == Decimal("4.0000")
+    assert payload["schema_version"] == 1
+    assert payload["authority_nodes"] == ["gw004"]
+    assert payload["total_energy_kwh"] == "4.0000"
+    assert [item["source_protocol_transaction_id"] for item in payload["sessions"]] == [
+        "tx-a",
+        "tx-b",
+    ]
+    assert all(item["authority_node_key"] == "gw004" for item in payload["sessions"])
+    assert all(item["authority_node_role"] == "satellite" for item in payload["sessions"])
+    assert isinstance(payload["sessions"][0]["energy_kwh"], str)
+    assert isinstance(payload["sessions"][0]["conditions"], list)
+    assert isinstance(payload["sessions"][0]["source_evidence"], list)
+
+
+def test_reporting_period_can_aggregate_multiple_authoritative_satellites():
+    first_node = Node.objects.create(
+        identifier="gw004",
+        display_name="GW004",
+        role=NodeRole.SATELLITE,
+    )
+    second_node = Node.objects.create(
+        identifier="gw005",
+        display_name="GW005",
+        role=NodeRole.SATELLITE,
+    )
+    first = charger("CP-A", node=first_node)
+    second = charger("CP-B", node=second_node)
+    start = timezone.now()
+    transaction(
+        first,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    transaction(
+        second,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=1),
+        energy_kwh=Decimal("2.0000"),
+    )
+
+    period = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert period.authority_nodes == ("gw004", "gw005")
+    assert period.total_energy_kwh == Decimal("3.0000")
+
+
+def test_reporting_contract_is_self_describing():
+    contract = reporting_contract()
+
+    assert contract["schema"] == "arthexis.charging-session-report"
+    assert contract["schema_version"] == 1
+    assert "sessions" in contract["required_period_fields"]
+    assert "source_evidence" in contract["required_session_fields"]
+    assert contract["enum_values"]["meter_continuity"] == (
+        "continuous",
+        "discontinuous",
+        "unknown",
+    )
+
+
+def test_serialized_period_validates_against_current_contract():
+    payload = reporting_payload("CP-VALIDATE", "tx-valid")
+
+    assert validate_reporting_payload(payload) == payload
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        ("schema", "other.schema", "unsupported reporting schema"),
+        ("schema_version", 999, "unsupported reporting schema version"),
+    ],
+)
+def test_reporting_payload_rejects_incompatible_contract(
+    field_name,
+    value,
+    message,
+):
+    payload = reporting_payload(f"CP-{field_name}", f"tx-{field_name}")
+    payload[field_name] = value
+
+    with pytest.raises(ReportingContractError, match=message):
+        validate_reporting_payload(payload)
+
+
+def test_reporting_payload_rejects_missing_session_fields():
+    payload = reporting_payload("CP-MISSING-FIELD", "tx-missing-field")
+    del payload["sessions"][0]["source_evidence"]
+
+    with pytest.raises(
+        ReportingContractError,
+        match="missing required field: source_evidence",
+    ):
+        validate_reporting_payload(payload)
+
+
+def test_reporting_payload_rejects_unknown_enum_values():
+    payload = reporting_payload("CP-BAD-ENUM", "tx-bad-enum")
+    payload["sessions"][0]["meter_continuity"] = "invented"
+
+    with pytest.raises(
+        ReportingContractError,
+        match="invalid meter_continuity",
+    ):
+        validate_reporting_payload(payload)
+
+
+def test_reporting_period_content_digest_is_reproducible():
+    selected_charger = charger("CP-DIGEST")
+    start = timezone.now()
+    transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.2500"),
+    )
+    transaction(
+        selected_charger,
+        "tx-b",
+        started_at=start + timedelta(minutes=1),
+        stopped_at=start + timedelta(minutes=2),
+        energy_kwh=Decimal("2.7500"),
+    )
+
+    first = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+    second = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert first.content_digest == second.content_digest
+    assert first.as_dict()["content_digest"] == first.content_digest
+    assert len(first.content_digest) == 64
+
+
+def test_reporting_period_content_digest_changes_with_report_content():
+    selected_charger = charger("CP-DIGEST-CHANGE")
+    start = timezone.now()
+    selected = transaction(
+        selected_charger,
+        "tx-a",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    first = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    selected.energy_kwh = Decimal("2.0000")
+    selected.save(update_fields=("energy_kwh",))
+
+    second = project_reporting_period(
+        OcppTransaction.objects.all(),
+        started_at=start,
+        before=start + timedelta(hours=1),
+    )
+
+    assert first.content_digest != second.content_digest
+
+
+def test_reporting_payload_rejects_tampering_after_digest_is_created():
+    payload = reporting_payload("CP-TAMPER", "tx-tamper")
+    payload["sessions"][0]["energy_kwh"] = "999.0000"
+
+    with pytest.raises(
+        ReportingContractError,
+        match="content_digest does not match payload",
+    ):
+        validate_reporting_payload(payload)
+
+
+def test_meter_evidence_order_is_canonical():
+    selected_charger = charger("CP-EVIDENCE-ORDER")
+    start = timezone.now()
+    selected = transaction(
+        selected_charger,
+        "tx-evidence",
+        started_at=start,
+        stopped_at=start,
+        energy_kwh=Decimal("1.0000"),
+    )
+    later = MeterValue.objects.create(
+        transaction=selected,
+        sampled_at=start + timedelta(minutes=2),
+        value=Decimal("2000"),
+        source_fingerprint="later",
+    )
+    earlier = MeterValue.objects.create(
+        transaction=selected,
+        sampled_at=start + timedelta(minutes=1),
+        value=Decimal("1000"),
+        source_fingerprint="earlier",
+    )
+
+    result = project_charging_session(selected)
+
+    assert result.source_evidence[-2:] == (
+        SourceEvidence(kind="meter_value", reference=earlier.source_fingerprint),
+        SourceEvidence(kind="meter_value", reference=later.source_fingerprint),
+    )
