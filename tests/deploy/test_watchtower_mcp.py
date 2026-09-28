@@ -430,7 +430,7 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
     assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
     assert 'gh api --method POST' in step
-    assert '{"labels":["approved","version"]}' in step
+    assert '{"labels":["approved","version-only"]}' in step
     assert '/issues/${rollover_pr}/labels' in step
     assert 'rollover_pr=approved number=$rollover_pr' in step
 
@@ -510,7 +510,7 @@ def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None
     assert "name: Coalesce active PR queue" in workflow
     assert "for repository in arthexis/arthexis arthexis/gway; do" in workflow
     assert "pulls?state=open&per_page=100" in workflow
-    assert 'index("on-hold")' in workflow
+    assert 'any(. == "on-hold" or . == "on hold")' in workflow
     assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in workflow
     assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in workflow
     assert "needs: [classify, queue-gate]" in workflow
