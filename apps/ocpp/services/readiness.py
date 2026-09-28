@@ -86,15 +86,59 @@ def query_charger_ocpp_readiness(identity: str) -> dict[str, object]:
     }
 
 
+def query_chargers_ocpp_readiness() -> dict[str, object]:
+    """Describe OCPP readiness across all configured chargers."""
+
+    instance = query_ocpp_readiness()
+    chargers = []
+    protocol_modes = set()
+    card_modes = set()
+
+    for charger in Charger.objects.order_by("identity"):
+        protocol = _mode(charger.protocol_mode)
+        cards = _mode(charger.authorization_mode)
+        protocol_modes.add(protocol)
+        card_modes.add(cards)
+        posture = protocol if protocol == cards else PARTIAL
+        chargers.append(
+            {
+                "charger": charger.identity,
+                "ready": bool(instance["ready"] and charger.active),
+                "enabled": charger.active,
+                "posture": posture,
+                "protocol": protocol,
+                "cards": cards,
+            }
+        )
+
+    def aggregate(values: set[str]) -> str | None:
+        if not values:
+            return None
+        if len(values) == 1:
+            return next(iter(values))
+        return PARTIAL
+
+    return {
+        "ready": bool(instance["ready"]),
+        "protocol": aggregate(protocol_modes),
+        "cards": aggregate(card_modes),
+        "chargers": chargers,
+    }
+
+
 def evaluate_ocpp_readiness(
     dimension: str | None = None,
     mode: str | None = None,
     *,
     charger: str | None = None,
+    chargers: bool = False,
 ) -> bool | str | dict[str, object]:
     """Return the compact result for the ready OCPP operation."""
 
-    valid_dimensions = ("protocol", "cards") if charger else DIMENSIONS
+    if charger and chargers:
+        raise ValueError("--charger and --chargers are mutually exclusive.")
+
+    valid_dimensions = ("protocol", "cards") if (charger or chargers) else DIMENSIONS
     if dimension is not None and dimension not in valid_dimensions:
         raise ValueError(
             "OCPP readiness dimension must be one of: "
@@ -107,16 +151,20 @@ def evaluate_ocpp_readiness(
     if mode is not None and dimension is None:
         raise ValueError("OCPP readiness mode requires a dimension.")
 
-    payload = (
-        query_charger_ocpp_readiness(charger)
-        if charger
-        else query_ocpp_readiness()
-    )
+    if chargers:
+        payload = query_chargers_ocpp_readiness()
+    elif charger:
+        payload = query_charger_ocpp_readiness(charger)
+    else:
+        payload = query_ocpp_readiness()
     if not payload["ready"]:
         return False
 
-    if charger and dimension is None and mode is None:
+    if (charger or chargers) and dimension is None and mode is None:
         return payload
+
+    if chargers and dimension is None:
+        raise ValueError("--chargers requires protocol or cards for mode predicates.")
 
     result = payload[dimension] if dimension else payload["posture"]
     if mode is None:
