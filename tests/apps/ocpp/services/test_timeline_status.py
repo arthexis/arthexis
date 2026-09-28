@@ -51,6 +51,9 @@ def test_snapshot_is_json_safe_and_read_only():
         "recent_retry_attempts": 0,
         "inbound_processing": 0,
         "outbound_pressure": 0,
+        "pending_work": 0,
+        "oldest_pending_at": None,
+        "oldest_pending_age_seconds": None,
         "connection_live": False,
         "connection_lease_remaining_seconds": None,
     }
@@ -297,6 +300,9 @@ def test_snapshot_reports_recent_rate_errors_retries_and_pressure():
     assert snapshot["recent_retry_attempts"] == 2
     assert snapshot["inbound_processing"] == 1
     assert snapshot["outbound_pressure"] == 1
+    assert snapshot["pending_work"] == 2
+    assert snapshot["oldest_pending_at"] == (current - timedelta(minutes=1)).isoformat()
+    assert snapshot["oldest_pending_age_seconds"] == 60.0
     assert snapshot["connection_live"] is True
     assert snapshot["connection_lease_remaining_seconds"] == 90.0
 
@@ -323,3 +329,38 @@ def test_historical_snapshot_excludes_future_metric_records():
 
     assert snapshot["recent_requests"] == 0
     assert snapshot["recent_completed_requests"] == 0
+
+
+def test_pending_work_uses_oldest_authoritative_timestamp():
+    selected = charger("timeline-pending-oldest")
+    current = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+    progress = ChargerTimelineProgress.objects.create(
+        charger=selected,
+        state=ChargerTimelineProgress.State.CATCHING_UP,
+        newest_event_at=current - timedelta(hours=1),
+        last_received_at=current,
+    )
+    inbound = _inbound_request(
+        selected,
+        unique_id="pending-inbound",
+        status=InboundProtocolRequest.Status.PROCESSING,
+    )
+    InboundProtocolRequest.objects.filter(pk=inbound.pk).update(
+        received_at=current - timedelta(minutes=4)
+    )
+    outbound = ProtocolOperation.objects.create(
+        charger=selected,
+        version=ProtocolVersion.OCPP_16.value,
+        direction=ProtocolOperation.Direction.CSMS_TO_CHARGE_POINT,
+        action="Reset",
+        status=ProtocolOperation.Status.RECOVERY_REQUIRED,
+    )
+    ProtocolOperation.objects.filter(pk=outbound.pk).update(
+        created_at=current - timedelta(minutes=2)
+    )
+
+    snapshot = timeline_snapshot(progress, as_of=current)
+
+    assert snapshot["pending_work"] == 2
+    assert snapshot["oldest_pending_at"] == (current - timedelta(minutes=4)).isoformat()
+    assert snapshot["oldest_pending_age_seconds"] == 240.0
