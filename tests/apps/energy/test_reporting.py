@@ -1,7 +1,7 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-from datetime import timedelta
 
 from django.utils import timezone
 
@@ -160,7 +160,6 @@ def test_missing_optional_attribution_remains_explicitly_unresolved():
     assert ReportingCondition.MISSING_VEHICLE in result.conditions
 
 
-
 def test_period_projection_is_stable_and_includes_live_and_historical_sessions():
     selected_charger = charger("CP-PERIOD")
     start = timezone.now()
@@ -175,15 +174,15 @@ def test_period_projection_is_stable_and_includes_live_and_historical_sessions()
         selected_charger,
         "tx-history",
         started_at=start + timedelta(minutes=5),
-        stopped_at=start + timezone.timedelta(minutes=6),
+        stopped_at=start + timedelta(minutes=6),
         historical=True,
         energy_kwh=Decimal("2.0000"),
     )
     transaction(
         selected_charger,
         "tx-outside",
-        started_at=start + timezone.timedelta(hours=2),
-        stopped_at=start + timezone.timedelta(hours=2),
+        started_at=start + timedelta(hours=2),
+        stopped_at=start + timedelta(hours=2),
         energy_kwh=Decimal("3.0000"),
     )
 
@@ -191,7 +190,7 @@ def test_period_projection_is_stable_and_includes_live_and_historical_sessions()
         projected_sessions_for_period(
             type(earlier).objects.all(),
             started_at=start,
-            before=start + timezone.timedelta(hours=1),
+            before=start + timedelta(hours=1),
         )
     )
 
