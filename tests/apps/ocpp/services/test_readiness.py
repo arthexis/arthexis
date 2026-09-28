@@ -196,3 +196,103 @@ def test_single_charger_rejects_admission_dimension(monkeypatch) -> None:
 def test_single_charger_rejects_unknown_identity() -> None:
     with pytest.raises(ValueError, match="Unknown charger: missing"):
         evaluate_ocpp_readiness(charger="missing")
+
+
+
+@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
+def test_chargers_returns_ordered_breakdown_and_partial_aggregates(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        readiness,
+        "interface_addresses",
+        lambda interface: {"192.0.2.10"},
+    )
+    Charger.objects.create(
+        identity="charger-b",
+        protocol_mode=Charger.AuthorizationMode.RESTRICTED,
+        authorization_mode=Charger.AuthorizationMode.OPEN,
+    )
+    Charger.objects.create(
+        identity="charger-a",
+        protocol_mode=Charger.AuthorizationMode.OPEN,
+        authorization_mode=Charger.AuthorizationMode.OPEN,
+    )
+    Charger.objects.create(
+        identity="charger-c",
+        active=False,
+        protocol_mode=Charger.AuthorizationMode.RESTRICTED,
+        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+    )
+
+    payload = evaluate_ocpp_readiness(chargers=True)
+
+    assert payload["ready"] is True
+    assert payload["protocol"] == "partial"
+    assert payload["cards"] == "partial"
+    assert [item["charger"] for item in payload["chargers"]] == [
+        "charger-a",
+        "charger-b",
+        "charger-c",
+    ]
+    assert payload["chargers"][0] == {
+        "charger": "charger-a",
+        "ready": True,
+        "enabled": True,
+        "posture": "permissive",
+        "protocol": "permissive",
+        "cards": "permissive",
+    }
+    assert payload["chargers"][1]["posture"] == "partial"
+    assert payload["chargers"][2]["ready"] is False
+    assert payload["chargers"][2]["enabled"] is False
+
+
+@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
+def test_chargers_dimension_and_mode_use_fleet_aggregate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        readiness,
+        "interface_addresses",
+        lambda interface: {"192.0.2.10"},
+    )
+    Charger.objects.create(
+        identity="charger-one",
+        protocol_mode=Charger.AuthorizationMode.OPEN,
+        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+    )
+    Charger.objects.create(
+        identity="charger-two",
+        protocol_mode=Charger.AuthorizationMode.OPEN,
+        authorization_mode=Charger.AuthorizationMode.RESTRICTED,
+    )
+
+    assert evaluate_ocpp_readiness("protocol", chargers=True) == "permissive"
+    assert evaluate_ocpp_readiness("cards", chargers=True) == "strict"
+    assert evaluate_ocpp_readiness(
+        "protocol",
+        "permissive",
+        chargers=True,
+    ) is True
+    assert evaluate_ocpp_readiness(
+        "cards",
+        "permissive",
+        chargers=True,
+    ) is False
+
+
+@override_settings(OCPP_TRUSTED_CHARGER_INTERFACE="eth0")
+def test_chargers_returns_false_when_listener_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(readiness, "interface_addresses", lambda interface: set())
+    Charger.objects.create(identity="charger-one")
+
+    assert evaluate_ocpp_readiness(chargers=True) is False
+
+
+def test_chargers_rejects_admission_dimension() -> None:
+    with pytest.raises(ValueError, match="dimension must be one of: protocol, cards"):
+        evaluate_ocpp_readiness("admission", chargers=True)
+
+
+def test_charger_and_chargers_are_mutually_exclusive() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        evaluate_ocpp_readiness(charger="charger-one", chargers=True)
