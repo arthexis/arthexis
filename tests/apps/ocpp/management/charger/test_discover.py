@@ -70,7 +70,10 @@ def test_capture_request_without_gway_keeps_discovery_report(
         return session
 
     monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
-    monkeypatch.setattr(discover_module, "default_capture_provider", lambda: None)
+    monkeypatch.setattr(
+        "apps.ocpp.discovery.capture.default_capture_provider",
+        lambda: None,
+    )
 
     result = discover_module.discover(
         interface="eth0",
@@ -85,6 +88,9 @@ def test_capture_request_without_gway_keeps_discovery_report(
         "succeeded": False,
         "strategy": None,
         "failure_reason": "capture_provider_unavailable",
+        "redirect_id": None,
+        "active": False,
+        "release_failure_reason": None,
     }
     assert "Capture: unavailable (capture_provider_unavailable)" in result["display"]
 
@@ -120,15 +126,23 @@ def test_capture_request_with_provider_records_plan_without_mutation(
             self.requests.append(request)
             return CapturePlan(
                 provider=self.name,
-                strategy="destination-nat",
+                strategy="destination-redirect",
                 request=request,
             )
+
+        def apply(self, plan):
+            return {"id": "abc123def456", "active": True}
+
+        def status(self, redirect_id):
+            return {"id": redirect_id, "active": True}
+
+        def release(self, redirect_id):
+            return {"id": redirect_id, "active": False, "changed": True}
 
     provider = FakeProvider()
     monkeypatch.setattr(discover_module, "run_passive_discovery", fake_run)
     monkeypatch.setattr(
-        discover_module,
-        "default_capture_provider",
+        "apps.ocpp.discovery.capture.default_capture_provider",
         lambda: provider,
     )
 
@@ -143,12 +157,18 @@ def test_capture_request_with_provider_records_plan_without_mutation(
     assert result["capture"] == {
         "requested": True,
         "available": True,
-        "attempted": False,
+        "attempted": True,
         "succeeded": False,
-        "strategy": "destination-nat",
+        "strategy": "destination-redirect",
         "failure_reason": None,
+        "redirect_id": "abc123def456",
+        "active": True,
+        "release_failure_reason": None,
     }
-    assert "Capture: available via fake-gway (destination-nat)" in result["display"]
+    assert (
+        "Capture: available via fake-gway (destination-redirect)"
+        in result["display"]
+    )
 
 
 def test_capture_request_without_candidate_reports_unavailable(
