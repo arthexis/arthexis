@@ -4,7 +4,9 @@ from apps.ocpp.simulator.authorization import (
     AuthorizationAttempt,
     AuthorizationAttemptResult,
     AuthorizationScenario,
+    run_live_authorization_scenario,
 )
+from apps.ocpp.simulator.network import LiveSimulatorError
 
 
 def test_authorization_scenario_preserves_order_and_repeat_identity():
@@ -74,3 +76,79 @@ def test_result_contract_does_not_echo_raw_id_tag():
         policy_context="restricted",
     )
     assert not hasattr(result, "id_tag")
+
+
+class FakeAuthorizationTransport:
+    def __init__(self, outcomes):
+        self.outcomes = iter(outcomes)
+        self.received = []
+
+    async def authorize(self, id_tag):
+        self.received.append(id_tag)
+        outcome = next(self.outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def test_live_runner_preserves_order_repeats_and_actual_statuses():
+    async def exercise():
+        scenario = AuthorizationScenario(
+            name="restricted-matrix",
+            policy_context="restricted",
+            attempts=(
+                AuthorizationAttempt(name="known", id_tag="KNOWN"),
+                AuthorizationAttempt(name="unknown", id_tag="UNKNOWN"),
+                AuthorizationAttempt(
+                    name="known-repeat",
+                    id_tag="KNOWN",
+                    repeat_of="known",
+                ),
+            ),
+        )
+        transport = FakeAuthorizationTransport(
+            ["Accepted", "Invalid", "Accepted"]
+        )
+
+        results = await run_live_authorization_scenario(transport, scenario)
+
+        assert transport.received == ["KNOWN", "UNKNOWN", "KNOWN"]
+        assert [(r.sequence, r.attempt, r.status, r.repeat_of) for r in results] == [
+            (1, "known", "Accepted", None),
+            (2, "unknown", "Invalid", None),
+            (3, "known-repeat", "Accepted", "known"),
+        ]
+        assert all(r.policy_context == "restricted" for r in results)
+
+    import asyncio
+
+    asyncio.run(exercise())
+
+
+def test_live_runner_keeps_per_attempt_transport_failures_structured():
+    async def exercise():
+        scenario = AuthorizationScenario(
+            name="mixed",
+            attempts=(
+                AuthorizationAttempt(name="first", id_tag="ONE"),
+                AuthorizationAttempt(name="second", id_tag="TWO"),
+                AuthorizationAttempt(name="third", id_tag="THREE"),
+            ),
+        )
+        transport = FakeAuthorizationTransport(
+            [
+                "Accepted",
+                LiveSimulatorError("connection receive failed"),
+                "Blocked",
+            ]
+        )
+
+        results = await run_live_authorization_scenario(transport, scenario)
+
+        assert [r.status for r in results] == ["Accepted", None, "Blocked"]
+        assert results[1].error == "connection receive failed"
+        assert [r.attempt for r in results] == ["first", "second", "third"]
+
+    import asyncio
+
+    asyncio.run(exercise())
