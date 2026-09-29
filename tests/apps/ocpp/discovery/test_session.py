@@ -1,4 +1,6 @@
+import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import pytest
@@ -315,3 +317,107 @@ def test_summary_tracks_active_redirect_until_release(tmp_path) -> None:
     released = session.write_summary()["capture"]
     assert released["active"] is False
     assert released["redirect_id"] == "abc123def456"
+
+
+
+def test_concurrent_reopened_sessions_allocate_unique_sequences(tmp_path) -> None:
+    DiscoverySession.create(tmp_path, session_id="concurrent")
+
+    def append(index: int) -> int:
+        session = DiscoverySession.open(tmp_path, "concurrent")
+        return session.record(
+            "traffic_observed",
+            metadata={"index": index},
+        )["sequence"]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        sequences = sorted(executor.map(append, range(20)))
+
+    assert sequences == list(range(2, 22))
+    persisted = DiscoverySession.open(tmp_path, "concurrent").events()
+    assert [event["sequence"] for event in persisted] == list(range(1, 22))
+
+
+@pytest.mark.parametrize(
+    "artifact_path",
+    ("../outside.bin", "/absolute.bin", "nested/../outside.bin"),
+)
+def test_artifact_paths_cannot_escape_session(tmp_path, artifact_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="artifact-safe")
+
+    with pytest.raises(ValueError, match="artifact path"):
+        session.write_artifact(artifact_path, b"evidence")
+
+
+def test_write_artifact_returns_relative_path_hash_and_size(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="artifact")
+    content = b"pcap-or-debug-evidence"
+
+    artifact = session.write_artifact("traffic/sample.bin", content)
+
+    assert artifact == {
+        "path": "traffic/sample.bin",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "bytes": len(content),
+    }
+    assert (session.path / "traffic" / "sample.bin").read_bytes() == content
+
+
+def test_handoff_arm_and_claim_are_durable_and_single_use(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="handoff")
+    session.arm_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.40",
+        original_destination={"host": "vendor.example", "port": 9000},
+        strategy="destination-redirect",
+    )
+
+    assert session.handoff_path.exists()
+    assert session.write_summary()["handoff_armed"] is True
+    assert (
+        session.claim_handoff(
+            charger_identity="OTHER",
+            client_host="192.0.2.40",
+        )
+        is None
+    )
+
+    claimed = DiscoverySession.open(tmp_path, "handoff").claim_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.40",
+    )
+
+    assert claimed is not None
+    reopened = DiscoverySession.open(tmp_path, "handoff")
+    assert not reopened.handoff_path.exists()
+    assert reopened.claimed_handoff_path.exists()
+    assert reopened.write_summary()["handoff_claimed"] is True
+    assert (
+        reopened.claim_handoff(
+            charger_identity="CP001",
+            client_host="192.0.2.40",
+        )
+        is None
+    )
+
+
+def test_handoff_can_match_source_host_without_known_identity(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="handoff-host")
+    session.arm_handoff(
+        client_host="198.51.100.8",
+        strategy="destination-redirect",
+    )
+
+    claimed = session.claim_handoff(
+        charger_identity="learned-from-ocpp-path",
+        client_host="198.51.100.8",
+    )
+
+    assert claimed is not None
+
+
+def test_handoff_requires_match_key(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="handoff-invalid")
+
+    with pytest.raises(ValueError, match="charger_identity and/or client_host"):
+        session.arm_handoff()
