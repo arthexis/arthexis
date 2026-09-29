@@ -105,6 +105,21 @@ Helpers live at the narrowest common ancestor that uses them.
 Do not promote a helper toward the repository root merely for convenience.
 Move it outward only when multiple sibling ownership areas genuinely share it.
 
+## Workflow contract tests
+
+Deployment workflow tests should assert semantic contracts at the narrowest useful workflow boundary instead of repeatedly searching the full YAML text. The shared `tests/deploy/workflow_contracts.py` helper exposes named jobs and named steps for this purpose.
+
+Prefer:
+
+```python
+pair = watchtower_workflow.step("Resolve exact deployment pair")
+gate = watchtower_workflow.job("queue-gate")
+```
+
+over hand-written chains of `.split(...)` that depend on neighboring step order. Exact string assertions remain appropriate when the literal command or spelling is itself the contract.
+
+Retired deployment mechanisms belong in one explicit negative-contract test rather than being reasserted independently across multiple modules. When a workflow mechanism is deliberately removed, update the semantic contract and its retired-pattern guard together.
+
 ## Architecture enforcement
 
 `tests/test_architecture.py` protects the package topology without imposing

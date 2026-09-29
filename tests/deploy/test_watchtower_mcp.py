@@ -1,6 +1,5 @@
 from pathlib import Path
 import pytest
-import subprocess
 
 
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
@@ -23,8 +22,6 @@ def _blocks(path: Path) -> list[str]:
     if current:
         blocks.append(" ".join(current))
     return blocks
-
-
 
 
 def test_watchtower_mcp_policy_has_read_only_remote_scopes() -> None:
@@ -127,13 +124,15 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 
 
 @pytest.mark.workflow
-def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase(watchtower_workflow) -> None:
+    workflow = watchtower_workflow.text
+    preflight = watchtower_workflow.step("Preflight Watchtower Remote stage")
+    converge = watchtower_workflow.step("Converge Watchtower Remote stage")
+    verify = watchtower_workflow.step("Verify Watchtower Remote stage")
+
     assert "default: arthexis" in workflow
-    assert "- name: Preflight Watchtower Remote stage" in workflow
-    assert "- name: Converge Watchtower Remote stage" in workflow
-    assert "- name: Verify Watchtower Remote stage" in workflow
-    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
+    for step in (preflight, converge, verify):
+        assert "env.WATCHTOWER_STAGE == 'arthexis'" in step
 
 
 @pytest.mark.workflow
@@ -150,16 +149,6 @@ def test_watchtower_deploy_accepts_remote_only_as_repair_stage() -> None:
     assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
-
-@pytest.mark.workflow
-def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "from gway.sampler import root" not in workflow
-    assert '"mcp" / "server.rx"' not in workflow
-    assert "service install --backend systemd --system --name mcp-server" not in workflow
-    assert "security token create" not in workflow
-
 
 def test_remote_recipe_uses_semantic_gway_cache_root() -> None:
     project = Path("pyproject.toml").read_text(encoding="utf-8")
@@ -195,7 +184,6 @@ def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
     assert "--name mcp-server" in recipe
     assert "remote serve" in recipe
     assert "security token create" not in recipe
-
 
 
 def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
@@ -238,7 +226,6 @@ def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -
     assert lines[auth - 1] == "--"
 
 
-
 def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() -> None:
     for path in (Path("deploy/remote.rx"), Path("deploy/remote-preflight.rx")):
         recipe = path.read_text(encoding="utf-8")
@@ -247,14 +234,12 @@ def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() ->
         assert "./deploy/mcp-server.rx" not in recipe
 
 
-
 @pytest.mark.workflow
 def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
     assert "vars.ARTHEXIS_CERTBOT_EMAIL" not in workflow
-
 
 
 def test_public_remote_verifier_exercises_query_and_mcp_product_contract() -> None:
@@ -331,13 +316,11 @@ def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
     assert '"log.sources"' in logs_section
 
 
-
 @pytest.mark.workflow
 def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "/var/lib/gway/venv/bin/python -m gway --help" in workflow
-    assert "/var/lib/gway/venv/bin/gway --help" not in workflow
 
 
 @pytest.mark.workflow
@@ -382,8 +365,6 @@ def test_arthexis_systemd_service_uses_accepted_build_compatible_server_command(
         in workflow
     )
     assert "accepted-build-compatible server callable" in workflow
-    assert "/opt/arthexis/.venv/bin/python -m arthexis.server" not in workflow
-    assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
 
 
 @pytest.mark.workflow
@@ -411,146 +392,43 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
         in recipe
     )
     assert "arthexis-python -m arthexis.ready --local" in recipe
-    assert "/opt/arthexis/.venv/bin/ready" not in recipe
-    assert "\nready --local\n" not in recipe
 
 
 @pytest.mark.workflow
-def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_watchtower_restores_previous_gway_runtime_on_failed_deploy(watchtower_workflow) -> None:
+    deploy = watchtower_workflow.job("deploy")
+    install = watchtower_workflow.step("Install exact canonical Gway")
+    accepted = watchtower_workflow.step("Record accepted Watchtower deployment")
+    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
 
-    assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in workflow
-    assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in workflow
-    assert "- name: Restore previous Gway runtime after failed deployment" in workflow
-    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in workflow
+    assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in install
+    assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
+    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
     assert (
         "failure() && env.WATCHTOWER_STAGE == 'arthexis' "
         "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
         "&& env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'"
-    ) in workflow
-    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in workflow
-    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in workflow
-    assert "systemctl restart gway-mcp-server.service" in workflow
-    assert "systemctl restart gway-remote-auth.service" in workflow
-    assert "systemctl is-active --quiet gway-mcp-server.service" in workflow
-    assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
-    assert 'for port in 8000 8001; do' in workflow
-    assert 'gway_runtime_rollback=restored' in workflow
+    ) in rollback
+    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in rollback
+    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in rollback
+    assert "systemctl restart gway-mcp-server.service" in rollback
+    assert "systemctl restart gway-remote-auth.service" in rollback
+    assert "systemctl is-active --quiet gway-mcp-server.service" in rollback
+    assert "systemctl is-active --quiet gway-remote-auth.service" in rollback
+    assert 'for port in 8000 8001; do' in rollback
+    assert 'gway_runtime_rollback=restored' in rollback
+    assert deploy.index(accepted) < deploy.index(rollback)
 
 
 @pytest.mark.workflow
-def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_watchtower_queue_gate_runs_before_self_hosted_deploy(watchtower_workflow) -> None:
+    workflow = watchtower_workflow.text
+    gate = watchtower_workflow.job("queue-gate")
+    deploy = watchtower_workflow.job("deploy")
 
-    step = workflow.split("- name: Open next-version PR after accepted deployment", 1)[1]
-    step = step.split("- name: Restore previous Gway runtime after failed deployment", 1)[0]
-    assert "if: env.WATCHTOWER_STAGE == 'arthexis'" in step
-    assert "ARTHEXIS_CHANGED" not in step
-    assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
-    assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
-    assert '--label approved' not in step
-    assert '--label version-only' in step
-    assert 'gh pr merge "$rollover_pr"' in step
-    assert 'test "$rollover_head" = "$rollover_expected_head"' in step
-    assert '--auto --merge' in step
-    assert '--match-head-commit' not in step
-    assert 'rollover_pr=auto_merge_enabled number=$rollover_pr' in step
-
-
-@pytest.mark.workflow
-def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "git worktree prune" in workflow
-    assert 'git -C "$GITHUB_WORKSPACE" worktree remove --force "$work"' in workflow
-    assert 'trap cleanup EXIT' in workflow
-
-
-@pytest.mark.workflow
-def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert 'GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}' in workflow
-    assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
-    assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
-    assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in workflow
-    assert '--force-with-lease="refs/heads/$branch:"' in workflow
-    push_line = next(
-        line for line in workflow.splitlines()
-        if 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in line
-    )
-    assert push_line.endswith("\\")
-    assert not push_line.endswith("\\\\")
-    assert "https://$GH_TOKEN@" not in workflow
-
-
-def test_watchtower_rollover_push_command_executes_against_local_remote(tmp_path: Path) -> None:
-    remote = tmp_path / "remote.git"
-    work = tmp_path / "work"
-    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
-    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.email", "ci@example.invalid"], check=True)
-    (work / "VERSION").write_text("2.0.2\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(work), "add", "VERSION"], check=True)
-    subprocess.run(["git", "-C", str(work), "commit", "-m", "seed"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(remote)], check=True)
-
-    command = """
-set -Eeuo pipefail
-branch=release/next-arthexis
-git checkout -B "$branch"
-remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
-auth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"
-if [[ -n "$remote_branch_sha" ]]; then
-  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
-    push --force-with-lease="refs/heads/$branch:$remote_branch_sha" \\
-    origin "HEAD:refs/heads/$branch"
-else
-  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
-    push --force-with-lease="refs/heads/$branch:" \\
-    origin "HEAD:refs/heads/$branch"
-fi
-"""
-    subprocess.run(["bash", "-c", command], cwd=work, check=True, capture_output=True, text=True)
-    remote_branch = subprocess.run(
-        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/release/next-arthexis"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    local_head = subprocess.run(
-        ["git", "-C", str(work), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert remote_branch == local_head
-
-@pytest.mark.workflow
-def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "queue-gate:" in workflow
-    assert "name: Coalesce active PR queue" in workflow
-    assert "for repository in arthexis/arthexis arthexis/gway; do" in workflow
-    assert "pulls?state=open&per_page=100" in workflow
-    assert 'any(. == "on-hold" or . == "on hold")' in workflow
-    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in workflow
-    assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in workflow
-    assert "needs: [classify, queue-gate]" in workflow
-    assert "needs.queue-gate.outputs.deploy == 'true'" in workflow
-
-
-@pytest.mark.workflow
-def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    gate = workflow.index("  queue-gate:")
-    deploy = workflow.index("\n  deploy:\n    name: Watchtower Deploy\n", gate)
-    runner = workflow.index("runs-on: [self-hosted, Linux, X64, arthexis-ci]", deploy)
-
-    assert gate < deploy < runner
-    assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
+    assert workflow.index(gate) < workflow.index(deploy)
+    assert "runs-on: ubuntu-latest" in gate
+    assert "runs-on: [self-hosted, Linux, X64, arthexis-ci]" in deploy
 
 
 @pytest.mark.workflow
@@ -570,33 +448,9 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
 
 
 @pytest.mark.workflow
-def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    arthexis = workflow.split(
-        "gh pr create --repo \"$GITHUB_REPOSITORY\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-    gway = workflow.split(
-        "gh pr create --repo \"$repository\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-
-    for command in (arthexis, gway):
-        assert "--label approved" not in command
-        assert "--label version-only" in command
-
-    assert "--match-head-commit" not in workflow
-    assert workflow.count("--auto --merge") >= 2
-    assert workflow.count('rollover_expected_head="$(git rev-parse HEAD)"') >= 2
-    assert workflow.count('test "$rollover_head" = "$rollover_expected_head"') >= 2
-    assert "rollover_pr=auto_merge_enabled" in workflow
-    assert "gway_rollover_pr=auto_merge_enabled" in workflow
-
-
-@pytest.mark.workflow
-def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    dispatch = workflow.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
+def test_gway_dispatch_coalesces_with_current_arthexis_main(watchtower_workflow) -> None:
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    dispatch = pair.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
     dispatch = dispatch.split('else\n            requested_arthexis=', 1)[0]
 
     assert 'arthexis_sha="$current_arthexis"' in dispatch
@@ -605,10 +459,3 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
 
 
-@pytest.mark.workflow
-def test_watchtower_rollover_head_sha_uses_rest_api_not_gh_pr_json_field() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "headRefOid" not in workflow
-    assert "gh api \"/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow
-    assert "gh api \"/repos/${repository}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow

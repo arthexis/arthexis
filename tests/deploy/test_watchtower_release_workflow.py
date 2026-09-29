@@ -59,132 +59,42 @@ def test_watchtower_requires_release_label_before_dispatch(watchtower_deploy_wor
     assert 'label.get("name") == "release"' in workflow
 
 
-def test_arthexis_deploy_uses_current_gway_main(watchtower_deploy_workflow: str) -> None:
-    workflow = watchtower_deploy_workflow
+def test_arthexis_deploy_uses_current_gway_main(watchtower_workflow) -> None:
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
 
-    assert 'gway_sha="$current_gway"' in workflow
-    assert 'gway_sha="${previous_gway:-$current_gway}"' not in workflow
-
-
+    assert 'gway_sha="$current_gway"' in pair
+    assert 'gway_sha="${previous_gway:-$current_gway}"' not in pair
 
 
-def test_watchtower_deploy_label_bypasses_shared_queue(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
-
-    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in workflow
-    assert 'grep -Fxq deploy <<<"$labels"' in workflow
-    assert "github.event.client_payload.force_deploy || 'false'" in workflow
-    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in workflow
-    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in workflow
-    assert "watchtower_deploy=forced_by_release_or_deploy_label" in workflow
 
 
-def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
+def test_watchtower_deploy_label_bypasses_shared_queue(watchtower_workflow) -> None:
+    classify = watchtower_workflow.job("classify")
+    gate = watchtower_workflow.job("queue-gate")
 
-    gate = workflow.split("queue-gate:", 1)[1].split("\n\n  deploy:", 1)[0]
-    assert "arthexis/arthexis arthexis/gway" in gate
+    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in classify
+    assert 'grep -Fxq deploy <<<"$labels"' in classify
+    assert "github.event.client_payload.force_deploy || 'false'" in classify
+    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in gate
+    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in gate
+    assert "watchtower_deploy=forced_by_release_or_deploy_label" in gate
+
+
+def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workflow) -> None:
+    gate = watchtower_workflow.job("queue-gate")
+    assert "for repository in arthexis/arthexis arthexis/gway; do" in gate
+    assert "pulls?state=open&per_page=100" in gate
     assert '. == "on-hold"' in gate
     assert '. == "on hold"' in gate
     assert "draft" not in gate.lower()
+    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in gate
+    assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in gate
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
 
 
-def _commit_pyproject(repo: Path, version: str, *, extra: str = "") -> str:
-    pyproject = repo / "pyproject.toml"
-    pyproject.write_text(
-        "[project]\n"
-        'name = "gway"\n'
-        f'version = "{version}"\n'
-        + extra,
-        encoding="utf-8",
-    )
-    subprocess.run(["git", "-C", str(repo), "add", "pyproject.toml"], check=True)
-    subprocess.run(
-        ["git", "-C", str(repo), "commit", "-m", f"version {version}"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
-def test_gway_version_only_detector_accepts_patch_only_rollover(tmp_path: Path) -> None:
-    repo = tmp_path / "gway"
-    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.invalid"], check=True)
-
-    before = _commit_pyproject(repo, "0.4.60")
-    after = _commit_pyproject(repo, "0.4.61")
-
-    result = subprocess.run(
-        [
-            "python",
-            ".github/scripts/is_gway_version_only_rollover.py",
-            str(repo),
-            before,
-            after,
-        ],
-        check=False,
-    )
-    assert result.returncode == 0
-
-
-def test_gway_version_only_detector_rejects_other_pyproject_changes(tmp_path: Path) -> None:
-    repo = tmp_path / "gway"
-    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.invalid"], check=True)
-
-    before = _commit_pyproject(repo, "0.4.60")
-    after = _commit_pyproject(repo, "0.4.61", extra='description = "changed"\n')
-
-    result = subprocess.run(
-        [
-            "python",
-            ".github/scripts/is_gway_version_only_rollover.py",
-            str(repo),
-            before,
-            after,
-        ],
-        check=False,
-    )
-    assert result.returncode == 1
-
-
-def test_watchtower_reconciles_stranded_gway_rollover(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
-
-    step = workflow.split(
-        "- name: Reconcile Gway next-version PR after accepted deployment", 1
-    )[1].split("- name: Restore previous Gway runtime after failed deployment", 1)[0]
-
-    assert "if: env.WATCHTOWER_STAGE == 'arthexis'" in step
-    assert "GWAY_CHANGED" not in step
-    assert "is_gway_version_only_rollover.py" in step
-    assert "gway_rollover=suppressed_version_only" in step
-    assert 'git clone --quiet --depth=2 https://github.com/arthexis/gway.git "$work"' in step
-    assert 'remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch"' in step
-    assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in step
-    assert '--force-with-lease="refs/heads/$branch:"' in step
-
-
-def test_manual_release_pins_both_packages_to_accepted_manifest():
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
-
-    release_branch = workflow.split(
+def test_manual_release_pins_both_packages_to_accepted_manifest(watchtower_workflow):
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    release_branch = pair.split(
         'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
     )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
 
@@ -196,12 +106,23 @@ def test_manual_release_pins_both_packages_to_accepted_manifest():
     assert 'current_gway' not in release_branch
 
 
-def test_manual_release_requires_valid_accepted_pair():
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
-
-    release_branch = workflow.split(
+def test_manual_release_requires_valid_accepted_pair(watchtower_workflow):
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    release_branch = pair.split(
         'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
     )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
 
     assert "Manual release requires a valid accepted Arthexis SHA." in release_branch
     assert "Manual release requires a valid accepted Gway SHA." in release_branch
+
+
+def test_watchtower_acceptance_does_not_mutate_product_repositories(
+    watchtower_workflow,
+) -> None:
+    deploy = watchtower_workflow.job("deploy")
+    accepted = deploy.index("- name: Record accepted Watchtower deployment")
+    tail = deploy[accepted:]
+
+    assert "gh pr create" not in tail
+    assert "git checkout -B" not in tail
+    assert "git push" not in tail
