@@ -16,7 +16,7 @@ class WorkflowText:
 
     def job(self, job_id: str) -> str:
         marker = f"  {job_id}:"
-        return self._indented_block(marker, indent=2)
+        return self._indented_block(marker, indent=2, text=self.text)
 
     def step(self, name: str, *, job_id: str = "deploy") -> str:
         job = self.job(job_id)
