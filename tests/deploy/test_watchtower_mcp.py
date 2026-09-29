@@ -470,3 +470,12 @@ def test_watchtower_gway_launcher_remains_usable_without_sudo(watchtower_workflo
         assert "chmod 0711 /var/lib/gway" in step
         assert "chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin" in step
         assert "/usr/local/bin/gway version >/dev/null" in step
+
+
+@pytest.mark.workflow
+def test_watchtower_bootstrap_smoke_checks_installer_root_ui(watchtower_workflow) -> None:
+    bootstrap = watchtower_workflow.step("Converge public Gway bootstrap")
+
+    assert "https://install.arthexis.com/" in bootstrap
+    assert 'grep -F \'id="installer"\'' in bootstrap
+    assert 'grep -F \'id="command"\'' in bootstrap
