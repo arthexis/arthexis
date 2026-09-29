@@ -73,6 +73,7 @@ class CsmsCandidate:
     destination_ip: str
     destination_port: int
     destination_mac: str | None = None
+    source_ips: set[str] = field(default_factory=set)
     hostnames: set[str] = field(default_factory=set)
     http_paths: set[str] = field(default_factory=set)
     websocket_paths: set[str] = field(default_factory=set)
@@ -91,6 +92,7 @@ class CsmsCandidate:
             "destination_ip": self.destination_ip,
             "destination_port": self.destination_port,
             "destination_mac": self.destination_mac,
+            "source_ips": sorted(self.source_ips),
             "hostnames": sorted(self.hostnames),
             "http_paths": sorted(self.http_paths),
             "websocket_paths": sorted(self.websocket_paths),
@@ -427,6 +429,10 @@ class CandidateTracker:
             key,
             CsmsCandidate(destination_ip, destination_port),
         )
+        source_ip = metadata.get("source_ip")
+        if isinstance(source_ip, str) and source_ip:
+            candidate.source_ips.add(source_ip)
+
         if observation.event_type == "connection_attempt":
             observed_at = metadata.get("observed_at")
             if isinstance(observed_at, (int, float)):
