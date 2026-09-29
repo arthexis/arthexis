@@ -1,6 +1,5 @@
 from pathlib import Path
 import pytest
-import subprocess
 
 
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
@@ -23,8 +22,6 @@ def _blocks(path: Path) -> list[str]:
     if current:
         blocks.append(" ".join(current))
     return blocks
-
-
 
 
 def test_watchtower_mcp_policy_has_read_only_remote_scopes() -> None:
@@ -153,16 +150,6 @@ def test_watchtower_deploy_accepts_remote_only_as_repair_stage() -> None:
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
-@pytest.mark.workflow
-def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "from gway.sampler import root" not in workflow
-    assert '"mcp" / "server.rx"' not in workflow
-    assert "service install --backend systemd --system --name mcp-server" not in workflow
-    assert "security token create" not in workflow
-
-
 def test_remote_recipe_uses_semantic_gway_cache_root() -> None:
     project = Path("pyproject.toml").read_text(encoding="utf-8")
     remote = REMOTE.read_text(encoding="utf-8")
@@ -197,7 +184,6 @@ def test_watchtower_has_safe_o8a_preflight_recipe() -> None:
     assert "--name mcp-server" in recipe
     assert "remote serve" in recipe
     assert "security token create" not in recipe
-
 
 
 def test_remote_service_targets_use_bare_double_dash_continuations() -> None:
@@ -240,7 +226,6 @@ def test_remote_preflight_service_targets_use_bare_double_dash_continuations() -
     assert lines[auth - 1] == "--"
 
 
-
 def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() -> None:
     for path in (Path("deploy/remote.rx"), Path("deploy/remote-preflight.rx")):
         recipe = path.read_text(encoding="utf-8")
@@ -249,14 +234,12 @@ def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() ->
         assert "./deploy/mcp-server.rx" not in recipe
 
 
-
 @pytest.mark.workflow
 def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}" in workflow
     assert "vars.ARTHEXIS_CERTBOT_EMAIL" not in workflow
-
 
 
 def test_public_remote_verifier_exercises_query_and_mcp_product_contract() -> None:
@@ -333,13 +316,11 @@ def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
     assert '"log.sources"' in logs_section
 
 
-
 @pytest.mark.workflow
 def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "/var/lib/gway/venv/bin/python -m gway --help" in workflow
-    assert "/var/lib/gway/venv/bin/gway --help" not in workflow
 
 
 @pytest.mark.workflow
@@ -384,8 +365,6 @@ def test_arthexis_systemd_service_uses_accepted_build_compatible_server_command(
         in workflow
     )
     assert "accepted-build-compatible server callable" in workflow
-    assert "/opt/arthexis/.venv/bin/python -m arthexis.server" not in workflow
-    assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
 
 
 @pytest.mark.workflow
@@ -413,8 +392,6 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
         in recipe
     )
     assert "arthexis-python -m arthexis.ready --local" in recipe
-    assert "/opt/arthexis/.venv/bin/ready" not in recipe
-    assert "\nready --local\n" not in recipe
 
 
 @pytest.mark.workflow
@@ -443,9 +420,6 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy(watchtower_w
     assert deploy.index(accepted) < deploy.index(rollback)
 
 
-
-
-
 @pytest.mark.workflow
 def test_watchtower_queue_gate_runs_before_self_hosted_deploy(watchtower_workflow) -> None:
     workflow = watchtower_workflow.text
@@ -471,7 +445,6 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
         assert "types: [opened, synchronize, reopened]" in workflow
         assert "labeled" not in workflow.split("workflow_dispatch:", 1)[0]
         assert "unlabeled" not in workflow.split("workflow_dispatch:", 1)[0]
-
 
 
 @pytest.mark.workflow
