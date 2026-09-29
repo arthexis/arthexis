@@ -93,3 +93,13 @@ def test_rollback_requires_accepted_pair_and_schema_guard() -> None:
     assert "- name: Verify accepted rollback inputs" in workflow
     assert "- name: Refuse schema-unsafe rollback" in workflow
     assert "database contains migrations unknown to the accepted revision" in workflow
+
+
+@pytest.mark.workflow
+def test_recovery_uses_canonical_gway_runtime() -> None:
+    workflow = Path(".github/workflows/watchtower-recovery.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert '/usr/local/bin/gway --recipe "${project}/deploy/remote-preflight.rx"' in workflow
+    assert '"${project}/.venv/bin/python" -m gway' not in workflow
