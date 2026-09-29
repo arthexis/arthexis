@@ -59,34 +59,29 @@ def test_watchtower_requires_release_label_before_dispatch(watchtower_deploy_wor
     assert 'label.get("name") == "release"' in workflow
 
 
-def test_arthexis_deploy_uses_current_gway_main(watchtower_deploy_workflow: str) -> None:
-    workflow = watchtower_deploy_workflow
+def test_arthexis_deploy_uses_current_gway_main(watchtower_workflow) -> None:
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
 
-    assert 'gway_sha="$current_gway"' in workflow
-    assert 'gway_sha="${previous_gway:-$current_gway}"' not in workflow
-
-
+    assert 'gway_sha="$current_gway"' in pair
+    assert 'gway_sha="${previous_gway:-$current_gway}"' not in pair
 
 
-def test_watchtower_deploy_label_bypasses_shared_queue(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
-
-    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in workflow
-    assert 'grep -Fxq deploy <<<"$labels"' in workflow
-    assert "github.event.client_payload.force_deploy || 'false'" in workflow
-    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in workflow
-    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in workflow
-    assert "watchtower_deploy=forced_by_release_or_deploy_label" in workflow
 
 
-def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
+def test_watchtower_deploy_label_bypasses_shared_queue(watchtower_workflow) -> None:
+    classify = watchtower_workflow.job("classify")
+    gate = watchtower_workflow.job("queue-gate")
 
-    gate = workflow.split("queue-gate:", 1)[1].split("\n\n  deploy:", 1)[0]
+    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in classify
+    assert 'grep -Fxq deploy <<<"$labels"' in classify
+    assert "github.event.client_payload.force_deploy || 'false'" in classify
+    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in gate
+    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in gate
+    assert "watchtower_deploy=forced_by_release_or_deploy_label" in gate
+
+
+def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workflow) -> None:
+    gate = watchtower_workflow.job("queue-gate")
     assert "for repository in arthexis/arthexis arthexis/gway; do" in gate
     assert "pulls?state=open&per_page=100" in gate
     assert '. == "on-hold"' in gate
@@ -97,10 +92,9 @@ def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
 
 
-def test_manual_release_pins_both_packages_to_accepted_manifest():
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
-
-    release_branch = workflow.split(
+def test_manual_release_pins_both_packages_to_accepted_manifest(watchtower_workflow):
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    release_branch = pair.split(
         'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
     )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
 
@@ -112,10 +106,9 @@ def test_manual_release_pins_both_packages_to_accepted_manifest():
     assert 'current_gway' not in release_branch
 
 
-def test_manual_release_requires_valid_accepted_pair():
-    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
-
-    release_branch = workflow.split(
+def test_manual_release_requires_valid_accepted_pair(watchtower_workflow):
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    release_branch = pair.split(
         'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
     )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
 
