@@ -473,13 +473,14 @@ def test_watchtower_gway_runtime_and_launcher_support_user_and_admin_contexts(
         assert "chmod 0711 /var/lib/gway" in step
         assert "chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin" in step
         assert (
-            "env -u GWAY_CACHE_DIR /var/lib/gway/venv/bin/python -m gway version"
+            'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" '
+            "/var/lib/gway/venv/bin/python -m gway version"
             in step
         )
 
     assert 'if [ "$(id -u)" -eq 0 ]; then' in launcher
     assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in launcher
-    assert "unset GWAY_CACHE_DIR" in launcher
+    assert 'export GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' in launcher
     assert "/usr/local/bin/gway version >/dev/null" in launcher
     assert "sudo -n /usr/local/bin/gway security oauth client list" in launcher
 
