@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sqlite3
 import subprocess
@@ -8,9 +9,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from arthexis.reconciliation.capture import capture_legacy_installation
-from arthexis.reconciliation.fixture import restore_fixture
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,12 +21,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-@pytest.fixture(scope="session")
-def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
-    root = tmp_path_factory.mktemp("reconciled-e2e-baseline")
-    legacy = root / "legacy"
-    legacy.mkdir()
-    database = legacy / "db.sqlite3"
+def _legacy_installation(root: Path) -> Path:
+    root.mkdir()
+    database = root / "db.sqlite3"
     with sqlite3.connect(database) as connection:
         connection.execute(
             "CREATE TABLE django_migrations "
@@ -45,10 +40,17 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
         connection.execute(
             "INSERT INTO core_rfid(rfid, active) VALUES ('legacy-card', 1)"
         )
+    (root / "VERSION").write_text("0.9.0\n", encoding="utf-8")
+    return database
 
-    capture = capture_legacy_installation(legacy, root / "captures")
-    fixture = restore_fixture(capture.path, root / "fixtures")
-    source_sha = _sha256(fixture.database_path)
+
+@pytest.fixture(scope="session")
+def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
+    root = tmp_path_factory.mktemp("rehearsal-e2e-baseline")
+    legacy = root / "legacy"
+    source_database = _legacy_installation(legacy)
+    source_sha = _sha256(source_database)
+    output = root / "rehearsal"
 
     environment = os.environ.copy()
     environment["ARTHEXIS_DATA_DIR"] = str(root / "current-data")
@@ -57,8 +59,10 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
         [
             sys.executable,
             str(PROJECT_ROOT / "scripts" / "reconcile.py"),
-            "reconcile-fixture",
-            str(fixture.path),
+            "rehearse",
+            str(legacy),
+            "--output",
+            str(output),
             "--nice",
             "0",
             "--batch-size",
@@ -71,13 +75,20 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    destination = fixture.path / "reconciled.sqlite3"
+    result = json.loads(completed.stdout)
 
     return {
         "root": root,
-        "capture_path": capture.path,
-        "fixture_path": fixture.path,
-        "source_database": fixture.database_path,
+        "legacy_path": legacy,
+        "source_database": source_database,
         "source_sha256": source_sha,
-        "destination_database": destination,
+        "rehearsal_root": output,
+        "capture_path": Path(str(result["capture"]["path"])),
+        "fixture_path": Path(str(result["fixture"]["path"])),
+        "destination_database": Path(str(result["destination_database"])),
+        "resource_report": Path(str(result["resource_report"])),
+        "json_report": Path(str(result["json_report"])),
+        "text_report": Path(str(result["text_report"])),
+        "go_bundle": Path(str(result["go_bundle"])),
+        "result": result,
     }
