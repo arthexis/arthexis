@@ -586,3 +586,15 @@ def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
     assert workflow.count("--auto --merge --match-head-commit") >= 2
     assert "rollover_pr=auto_merge_enabled" in workflow
     assert "gway_rollover_pr=auto_merge_enabled" in workflow
+
+
+@pytest.mark.workflow
+def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    dispatch = workflow.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
+    dispatch = dispatch.split('else\n            requested_arthexis=', 1)[0]
+
+    assert 'arthexis_sha="$current_arthexis"' in dispatch
+    assert 'arthexis_sha="${previous_arthexis:-$current_arthexis}"' not in dispatch
+    assert 'gway_sha="$current_gway"' in dispatch
+    assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
