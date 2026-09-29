@@ -44,7 +44,7 @@ def test_external_id_is_unique() -> None:
 def test_optional_user_and_account_links_are_retained_when_present() -> None:
     user = get_user_model().objects.create_user(
         username="card-owner",
-        password="unused",
+        password=None,
     )
     account = CustomerAccount.objects.create(
         key="account-1",
@@ -66,7 +66,7 @@ def test_optional_user_and_account_links_are_retained_when_present() -> None:
 def test_user_and_account_deletion_leave_the_credential() -> None:
     user = get_user_model().objects.create_user(
         username="card-owner",
-        password="unused",
+        password=None,
     )
     account = CustomerAccount.objects.create(
         key="account-1",
