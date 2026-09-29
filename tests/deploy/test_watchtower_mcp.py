@@ -598,3 +598,12 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
     assert 'arthexis_sha="${previous_arthexis:-$current_arthexis}"' not in dispatch
     assert 'gway_sha="$current_gway"' in dispatch
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
+
+
+@pytest.mark.workflow
+def test_watchtower_rollover_head_sha_uses_rest_api_not_gh_pr_json_field() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "headRefOid" not in workflow
+    assert 'gh api "/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}" --jq '.head.sha'' in workflow
+    assert 'gh api "/repos/${repository}/pulls/${rollover_pr}" --jq '.head.sha'' in workflow
