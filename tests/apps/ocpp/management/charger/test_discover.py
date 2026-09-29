@@ -64,6 +64,7 @@ def test_capture_request_without_gway_keeps_discovery_report(
                 "destination_ip": "198.51.100.40",
                 "destination_port": 9000,
                 "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "source_ips": ["192.0.2.20"],
                 "hostnames": ["csms.example.com"],
             },
         )
@@ -111,6 +112,7 @@ def test_capture_request_with_provider_records_plan_without_mutation(
                 "destination_ip": "198.51.100.40",
                 "destination_port": 9000,
                 "destination_mac": "aa:bb:cc:dd:ee:ff",
+                "source_ips": ["192.0.2.20"],
                 "hostnames": ["csms.example.com"],
             },
         )
