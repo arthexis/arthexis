@@ -13,7 +13,7 @@ repeat
 --max 60
 
 recipe web/remote/expose
---site remote.arthexis.com
+--site remote_arthexis_com
 --domain remote.arthexis.com
 --mcp-host 127.0.0.1
 --mcp-port 8000
