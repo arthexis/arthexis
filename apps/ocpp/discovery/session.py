@@ -178,7 +178,13 @@ class DiscoverySession:
         return session
 
     @classmethod
-    def open(cls, root: Path, session_id: str) -> DiscoverySession:
+    def open(
+        cls,
+        root: Path,
+        session_id: str,
+        *,
+        projector: Callable[[Mapping[str, object]], object] | None = None,
+    ) -> DiscoverySession:
         """Open an existing session, repairing only an interrupted final append."""
 
         cls._validate_session_id(session_id)
@@ -200,7 +206,7 @@ class DiscoverySession:
             path=path,
             created_at=created_at,
             _next_sequence=len(events) + 1,
-            projector=None,
+            projector=projector,
         )
 
     @property
