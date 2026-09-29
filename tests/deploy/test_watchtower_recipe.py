@@ -73,7 +73,7 @@ def test_remote_dns_bootstrap_is_separate_from_recurring_exposure() -> None:
     expose = expose_commands[2]
 
     assert expose.startswith("recipe web/remote")
-    assert "--site remote.arthexis.com" in expose
+    assert "--site remote_arthexis_com" in expose
     assert "--domain remote.arthexis.com" in expose
     assert "--mcp-host 127.0.0.1" in expose
     assert "--mcp-port 8000" in expose
