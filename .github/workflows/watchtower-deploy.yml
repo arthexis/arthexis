@@ -845,17 +845,18 @@ jobs:
           else
             GH_TOKEN="$GH_TOKEN" gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
               --title "Advance Arthexis to ${next_version} after accepted ${released} deployment" \
-              --label approved \
               --label version-only \
               --body "Watchtower successfully accepted Arthexis \`${released}\` at \`${ARTHEXIS_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "rollover_pr=created number=$rollover_pr"
           fi
-          printf '%s\n' '{"labels":["approved","version-only"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+          printf '%s\n' '{"labels":["version-only"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
-          echo "rollover_pr=approved number=$rollover_pr"
+          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh pr view "$rollover_pr" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$rollover_head"
+          echo "rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
       - name: Reconcile Gway next-version PR after accepted deployment
         if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
@@ -955,17 +956,18 @@ jobs:
           else
             GH_TOKEN="$GH_TOKEN" gh pr create --repo "$repository" --base main --head "$branch" \
               --title "Advance Gway to ${next_version} after accepted ${released} deployment" \
-              --label approved \
               --label version-only \
               --body "Watchtower successfully accepted Gway \`${released}\` at \`${GWAY_EXPECTED_SHA}\`.\n\nThis version-only rollover is created from deployment acceptance, independently of PyPI publication. Its merge is ignored by Watchtower deployment triggers."
             rollover_pr="$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$repository" --state open --head "$branch" --json number --jq '.[0].number')"
             echo "gway_rollover_pr=created number=$rollover_pr"
           fi
-          printf '%s\n' '{"labels":["approved","version-only"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
+          printf '%s\n' '{"labels":["version-only"]}' | GH_TOKEN="$GH_TOKEN" gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${repository}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
-          echo "gway_rollover_pr=approved number=$rollover_pr"
+          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh pr view "$rollover_pr" --repo "$repository" --json headRefOid --jq '.headRefOid')"
+          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$repository" --auto --merge --match-head-commit "$rollover_head"
+          echo "gway_rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
 
       - name: Restore previous Gway runtime after failed deployment
