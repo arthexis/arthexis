@@ -605,5 +605,5 @@ def test_watchtower_rollover_head_sha_uses_rest_api_not_gh_pr_json_field() -> No
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "headRefOid" not in workflow
-    assert 'gh api "/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}" --jq '.head.sha'' in workflow
-    assert 'gh api "/repos/${repository}/pulls/${rollover_pr}" --jq '.head.sha'' in workflow
+    assert "gh api \"/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow
+    assert "gh api \"/repos/${repository}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow
