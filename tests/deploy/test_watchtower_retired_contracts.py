@@ -45,6 +45,7 @@ def test_watchtower_acceptance_is_terminal_for_repository_mutation(
     tail = deploy[accepted:]
 
     assert "gh pr create" not in tail
+    assert "git checkout -B" not in tail
     assert "git push" not in tail
-    assert "/pulls" not in tail
+    assert "release/advance-" not in tail
     assert "version-only" not in tail
