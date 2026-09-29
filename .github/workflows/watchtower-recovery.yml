@@ -131,8 +131,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           project=/opt/arthexis
-          sudo -n "${project}/.venv/bin/python" -m gway \
-            "${project}/deploy/remote-preflight.rx"
+          sudo -n /usr/local/bin/gway --recipe "${project}/deploy/remote-preflight.rx"
           sudo -n "${project}/.venv/bin/python" \
             "${project}/scripts/verify_remote_deployment.py" local
           sudo -n "${project}/.venv/bin/python" \
@@ -293,7 +292,7 @@ jobs:
           project=/opt/arthexis
           sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" check --fail-level ERROR >/dev/null 2>&1
           sudo -n env ARTHEXIS_DATA_DIR=/var/lib/arthexis "${project}/.venv/bin/python" "${project}/manage.py" makemigrations --check --dry-run >/dev/null 2>&1
-          sudo -n "${project}/.venv/bin/python" -m gway "${project}/deploy/remote-preflight.rx" >/dev/null
+          sudo -n /usr/local/bin/gway --recipe "${project}/deploy/remote-preflight.rx" >/dev/null
           sudo -n "${project}/.venv/bin/python" "${project}/scripts/verify_remote_deployment.py" local
           sudo -n "${project}/.venv/bin/python" "${project}/scripts/verify_remote_deployment.py" public
           echo "rollback_verification=ok"
