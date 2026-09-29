@@ -829,6 +829,7 @@ jobs:
           git checkout -B "$branch"
           git add VERSION pyproject.toml
           git commit -m "chore(release): advance arthexis to v${next_version}"
+          rollover_expected_head="$(git rev-parse HEAD)"
           remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
           auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           if [[ -n "$remote_branch_sha" ]]; then
@@ -859,7 +860,11 @@ jobs:
             "/repos/${GITHUB_REPOSITORY}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
           rollover_head="$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}" --jq '.head.sha')"
-          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$rollover_head"
+          test "$rollover_head" = "$rollover_expected_head" || {
+            echo "Refusing to arm auto-merge for stale Arthexis rollover PR: expected=$rollover_expected_head actual=$rollover_head" >&2
+            exit 1
+          }
+          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$GITHUB_REPOSITORY" --auto --merge
           echo "rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
       - name: Reconcile Gway next-version PR after accepted deployment
@@ -940,6 +945,7 @@ jobs:
           git add pyproject.toml
           test "$(git diff --cached --name-only)" = "pyproject.toml"
           git commit -m "chore(release): advance gway to v${next_version}"
+          rollover_expected_head="$(git rev-parse HEAD)"
           remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
           auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           if [[ -n "$remote_branch_sha" ]]; then
@@ -970,7 +976,11 @@ jobs:
             "/repos/${repository}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
           rollover_head="$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${repository}/pulls/${rollover_pr}" --jq '.head.sha')"
-          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$repository" --auto --merge --match-head-commit "$rollover_head"
+          test "$rollover_head" = "$rollover_expected_head" || {
+            echo "Refusing to arm auto-merge for stale Gway rollover PR: expected=$rollover_expected_head actual=$rollover_head" >&2
+            exit 1
+          }
+          GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$repository" --auto --merge
           echo "gway_rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
 
