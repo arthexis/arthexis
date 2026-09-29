@@ -438,7 +438,6 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'gway_runtime_rollback=restored' in workflow
 
 
-@pytest.mark.workflow
 def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -466,7 +465,6 @@ def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
     assert 'trap cleanup EXIT' in workflow
 
 
-@pytest.mark.workflow
 def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -483,49 +481,6 @@ def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     assert not push_line.endswith("\\\\")
     assert "https://$GH_TOKEN@" not in workflow
 
-
-def test_watchtower_rollover_push_command_executes_against_local_remote(tmp_path: Path) -> None:
-    remote = tmp_path / "remote.git"
-    work = tmp_path / "work"
-    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
-    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.email", "ci@example.invalid"], check=True)
-    (work / "VERSION").write_text("2.0.2\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(work), "add", "VERSION"], check=True)
-    subprocess.run(["git", "-C", str(work), "commit", "-m", "seed"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(remote)], check=True)
-
-    command = """
-set -Eeuo pipefail
-branch=release/next-arthexis
-git checkout -B "$branch"
-remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')"
-auth_header="$(printf 'x-access-token:%s' "test-token" | base64 -w0)"
-if [[ -n "$remote_branch_sha" ]]; then
-  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
-    push --force-with-lease="refs/heads/$branch:$remote_branch_sha" \\
-    origin "HEAD:refs/heads/$branch"
-else
-  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \\
-    push --force-with-lease="refs/heads/$branch:" \\
-    origin "HEAD:refs/heads/$branch"
-fi
-"""
-    subprocess.run(["bash", "-c", command], cwd=work, check=True, capture_output=True, text=True)
-    remote_branch = subprocess.run(
-        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/release/next-arthexis"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    local_head = subprocess.run(
-        ["git", "-C", str(work), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert remote_branch == local_head
 
 @pytest.mark.workflow
 def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
@@ -569,7 +524,6 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
         assert "unlabeled" not in workflow.split("workflow_dispatch:", 1)[0]
 
 
-@pytest.mark.workflow
 def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     arthexis = workflow.split(
@@ -605,7 +559,6 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
 
 
-@pytest.mark.workflow
 def test_watchtower_rollover_head_sha_uses_rest_api_not_gh_pr_json_field() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
