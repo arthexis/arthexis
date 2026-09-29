@@ -46,30 +46,39 @@ def test_workflow_named_contract_modules_are_marked_workflow() -> None:
     assert [str(path) for path in files if not _module_has_workflow_marker(path)] == []
 
 
-def test_known_mixed_deploy_modules_mark_only_workflow_assertions() -> None:
-    remote = _function_markers(ROOT / "deploy" / "test_remote_acceptance.py")
-    assert "workflow" in remote["test_base_watchtower_stage_does_not_couple_remote_acceptance"]
-    assert "workflow" not in remote["test_remote_acceptance_validates_oauth_metadata_contract"]
-
-    mcp = _function_markers(ROOT / "deploy" / "test_watchtower_mcp.py")
-    workflow_tests = {
-        name
-        for name in mcp
+def _workflow_reading_tests(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    selected: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        source = ast.unparse(node)
         if (
-            name.startswith("test_watchtower_")
-            or name.startswith("test_arthexis_")
-            or name.startswith("test_remote_verifier_")
-            or name.startswith("test_approved_auto_merge_")
-            or name.startswith("test_full_ci_")
-            or name.startswith("test_rollover_prs_")
-        )
-        and name not in {
-            "test_watchtower_mcp_policy_has_read_only_remote_scopes",
-            "test_watchtower_mcp_service_wrapper_delegates_to_gway_sampler",
-        }
-    }
-    assert workflow_tests
-    assert [name for name in sorted(workflow_tests) if "workflow" not in mcp[name]] == []
+            "WORKFLOW" in source
+            or "watchtower_deploy_workflow" in source
+            or "watchtower_recovery_workflow" in source
+            or ".github/workflows/" in source
+        ):
+            selected.add(node.name)
+    return selected
+
+
+def test_mixed_deploy_modules_mark_workflow_reading_assertions() -> None:
+    for path in sorted((ROOT / "deploy").glob("test_*.py")):
+        if _module_has_workflow_marker(path):
+            continue
+        markers = _function_markers(path)
+        workflow_tests = _workflow_reading_tests(path)
+        assert [
+            f"{path}:{name}"
+            for name in sorted(workflow_tests)
+            if "workflow" not in markers[name]
+        ] == []
+
+    remote = _function_markers(ROOT / "deploy" / "test_remote_acceptance.py")
+    assert "workflow" not in remote[
+        "test_remote_acceptance_validates_oauth_metadata_contract"
+    ]
 
 
 def test_real_migration_executor_tests_are_explicitly_marked() -> None:
