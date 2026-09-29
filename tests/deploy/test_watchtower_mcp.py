@@ -583,7 +583,10 @@ def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
         assert "--label approved" not in command
         assert "--label version-only" in command
 
-    assert workflow.count("--auto --merge --match-head-commit") >= 2
+    assert "--match-head-commit" not in workflow
+    assert workflow.count("--auto --merge") >= 2
+    assert workflow.count('rollover_expected_head="$(git rev-parse HEAD)"') >= 2
+    assert workflow.count('test "$rollover_head" = "$rollover_expected_head"') >= 2
     assert "rollover_pr=auto_merge_enabled" in workflow
     assert "gway_rollover_pr=auto_merge_enabled" in workflow
 
