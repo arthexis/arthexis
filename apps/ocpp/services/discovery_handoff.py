@@ -7,7 +7,7 @@ from typing import Any
 
 from django.conf import settings
 
-from arthexis.discovery import DiscoverySession, DiscoveryStore
+from apps.ocpp.discovery.session import DiscoverySession
 from apps.events.services import publish_safely
 from apps.ocpp.models import Charger
 
@@ -18,43 +18,31 @@ def _project_discovery_event(event: Mapping[str, Any]) -> object:
     """Best-effort projection of one already-durable discovery event."""
     payload = {
         "session_id": event["session_id"],
-        "sequence": event["seq"],
-        "event_type": event["type"],
-        "kind": event["kind"],
+        "sequence": event["sequence"],
+        "event_type": event["event_type"],
+        "category": event["category"],
+        "artifact_refs": list(event.get("artifact_refs") or []),
     }
-    if "artifact" in event:
-        payload["artifact"] = event["artifact"]
     return publish_safely(
         event_type="discovery.event",
-        producer="arthexis.discovery",
+        producer="arthexis.ocpp.discovery",
         payload=payload,
     )
 
 
-def discovery_store() -> DiscoveryStore:
-    """Return the filesystem-backed discovery store for this Arthexis instance."""
-    return DiscoveryStore(
-        Path(settings.DATA_DIR) / "discovery",
-        projector=_project_discovery_event,
-    )
+def _discovery_root() -> Path:
+    return Path(settings.DATA_DIR)
 
 
-def arm_discovery_handoff(
-    session_id: str,
-    *,
-    charger_identity: str | None = None,
-    client_host: str | None = None,
-    original_destination: Mapping[str, Any] | None = None,
-    strategy: str | None = None,
-) -> dict[str, Any]:
-    """Arm one discovery session before Gway applies a capture redirect."""
-    session = discovery_store().open(session_id)
-    return session.arm_handoff(
-        charger_identity=charger_identity,
-        client_host=client_host,
-        original_destination=original_destination,
-        strategy=strategy,
-    )
+def _open_session(session_id: str) -> DiscoverySession:
+    return DiscoverySession.open(_discovery_root(), session_id)
+
+
+def _sessions_newest_first() -> list[DiscoverySession]:
+    return [
+        DiscoverySession.open(_discovery_root(), str(item["session_id"]))
+        for item in reversed(DiscoverySession.list(_discovery_root()))
+    ]
 
 
 def _client_host(scope: Mapping[str, object]) -> str | None:
@@ -73,26 +61,33 @@ def claim_and_record_discovery_handoff(
     offered_subprotocols: list[str],
 ) -> DiscoverySession | None:
     """Link a redirected connection to discovery without becoming its transport owner."""
-    store = discovery_store()
     client_host = _client_host(scope)
-    session = store.claim_handoff(
-        charger_identity=charger.identity,
-        client_host=client_host,
+    session = next(
+        (
+            candidate
+            for candidate in _sessions_newest_first()
+            if candidate.claim_handoff(
+                charger_identity=charger.identity,
+                client_host=client_host,
+            )
+            is not None
+        ),
+        None,
     )
     if session is None:
         return None
 
     try:
-        session.append(
+        session.record(
             "redirect_observed",
-            data={
+            metadata={
                 "client_host": client_host,
                 "path": scope.get("path", ""),
             },
         )
-        session.append(
+        session.record(
             "ocpp_connection",
-            data={
+            metadata={
                 "charger": {
                     "id": charger.pk,
                     "identity": charger.identity,
@@ -103,9 +98,9 @@ def claim_and_record_discovery_handoff(
                 "client_host": client_host,
             },
         )
-        session.append(
+        session.record(
             "capture_succeeded",
-            data={
+            metadata={
                 "charger_id": charger.pk,
                 "charger_identity": charger.identity,
                 "protocol": protocol,
