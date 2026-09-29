@@ -114,3 +114,15 @@ def test_manual_release_requires_valid_accepted_pair(watchtower_workflow):
 
     assert "Manual release requires a valid accepted Arthexis SHA." in release_branch
     assert "Manual release requires a valid accepted Gway SHA." in release_branch
+
+
+def test_watchtower_acceptance_does_not_mutate_product_repositories(
+    watchtower_workflow,
+) -> None:
+    deploy = watchtower_workflow.job("deploy")
+    accepted = deploy.index("- name: Record accepted Watchtower deployment")
+    tail = deploy[accepted:]
+
+    assert "gh pr create" not in tail
+    assert "git checkout -B" not in tail
+    assert "git push" not in tail
