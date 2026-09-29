@@ -33,6 +33,7 @@ def test_create_session_builds_report_layout_and_initial_event(tmp_path) -> None
         "manifest.json",
         "events.jsonl",
         "summary.json",
+        ".events.lock",
         "network",
         "traffic",
         "ocpp",
@@ -421,3 +422,34 @@ def test_handoff_requires_match_key(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="charger_identity and/or client_host"):
         session.arm_handoff()
+
+
+
+def test_disarm_handoff_removes_only_unclaimed_handoff(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="handoff-disarm")
+    session.arm_handoff(client_host="192.0.2.20")
+
+    result = session.disarm_handoff()
+
+    assert result == {"disarmed": True, "claimed": False}
+    assert not session.handoff_path.exists()
+    assert session.write_summary()["handoff_armed"] is False
+    assert any(
+        event["event_type"] == "handoff_disarmed"
+        for event in session.events()
+    )
+
+
+def test_disarm_handoff_never_undoes_claimed_handoff(tmp_path) -> None:
+    session = DiscoverySession.create(tmp_path, session_id="handoff-claimed")
+    session.arm_handoff(client_host="192.0.2.20")
+    assert session.claim_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.20",
+    ) is not None
+
+    result = session.disarm_handoff()
+
+    assert result == {"disarmed": False, "claimed": True}
+    assert session.claimed_handoff_path.exists()
+    assert session.write_summary()["handoff_claimed"] is True
