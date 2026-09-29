@@ -19,7 +19,7 @@ on:
         type: choice
         options:
           - arthexis
-          - remote
+          - remote-only
           - release
 
 concurrency:
@@ -69,14 +69,14 @@ jobs:
             fi
           elif [[ "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
-            if grep -Fxq remote <<<"$labels"; then
-              stage="remote"
+            if grep -Fxq remote-only <<<"$labels"; then
+              stage="remote-only"
             fi
             if grep -Fxq deploy <<<"$labels"; then
               force_deploy=true
             fi
           fi
-          if [[ "$stage" != "arthexis" && "$stage" != "remote" && "$stage" != "release" ]]; then
+          if [[ "$stage" != "arthexis" && "$stage" != "remote-only" && "$stage" != "release" ]]; then
             echo "Unsupported deployment stage: $stage" >&2
             exit 1
           fi
@@ -540,7 +540,7 @@ jobs:
           echo "service=active_independent_of_gway"
 
       - name: Preflight Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -559,7 +559,7 @@ jobs:
           echo "remote_listeners=end"
 
       - name: Converge Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -575,7 +575,7 @@ jobs:
             --public-ipv4 "${public_ipv4}"
 
       - name: Verify Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -604,7 +604,7 @@ jobs:
           echo "remote_acceptance=ok"
 
       - name: Preflight Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -625,7 +625,7 @@ jobs:
           echo "wire_listener=end"
 
       - name: Converge Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -639,7 +639,7 @@ jobs:
             --public-address "${public_ipv4}"
 
       - name: Verify Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'remote' || env.WATCHTOWER_STAGE == 'release'
+        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -712,7 +712,7 @@ jobs:
               ),
               "accepted_at": datetime.now(timezone.utc).isoformat(),
               "release_intent": os.environ.get("WATCHTOWER_RELEASE_INTENT") or None,
-              "stages": ["arthexis", "remote"] if os.environ.get("WATCHTOWER_RELEASE_INTENT") == "manual" else [os.environ.get("WATCHTOWER_STAGE", "arthexis")],
+              "stages": ["arthexis", "remote"],
           }
 
           def request(method, path, payload=None):
