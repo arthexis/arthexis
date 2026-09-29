@@ -9,10 +9,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from apps.ocpp.discovery.projection import project_discovery_event
 from apps.ocpp.discovery.session import DiscoverySession
 
 _ALLOWED_ROLES = frozenset({"control", "satellite"})
 _TSHARK_FIELDS = (
+    "frame.time_epoch",
     "eth.src",
     "eth.dst",
     "arp.opcode",
@@ -21,13 +23,27 @@ _TSHARK_FIELDS = (
     "arp.src.hw_mac",
     "ip.src",
     "ip.dst",
+    "ipv6.src",
+    "ipv6.dst",
+    "icmpv6.type",
+    "icmpv6.nd.ns.target_address",
+    "icmpv6.nd.na.target_address",
+    "icmpv6.opt.src_linkaddr",
+    "icmpv6.opt.target_linkaddr",
     "tcp.srcport",
     "tcp.dstport",
+    "tcp.flags.syn",
+    "tcp.flags.ack",
     "dns.id",
     "dns.flags.response",
     "dns.qry.type",
     "dns.qry.name",
     "dns.a",
+    "dns.aaaa",
+    "dhcp.option.dhcp",
+    "dhcp.option.requested_ip_address",
+    "dhcp.ip.your",
+    "dhcp.hw.mac_addr",
     "http.request.method",
     "http.host",
     "http.request.uri",
@@ -57,12 +73,16 @@ class CsmsCandidate:
     destination_ip: str
     destination_port: int
     destination_mac: str | None = None
+    source_ips: set[str] = field(default_factory=set)
     hostnames: set[str] = field(default_factory=set)
     http_paths: set[str] = field(default_factory=set)
     websocket_paths: set[str] = field(default_factory=set)
     ocpp_subprotocols: set[str] = field(default_factory=set)
     tls_sni: set[str] = field(default_factory=set)
     attempts: int = 0
+    first_attempt_at: float | None = None
+    last_attempt_at: float | None = None
+    retry_intervals_seconds: list[float] = field(default_factory=list)
     mac_without_resolution: bool = False
 
     def as_metadata(self) -> dict[str, object]:
@@ -72,12 +92,16 @@ class CsmsCandidate:
             "destination_ip": self.destination_ip,
             "destination_port": self.destination_port,
             "destination_mac": self.destination_mac,
+            "source_ips": sorted(self.source_ips),
             "hostnames": sorted(self.hostnames),
             "http_paths": sorted(self.http_paths),
             "websocket_paths": sorted(self.websocket_paths),
             "ocpp_subprotocols": sorted(self.ocpp_subprotocols),
             "tls_sni": sorted(self.tls_sni),
             "attempts": self.attempts,
+            "first_attempt_at": self.first_attempt_at,
+            "last_attempt_at": self.last_attempt_at,
+            "retry_intervals_seconds": self.retry_intervals_seconds,
             "destination_mac_observed_without_resolution": (
                 self.mac_without_resolution
             ),
@@ -99,6 +123,14 @@ class TsharkObserver:
 
     def __init__(self, executable: str | None = None) -> None:
         self.executable = executable or shutil.which("tshark")
+
+    def link_state(self, interface: str) -> str | None:
+        """Return passive Linux link-state evidence when available."""
+        state_path = Path("/sys/class/net") / interface / "operstate"
+        try:
+            return state_path.read_text(encoding="utf-8").strip() or None
+        except OSError:
+            return None
 
     def preflight(self, interface: str) -> None:
         """Require TShark and a non-empty interface before session creation."""
@@ -160,6 +192,11 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
     values.extend([""] * (len(_TSHARK_FIELDS) - len(values)))
     fields = dict(zip(_TSHARK_FIELDS, values, strict=False))
 
+    timestamp = None
+    try:
+        timestamp = float(fields["frame.time_epoch"])
+    except ValueError:
+        pass
     source_mac = fields["eth.src"].lower() or None
     destination_mac = fields["eth.dst"].lower() or None
     arp_opcode = fields["arp.opcode"]
@@ -186,15 +223,18 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
             },
         )
 
-    source_ip = fields["ip.src"]
-    destination_ip = fields["ip.dst"]
+    source_ip = fields["ip.src"] or fields["ipv6.src"]
+    destination_ip = fields["ip.dst"] or fields["ipv6.dst"]
     source_port = fields["tcp.srcport"]
     destination_port = fields["tcp.dstport"]
+    tcp_syn = fields["tcp.flags.syn"] == "1"
+    tcp_ack = fields["tcp.flags.ack"] == "1"
     dns_id = fields["dns.id"]
     dns_response = fields["dns.flags.response"]
     dns_name = fields["dns.qry.name"].rstrip(".")
     dns_type = fields["dns.qry.type"]
-    dns_address = fields["dns.a"]
+    dns_address = fields["dns.a"] or fields["dns.aaaa"]
+    dhcp_message_type = fields["dhcp.option.dhcp"]
     http_method = fields["http.request.method"]
     http_host = fields["http.host"]
     http_uri = fields["http.request.uri"]
@@ -212,7 +252,40 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
         ),
         "source_mac": source_mac,
         "destination_mac": destination_mac,
+        "observed_at": timestamp,
     }
+
+    icmpv6_type = fields["icmpv6.type"]
+    if icmpv6_type in {"135", "136"}:
+        target = (
+            fields["icmpv6.nd.ns.target_address"]
+            if icmpv6_type == "135"
+            else fields["icmpv6.nd.na.target_address"]
+        )
+        metadata.update(
+            {
+                "target_ip": target or None,
+                "source_link_address": fields["icmpv6.opt.src_linkaddr"] or None,
+                "target_link_address": fields["icmpv6.opt.target_linkaddr"] or None,
+            }
+        )
+        return NetworkObservation(
+            "ndp_neighbor_solicitation"
+            if icmpv6_type == "135"
+            else "ndp_neighbor_advertisement",
+            metadata,
+        )
+
+    if dhcp_message_type.isdigit():
+        metadata.update(
+            {
+                "message_type": int(dhcp_message_type),
+                "requested_address": fields["dhcp.option.requested_ip_address"] or None,
+                "offered_address": fields["dhcp.ip.your"] or None,
+                "client_mac": fields["dhcp.hw.mac_addr"].lower() or source_mac,
+            }
+        )
+        return NetworkObservation("dhcp", metadata)
 
     if dns_id.isdigit() and dns_response == "0" and dns_name:
         metadata.update(
@@ -258,8 +331,10 @@ def parse_tshark_line(line: str) -> NetworkObservation | None:
             return NetworkObservation("websocket_upgrade", metadata)
         return NetworkObservation("http_request", metadata)
 
-    if destination_ip and destination_port.isdigit():
+    if destination_ip and destination_port.isdigit() and tcp_syn and not tcp_ack:
         return NetworkObservation("connection_attempt", metadata)
+    if destination_ip and destination_port.isdigit():
+        return NetworkObservation("traffic_observed", metadata)
     return None
 
 
@@ -278,9 +353,17 @@ class CandidateTracker:
         """Consume evidence and return any additional derived observations."""
 
         metadata = observation.metadata
-        if observation.event_type == "arp_reply":
-            ip = metadata.get("sender_ip")
-            mac = metadata.get("sender_mac")
+        if observation.event_type in {"arp_reply", "ndp_neighbor_advertisement"}:
+            ip = (
+                metadata.get("sender_ip")
+                if observation.event_type == "arp_reply"
+                else metadata.get("target_ip")
+            )
+            mac = (
+                metadata.get("sender_mac")
+                if observation.event_type == "arp_reply"
+                else metadata.get("target_link_address")
+            )
             if isinstance(ip, str) and isinstance(mac, str):
                 self._resolved_neighbors[ip] = mac
             return []
@@ -346,7 +429,22 @@ class CandidateTracker:
             key,
             CsmsCandidate(destination_ip, destination_port),
         )
-        candidate.attempts += 1
+        source_ip = metadata.get("source_ip")
+        if isinstance(source_ip, str) and source_ip:
+            candidate.source_ips.add(source_ip)
+
+        if observation.event_type == "connection_attempt":
+            observed_at = metadata.get("observed_at")
+            if isinstance(observed_at, (int, float)):
+                timestamp = float(observed_at)
+                if candidate.first_attempt_at is None:
+                    candidate.first_attempt_at = timestamp
+                if candidate.last_attempt_at is not None:
+                    candidate.retry_intervals_seconds.append(
+                        round(timestamp - candidate.last_attempt_at, 6)
+                    )
+                candidate.last_attempt_at = timestamp
+            candidate.attempts += 1
         candidate.hostnames.update(self._dns_resolutions.get(destination_ip, set()))
 
         derived: list[NetworkObservation] = []
@@ -416,17 +514,32 @@ def run_passive_discovery(
 
     observer.preflight(interface)
 
-    session = DiscoverySession.create(root)
+    session = DiscoverySession.create(root, projector=project_discovery_event)
     session.record(
         "interface_selected",
         metadata={"interface": interface, "role": normalized_role},
     )
+    link_state = getattr(observer, "link_state", None)
+    if callable(link_state):
+        state = link_state(interface)
+        if state:
+            session.record(
+                "link_state",
+                metadata={"interface": interface, "state": state},
+            )
+
     tracker = CandidateTracker()
 
-    for observation in observer.observations(interface):
-        session.record(observation.event_type, metadata=observation.metadata)
-        for derived in tracker.consume(observation):
-            session.record(derived.event_type, metadata=derived.metadata)
+    try:
+        for observation in observer.observations(interface):
+            session.record(observation.event_type, metadata=observation.metadata)
+            for derived in tracker.consume(observation):
+                session.record(derived.event_type, metadata=derived.metadata)
+    except KeyboardInterrupt:
+        session.record(
+            "session_interrupted",
+            metadata={"reason": "operator_interrupt"},
+        )
 
     for candidate in tracker.candidates():
         session.record(

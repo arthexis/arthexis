@@ -5,14 +5,21 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import uuid
 from dataclasses import dataclass
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from contextlib import contextmanager
+from hashlib import sha256
+from pathlib import PurePosixPath
 from datetime import datetime, timezone
 from pathlib import Path
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _EVENT_CATEGORIES = frozenset({"observation", "inference", "operator_note"})
+_EVENT_LOCKS: dict[str, threading.Lock] = {}
+_EVENT_LOCKS_GUARD = threading.Lock()
+
 _REQUIRED_EVENT_KEYS = frozenset(
     {
         "session_id",
@@ -47,6 +54,17 @@ def _read_json(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path.name} must contain a JSON object")
     return payload
+
+
+def _validated_artifact_path(path: str) -> PurePosixPath:
+    candidate = PurePosixPath(path)
+    if (
+        candidate.is_absolute()
+        or not candidate.parts
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+    ):
+        raise ValueError("Discovery artifact path must stay inside the session")
+    return candidate
 
 
 def _validate_event(
@@ -103,12 +121,13 @@ def _validate_event(
 
 @dataclass
 class DiscoverySession:
-    """Append and inspect durable evidence for one discovery session."""
+    """Append and inspect durable OCPP discovery evidence."""
 
     session_id: str
     path: Path
     created_at: str
     _next_sequence: int = 1
+    projector: Callable[[Mapping[str, object]], object] | None = None
 
     @classmethod
     def create(
@@ -117,6 +136,7 @@ class DiscoverySession:
         *,
         session_id: str | None = None,
         created_at: datetime | None = None,
+        projector: Callable[[Mapping[str, object]], object] | None = None,
     ) -> DiscoverySession:
         """Create a new discovery report directory and its initial event."""
 
@@ -147,6 +167,7 @@ class DiscoverySession:
             session_id=identifier,
             path=path,
             created_at=timestamp,
+            projector=projector,
         )
         session.record(
             "session_started",
@@ -157,7 +178,13 @@ class DiscoverySession:
         return session
 
     @classmethod
-    def open(cls, root: Path, session_id: str) -> DiscoverySession:
+    def open(
+        cls,
+        root: Path,
+        session_id: str,
+        *,
+        projector: Callable[[Mapping[str, object]], object] | None = None,
+    ) -> DiscoverySession:
         """Open an existing session, repairing only an interrupted final append."""
 
         cls._validate_session_id(session_id)
@@ -179,7 +206,113 @@ class DiscoverySession:
             path=path,
             created_at=created_at,
             _next_sequence=len(events) + 1,
+            projector=projector,
         )
+
+    @property
+    def handoff_path(self) -> Path:
+        return self.path / "handoff.json"
+
+    @property
+    def claimed_handoff_path(self) -> Path:
+        return self.path / "handoff.claimed.json"
+
+    def _thread_lock(self) -> threading.Lock:
+        key = str(self.path.resolve())
+        with _EVENT_LOCKS_GUARD:
+            return _EVENT_LOCKS.setdefault(key, threading.Lock())
+
+    @contextmanager
+    def _event_lock(self):
+        self.path.mkdir(parents=True, exist_ok=True)
+        with self._thread_lock():
+            with (self.path / ".events.lock").open("a+b") as stream:
+                os.lockf(stream.fileno(), os.F_LOCK, 0)
+                try:
+                    yield
+                finally:
+                    os.lockf(stream.fileno(), os.F_ULOCK, 0)
+
+    def write_artifact(self, relative_path: str, content: bytes) -> dict[str, object]:
+        """Persist a larger discovery artifact inside the session."""
+        candidate = _validated_artifact_path(relative_path)
+        destination = self.path.joinpath(*candidate.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(destination.suffix + ".tmp")
+        with temporary.open("wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(destination)
+        return {
+            "path": candidate.as_posix(),
+            "sha256": sha256(content).hexdigest(),
+            "bytes": len(content),
+        }
+
+    def arm_handoff(
+        self,
+        *,
+        charger_identity: str | None = None,
+        client_host: str | None = None,
+        original_destination: Mapping[str, object] | None = None,
+        strategy: str | None = None,
+    ) -> dict[str, object]:
+        """Persist the expected redirected connection before network mutation."""
+        if not charger_identity and not client_host:
+            raise ValueError(
+                "Discovery handoff requires charger_identity and/or client_host"
+            )
+        payload: dict[str, object] = {
+            "charger_identity": charger_identity or "",
+            "client_host": client_host or "",
+        }
+        if original_destination is not None:
+            payload["original_destination"] = dict(original_destination)
+        if strategy:
+            payload["strategy"] = strategy
+        with self._event_lock():
+            if self.handoff_path.exists() or self.claimed_handoff_path.exists():
+                raise FileExistsError(
+                    f"{self.session_id}: discovery handoff is already armed or claimed"
+                )
+            _write_json(self.handoff_path, payload)
+        self.record("handoff_armed", metadata=payload)
+        self.write_summary()
+        return payload
+
+    def claim_handoff(
+        self,
+        *,
+        charger_identity: str,
+        client_host: str | None = None,
+    ) -> dict[str, object] | None:
+        """Atomically claim this session for a matching OCPP connection."""
+        with self._event_lock():
+            if not self.handoff_path.exists():
+                return None
+            payload = _read_json(self.handoff_path)
+            expected_identity = str(payload.get("charger_identity") or "")
+            expected_host = str(payload.get("client_host") or "")
+            if expected_identity and expected_identity != charger_identity:
+                return None
+            if expected_host and expected_host != (client_host or ""):
+                return None
+            self.handoff_path.replace(self.claimed_handoff_path)
+            return payload
+
+    def disarm_handoff(self) -> dict[str, object]:
+        """Remove an unclaimed handoff idempotently without undoing a claim."""
+        with self._event_lock():
+            if self.claimed_handoff_path.exists():
+                return {"disarmed": False, "claimed": True}
+            if not self.handoff_path.exists():
+                return {"disarmed": False, "claimed": False}
+            self.handoff_path.unlink()
+
+        self.record("handoff_disarmed")
+        self.write_summary()
+        return {"disarmed": True, "claimed": False}
 
     @classmethod
     def list(cls, root: Path) -> list[dict[str, object]]:
@@ -285,11 +418,71 @@ class DiscoverySession:
 
         event_counts: dict[str, int] = {}
         category_counts: dict[str, int] = {}
+        capture_requested = False
+        capture_available: bool | None = None
+        capture_attempted = False
+        capture_succeeded = False
+        capture_strategy: str | None = None
+        capture_failure_reason: str | None = None
+        capture_redirect_id: str | None = None
+        capture_active = False
+        capture_release_failure_reason: str | None = None
+        charger: dict[str, object] | None = None
         for event in events:
             event_type = event["event_type"]
             category = event["category"]
             event_counts[event_type] = event_counts.get(event_type, 0) + 1
             category_counts[category] = category_counts.get(category, 0) + 1
+
+            metadata = event["metadata"]
+            if event_type == "capture_requested":
+                capture_requested = True
+            elif event_type == "capture_available":
+                capture_available = True
+                strategy = metadata.get("strategy")
+                if isinstance(strategy, str):
+                    capture_strategy = strategy
+            elif event_type == "capture_unavailable":
+                capture_available = False
+                reason = metadata.get("reason")
+                if isinstance(reason, str):
+                    capture_failure_reason = reason
+            elif event_type in {"capture_started", "capture_failed", "capture_succeeded"}:
+                capture_attempted = True
+                if event_type == "capture_started":
+                    redirect_id = metadata.get("redirect_id")
+                    if isinstance(redirect_id, str):
+                        capture_redirect_id = redirect_id
+                    capture_active = True
+                elif event_type == "capture_failed":
+                    reason = metadata.get("reason")
+                    if isinstance(reason, str):
+                        capture_failure_reason = reason
+                elif event_type == "capture_succeeded":
+                    capture_succeeded = True
+            elif event_type == "capture_released":
+                capture_active = False
+                capture_release_failure_reason = None
+            elif event_type == "capture_release_failed":
+                reason = metadata.get("reason")
+                if isinstance(reason, str):
+                    capture_release_failure_reason = reason
+            elif event_type == "ocpp_connection":
+                selected = metadata.get("charger")
+                if isinstance(selected, dict):
+                    charger = dict(selected)
+
+        capture = {
+            "requested": capture_requested,
+            "available": capture_available if capture_requested else None,
+            "attempted": capture_attempted,
+            "succeeded": capture_succeeded,
+            "strategy": capture_strategy,
+            "failure_reason": capture_failure_reason,
+            "redirect_id": capture_redirect_id,
+            "active": capture_active,
+            "release_failure_reason": capture_release_failure_reason,
+        }
 
         return {
             "format_version": 1,
@@ -301,6 +494,10 @@ class DiscoverySession:
             "category_counts": category_counts,
             "last_sequence": events[-1]["sequence"] if events else None,
             "last_event_at": events[-1]["timestamp"] if events else None,
+            "capture": capture,
+            "handoff_armed": self.handoff_path.exists(),
+            "handoff_claimed": self.claimed_handoff_path.exists(),
+            "charger": charger,
         }
 
     def write_summary(self) -> dict[str, object]:
@@ -338,10 +535,23 @@ class DiscoverySession:
         }
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
 
-        with (self.path / "events.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
+        with self._event_lock():
+            current = self._load_events(
+                self.path / "events.jsonl",
+                session_id=self.session_id,
+                repair_truncated_tail=True,
+            )
+            event["sequence"] = len(current) + 1
+            encoded = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+            with (self.path / "events.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            self._next_sequence = event["sequence"] + 1
 
-        self._next_sequence += 1
+        if self.projector is not None:
+            try:
+                self.projector(event)
+            except Exception:
+                pass
         return event

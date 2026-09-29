@@ -11,6 +11,7 @@ from apps.ocpp.discovery.network import (
 
 
 _TSHARK_FIELD_ORDER = (
+    "frame.time_epoch",
     "eth.src",
     "eth.dst",
     "arp.opcode",
@@ -19,13 +20,27 @@ _TSHARK_FIELD_ORDER = (
     "arp.src.hw_mac",
     "ip.src",
     "ip.dst",
+    "ipv6.src",
+    "ipv6.dst",
+    "icmpv6.type",
+    "icmpv6.nd.ns.target_address",
+    "icmpv6.nd.na.target_address",
+    "icmpv6.opt.src_linkaddr",
+    "icmpv6.opt.target_linkaddr",
     "tcp.srcport",
     "tcp.dstport",
+    "tcp.flags.syn",
+    "tcp.flags.ack",
     "dns.id",
     "dns.flags.response",
     "dns.qry.type",
     "dns.qry.name",
     "dns.a",
+    "dns.aaaa",
+    "dhcp.option.dhcp",
+    "dhcp.option.requested_ip_address",
+    "dhcp.ip.your",
+    "dhcp.hw.mac_addr",
     "http.request.method",
     "http.host",
     "http.request.uri",
@@ -64,9 +79,15 @@ def destination_observation(
 
 
 class FakeObserver:
-    def __init__(self, observations=(), error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        observations=(),
+        error: Exception | None = None,
+        link_state: str | None = None,
+    ) -> None:
         self.items = list(observations)
         self.error = error
+        self.state = link_state
         self.preflight_calls: list[str] = []
         self.observe_calls: list[str] = []
 
@@ -78,6 +99,9 @@ class FakeObserver:
     def observations(self, interface: str):
         self.observe_calls.append(interface)
         yield from self.items
+
+    def link_state(self, interface: str) -> str | None:
+        return self.state
 
 
 def test_role_gate_runs_before_observer_or_session_creation(tmp_path) -> None:
@@ -151,6 +175,7 @@ def test_passive_discovery_correlates_ip_port_and_mac_without_arp(tmp_path) -> N
     assert candidate["metadata"]["destination_ip"] == DESTINATION_IP
     assert candidate["metadata"]["destination_port"] == 9000
     assert candidate["metadata"]["destination_mac"] == DESTINATION_MAC
+    assert candidate["metadata"]["source_ips"] == [SOURCE_IP]
     assert candidate["metadata"]["attempts"] == 2
     assert (
         candidate["metadata"]["destination_mac_observed_without_resolution"]
@@ -225,8 +250,11 @@ def test_tshark_parser_retains_ethernet_and_ip_destination() -> None:
                 "eth.dst": DESTINATION_MAC,
                 "ip.src": SOURCE_IP,
                 "ip.dst": DESTINATION_IP,
+                "frame.time_epoch": "100.0",
                 "tcp.srcport": "51000",
                 "tcp.dstport": "9000",
+                "tcp.flags.syn": "1",
+                "tcp.flags.ack": "0",
             }
         )
     )
@@ -555,3 +583,236 @@ def test_tls_sni_enriches_candidate_without_becoming_http_hostname() -> None:
     assert candidate.hostnames == set()
     assert candidate.http_paths == set()
     assert candidate.websocket_paths == set()
+
+
+
+def test_tshark_parser_retains_ipv6_connection_attempt() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "frame.time_epoch": "101.5",
+                "eth.src": SOURCE_MAC,
+                "eth.dst": DESTINATION_MAC,
+                "ipv6.src": "2001:db8::20",
+                "ipv6.dst": "2001:db8::40",
+                "tcp.srcport": "51000",
+                "tcp.dstport": "9000",
+                "tcp.flags.syn": "1",
+                "tcp.flags.ack": "0",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "connection_attempt"
+    assert observation.metadata["source_ip"] == "2001:db8::20"
+    assert observation.metadata["destination_ip"] == "2001:db8::40"
+    assert observation.metadata["observed_at"] == 101.5
+
+
+def test_tshark_parser_retains_ndp_neighbor_advertisement() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "ipv6.src": "fe80::1",
+                "ipv6.dst": "fe80::20",
+                "icmpv6.type": "136",
+                "icmpv6.nd.na.target_address": "2001:db8::40",
+                "icmpv6.opt.target_linkaddr": DESTINATION_MAC,
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "ndp_neighbor_advertisement"
+    assert observation.metadata["target_ip"] == "2001:db8::40"
+    assert observation.metadata["target_link_address"] == DESTINATION_MAC
+
+
+def test_ndp_advertisement_prevents_false_ipv6_cached_neighbor_inference() -> None:
+    tracker = CandidateTracker()
+    tracker.consume(
+        NetworkObservation(
+            "ndp_neighbor_advertisement",
+            {
+                "target_ip": "2001:db8::40",
+                "target_link_address": DESTINATION_MAC,
+            },
+        )
+    )
+
+    derived = tracker.consume(
+        NetworkObservation(
+            "connection_attempt",
+            {
+                "destination_ip": "2001:db8::40",
+                "destination_port": 9000,
+                "destination_mac": DESTINATION_MAC,
+            },
+        )
+    )
+
+    assert derived == []
+
+
+def test_tshark_parser_retains_dns_aaaa_response() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "ipv6.src": "2001:db8::53",
+                "ipv6.dst": "2001:db8::20",
+                "dns.id": "4343",
+                "dns.flags.response": "1",
+                "dns.qry.type": "28",
+                "dns.qry.name": "csms6.example.com",
+                "dns.aaaa": "2001:db8::40",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "dns_response"
+    assert observation.metadata["address"] == "2001:db8::40"
+
+
+@pytest.mark.parametrize(
+    ("message_type", "requested", "offered"),
+    [
+        ("1", None, None),
+        ("3", "192.0.2.20", None),
+        ("2", None, "192.0.2.20"),
+        ("5", None, "192.0.2.20"),
+    ],
+)
+def test_tshark_parser_retains_dhcp_evidence(
+    message_type,
+    requested,
+    offered,
+) -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "eth.src": SOURCE_MAC,
+                "dhcp.option.dhcp": message_type,
+                "dhcp.option.requested_ip_address": requested or "",
+                "dhcp.ip.your": offered or "",
+                "dhcp.hw.mac_addr": SOURCE_MAC,
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "dhcp"
+    assert observation.metadata["message_type"] == int(message_type)
+    assert observation.metadata["requested_address"] == requested
+    assert observation.metadata["offered_address"] == offered
+    assert observation.metadata["client_mac"] == SOURCE_MAC
+
+
+def test_non_syn_tcp_traffic_does_not_count_as_connection_attempt() -> None:
+    observation = parse_tshark_line(
+        tshark_row(
+            **{
+                "ip.src": SOURCE_IP,
+                "ip.dst": DESTINATION_IP,
+                "tcp.srcport": "51000",
+                "tcp.dstport": "9000",
+                "tcp.flags.syn": "0",
+                "tcp.flags.ack": "1",
+            }
+        )
+    )
+
+    assert observation is not None
+    assert observation.event_type == "traffic_observed"
+
+
+def test_candidate_tracker_records_syn_retry_cadence_only() -> None:
+    tracker = CandidateTracker()
+    for observed_at in (100.0, 102.5, 107.0):
+        tracker.consume(
+            NetworkObservation(
+                "connection_attempt",
+                {
+                    "destination_ip": DESTINATION_IP,
+                    "destination_port": 9000,
+                    "observed_at": observed_at,
+                },
+            )
+        )
+    tracker.consume(
+        NetworkObservation(
+            "http_request",
+            {
+                "destination_ip": DESTINATION_IP,
+                "destination_port": 9000,
+                "path": "/health",
+            },
+        )
+    )
+
+    candidate = tracker.candidates()[0]
+    assert candidate.attempts == 3
+    assert candidate.first_attempt_at == 100.0
+    assert candidate.last_attempt_at == 107.0
+    assert candidate.retry_intervals_seconds == [2.5, 4.5]
+
+
+def test_passive_discovery_records_link_state(tmp_path) -> None:
+    observer = FakeObserver(link_state="up")
+
+    session = run_passive_discovery(
+        interface="eth0",
+        role="control",
+        root=tmp_path,
+        observer=observer,
+    )
+
+    event = next(
+        item for item in session.events() if item["event_type"] == "link_state"
+    )
+    assert event["metadata"] == {"interface": "eth0", "state": "up"}
+
+
+def test_operator_interrupt_still_finalizes_candidates_and_summary(tmp_path) -> None:
+    class InterruptingObserver(FakeObserver):
+        def observations(self, interface: str):
+            self.observe_calls.append(interface)
+            yield destination_observation(
+                observed_at=100.0,
+                destination_mac=DESTINATION_MAC,
+            )
+            raise KeyboardInterrupt
+
+    session = run_passive_discovery(
+        interface="eth0",
+        role="control",
+        root=tmp_path,
+        observer=InterruptingObserver(),
+    )
+
+    events = session.events()
+    assert any(item["event_type"] == "session_interrupted" for item in events)
+    assert any(item["event_type"] == "csms_candidate" for item in events)
+    assert session.write_summary()["session_id"] == session.session_id
+
+
+
+def test_candidate_tracks_all_observed_charger_source_addresses() -> None:
+    tracker = CandidateTracker()
+    for source_ip in ("192.0.2.20", "192.0.2.21"):
+        tracker.consume(
+            NetworkObservation(
+                "connection_attempt",
+                {
+                    "source_ip": source_ip,
+                    "destination_ip": DESTINATION_IP,
+                    "destination_port": 9000,
+                },
+            )
+        )
+
+    candidate = tracker.candidates()[0]
+
+    assert candidate.source_ips == {"192.0.2.20", "192.0.2.21"}
+    assert candidate.as_metadata()["source_ips"] == ["192.0.2.20", "192.0.2.21"]

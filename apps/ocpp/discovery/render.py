@@ -24,6 +24,21 @@ def render_discovery_events(
             interface = metadata.get("interface") or "unknown"
             role = metadata.get("role") or "unknown"
             lines.append(f"Interface: {interface} ({role})")
+        elif event_type == "link_state":
+            interface = metadata.get("interface") or "unknown"
+            state = metadata.get("state") or "unknown"
+            lines.append(f"Link: {interface} {state}")
+        elif event_type == "dhcp":
+            message_type = metadata.get("message_type")
+            requested = metadata.get("requested_address")
+            offered = metadata.get("offered_address")
+            details = []
+            if requested:
+                details.append(f"requested={requested}")
+            if offered:
+                details.append(f"offered={offered}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            lines.append(f"DHCP: type={message_type}{suffix}")
         elif event_type == "dns_resolution":
             name = metadata.get("name")
             address = metadata.get("address")
@@ -51,6 +66,22 @@ def render_discovery_events(
             if endpoint:
                 suffix = f" [SNI {sni}]" if sni else ""
                 lines.append(f"TLS: {endpoint}{suffix}")
+        elif event_type == "capture_available":
+            strategy = metadata.get("strategy") or "unknown"
+            provider = metadata.get("provider") or "unknown"
+            lines.append(f"Capture: available via {provider} ({strategy})")
+        elif event_type == "capture_unavailable":
+            reason = metadata.get("reason") or "unknown"
+            lines.append(f"Capture: unavailable ({reason})")
+        elif event_type == "capture_started":
+            redirect_id = metadata.get("redirect_id") or "unknown"
+            lines.append(f"Capture: active ({redirect_id})")
+        elif event_type == "capture_released":
+            redirect_id = metadata.get("redirect_id") or "unknown"
+            lines.append(f"Capture: released ({redirect_id})")
+        elif event_type == "capture_release_failed":
+            reason = metadata.get("reason") or "unknown"
+            lines.append(f"Capture release: failed ({reason})")
         elif event_type == "csms_candidate":
             candidates.append(metadata)
 
@@ -82,6 +113,12 @@ def render_discovery_events(
             mac = candidate.get("destination_mac")
             if mac:
                 details.append(f"mac={mac}")
+            intervals = candidate.get("retry_intervals_seconds")
+            if isinstance(intervals, list) and intervals:
+                details.append(
+                    "retry="
+                    + ",".join(f"{float(value):g}s" for value in intervals)
+                )
             suffix = f" ({'; '.join(details)})" if details else ""
             lines.append(f"  {index}. {endpoint} attempts={attempts}{suffix}")
     else:
