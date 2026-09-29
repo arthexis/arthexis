@@ -127,17 +127,20 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 
 
 @pytest.mark.workflow
-def test_base_watchtower_stage_excludes_remote_provisioning() -> None:
+def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "Provision Watchtower remote policy and services" not in workflow
-    assert "/usr/local/bin/gway ./deploy/remote.rx" not in workflow
     assert "default: arthexis" in workflow
+    assert "- name: Preflight Watchtower Remote stage" in workflow
+    assert "- name: Converge Watchtower Remote stage" in workflow
+    assert "- name: Verify Watchtower Remote stage" in workflow
+    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
 
 
 @pytest.mark.workflow
-def test_watchtower_deploy_accepts_remote_as_manual_gway_extension() -> None:
+def test_watchtower_deploy_accepts_remote_only_as_repair_stage() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "          - remote" in workflow
+    assert "          - remote-only" in workflow
+    assert 'grep -Fxq remote-only <<<"$labels"' in workflow
     assert "- name: Preflight Watchtower Remote stage" in workflow
     assert "- name: Converge Watchtower Remote stage" in workflow
     assert "- name: Verify Watchtower Remote stage" in workflow
@@ -393,9 +396,10 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
 
 
 @pytest.mark.workflow
-def test_remote_verifier_runs_only_in_remote_stage() -> None:
+def test_remote_verifier_runs_in_full_and_remote_only_stages() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "if: env.WATCHTOWER_STAGE == 'remote'" in workflow
+    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
+    assert "env.WATCHTOWER_STAGE == 'remote-only'" in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
