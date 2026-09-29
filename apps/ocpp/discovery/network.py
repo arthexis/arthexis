@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from apps.ocpp.discovery.projection import project_discovery_event
 from apps.ocpp.discovery.session import DiscoverySession
 
 _ALLOWED_ROLES = frozenset({"control", "satellite"})
@@ -507,7 +508,7 @@ def run_passive_discovery(
 
     observer.preflight(interface)
 
-    session = DiscoverySession.create(root)
+    session = DiscoverySession.create(root, projector=project_discovery_event)
     session.record(
         "interface_selected",
         metadata={"interface": interface, "role": normalized_role},
