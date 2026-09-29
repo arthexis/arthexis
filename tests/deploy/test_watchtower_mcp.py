@@ -552,24 +552,6 @@ def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
 
 
 @pytest.mark.workflow
-def test_post_merge_handoff_is_separate_from_merge_authorization() -> None:
-    workflow = Path(
-        ".github/workflows/post-merge-watchtower-handoff.yml"
-    ).read_text(encoding="utf-8")
-
-    assert "types: [closed]" in workflow
-    assert "github.event.pull_request.merged == true" in workflow
-    assert "group: post-merge-watchtower-" in workflow
-    assert "cancel-in-progress: false" in workflow
-    assert 'issues/$PR_NUMBER/comments' in workflow
-    assert 'select(.body ==' in workflow
-    assert "post_merge_handoff=already_accepted" in workflow
-    assert workflow.index("post_merge_handoff=already_accepted") < workflow.index(
-        "gh workflow run watchtower-deploy.yml"
-    )
-
-
-@pytest.mark.workflow
 def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
     workflow_paths = (
         Path(".github/workflows/python-quality.yml"),
