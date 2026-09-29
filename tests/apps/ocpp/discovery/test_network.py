@@ -175,6 +175,7 @@ def test_passive_discovery_correlates_ip_port_and_mac_without_arp(tmp_path) -> N
     assert candidate["metadata"]["destination_ip"] == DESTINATION_IP
     assert candidate["metadata"]["destination_port"] == 9000
     assert candidate["metadata"]["destination_mac"] == DESTINATION_MAC
+    assert candidate["metadata"]["source_ips"] == [SOURCE_IP]
     assert candidate["metadata"]["attempts"] == 2
     assert (
         candidate["metadata"]["destination_mac_observed_without_resolution"]
@@ -794,3 +795,24 @@ def test_operator_interrupt_still_finalizes_candidates_and_summary(tmp_path) -> 
     assert any(item["event_type"] == "session_interrupted" for item in events)
     assert any(item["event_type"] == "csms_candidate" for item in events)
     assert session.write_summary()["session_id"] == session.session_id
+
+
+
+def test_candidate_tracks_all_observed_charger_source_addresses() -> None:
+    tracker = CandidateTracker()
+    for source_ip in ("192.0.2.20", "192.0.2.21"):
+        tracker.consume(
+            NetworkObservation(
+                "connection_attempt",
+                {
+                    "source_ip": source_ip,
+                    "destination_ip": DESTINATION_IP,
+                    "destination_port": 9000,
+                },
+            )
+        )
+
+    candidate = tracker.candidates()[0]
+
+    assert candidate.source_ips == {"192.0.2.20", "192.0.2.21"}
+    assert candidate.as_metadata()["source_ips"] == ["192.0.2.20", "192.0.2.21"]
