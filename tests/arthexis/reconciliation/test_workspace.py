@@ -92,16 +92,17 @@ def _run_reconciliation(
 
 
 @pytest.mark.reconciliation_e2e
-def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(tmp_path):
-    fixture = _fixture(tmp_path)
-    source_sha = _sha256(fixture.database_path)
+def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(
+    reconciled_e2e_baseline,
+):
+    fixture = Path(reconciled_e2e_baseline["fixture_path"])
+    source_database = Path(reconciled_e2e_baseline["source_database"])
+    source_sha = str(reconciled_e2e_baseline["source_sha256"])
+    result = reconciled_e2e_baseline["result"]
 
-    completed = _run_reconciliation(fixture.path, tmp_path, batch_size=1)
+    assert _sha256(source_database) == source_sha
 
-    assert completed.returncode == 0, completed.stderr
-    assert _sha256(fixture.database_path) == source_sha
-
-    destination = fixture.path / "reconciled.sqlite3"
+    destination = fixture / "reconciled.sqlite3"
     assert classify_database(destination) == "v2"
     with sqlite3.connect(destination) as connection:
         generation = connection.execute(
@@ -114,14 +115,14 @@ def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(tmp_p
     assert cards == 1
 
     receipt = json.loads(
-        (fixture.path / "reconciliation.json").read_text(encoding="utf-8")
+        (fixture / "reconciliation.json").read_text(encoding="utf-8")
     )
     assert receipt["status"] == "success"
     assert receipt["destination_database"]["classification"] == "v2"
     assert receipt["reconciliation"]["imported"]["card_credentials"] == 1
     assert receipt["resource_policy"]["batch_size"] == 1
     assert receipt["resource_usage"]["elapsed_seconds"] >= 0
-
+    assert Path(str(result["destination_database"])) == destination
 
 def test_reconcile_fixture_refuses_to_overwrite_output(tmp_path):
     fixture = _fixture(tmp_path)
