@@ -271,11 +271,12 @@ class DiscoverySession:
             payload["original_destination"] = dict(original_destination)
         if strategy:
             payload["strategy"] = strategy
-        if self.handoff_path.exists() or self.claimed_handoff_path.exists():
-            raise FileExistsError(
-                f"{self.session_id}: discovery handoff is already armed or claimed"
-            )
-        _write_json(self.handoff_path, payload)
+        with self._event_lock():
+            if self.handoff_path.exists() or self.claimed_handoff_path.exists():
+                raise FileExistsError(
+                    f"{self.session_id}: discovery handoff is already armed or claimed"
+                )
+            _write_json(self.handoff_path, payload)
         self.record("handoff_armed", metadata=payload)
         self.write_summary()
         return payload
