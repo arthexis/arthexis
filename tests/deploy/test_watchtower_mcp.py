@@ -442,14 +442,14 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
 
 
 @pytest.mark.workflow
-def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    gate = workflow.index("  queue-gate:")
-    deploy = workflow.index("\n  deploy:\n    name: Watchtower Deploy\n", gate)
-    runner = workflow.index("runs-on: [self-hosted, Linux, X64, arthexis-ci]", deploy)
+def test_watchtower_queue_gate_runs_before_self_hosted_deploy(watchtower_workflow) -> None:
+    workflow = watchtower_workflow.text
+    gate = watchtower_workflow.job("queue-gate")
+    deploy = watchtower_workflow.job("deploy")
 
-    assert gate < deploy < runner
-    assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
+    assert workflow.index(gate) < workflow.index(deploy)
+    assert "runs-on: ubuntu-latest" in gate
+    assert "runs-on: [self-hosted, Linux, X64, arthexis-ci]" in deploy
 
 
 @pytest.mark.workflow
@@ -470,9 +470,9 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
 
 
 @pytest.mark.workflow
-def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    dispatch = workflow.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
+def test_gway_dispatch_coalesces_with_current_arthexis_main(watchtower_workflow) -> None:
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+    dispatch = pair.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
     dispatch = dispatch.split('else\n            requested_arthexis=', 1)[0]
 
     assert 'arthexis_sha="$current_arthexis"' in dispatch
