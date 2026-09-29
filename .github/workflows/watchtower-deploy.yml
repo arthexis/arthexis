@@ -210,7 +210,20 @@ jobs:
             previous_gway="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("gway_sha", ""))' "$previous_manifest")"
           fi
 
-          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+          if [[ "$RELEASE_INTENT" == "manual" ]]; then
+            [[ "$previous_arthexis" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Manual release requires a valid accepted Arthexis SHA." >&2
+              exit 1
+            }
+            [[ "$previous_gway" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Manual release requires a valid accepted Gway SHA." >&2
+              exit 1
+            }
+            arthexis_sha="$previous_arthexis"
+            gway_sha="$previous_gway"
+            source="accepted-release"
+            echo "release_pair=accepted_manifest arthexis=$arthexis_sha gway=$gway_sha"
+          elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             [[ "$REQUESTED_GWAY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
               echo "repository_dispatch must provide a full Gway SHA." >&2
               exit 1

@@ -179,3 +179,29 @@ def test_watchtower_reconciles_stranded_gway_rollover(
     assert 'remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch"' in step
     assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in step
     assert '--force-with-lease="refs/heads/$branch:"' in step
+
+
+def test_manual_release_pins_both_packages_to_accepted_manifest():
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
+
+    release_branch = workflow.split(
+        'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
+    )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
+
+    assert 'arthexis_sha="$previous_arthexis"' in release_branch
+    assert 'gway_sha="$previous_gway"' in release_branch
+    assert 'source="accepted-release"' in release_branch
+    assert 'requested_arthexis=' not in release_branch
+    assert 'current_arthexis' not in release_branch
+    assert 'current_gway' not in release_branch
+
+
+def test_manual_release_requires_valid_accepted_pair():
+    workflow = Path(".github/workflows/watchtower-deploy.yml").read_text()
+
+    release_branch = workflow.split(
+        'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
+    )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
+
+    assert "Manual release requires a valid accepted Arthexis SHA." in release_branch
+    assert "Manual release requires a valid accepted Gway SHA." in release_branch
