@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sqlite3
 import subprocess
@@ -72,7 +71,7 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    destination = fixture.path / "reconciled.sqlite3"
 
     return {
         "root": root,
@@ -80,5 +79,5 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
         "fixture_path": fixture.path,
         "source_database": fixture.database_path,
         "source_sha256": source_sha,
-        "result": result,
+        "destination_database": destination,
     }
