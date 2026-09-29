@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+
+pytestmark = pytest.mark.workflow
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "watchtower-deploy.yml"
