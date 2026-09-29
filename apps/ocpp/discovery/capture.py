@@ -243,6 +243,34 @@ def start_capture(
         local_port=local_port,
     )
     plan = selected.plan(request)
+
+    source_ips = candidate.get("source_ips")
+    client_hosts = (
+        [value for value in source_ips if isinstance(value, str) and value]
+        if isinstance(source_ips, list)
+        else []
+    )
+    if len(client_hosts) != 1:
+        session.record(
+            "capture_unavailable",
+            metadata={
+                "reason": "handoff_match_unavailable",
+                "source_ips": client_hosts,
+            },
+        )
+        return {"active": False, "reason": "handoff_match_unavailable"}
+
+    original_destination = {
+        "host": request.hostname or request.destination_ip,
+        "ip": request.destination_ip,
+        "port": request.destination_port,
+    }
+    session.arm_handoff(
+        client_host=client_hosts[0],
+        original_destination=original_destination,
+        strategy=plan.strategy,
+    )
+
     session.record(
         "capture_available",
         metadata={
@@ -257,6 +285,7 @@ def start_capture(
     try:
         applied = selected.apply(plan)
     except Exception as error:
+        session.disarm_handoff()
         session.record(
             "capture_failed",
             metadata={
@@ -361,8 +390,11 @@ def release_capture(
             "changed": bool(result.get("changed", False)),
         },
     )
+    handoff = session.disarm_handoff()
     return {
         "active": False,
         "changed": bool(result.get("changed", False)),
         "redirect_id": redirect_id,
+        "handoff_disarmed": bool(handoff.get("disarmed", False)),
+        "handoff_claimed": bool(handoff.get("claimed", False)),
     }
