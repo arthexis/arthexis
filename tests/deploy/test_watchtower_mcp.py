@@ -127,13 +127,15 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 
 
 @pytest.mark.workflow
-def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase(watchtower_workflow) -> None:
+    workflow = watchtower_workflow.text
+    preflight = watchtower_workflow.step("Preflight Watchtower Remote stage")
+    converge = watchtower_workflow.step("Converge Watchtower Remote stage")
+    verify = watchtower_workflow.step("Verify Watchtower Remote stage")
+
     assert "default: arthexis" in workflow
-    assert "- name: Preflight Watchtower Remote stage" in workflow
-    assert "- name: Converge Watchtower Remote stage" in workflow
-    assert "- name: Verify Watchtower Remote stage" in workflow
-    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
+    for step in (preflight, converge, verify):
+        assert "env.WATCHTOWER_STAGE == 'arthexis'" in step
 
 
 @pytest.mark.workflow
@@ -416,26 +418,29 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
 
 
 @pytest.mark.workflow
-def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_watchtower_restores_previous_gway_runtime_on_failed_deploy(watchtower_workflow) -> None:
+    deploy = watchtower_workflow.job("deploy")
+    install = watchtower_workflow.step("Install exact canonical Gway")
+    accepted = watchtower_workflow.step("Record accepted Watchtower deployment")
+    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
 
-    assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in workflow
-    assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in workflow
-    assert "- name: Restore previous Gway runtime after failed deployment" in workflow
-    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in workflow
+    assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in install
+    assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
+    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
     assert (
         "failure() && env.WATCHTOWER_STAGE == 'arthexis' "
         "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
         "&& env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'"
-    ) in workflow
-    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in workflow
-    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in workflow
-    assert "systemctl restart gway-mcp-server.service" in workflow
-    assert "systemctl restart gway-remote-auth.service" in workflow
-    assert "systemctl is-active --quiet gway-mcp-server.service" in workflow
-    assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
-    assert 'for port in 8000 8001; do' in workflow
-    assert 'gway_runtime_rollback=restored' in workflow
+    ) in rollback
+    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in rollback
+    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in rollback
+    assert "systemctl restart gway-mcp-server.service" in rollback
+    assert "systemctl restart gway-remote-auth.service" in rollback
+    assert "systemctl is-active --quiet gway-mcp-server.service" in rollback
+    assert "systemctl is-active --quiet gway-remote-auth.service" in rollback
+    assert 'for port in 8000 8001; do' in rollback
+    assert 'gway_runtime_rollback=restored' in rollback
+    assert deploy.index(accepted) < deploy.index(rollback)
 
 
 
