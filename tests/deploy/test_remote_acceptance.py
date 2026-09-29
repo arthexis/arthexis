@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path("scripts/verify_remote_deployment.py")
 WORKFLOW = Path(".github/workflows/watchtower-deploy.yml")
 
@@ -42,6 +44,7 @@ def test_remote_acceptance_requires_mcp_oauth_challenge() -> None:
     assert 'resource_metadata="{PROTECTED}"' in script
 
 
+@pytest.mark.workflow
 def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
