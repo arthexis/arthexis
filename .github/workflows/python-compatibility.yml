@@ -13,7 +13,49 @@ permissions:
   contents: read
 
 jobs:
+  classify:
+    name: Classify test scope
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+      workflow_only: ${{ steps.scope.outputs.workflow_only }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Determine test scope
+        id: scope
+        shell: bash
+        env:
+          VERSION_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'version-only') }}
+          INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -Eeuo pipefail
+          workflow_only=false
+          if [[ "$VERSION_PR" != "true" && "$INTEGRATION_PR" != "true" && -n "$BASE_SHA" ]]; then
+            workflow_only=true
+            while IFS= read -r path; do
+              case "$path" in
+                .github/workflows/*|.github/scripts/*|tests/workflow/*) ;;
+                *) workflow_only=false; break ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          fi
+
+          if [[ "$VERSION_PR" == "true" || "$workflow_only" == "true" ]]; then
+            matrix='["3.13"]'
+          else
+            matrix='["3.10","3.13"]'
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "workflow_only=$workflow_only" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix workflow_only=$workflow_only"
+
   tests:
+    needs: classify
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     env:
@@ -23,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ contains(github.event.pull_request.labels.*.name, 'version-only') && fromJSON('["3.13"]') || (contains(github.event.pull_request.labels.*.name, 'workflow') && !contains(github.event.pull_request.labels.*.name, 'integration') && fromJSON('["3.13"]') || fromJSON('["3.10", "3.11", "3.13"]')) }}
+        python-version: ${{ fromJSON(needs.classify.outputs.matrix) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -60,7 +102,7 @@ jobs:
         continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
-          WORKFLOW_PR: ${{ contains(github.event.pull_request.labels.*.name, 'workflow') }}
+          WORKFLOW_PR: ${{ needs.classify.outputs.workflow_only }}
           INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
         run: |
           if [[ "$INTEGRATION_PR" == "true" ]]; then
