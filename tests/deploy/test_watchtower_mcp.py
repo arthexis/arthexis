@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 import subprocess
 
 
@@ -125,6 +126,7 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
     assert "--timeout 40" in restart
 
 
+@pytest.mark.workflow
 def test_base_watchtower_stage_excludes_remote_provisioning() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "Provision Watchtower remote policy and services" not in workflow
@@ -132,6 +134,7 @@ def test_base_watchtower_stage_excludes_remote_provisioning() -> None:
     assert "default: arthexis" in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_deploy_accepts_remote_as_manual_gway_extension() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "          - remote" in workflow
@@ -145,6 +148,7 @@ def test_watchtower_deploy_accepts_remote_as_manual_gway_extension() -> None:
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
+@pytest.mark.workflow
 def test_watchtower_workflow_no_longer_reimplements_mcp_service_setup() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -241,6 +245,7 @@ def test_remote_mcp_recipe_targets_are_relative_to_current_recipe_directory() ->
 
 
 
+@pytest.mark.workflow
 def test_watchtower_public_exposure_uses_certbot_actions_variable() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -287,6 +292,7 @@ def test_public_remote_verifier_uses_ephemeral_scoped_credentials() -> None:
     assert 'print(mutate_bearer)' not in verifier
 
 
+@pytest.mark.workflow
 def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -299,6 +305,7 @@ def test_watchtower_installs_canonical_admin_gway_launcher() -> None:
     assert "/usr/local/bin/gway security oauth client list" in workflow
 
 
+@pytest.mark.workflow
 def test_arthexis_product_runtime_is_separate_from_gway() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -322,6 +329,7 @@ def test_chatgpt_logs_scope_includes_help_for_existing_tokens() -> None:
 
 
 
+@pytest.mark.workflow
 def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -329,6 +337,7 @@ def test_watchtower_validates_relocated_gway_with_module_entrypoint() -> None:
     assert "/var/lib/gway/venv/bin/gway --help" not in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_quarantines_only_incomplete_inactive_product_target() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -339,6 +348,7 @@ def test_watchtower_quarantines_only_incomplete_inactive_product_target() -> Non
     assert 'sudo -n mv "${stale_product}" /opt/arthexis' in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_service_transition_tolerates_absent_legacy_web_and_diagnoses_failure() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -350,6 +360,7 @@ def test_watchtower_service_transition_tolerates_absent_legacy_web_and_diagnoses
     assert "journalctl -u arthexis-arthexis.com.service -n 80" in workflow
 
 
+@pytest.mark.workflow
 def test_arthexis_systemd_service_uses_accepted_build_compatible_server_command() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -372,6 +383,7 @@ def test_arthexis_systemd_service_uses_accepted_build_compatible_server_command(
     assert "/opt/arthexis/.venv/bin/python -m gway" not in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -380,6 +392,7 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
     assert "exec /usr/local/bin/gway ./deploy/ready.rx" not in workflow
 
 
+@pytest.mark.workflow
 def test_remote_verifier_runs_only_in_remote_stage() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "if: env.WATCHTOWER_STAGE == 'remote'" in workflow
@@ -398,6 +411,7 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
     assert "\nready --local\n" not in recipe
 
 
+@pytest.mark.workflow
 def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -420,6 +434,7 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'gway_runtime_rollback=restored' in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -434,6 +449,7 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert 'rollover_pr=approved number=$rollover_pr' in step
 
 
+@pytest.mark.workflow
 def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -442,6 +458,7 @@ def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
     assert 'trap cleanup EXIT' in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -502,6 +519,7 @@ fi
     ).stdout.strip()
     assert remote_branch == local_head
 
+@pytest.mark.workflow
 def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -516,6 +534,7 @@ def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None
     assert "needs.queue-gate.outputs.deploy == 'true'" in workflow
 
 
+@pytest.mark.workflow
 def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     gate = workflow.index("  queue-gate:")
@@ -526,6 +545,7 @@ def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
     assert "runs-on: ubuntu-latest" in workflow[gate:deploy]
 
 
+@pytest.mark.workflow
 def test_approved_auto_merge_serializes_and_reconciles_watchtower_handoff() -> None:
     workflow = Path(".github/workflows/approved-auto-merge.yml").read_text(encoding="utf-8")
 
@@ -537,6 +557,7 @@ def test_approved_auto_merge_serializes_and_reconciles_watchtower_handoff() -> N
     assert workflow.index("post_merge_handoff=already_accepted") < workflow.index("gh workflow run watchtower-deploy.yml")
 
 
+@pytest.mark.workflow
 def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
     workflow_paths = (
         Path(".github/workflows/python-quality.yml"),
@@ -552,6 +573,7 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
         assert "unlabeled" not in workflow.split("workflow_dispatch:", 1)[0]
 
 
+@pytest.mark.workflow
 def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     arthexis = workflow.split(
