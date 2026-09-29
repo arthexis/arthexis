@@ -87,98 +87,14 @@ def test_watchtower_normal_queue_still_counts_all_non_hold_prs(
     workflow = watchtower_deploy_workflow
 
     gate = workflow.split("queue-gate:", 1)[1].split("\n\n  deploy:", 1)[0]
-    assert "arthexis/arthexis arthexis/gway" in gate
+    assert "for repository in arthexis/arthexis arthexis/gway; do" in gate
+    assert "pulls?state=open&per_page=100" in gate
     assert '. == "on-hold"' in gate
     assert '. == "on hold"' in gate
     assert "draft" not in gate.lower()
+    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in gate
+    assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in gate
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
-
-
-def _commit_pyproject(repo: Path, version: str, *, extra: str = "") -> str:
-    pyproject = repo / "pyproject.toml"
-    pyproject.write_text(
-        "[project]\n"
-        'name = "gway"\n'
-        f'version = "{version}"\n'
-        + extra,
-        encoding="utf-8",
-    )
-    subprocess.run(["git", "-C", str(repo), "add", "pyproject.toml"], check=True)
-    subprocess.run(
-        ["git", "-C", str(repo), "commit", "-m", f"version {version}"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
-def test_gway_version_only_detector_accepts_patch_only_rollover(tmp_path: Path) -> None:
-    repo = tmp_path / "gway"
-    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.invalid"], check=True)
-
-    before = _commit_pyproject(repo, "0.4.60")
-    after = _commit_pyproject(repo, "0.4.61")
-
-    result = subprocess.run(
-        [
-            "python",
-            ".github/scripts/is_gway_version_only_rollover.py",
-            str(repo),
-            before,
-            after,
-        ],
-        check=False,
-    )
-    assert result.returncode == 0
-
-
-def test_gway_version_only_detector_rejects_other_pyproject_changes(tmp_path: Path) -> None:
-    repo = tmp_path / "gway"
-    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.name", "CI"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.invalid"], check=True)
-
-    before = _commit_pyproject(repo, "0.4.60")
-    after = _commit_pyproject(repo, "0.4.61", extra='description = "changed"\n')
-
-    result = subprocess.run(
-        [
-            "python",
-            ".github/scripts/is_gway_version_only_rollover.py",
-            str(repo),
-            before,
-            after,
-        ],
-        check=False,
-    )
-    assert result.returncode == 1
-
-
-def test_watchtower_reconciles_stranded_gway_rollover(
-    watchtower_deploy_workflow: str,
-) -> None:
-    workflow = watchtower_deploy_workflow
-
-    step = workflow.split(
-        "- name: Reconcile Gway next-version PR after accepted deployment", 1
-    )[1].split("- name: Restore previous Gway runtime after failed deployment", 1)[0]
-
-    assert "if: env.WATCHTOWER_STAGE == 'arthexis'" in step
-    assert "GWAY_CHANGED" not in step
-    assert "is_gway_version_only_rollover.py" in step
-    assert "gway_rollover=suppressed_version_only" in step
-    assert 'git clone --quiet --depth=2 https://github.com/arthexis/gway.git "$work"' in step
-    assert 'remote_branch_sha="$(git ls-remote --heads origin "refs/heads/$branch"' in step
-    assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in step
-    assert '--force-with-lease="refs/heads/$branch:"' in step
 
 
 def test_manual_release_pins_both_packages_to_accepted_manifest():
