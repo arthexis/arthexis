@@ -340,3 +340,32 @@ def test_release_after_claim_keeps_claim_evidence(tmp_path) -> None:
     assert result["handoff_disarmed"] is False
     assert result["handoff_claimed"] is True
     assert session.claimed_handoff_path.exists()
+
+
+
+def test_capture_plan_failure_preserves_discovery_without_handoff(tmp_path) -> None:
+    class Provider:
+        name = "gway"
+
+        def plan(self, request):
+            raise RuntimeError("capability disappeared")
+
+    session = DiscoverySession.create(tmp_path, session_id="plan-failure")
+    session.record(
+        "csms_candidate",
+        category="inference",
+        metadata={
+            "source_ips": ["192.0.2.20"],
+            "destination_ip": "198.51.100.40",
+            "destination_port": 9000,
+            "hostnames": [],
+        },
+    )
+
+    result = start_capture(session, interface="eth0", provider=Provider())
+
+    assert result == {"active": False, "reason": "capture_provider_unavailable"}
+    assert not session.handoff_path.exists()
+    assert session.write_summary()["capture"]["failure_reason"] == (
+        "capture_provider_unavailable"
+    )
