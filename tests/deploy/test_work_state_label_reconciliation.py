@@ -24,7 +24,7 @@ def test_native_auto_merge_guard_uses_github_state_not_work_labels() -> None:
 
 def test_branch_update_releases_hold_without_using_work_state_lock() -> None:
     workflow = Path(
-        ".github/workflows/approved-branch-update.yml"
+        ".github/workflows/branch-update.yml"
     ).read_text(encoding="utf-8")
 
     assert "expected_head_sha=$head_sha" in workflow
