@@ -147,3 +147,40 @@ def test_event_projection_failure_does_not_lose_discovery_evidence(
             payload__session_id="project-outage",
             payload__sequence=persisted["sequence"],
         ).exists()
+
+
+
+def test_ocpp_claim_marks_success_without_releasing_redirect(tmp_path) -> None:
+    with override_settings(DATA_DIR=tmp_path):
+        session = create_session(tmp_path, "capture-owned", interface="eth0")
+        session.record(
+            "capture_started",
+            metadata={
+                "provider": "gway",
+                "strategy": "destination-redirect",
+                "redirect_id": "abc123def456",
+            },
+        )
+        session.arm_handoff(
+            client_host="192.0.2.20",
+            original_destination={"ip": "198.51.100.40", "port": 9000},
+            strategy="destination-redirect",
+        )
+        selected = charger("CP-OWNED")
+
+        claimed = claim_and_record_discovery_handoff(
+            charger=selected,
+            scope={
+                "client": ("192.0.2.20", 43123),
+                "path": "/ocpp/CP-OWNED",
+            },
+            protocol="ocpp1.6",
+            offered_subprotocols=["ocpp1.6"],
+        )
+
+        assert claimed is not None
+        summary = claimed.write_summary()
+        assert summary["capture"]["succeeded"] is True
+        assert summary["capture"]["active"] is True
+        assert summary["capture"]["redirect_id"] == "abc123def456"
+        assert summary["handoff_claimed"] is True
