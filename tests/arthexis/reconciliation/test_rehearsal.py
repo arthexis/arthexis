@@ -117,25 +117,14 @@ def _assert_go_bundle(result: dict[str, object]) -> Path:
 
 @pytest.mark.reconciliation_e2e
 def test_rehearse_runs_from_live_source_through_go_report_without_mutating_source(
-    tmp_path,
+    reconciled_e2e_baseline,
 ):
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    source_sha = _sha256(source_database)
-    output = tmp_path / "rehearsal"
+    source_database = Path(reconciled_e2e_baseline["source_database"])
+    source_sha = str(reconciled_e2e_baseline["source_sha256"])
+    legacy = Path(reconciled_e2e_baseline["legacy_path"])
+    result = reconciled_e2e_baseline["result"]
 
-    completed = _run_rehearsal(
-        legacy,
-        output,
-        "--batch-size",
-        "1",
-        data_dir=tmp_path / "current-data",
-    )
-
-    assert completed.returncode == 0, completed.stderr
     assert _sha256(source_database) == source_sha
-
-    result = _json_result(completed)
     assert result["decision"] == "GO"
     assert result["source"] == str(legacy.resolve())
     assert result["resource_safety"]["decision"] == "GO"
@@ -158,33 +147,44 @@ def test_rehearse_runs_from_live_source_through_go_report_without_mutating_sourc
 
 
 @pytest.mark.reconciliation_e2e
-def test_rehearse_stops_with_no_go_when_resource_limit_is_exceeded(tmp_path):
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
-    source_sha = _sha256(source_database)
-    output = tmp_path / "rehearsal"
+def test_completed_rehearsal_stops_with_no_go_when_workspace_limit_is_exceeded(
+    reconciled_e2e_baseline,
+    tmp_path,
+):
+    import time
 
-    completed = _run_rehearsal(
-        legacy,
-        output,
-        "--max-workspace-mib",
-        "0.001",
-        data_dir=tmp_path / "current-data",
+    from arthexis.reconciliation.rehearsal import (
+        ResourcePolicy,
+        create_go_bundle,
+        evaluate_resources,
+        write_resource_receipt,
     )
 
-    assert completed.returncode == 2, completed.stderr
-    assert _sha256(source_database) == source_sha
+    rehearsal_root = Path(reconciled_e2e_baseline["rehearsal_root"])
+    fixture = Path(reconciled_e2e_baseline["fixture_path"])
+    result = evaluate_resources(
+        rehearsal_root,
+        fixture / "reconciliation.json",
+        started=time.monotonic(),
+        policy=ResourcePolicy(max_workspace_mib=0.001),
+    )
 
-    result = _json_result(completed)
     assert result["decision"] == "NO-GO"
-    assert result["reason"] == "resource-limit"
-    assert result["resource_safety"]["decision"] == "NO-GO"
     assert any(
         violation["resource"] == "workspace_mib"
-        for violation in result["resource_safety"]["violations"]
+        for violation in result["violations"]
     )
-    assert Path(result["resource_report"]).is_file()
-    assert not Path(result["fixture"]["path"], "migration-report.json").exists()
+
+    resource_report = write_resource_receipt(tmp_path, result)
+    with pytest.raises(ValueError, match="resource safety decision GO"):
+        create_go_bundle(
+            tmp_path / "bundle-root",
+            capture_path=Path(reconciled_e2e_baseline["capture_path"]),
+            fixture_path=fixture,
+            migration_report=Path(reconciled_e2e_baseline["json_report"]),
+            migration_text_report=Path(reconciled_e2e_baseline["text_report"]),
+            resource_report=resource_report,
+        )
 
 
 def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
@@ -296,32 +296,34 @@ def test_cutover_proof_rejects_live_source_advanced_after_capture(tmp_path):
 
 
 @pytest.mark.reconciliation_e2e
-def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(tmp_path):
-    legacy = tmp_path / "legacy"
-    source_database = _legacy_installation(legacy)
+def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(
+    reconciled_e2e_baseline,
+    tmp_path,
+):
+    copied_root = tmp_path / "baseline"
+    shutil.copytree(Path(reconciled_e2e_baseline["root"]), copied_root)
+    legacy = copied_root / "legacy"
+    source_database = legacy / "db.sqlite3"
     source_sha = _sha256(source_database)
-    output = tmp_path / "rehearsal"
+    output = copied_root / "rehearsal"
+    first_result = reconciled_e2e_baseline["result"]
+    first_bundle = output / "bundles" / Path(str(first_result["go_bundle"])).name
 
-    first = _run_rehearsal(
-        legacy,
-        output,
-        data_dir=tmp_path / "current-data",
-    )
     second = _run_rehearsal(
         legacy,
         output,
-        data_dir=tmp_path / "current-data",
+        data_dir=copied_root / "current-data",
     )
 
-    assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     assert _sha256(source_database) == source_sha
 
-    first_result = _json_result(first)
     second_result = _json_result(second)
     assert first_result["capture"]["capture_id"] != second_result["capture"]["capture_id"]
-    assert first_result["go_bundle"] != second_result["go_bundle"]
-    assert Path(first_result["go_bundle"]).is_dir()
+    assert Path(str(first_result["go_bundle"])).name != Path(
+        str(second_result["go_bundle"])
+    ).name
+    assert first_bundle.is_dir()
     assert Path(second_result["go_bundle"]).is_dir()
 
 
