@@ -347,8 +347,11 @@ jobs:
             echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=false" >> "$GITHUB_ENV"
           fi
           sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv
+          sudo -n chmod 0711 /var/lib/gway
+          sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+          /usr/local/bin/gway version >/dev/null
 
       - name: Verify exact deployment pair before mutation
         if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
@@ -786,7 +789,10 @@ jobs:
             sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.failed
           fi
           sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv
+          sudo -n chmod 0711 /var/lib/gway
+          sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+          /usr/local/bin/gway version >/dev/null
 
           sudo -n systemctl daemon-reload
           sudo -n systemctl restart gway-mcp-server.service

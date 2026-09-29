@@ -459,3 +459,14 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main(watchtower_workflow)
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
 
 
+
+
+@pytest.mark.workflow
+def test_watchtower_gway_launcher_remains_usable_without_sudo(watchtower_workflow) -> None:
+    install = watchtower_workflow.step("Install exact canonical Gway")
+    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
+
+    for step in (install, rollback):
+        assert "chmod 0711 /var/lib/gway" in step
+        assert "chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin" in step
+        assert "/usr/local/bin/gway version >/dev/null" in step
