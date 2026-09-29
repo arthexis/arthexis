@@ -10,7 +10,7 @@ class WorkflowText:
     text: str
 
     @classmethod
-    def load(cls, path: str | Path) -> "WorkflowText":
+    def load(cls, path: str | Path) -> WorkflowText:
         resolved = Path(path)
         return cls(resolved, resolved.read_text(encoding="utf-8"))
 
