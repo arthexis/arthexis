@@ -82,7 +82,7 @@ jobs:
 
   clean-install:
     name: python / Clean install
-    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'version-only') }}
+    if: ${{ !inputs.version_pr && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'version-only')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
