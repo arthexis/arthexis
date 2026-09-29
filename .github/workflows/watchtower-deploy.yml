@@ -351,7 +351,7 @@ jobs:
           sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
-          /usr/local/bin/gway version >/dev/null
+          env -u GWAY_CACHE_DIR /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
       - name: Verify exact deployment pair before mutation
         if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
@@ -430,15 +430,21 @@ jobs:
           printf '%s\n' \
             '#!/bin/sh' \
             'set -eu' \
-            'export GWAY_CACHE_DIR=/var/lib/gway/cache' \
+            'if [ "$(id -u)" -eq 0 ]; then' \
+            '  export GWAY_CACHE_DIR=/var/lib/gway/cache' \
+            'else' \
+            '  unset GWAY_CACHE_DIR' \
+            'fi' \
             'exec /var/lib/gway/venv/bin/python -m gway "$@"' \
             >"${launcher}"
           chmod 0755 "${launcher}"
           sudo -n install -m 0755 "${launcher}" /usr/local/bin/gway
           rm -f "${launcher}"
+          /usr/local/bin/gway version >/dev/null
           sudo -n /usr/local/bin/gway help security oauth client create >/dev/null
           sudo -n /usr/local/bin/gway security oauth client list >/dev/null
           sudo -n test -f /var/lib/gway/cache/security/state.sqlite
+          echo "canonical_gway_user=ok"
           echo "canonical_gway_admin=ok"
 
       - name: Converge public Gway bootstrap
@@ -799,7 +805,7 @@ jobs:
           sudo -n chmod 0711 /var/lib/gway
           sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
-          /usr/local/bin/gway version >/dev/null
+          env -u GWAY_CACHE_DIR /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
           sudo -n systemctl daemon-reload
           sudo -n systemctl restart gway-mcp-server.service
