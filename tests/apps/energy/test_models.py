@@ -96,7 +96,7 @@ def test_account_defaults_describe_an_active_empty_account() -> None:
 def test_account_user_and_tariff_relationships_are_optional_and_reversible() -> None:
     user = get_user_model().objects.create_user(
         username="energy-owner",
-        password="unused",
+        password=None,
     )
     tariff = EnergyTariff.objects.create(
         code="standard",
@@ -119,7 +119,7 @@ def test_account_user_and_tariff_relationships_are_optional_and_reversible() -> 
 def test_account_user_and_tariff_deletion_leave_the_account() -> None:
     user = get_user_model().objects.create_user(
         username="energy-owner",
-        password="unused",
+        password=None,
     )
     tariff = EnergyTariff.objects.create(
         code="standard",
