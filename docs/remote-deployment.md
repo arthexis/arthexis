@@ -104,6 +104,17 @@ After DNS/TLS/nginx deployment,
 
 The GitHub Actions deployment also confirms both systemd services are active.
 
+## Accepted deployment lifecycle
+
+A successful Watchtower deployment records the accepted Arthexis/Gway pair and then treats that repository state as settled. Acceptance is terminal with respect to product-repository mutation:
+
+- Watchtower does not create version-advancement branches or pull requests;
+- Watchtower does not automatically bump Arthexis or Gway versions;
+- Watchtower does not arm follow-up repository changes after acceptance;
+- version advancement is requested explicitly when a later change merits it.
+
+The certified publisher handoff may still reconcile release artifacts for the accepted pair, but it does not advance either source repository. This keeps a successful Watchtower deployment from immediately introducing a new PR that reopens the deployment queue.
+
 ## Deployment safety
 
 The recurring path is intentionally convergent:
