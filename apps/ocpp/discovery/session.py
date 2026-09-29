@@ -301,6 +301,19 @@ class DiscoverySession:
             self.handoff_path.replace(self.claimed_handoff_path)
             return payload
 
+    def disarm_handoff(self) -> dict[str, object]:
+        """Remove an unclaimed handoff idempotently without undoing a claim."""
+        with self._event_lock():
+            if self.claimed_handoff_path.exists():
+                return {"disarmed": False, "claimed": True}
+            if not self.handoff_path.exists():
+                return {"disarmed": False, "claimed": False}
+            self.handoff_path.unlink()
+
+        self.record("handoff_disarmed")
+        self.write_summary()
+        return {"disarmed": True, "claimed": False}
+
     @classmethod
     def list(cls, root: Path) -> list[dict[str, object]]:
         """List valid discovery sessions ordered by creation time then ID."""
