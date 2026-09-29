@@ -5,6 +5,7 @@ from django.db.migrations.executor import MigrationExecutor
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
+@pytest.mark.migration
 def test_permissiveness_migration_preserves_existing_open_charger_behavior() -> None:
     executor = MigrationExecutor(connection)
     executor.migrate([("ocpp", "0026_chargertimelineprogress")])

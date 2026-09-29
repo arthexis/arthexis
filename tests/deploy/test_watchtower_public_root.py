@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.workflow
+
 def test_base_watchtower_stage_excludes_public_surface_convergence(watchtower_deploy_workflow: str) -> None:
     workflow = watchtower_deploy_workflow
     assert "default: arthexis" in workflow

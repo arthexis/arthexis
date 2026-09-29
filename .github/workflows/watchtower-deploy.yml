@@ -228,10 +228,22 @@ jobs:
               echo "repository_dispatch must provide a full Gway SHA." >&2
               exit 1
             }
-            test "$REQUESTED_GWAY_SHA" = "$current_gway"
-            gway_sha="$REQUESTED_GWAY_SHA"
+            if [[ "$REQUESTED_GWAY_SHA" == "$current_gway" ]]; then
+              gway_sha="$REQUESTED_GWAY_SHA"
+              source="gway"
+            else
+              compare_status="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+                "https://api.github.com/repos/arthexis/gway/compare/$REQUESTED_GWAY_SHA...$current_gway" |
+                python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')"
+              if [[ "$compare_status" != "ahead" ]]; then
+                echo "Gway candidate is not an ancestor of current main: requested=$REQUESTED_GWAY_SHA current=$current_gway status=$compare_status" >&2
+                exit 1
+              fi
+              echo "watchtower_resolution=superseded requested=$REQUESTED_GWAY_SHA current=$current_gway"
+              gway_sha="$current_gway"
+              source="gway-coalesced"
+            fi
             arthexis_sha="${previous_arthexis:-$current_arthexis}"
-            source="gway"
           else
             requested_arthexis="${REQUESTED_ARTHEXIS_SHA:-${GITHUB_SHA}}"
             [[ "$requested_arthexis" =~ ^[0-9a-f]{40}$ ]]

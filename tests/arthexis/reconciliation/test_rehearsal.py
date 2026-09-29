@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -77,6 +78,31 @@ def _run_rehearsal(
 
 def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return json.loads(completed.stdout)
+
+
+def _baseline_bundle_inputs(
+    reconciled_e2e_baseline: dict[str, object],
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, Path, Path]:
+    from arthexis.reconciliation.verification import verify_reconciliation
+
+    capture = Path(reconciled_e2e_baseline["capture_path"])
+    fixture = tmp_path / "fixture"
+    shutil.copytree(Path(reconciled_e2e_baseline["fixture_path"]), fixture)
+    verification = verify_reconciliation(fixture)
+    resource_report = tmp_path / "resource-report.json"
+    resource_report.write_text(
+        json.dumps({"decision": "GO", "policy": {}, "usage": {}}, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    return (
+        capture,
+        fixture,
+        verification.json_path,
+        verification.text_path,
+        resource_report,
+    )
 
 
 def _assert_go_bundle(result: dict[str, object]) -> Path:
@@ -186,29 +212,33 @@ def test_rehearse_refuses_capture_when_free_disk_preflight_fails(tmp_path):
 
 
 @pytest.mark.reconciliation_e2e
-def test_go_bundle_is_immutable_and_refuses_overwrite(tmp_path):
+def test_go_bundle_is_immutable_and_refuses_overwrite(
+    reconciled_e2e_baseline,
+    tmp_path,
+):
     from arthexis.reconciliation.rehearsal import create_go_bundle
 
-    legacy = tmp_path / "legacy"
-    _legacy_installation(legacy)
-    output = tmp_path / "rehearsal"
-
-    completed = _run_rehearsal(
-        legacy,
-        output,
-        data_dir=tmp_path / "current-data",
+    capture, fixture, json_report, text_report, resource_report = (
+        _baseline_bundle_inputs(reconciled_e2e_baseline, tmp_path)
     )
-    assert completed.returncode == 0, completed.stderr
-    result = _json_result(completed)
+    output = tmp_path / "rehearsal"
+    create_go_bundle(
+        output,
+        capture_path=capture,
+        fixture_path=fixture,
+        migration_report=json_report,
+        migration_text_report=text_report,
+        resource_report=resource_report,
+    )
 
     with pytest.raises(ValueError, match="already exists"):
         create_go_bundle(
             output,
-            capture_path=Path(result["capture"]["path"]),
-            fixture_path=Path(result["fixture"]["path"]),
-            migration_report=Path(result["json_report"]),
-            migration_text_report=Path(result["text_report"]),
-            resource_report=Path(result["resource_report"]),
+            capture_path=capture,
+            fixture_path=fixture,
+            migration_report=json_report,
+            migration_text_report=text_report,
+            resource_report=resource_report,
         )
 
 
@@ -296,23 +326,17 @@ def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(tmp_path):
 
 
 @pytest.mark.reconciliation_e2e
-def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_path):
+def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(
+    reconciled_e2e_baseline,
+    tmp_path,
+):
     from arthexis.reconciliation.rehearsal import create_go_bundle
 
-    legacy = tmp_path / "legacy"
-    _legacy_installation(legacy)
-    output = tmp_path / "rehearsal"
-
-    completed = _run_rehearsal(
-        legacy,
-        output,
-        data_dir=tmp_path / "current-data",
+    capture, fixture, json_report, text_report, resource_report = (
+        _baseline_bundle_inputs(reconciled_e2e_baseline, tmp_path)
     )
-    assert completed.returncode == 0, completed.stderr
-    result = _json_result(completed)
-
     no_go_report = tmp_path / "no-go-report.json"
-    report = json.loads(Path(result["json_report"]).read_text(encoding="utf-8"))
+    report = json.loads(json_report.read_text(encoding="utf-8"))
     report["decision"] = "NO-GO"
     no_go_report.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
@@ -323,11 +347,11 @@ def test_go_bundle_refuses_no_go_verification_and_leaves_no_final_artifact(tmp_p
     with pytest.raises(ValueError, match="successful migration verification"):
         create_go_bundle(
             alternate_root,
-            capture_path=Path(result["capture"]["path"]),
-            fixture_path=Path(result["fixture"]["path"]),
+            capture_path=capture,
+            fixture_path=fixture,
             migration_report=no_go_report,
-            migration_text_report=Path(result["text_report"]),
-            resource_report=Path(result["resource_report"]),
+            migration_text_report=text_report,
+            resource_report=resource_report,
         )
 
     bundles = alternate_root / "bundles"
