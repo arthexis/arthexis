@@ -67,6 +67,7 @@ def reconciled_e2e_baseline(tmp_path_factory: pytest.TempPathFactory) -> dict[st
             "0",
             "--batch-size",
             "1",
+            "--cutover",
         ],
         cwd=PROJECT_ROOT,
         env=environment,

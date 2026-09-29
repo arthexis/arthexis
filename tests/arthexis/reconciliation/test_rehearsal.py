@@ -243,20 +243,10 @@ def test_go_bundle_is_immutable_and_refuses_overwrite(
 
 
 @pytest.mark.reconciliation_e2e
-def test_cutover_rehearsal_requires_no_missed_writes_proof(tmp_path):
-    legacy = tmp_path / "legacy"
-    _legacy_installation(legacy)
-    output = tmp_path / "rehearsal"
-
-    completed = _run_rehearsal(
-        legacy,
-        output,
-        "--cutover",
-        data_dir=tmp_path / "current-data",
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    result = _json_result(completed)
+def test_cutover_rehearsal_requires_no_missed_writes_proof(
+    reconciled_e2e_baseline,
+):
+    result = reconciled_e2e_baseline["result"]
     assert result["decision"] == "GO"
     assert result["cutover"]["decision"] == "GO"
     assert result["cutover"]["no_missed_writes"] is True
@@ -324,7 +314,12 @@ def test_rehearse_can_be_rerun_without_overwriting_prior_evidence(
         str(second_result["go_bundle"])
     ).name
     assert first_bundle.is_dir()
-    assert Path(second_result["go_bundle"]).is_dir()
+    second_bundle = Path(second_result["go_bundle"])
+    assert second_bundle.is_dir()
+    second_manifest = json.loads(
+        (second_bundle / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert second_manifest["cutover"]["mode"] == "ordinary-rehearsal"
 
 
 @pytest.mark.reconciliation_e2e
