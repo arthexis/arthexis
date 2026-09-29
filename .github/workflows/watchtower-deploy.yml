@@ -243,7 +243,11 @@ jobs:
               gway_sha="$current_gway"
               source="gway-coalesced"
             fi
-            arthexis_sha="${previous_arthexis:-$current_arthexis}"
+            # A Gway-triggered deploy is the queue-draining convergence point.
+            # Pair it with current Arthexis main, not the previously accepted SHA,
+            # so cross-repo changes that were coalesced while PRs were open land
+            # together as one candidate pair.
+            arthexis_sha="$current_arthexis"
           else
             requested_arthexis="${REQUESTED_ARTHEXIS_SHA:-${GITHUB_SHA}}"
             [[ "$requested_arthexis" =~ ^[0-9a-f]{40}$ ]]
