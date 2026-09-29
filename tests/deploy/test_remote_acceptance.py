@@ -45,7 +45,7 @@ def test_remote_acceptance_requires_mcp_oauth_challenge() -> None:
 
 
 @pytest.mark.workflow
-def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
+def test_base_watchtower_stage_includes_remote_acceptance() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "stage:" in workflow
@@ -54,7 +54,8 @@ def test_base_watchtower_stage_does_not_couple_remote_acceptance() -> None:
     assert "- name: Preflight Watchtower Remote stage" in workflow
     assert "- name: Converge Watchtower Remote stage" in workflow
     assert "- name: Verify Watchtower Remote stage" in workflow
-    assert "if: env.WATCHTOWER_STAGE == 'remote'" in workflow
+    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
+    assert "env.WATCHTOWER_STAGE == 'remote-only'" in workflow
     assert "gway --recipe deploy/remote.rx" in workflow
     assert "gway --recipe deploy/remote-expose.rx" in workflow
     assert "verify_remote_deployment.py local" in workflow
