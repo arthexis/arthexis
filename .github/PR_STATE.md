@@ -11,4 +11,4 @@ Pull request workflow state uses GitHub-native state rather than custom work-sta
 
 Branch updates do not claim PRs with a label. The branch-update workflow serializes updates at the repository level, rechecks the PR head, and uses GitHub's expected-head compare-and-swap when requesting an update.
 
-Automated version-rollover PRs are authorized by enabling native auto-merge directly after creation.
+Version advancement is explicit and manually requested. Watchtower deployment acceptance does not create or authorize follow-up version PRs.
