@@ -74,3 +74,12 @@ def test_dns_bootstrap_is_one_time_and_separate() -> None:
 
     assert len(commands) == 1
     assert commands[0].startswith("dns create remote.arthexis.com")
+
+
+def test_remote_exposure_separates_nginx_site_identifier_from_public_domain() -> None:
+    commands = _blocks(Path("deploy/remote-expose.rx"))
+    recipe = next(command for command in commands if command.startswith("recipe web/remote/expose"))
+
+    assert "--site remote_arthexis_com" in recipe
+    assert "--domain remote.arthexis.com" in recipe
+    assert "--site remote.arthexis.com" not in recipe
