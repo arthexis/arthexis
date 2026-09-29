@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -33,9 +33,7 @@ jobs:
           BRANCH_UPDATE_TOKEN: ${{ secrets.BRANCH_UPDATE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_ACTION: ${{ github.event.action }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
-          EVENT_LABEL: ${{ github.event.label.name }}
           INPUT_PR_NUMBER: ${{ inputs.pr_number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         shell: bash
@@ -121,10 +119,6 @@ jobs:
               return
             fi
 
-            if jq -e '[.labels[].name | ascii_downcase] | any(. == "in-progress")' <<< "$pr_json" >/dev/null; then
-              echo "PR #$pr_number: already in progress; freshness recorded but another worker owns it."
-              return
-            fi
 
             current_json="$(gh api "repos/$REPOSITORY/pulls/$pr_number")"
             current_head="$(jq -r '.head.sha' <<< "$current_json")"
@@ -134,14 +128,12 @@ jobs:
               return
             fi
 
-            if jq -e '[.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold" or . == "in-progress")' <<< "$current_json" >/dev/null; then
-              echo "PR #$pr_number: became unavailable before claim; skipping."
+            if jq -e '[.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold")' <<< "$current_json" >/dev/null; then
+              echo "PR #$pr_number: became on-hold before update; skipping."
               return
             fi
 
-            gh api "repos/$REPOSITORY/issues/$pr_number/labels"               --method POST               -f 'labels[]=in-progress' >/dev/null
-
-            echo "PR #$pr_number: claimed; updating branch ($behind_by commit(s) behind)."
+            echo "PR #$pr_number: updating branch ($behind_by commit(s) behind) with expected head $head_sha."
 
             set +e
             update_output="$(
@@ -150,10 +142,9 @@ jobs:
             update_status=$?
             set -e
 
-            gh api "repos/$REPOSITORY/issues/$pr_number/labels/in-progress"               --method DELETE >/dev/null 2>&1 || true
 
             if (( update_status != 0 )); then
-              echo "PR #$pr_number: branch update failed; claim released."
+              echo "PR #$pr_number: branch update failed; update attempt finished."
               echo "$update_output"
               {
                 echo "### PR #$pr_number branch update failed"
@@ -165,7 +156,7 @@ jobs:
               return
             fi
 
-            echo "PR #$pr_number: branch update requested successfully; claim released."
+            echo "PR #$pr_number: branch update requested successfully; update attempt finished."
           }
 
           if [[ -z "${BRANCH_UPDATE_TOKEN:-}" ]]; then
@@ -175,25 +166,6 @@ jobs:
 
           case "$EVENT_NAME" in
             pull_request_target)
-              case "$EVENT_ACTION" in
-                labeled)
-                  if [[ "${EVENT_LABEL,,}" != "approved" ]]; then
-                    echo "PR #$EVENT_PR_NUMBER: unrelated label added; skipping."
-                    exit 0
-                  fi
-                  ;;
-                unlabeled)
-                  if [[ "${EVENT_LABEL,,}" != "in-progress" ]]; then
-                    echo "PR #$EVENT_PR_NUMBER: unrelated label removed; skipping."
-                    exit 0
-                  fi
-                  pr_json="$(gh api "repos/$REPOSITORY/pulls/$EVENT_PR_NUMBER")"
-                  if ! jq -e '[.labels[].name | ascii_downcase] | any(. == "approved")' <<< "$pr_json" >/dev/null; then
-                    echo "PR #$EVENT_PR_NUMBER: in-progress released but PR is not approved; skipping recovery update."
-                    exit 0
-                  fi
-                  ;;
-              esac
               update_pr "$EVENT_PR_NUMBER"
               ;;
             workflow_dispatch)
