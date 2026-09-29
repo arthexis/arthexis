@@ -143,6 +143,7 @@ def test_capture_lifecycle_persists_handle_and_releases_after_reopen(tmp_path) -
         metadata={
             "destination_ip": "198.51.100.40",
             "destination_port": 9000,
+            "source_ips": ["192.0.2.20"],
             "hostnames": [],
         },
     )
@@ -165,6 +166,8 @@ def test_capture_lifecycle_persists_handle_and_releases_after_reopen(tmp_path) -
         "active": False,
         "changed": True,
         "redirect_id": "abc123def456",
+        "handoff_disarmed": True,
+        "handoff_claimed": False,
     }
     assert provider.released == ["abc123def456"]
     assert active_redirect(reopened.events()) is None
@@ -195,3 +198,145 @@ def test_release_failure_keeps_redirect_owned_for_retry(tmp_path) -> None:
     assert session.write_summary()["capture"]["release_failure_reason"] == (
         "redirect_remove_failed"
     )
+
+
+
+def test_capture_arms_handoff_before_redirect_apply(tmp_path) -> None:
+    observed = []
+
+    class Provider:
+        name = "gway"
+
+        def plan(self, request):
+            return CapturePlan(
+                provider=self.name,
+                strategy="destination-redirect",
+                request=request,
+            )
+
+        def apply(self, plan):
+            observed.append(plan.request.destination_ip)
+            assert session.handoff_path.exists()
+            return {"id": "abc123def456", "active": True}
+
+        def status(self, redirect_id):
+            return {"id": redirect_id, "active": True}
+
+        def release(self, redirect_id):
+            return {"id": redirect_id, "active": False, "changed": True}
+
+    session = DiscoverySession.create(tmp_path, session_id="arm-before-apply")
+    session.record(
+        "csms_candidate",
+        category="inference",
+        metadata={
+            "source_ips": ["192.0.2.20"],
+            "destination_ip": "198.51.100.40",
+            "destination_port": 9000,
+            "hostnames": ["csms.example.com"],
+        },
+    )
+
+    result = start_capture(session, interface="eth0", provider=Provider())
+
+    assert result["active"] is True
+    assert observed == ["198.51.100.40"]
+    assert session.write_summary()["handoff_armed"] is True
+
+
+def test_redirect_apply_failure_disarms_handoff(tmp_path) -> None:
+    class Provider:
+        name = "gway"
+
+        def plan(self, request):
+            return CapturePlan(
+                provider=self.name,
+                strategy="destination-redirect",
+                request=request,
+            )
+
+        def apply(self, plan):
+            raise RuntimeError("apply failed")
+
+    session = DiscoverySession.create(tmp_path, session_id="apply-failure")
+    session.record(
+        "csms_candidate",
+        category="inference",
+        metadata={
+            "source_ips": ["192.0.2.20"],
+            "destination_ip": "198.51.100.40",
+            "destination_port": 9000,
+            "hostnames": [],
+        },
+    )
+
+    result = start_capture(session, interface="eth0", provider=Provider())
+
+    assert result == {"active": False, "reason": "redirect_apply_failed"}
+    assert not session.handoff_path.exists()
+    assert any(
+        event["event_type"] == "handoff_disarmed"
+        for event in session.events()
+    )
+
+
+def test_capture_requires_unambiguous_source_host_for_handoff(tmp_path) -> None:
+    class Provider:
+        name = "gway"
+
+        def plan(self, request):
+            return CapturePlan(
+                provider=self.name,
+                strategy="destination-redirect",
+                request=request,
+            )
+
+        def apply(self, plan):
+            raise AssertionError("redirect must not be applied")
+
+    session = DiscoverySession.create(tmp_path, session_id="ambiguous-source")
+    session.record(
+        "csms_candidate",
+        category="inference",
+        metadata={
+            "source_ips": ["192.0.2.20", "192.0.2.21"],
+            "destination_ip": "198.51.100.40",
+            "destination_port": 9000,
+            "hostnames": [],
+        },
+    )
+
+    result = start_capture(session, interface="eth0", provider=Provider())
+
+    assert result == {"active": False, "reason": "handoff_match_unavailable"}
+    assert not session.handoff_path.exists()
+
+
+def test_release_after_claim_keeps_claim_evidence(tmp_path) -> None:
+    class Provider:
+        name = "gway"
+
+        def release(self, redirect_id):
+            return {"id": redirect_id, "active": False, "changed": True}
+
+    session = DiscoverySession.create(tmp_path, session_id="release-claimed")
+    session.record(
+        "capture_started",
+        metadata={
+            "provider": "gway",
+            "strategy": "destination-redirect",
+            "redirect_id": "abc123def456",
+        },
+    )
+    session.arm_handoff(client_host="192.0.2.20")
+    assert session.claim_handoff(
+        charger_identity="CP001",
+        client_host="192.0.2.20",
+    ) is not None
+
+    result = release_capture(session, provider=Provider())
+
+    assert result["active"] is False
+    assert result["handoff_disarmed"] is False
+    assert result["handoff_claimed"] is True
+    assert session.claimed_handoff_path.exists()
