@@ -19,6 +19,7 @@ jobs:
     outputs:
       matrix: ${{ steps.scope.outputs.matrix }}
       workflow_only: ${{ steps.scope.outputs.workflow_only }}
+      mixed_scope: ${{ steps.scope.outputs.mixed_scope }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -34,15 +35,29 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -Eeuo pipefail
-          workflow_only=false
-          if [[ "$VERSION_PR" != "true" && "$INTEGRATION_PR" != "true" && -n "$BASE_SHA" ]]; then
-            workflow_only=true
+          workflow_changed=false
+          non_workflow_changed=false
+          if [[ -n "$BASE_SHA" ]]; then
             while IFS= read -r path; do
               case "$path" in
-                .github/workflows/*|.github/scripts/*|tests/workflow/*) ;;
-                *) workflow_only=false; break ;;
+                .github/workflows/*|.github/scripts/*|tests/workflow/*|tests/deploy/*workflow*.py|tests/ocpp/*workflow*.py)
+                  workflow_changed=true
+                  ;;
+                *)
+                  non_workflow_changed=true
+                  ;;
               esac
             done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          fi
+
+          workflow_only=false
+          mixed_scope=false
+          if [[ "$VERSION_PR" != "true" && "$INTEGRATION_PR" != "true" ]]; then
+            if [[ "$workflow_changed" == "true" && "$non_workflow_changed" == "false" ]]; then
+              workflow_only=true
+            elif [[ "$workflow_changed" == "true" && "$non_workflow_changed" == "true" ]]; then
+              mixed_scope=true
+            fi
           fi
 
           if [[ "$VERSION_PR" == "true" || "$workflow_only" == "true" ]]; then
@@ -52,7 +67,8 @@ jobs:
           fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "workflow_only=$workflow_only" >> "$GITHUB_OUTPUT"
-          echo "matrix=$matrix workflow_only=$workflow_only"
+          echo "mixed_scope=$mixed_scope" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix workflow_only=$workflow_only mixed_scope=$mixed_scope"
 
   tests:
     needs: classify
@@ -103,8 +119,9 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           WORKFLOW_PR: ${{ needs.classify.outputs.workflow_only }}
-          INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
+          INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') || needs.classify.outputs.mixed_scope == 'true' }}
         run: |
+          set -Eeuo pipefail
           if [[ "$INTEGRATION_PR" == "true" ]]; then
             python -m pytest -q --durations=20 --no-migrations -n 4 --dist loadgroup -m "not reconciliation_e2e and not migration"
             if [[ "$PYTHON_VERSION" == "3.10" ]]; then
