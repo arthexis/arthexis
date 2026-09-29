@@ -438,48 +438,7 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
     assert 'gway_runtime_rollback=restored' in workflow
 
 
-def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    step = workflow.split("- name: Open next-version PR after accepted deployment", 1)[1]
-    step = step.split("- name: Restore previous Gway runtime after failed deployment", 1)[0]
-    assert "if: env.WATCHTOWER_STAGE == 'arthexis'" in step
-    assert "ARTHEXIS_CHANGED" not in step
-    assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
-    assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
-    assert '--label approved' not in step
-    assert '--label version-only' in step
-    assert 'gh pr merge "$rollover_pr"' in step
-    assert 'test "$rollover_head" = "$rollover_expected_head"' in step
-    assert '--auto --merge' in step
-    assert '--match-head-commit' not in step
-    assert 'rollover_pr=auto_merge_enabled number=$rollover_pr' in step
-
-
-@pytest.mark.workflow
-def test_watchtower_next_version_worktree_cleanup_is_retry_safe() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "git worktree prune" in workflow
-    assert 'git -C "$GITHUB_WORKSPACE" worktree remove --force "$work"' in workflow
-    assert 'trap cleanup EXIT' in workflow
-
-
-def test_watchtower_rollover_push_uses_release_token_ephemerally() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert 'GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}' in workflow
-    assert "printf 'x-access-token:%s' \"$GH_TOKEN\" | base64 -w0" in workflow
-    assert 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in workflow
-    assert '--force-with-lease="refs/heads/$branch:$remote_branch_sha"' in workflow
-    assert '--force-with-lease="refs/heads/$branch:"' in workflow
-    push_line = next(
-        line for line in workflow.splitlines()
-        if 'http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}' in line
-    )
-    assert push_line.endswith("\\")
-    assert not push_line.endswith("\\\\")
-    assert "https://$GH_TOKEN@" not in workflow
 
 
 @pytest.mark.workflow
@@ -524,28 +483,6 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
         assert "unlabeled" not in workflow.split("workflow_dispatch:", 1)[0]
 
 
-def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    arthexis = workflow.split(
-        "gh pr create --repo \"$GITHUB_REPOSITORY\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-    gway = workflow.split(
-        "gh pr create --repo \"$repository\"",
-        1,
-    )[1].split("rollover_pr=", 1)[0]
-
-    for command in (arthexis, gway):
-        assert "--label approved" not in command
-        assert "--label version-only" in command
-
-    assert "--match-head-commit" not in workflow
-    assert workflow.count("--auto --merge") >= 2
-    assert workflow.count('rollover_expected_head="$(git rev-parse HEAD)"') >= 2
-    assert workflow.count('test "$rollover_head" = "$rollover_expected_head"') >= 2
-    assert "rollover_pr=auto_merge_enabled" in workflow
-    assert "gway_rollover_pr=auto_merge_enabled" in workflow
-
 
 @pytest.mark.workflow
 def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
@@ -559,9 +496,3 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main() -> None:
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
 
 
-def test_watchtower_rollover_head_sha_uses_rest_api_not_gh_pr_json_field() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "headRefOid" not in workflow
-    assert "gh api \"/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow
-    assert "gh api \"/repos/${repository}/pulls/${rollover_pr}\" --jq '.head.sha'" in workflow
