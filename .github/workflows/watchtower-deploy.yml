@@ -351,7 +351,7 @@ jobs:
           sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
-          env -u GWAY_CACHE_DIR /var/lib/gway/venv/bin/python -m gway version >/dev/null
+          GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
       - name: Verify exact deployment pair before mutation
         if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
@@ -433,7 +433,7 @@ jobs:
             'if [ "$(id -u)" -eq 0 ]; then' \
             '  export GWAY_CACHE_DIR=/var/lib/gway/cache' \
             'else' \
-            '  unset GWAY_CACHE_DIR' \
+            '  export GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' \
             'fi' \
             'exec /var/lib/gway/venv/bin/python -m gway "$@"' \
             >"${launcher}"
@@ -805,7 +805,7 @@ jobs:
           sudo -n chmod 0711 /var/lib/gway
           sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
-          env -u GWAY_CACHE_DIR /var/lib/gway/venv/bin/python -m gway version >/dev/null
+          GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
           sudo -n systemctl daemon-reload
           sudo -n systemctl restart gway-mcp-server.service
