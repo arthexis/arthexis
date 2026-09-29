@@ -242,7 +242,17 @@ def start_capture(
         local_host=local_host,
         local_port=local_port,
     )
-    plan = selected.plan(request)
+    try:
+        plan = selected.plan(request)
+    except Exception as error:
+        session.record(
+            "capture_unavailable",
+            metadata={
+                "reason": "capture_provider_unavailable",
+                "detail": str(error),
+            },
+        )
+        return {"active": False, "reason": "capture_provider_unavailable"}
 
     source_ips = candidate.get("source_ips")
     client_hosts = (
