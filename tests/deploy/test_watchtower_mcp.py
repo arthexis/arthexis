@@ -451,7 +451,9 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert '--label approved' not in step
     assert '--label version-only' in step
     assert 'gh pr merge "$rollover_pr"' in step
-    assert '--auto --merge --match-head-commit "$rollover_head"' in step
+    assert 'test "$rollover_head" = "$rollover_expected_head"' in step
+    assert '--auto --merge' in step
+    assert '--match-head-commit' not in step
     assert 'rollover_pr=auto_merge_enabled number=$rollover_pr' in step
 
 
