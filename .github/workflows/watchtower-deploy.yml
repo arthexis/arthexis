@@ -858,7 +858,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
-          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh pr view "$rollover_pr" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${GITHUB_REPOSITORY}/pulls/${rollover_pr}" --jq '.head.sha')"
           GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$rollover_head"
           echo "rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
@@ -969,7 +969,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${repository}/issues/${rollover_pr}/labels" \
             --input - >/dev/null
-          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh pr view "$rollover_pr" --repo "$repository" --json headRefOid --jq '.headRefOid')"
+          rollover_head="$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${repository}/pulls/${rollover_pr}" --jq '.head.sha')"
           GH_TOKEN="$GH_TOKEN" gh pr merge "$rollover_pr" --repo "$repository" --auto --merge --match-head-commit "$rollover_head"
           echo "gway_rollover_pr=auto_merge_enabled number=$rollover_pr head=$rollover_head"
 
