@@ -535,20 +535,27 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          remote_diagnostics() {
+            sudo -n systemctl status gway-mcp-server.service gway-remote-auth.service --no-pager || true
+            sudo -n ss -ltnp '( sport = :8000 or sport = :8001 )' || true
+            sudo -n journalctl -u gway-mcp-server.service -u gway-remote-auth.service -n 80 --no-pager || true
+          }
+
           sudo -n systemctl is-active --quiet gway-mcp-server.service
           sudo -n systemctl is-active --quiet gway-remote-auth.service
-          for port in 8000 8001; do
-            python3 - "$port" <<'PY'
-          import socket
-          import sys
-
-          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2):
-              pass
-          PY
-          done
           cd /opt/arthexis
-          sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py local
-          sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py public
+
+          # The local acceptance helper owns listener readiness. It retries both
+          # ports after service restart, avoiding a one-shot probe racing systemd.
+          if ! sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py local; then
+            remote_diagnostics
+            exit 1
+          fi
+          if ! sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py public; then
+            remote_diagnostics
+            exit 1
+          fi
           echo "remote_services=active"
           echo "remote_acceptance=ok"
 
