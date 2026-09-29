@@ -138,17 +138,21 @@ def test_restricted_admission_authenticates_existing_chargers() -> None:
     policy = OcppPolicy.load()
     policy.charger_admission_mode = OcppPolicy.AdmissionMode.RESTRICTED
     policy.save()
-    existing = Charger.objects.create(
-        identity="charger-existing",
-        connection_token_hash=make_password("secret"),
-    )
 
-    accepted = async_to_sync(load_or_enroll_charger)(
-        "charger-existing", ("charger-existing", "secret")
-    )
-    rejected = async_to_sync(load_or_enroll_charger)(
-        "charger-existing", ("charger-existing", "wrong")
-    )
+    with override_settings(
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+    ):
+        existing = Charger.objects.create(
+            identity="charger-existing",
+            connection_token_hash=make_password("secret"),
+        )
+
+        accepted = async_to_sync(load_or_enroll_charger)(
+            "charger-existing", ("charger-existing", "secret")
+        )
+        rejected = async_to_sync(load_or_enroll_charger)(
+            "charger-existing", ("charger-existing", "wrong")
+        )
 
     assert accepted == existing
     assert rejected is None
