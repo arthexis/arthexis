@@ -106,17 +106,19 @@ jobs:
           INTEGRATION_PR: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
         run: |
           if [[ "$INTEGRATION_PR" == "true" ]]; then
-            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not reconciliation_e2e"
+            python -m pytest -q --durations=20 --no-migrations -n 4 --dist loadgroup -m "not reconciliation_e2e and not migration"
             if [[ "$PYTHON_VERSION" == "3.10" ]]; then
+              python -m pytest -q --durations=20 -m migration
               python -m pytest -q --durations=20 -m reconciliation_e2e
             fi
           elif [[ "$WORKFLOW_PR" == "true" ]]; then
             python -m pytest -q --durations=20 -m workflow
           elif [[ "$PYTHON_VERSION" == "3.10" ]]; then
-            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e"
+            python -m pytest -q --durations=20 --no-migrations -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e and not migration"
+            python -m pytest -q --durations=20 -m migration
             python -m pytest -q --durations=20 -m reconciliation_e2e
           else
-            python -m pytest -q --durations=20 -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e"
+            python -m pytest -q --durations=20 --no-migrations -n 4 --dist loadgroup -m "not workflow and not reconciliation_e2e and not migration"
           fi
 
       - name: Require all validation checks
