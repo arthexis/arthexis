@@ -16,6 +16,7 @@ def _session(tmp_path):
         metadata={
             "destination_ip": "198.51.100.40",
             "destination_port": 9000,
+            "source_ips": ["192.0.2.20"],
             "hostnames": [],
         },
     )
