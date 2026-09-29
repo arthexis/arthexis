@@ -177,8 +177,27 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          current_arthexis="$(git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
-          current_gway="$(git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
+          retry_capture() {
+            local attempts="$1"
+            local delay="$2"
+            shift 2
+            local attempt output
+            for attempt in $(seq 1 "$attempts"); do
+              if output="$("$@")"; then
+                printf '%s' "$output"
+                return 0
+              fi
+              if [[ "$attempt" -lt "$attempts" ]]; then
+                echo "watchtower_resolution=retrying attempt=$attempt/$attempts command=$1" >&2
+                sleep "$delay"
+              fi
+            done
+            echo "watchtower_resolution=exhausted attempts=$attempts command=$1" >&2
+            return 1
+          }
+
+          current_arthexis="$(retry_capture 5 2 git ls-remote https://github.com/arthexis/arthexis.git refs/heads/main | awk '{print $1}')"
+          current_gway="$(retry_capture 5 2 git ls-remote https://github.com/arthexis/gway.git refs/heads/main | awk '{print $1}')"
           [[ "$current_arthexis" =~ ^[0-9a-f]{40}$ ]]
           [[ "$current_gway" =~ ^[0-9a-f]{40}$ ]]
 
@@ -215,10 +234,10 @@ jobs:
           [[ "$arthexis_sha" =~ ^[0-9a-f]{40}$ ]]
           [[ "$gway_sha" =~ ^[0-9a-f]{40}$ ]]
 
-          arthexis_version="$(curl --fail --silent --show-error             "https://raw.githubusercontent.com/arthexis/arthexis/$arthexis_sha/VERSION" | tr -d '[:space:]')"
+          arthexis_version="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors             "https://raw.githubusercontent.com/arthexis/arthexis/$arthexis_sha/VERSION" | tr -d '[:space:]')"
           # This runs before the canonical Gway venv exists. Keep it compatible with
           # the Watchtower host's Python 3.10 and do not assume tomllib/tomli is installed.
-          gway_version="$(curl --fail --silent --show-error             "https://raw.githubusercontent.com/arthexis/gway/$gway_sha/pyproject.toml" |
+          gway_version="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors             "https://raw.githubusercontent.com/arthexis/gway/$gway_sha/pyproject.toml" |
             awk '
               /^\[project\][[:space:]]*$/ { in_project=1; next }
               /^\[/ && in_project { exit }
