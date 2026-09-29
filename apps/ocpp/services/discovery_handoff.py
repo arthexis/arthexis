@@ -7,27 +7,11 @@ from typing import Any
 
 from django.conf import settings
 
+from apps.ocpp.discovery.projection import project_discovery_event
 from apps.ocpp.discovery.session import DiscoverySession
-from apps.events.services import publish_safely
 from apps.ocpp.models import Charger
 
 logger = logging.getLogger(__name__)
-
-
-def _project_discovery_event(event: Mapping[str, Any]) -> object:
-    """Best-effort projection of one already-durable discovery event."""
-    payload = {
-        "session_id": event["session_id"],
-        "sequence": event["sequence"],
-        "event_type": event["event_type"],
-        "category": event["category"],
-        "artifact_refs": list(event.get("artifact_refs") or []),
-    }
-    return publish_safely(
-        event_type="discovery.event",
-        producer="arthexis.ocpp.discovery",
-        payload=payload,
-    )
 
 
 def _discovery_root() -> Path:
@@ -35,14 +19,40 @@ def _discovery_root() -> Path:
 
 
 def _open_session(session_id: str) -> DiscoverySession:
-    return DiscoverySession.open(_discovery_root(), session_id)
+    return DiscoverySession.open(
+        _discovery_root(),
+        session_id,
+        projector=project_discovery_event,
+    )
 
 
 def _sessions_newest_first() -> list[DiscoverySession]:
     return [
-        DiscoverySession.open(_discovery_root(), str(item["session_id"]))
+        DiscoverySession.open(
+            _discovery_root(),
+            str(item["session_id"]),
+            projector=project_discovery_event,
+        )
         for item in reversed(DiscoverySession.list(_discovery_root()))
     ]
+
+
+def arm_discovery_handoff(
+    session_id: str,
+    *,
+    charger_identity: str | None = None,
+    client_host: str | None = None,
+    original_destination: Mapping[str, Any] | None = None,
+    strategy: str | None = None,
+) -> dict[str, Any]:
+    """Arm one unified OCPP discovery session before redirect mutation."""
+    session = _open_session(session_id)
+    return session.arm_handoff(
+        charger_identity=charger_identity,
+        client_host=client_host,
+        original_destination=original_destination,
+        strategy=strategy,
+    )
 
 
 def _client_host(scope: Mapping[str, object]) -> str | None:
