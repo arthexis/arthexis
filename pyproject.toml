@@ -146,5 +146,6 @@ addopts = ["--strict-config", "--strict-markers"]
 markers = [
     "reconciliation_e2e: slow end-to-end legacy reconciliation acceptance",
     "workflow: CI and GitHub Actions workflow contract validation",
+    "migration: tests that require the real Django migration graph",
     "xdist_group(name): serialize tests sharing external process or service resources",
 ]
