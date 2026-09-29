@@ -98,7 +98,7 @@ def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(
     fixture = Path(reconciled_e2e_baseline["fixture_path"])
     source_database = Path(reconciled_e2e_baseline["source_database"])
     source_sha = str(reconciled_e2e_baseline["source_sha256"])
-    result = reconciled_e2e_baseline["result"]
+    destination_from_fixture = Path(reconciled_e2e_baseline["destination_database"])
 
     assert _sha256(source_database) == source_sha
 
@@ -122,7 +122,7 @@ def test_reconcile_fixture_creates_fresh_v2_output_without_mutating_source(
     assert receipt["reconciliation"]["imported"]["card_credentials"] == 1
     assert receipt["resource_policy"]["batch_size"] == 1
     assert receipt["resource_usage"]["elapsed_seconds"] >= 0
-    assert Path(str(result["destination_database"])) == destination
+    assert destination_from_fixture == destination
 
 def test_reconcile_fixture_refuses_to_overwrite_output(tmp_path):
     fixture = _fixture(tmp_path)
