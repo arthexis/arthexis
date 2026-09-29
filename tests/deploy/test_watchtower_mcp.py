@@ -448,9 +448,11 @@ def test_watchtower_rollover_reconciles_after_unchanged_accepted_retry() -> None
     assert "ARTHEXIS_CHANGED" not in step
     assert 'gh pr list --repo "$GITHUB_REPOSITORY"' in step
     assert 'gh pr create --repo "$GITHUB_REPOSITORY"' in step
-    assert '--label approved' in step
+    assert '--label approved' not in step
     assert '--label version-only' in step
-    assert 'rollover_pr=approved number=$rollover_pr' in step
+    assert 'gh pr merge "$rollover_pr"' in step
+    assert '--auto --merge --match-head-commit "$rollover_head"' in step
+    assert 'rollover_pr=auto_merge_enabled number=$rollover_pr' in step
 
 
 @pytest.mark.workflow
@@ -550,15 +552,21 @@ def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
 
 
 @pytest.mark.workflow
-def test_approved_auto_merge_serializes_and_reconciles_watchtower_handoff() -> None:
-    workflow = Path(".github/workflows/approved-auto-merge.yml").read_text(encoding="utf-8")
+def test_post_merge_handoff_is_separate_from_merge_authorization() -> None:
+    workflow = Path(
+        ".github/workflows/post-merge-watchtower-handoff.yml"
+    ).read_text(encoding="utf-8")
 
-    assert "group: approved-auto-merge-" in workflow
+    assert "types: [closed]" in workflow
+    assert "github.event.pull_request.merged == true" in workflow
+    assert "group: post-merge-watchtower-" in workflow
     assert "cancel-in-progress: false" in workflow
     assert 'issues/$PR_NUMBER/comments' in workflow
     assert 'select(.body ==' in workflow
     assert "post_merge_handoff=already_accepted" in workflow
-    assert workflow.index("post_merge_handoff=already_accepted") < workflow.index("gh workflow run watchtower-deploy.yml")
+    assert workflow.index("post_merge_handoff=already_accepted") < workflow.index(
+        "gh workflow run watchtower-deploy.yml"
+    )
 
 
 @pytest.mark.workflow
@@ -590,5 +598,9 @@ def test_rollover_prs_are_created_with_version_only_labels_atomically() -> None:
     )[1].split("rollover_pr=", 1)[0]
 
     for command in (arthexis, gway):
-        assert "--label approved" in command
+        assert "--label approved" not in command
         assert "--label version-only" in command
+
+    assert workflow.count("--auto --merge --match-head-commit") >= 2
+    assert "rollover_pr=auto_merge_enabled" in workflow
+    assert "gway_rollover_pr=auto_merge_enabled" in workflow
