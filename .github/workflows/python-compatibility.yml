@@ -2,7 +2,7 @@ name: python / Python compatibility
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -15,6 +15,7 @@ permissions:
 jobs:
   classify:
     name: Classify test scope
+    if: ${{ github.event_name != 'pull_request' || ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || contains(fromJSON('["workflow","integration","version-only","on-hold","on hold"]'), github.event.label.name)) }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.scope.outputs.matrix }}
