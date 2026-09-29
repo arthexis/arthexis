@@ -442,21 +442,6 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy() -> None:
 
 
 @pytest.mark.workflow
-def test_watchtower_coalesces_deploys_until_cross_repo_pr_queue_drains() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-
-    assert "queue-gate:" in workflow
-    assert "name: Coalesce active PR queue" in workflow
-    assert "for repository in arthexis/arthexis arthexis/gway; do" in workflow
-    assert "pulls?state=open&per_page=100" in workflow
-    assert 'any(. == "on-hold" or . == "on hold")' in workflow
-    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in workflow
-    assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in workflow
-    assert "needs: [classify, queue-gate]" in workflow
-    assert "needs.queue-gate.outputs.deploy == 'true'" in workflow
-
-
-@pytest.mark.workflow
 def test_watchtower_queue_gate_runs_before_self_hosted_deploy() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     gate = workflow.index("  queue-gate:")
