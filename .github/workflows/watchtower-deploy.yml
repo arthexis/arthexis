@@ -1009,7 +1009,7 @@ jobs:
           PY
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
-      - name: Restore previous Gway runtime after failed deployment
+      - name: Restore previous Gway runtime after failed Gway stage
         if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.GWAY_DEPLOYMENT_ACCEPTED != 'true' }}
         shell: bash
         run: |
