@@ -20,6 +20,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.ocpp.simulator.network import LiveSimulatorConfig, LiveSimulatorError
 from apps.ocpp.simulator.worker import (
     DEFAULT_IDLE_TIMEOUT,
+    active_session,
     cleanup_session_artifacts,
     error_path,
     load_session,
@@ -34,14 +35,20 @@ class Command(BaseCommand):
     def add_arguments(self, parser) -> None:
         actions = parser.add_subparsers(dest="action", required=True)
 
+        boot_parser = actions.add_parser(
+            "boot",
+            help="Start on demand, boot, and retain one live charger connection.",
+        )
+        self._add_start_arguments(boot_parser, legacy_url=False)
+
         open_parser = actions.add_parser(
-            "open", help="Open, boot, and retain a live charger connection."
+            "open", help="Compatibility alias for boot using --url."
         )
         self._add_start_arguments(open_parser, legacy_url=True)
 
         start_parser = actions.add_parser(
             "start",
-            help="Start a charger session pointed at a CSMS endpoint.",
+            help="Compatibility alias for boot.",
         )
         self._add_start_arguments(start_parser, legacy_url=False)
 
@@ -95,7 +102,7 @@ class Command(BaseCommand):
         replay_parser.add_argument("--reconnect-after", type=int)
 
         for name, help_text in (
-            ("authorize", "Send Authorize on an existing live connection."),
+            ("authorize", "Send Authorize on the existing live connection."),
             ("status", "Report the existing live simulator state."),
             ("reconnect", "Reconnect and BootNotification the same charger."),
             ("close", "Close the existing live simulator."),
@@ -121,11 +128,11 @@ class Command(BaseCommand):
             if action == "_worker":
                 self._run_worker(options)
                 return
-            if action in {"open", "start"}:
+            if action in {"boot", "open", "start"}:
                 self._open(options)
                 return
 
-            charger = options.get("charger") or self._default_charger_identity()
+            charger = self._resolve_active_charger(options.get("charger"))
             request_action = "close" if action == "stop" else action
             request = {"action": request_action}
             if action == "authorize":
@@ -167,6 +174,20 @@ class Command(BaseCommand):
         except (LiveSimulatorError, OSError, ValueError, TimeoutError) as exc:
             raise CommandError(str(exc)) from exc
 
+    @classmethod
+    def _resolve_active_charger(cls, requested: str | None) -> str:
+        """Resolve commands to the one active simulator without repeated identity args."""
+        current = active_session()
+        if current is not None:
+            active_charger = str(current["charger"])
+            if requested and requested != active_charger:
+                raise CommandError(
+                    f"simulator is active as {active_charger!r}; stop it before "
+                    f"targeting {requested!r}"
+                )
+            return active_charger
+        return requested or cls._default_charger_identity()
+
     @staticmethod
     def _default_charger_identity() -> str:
         configured = os.environ.get("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "").strip()
@@ -203,7 +224,13 @@ class Command(BaseCommand):
         parser.add_argument("--model", default="Gway Simulator")
         parser.add_argument("--timeout", type=float, default=30.0)
         parser.add_argument(
-            "--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT
+            "--idle-timeout",
+            type=float,
+            default=DEFAULT_IDLE_TIMEOUT,
+            help=(
+                "Optional positive inactivity timeout. Zero keeps the on-demand "
+                "simulator alive until explicit stop."
+            ),
         )
         parser.add_argument(
             "--allow-insecure-ws",
@@ -256,16 +283,21 @@ class Command(BaseCommand):
         charger = options.get("charger") or self._default_charger_identity()
         endpoint = options.get("endpoint") or options.get("url")
         if not endpoint:
-            raise CommandError("start requires a CSMS endpoint")
-        try:
-            load_session(charger)
-        except LiveSimulatorError:
-            pass
-        else:
-            raise CommandError(f"simulator {charger!r} is already open")
+            raise CommandError("boot requires a CSMS endpoint")
 
-        if options["idle_timeout"] <= 0:
-            raise CommandError("--idle-timeout must be greater than zero")
+        current = active_session()
+        if current is not None:
+            active_charger = str(current.get("charger"))
+            active_endpoint = str(current.get("url"))
+            if active_charger == charger and active_endpoint == endpoint:
+                raise CommandError(f"simulator {charger!r} is already booted")
+            raise CommandError(
+                f"simulator is already active as {active_charger!r} at "
+                f"{active_endpoint!r}; stop it before booting another charger"
+            )
+
+        if options["idle_timeout"] < 0:
+            raise CommandError("--idle-timeout must be zero or greater")
 
         allow_insecure_ws = options["allow_insecure_ws"] or self._allow_local_insecure_ws(
             endpoint
@@ -328,6 +360,7 @@ class Command(BaseCommand):
                     "open": True,
                     "boot": metadata.get("boot"),
                     "idle_timeout": options["idle_timeout"],
+                    "lifecycle": "on-demand",
                 },
                 sort_keys=True,
             )
