@@ -505,36 +505,19 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo -n systemctl daemon-reload
-          sudo -n systemctl restart gway-mcp-server.service
-          sudo -n systemctl restart gway-remote-auth.service
-          sudo -n systemctl is-active --quiet gway-mcp-server.service
-          sudo -n systemctl is-active --quiet gway-remote-auth.service
           sudo -n test -f /var/lib/gway/venv/share/gway/sampler/survey/__main__.rx
+          sudo -n test -f /var/lib/gway/venv/share/gway/sampler/mcp/local.rx
+          sudo -n test -f /var/lib/gway/venv/share/gway/sampler/mcp/serve.rx
           sudo -n /usr/local/bin/gway help survey >/dev/null
-          for port in 8000 8001; do
-            ready=false
-            for attempt in $(seq 1 20); do
-              if python3 - "$port" <<'PY'
-          import socket
-          import sys
-
-          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
-              pass
-          PY
-              then
-                ready=true
-                break
-              fi
-              sleep 1
-            done
-            if [[ "$ready" != "true" ]]; then
-              echo "gway_activation=service_port_failed port=$port" >&2
-              exit 1
-            fi
-          done
+          sudo -n /usr/local/bin/gway help mcp local >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve mcp local | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve mcp serve | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway security scope list >/dev/null
+          sudo -n /usr/local/bin/gway security whoami >/dev/null
           echo "gway_activation=ok"
           echo "gway_sampler_survey=ok"
+          echo "gway_mcp_local=ok"
+          echo "gway_security_registry=ok"
 
       - name: Record accepted Gway stage
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
@@ -1047,33 +1030,9 @@ jobs:
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
-          sudo -n systemctl daemon-reload
-          sudo -n systemctl restart gway-mcp-server.service
-          sudo -n systemctl restart gway-remote-auth.service
-          sudo -n systemctl is-active --quiet gway-mcp-server.service
-          sudo -n systemctl is-active --quiet gway-remote-auth.service
-
-          for port in 8000 8001; do
-            ready=false
-            for attempt in $(seq 1 20); do
-              if python3 - "$port" <<'PY'
-          import socket
-          import sys
-
-          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
-              pass
-          PY
-              then
-                ready=true
-                break
-              fi
-              sleep 1
-            done
-            if [[ "$ready" != "true" ]]; then
-              echo "gway_runtime_rollback=service_port_failed port=$port" >&2
-              exit 1
-            fi
-          done
+          sudo -n /usr/local/bin/gway help survey >/dev/null
+          sudo -n /usr/local/bin/gway help mcp local >/dev/null
+          sudo -n /usr/local/bin/gway security scope list >/dev/null
 
           sudo -n rm -rf /var/lib/gway/venv.failed
           echo "gway_runtime_rollback=restored"
