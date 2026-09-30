@@ -51,12 +51,14 @@ def test_watchtower_release_handoff_is_recoverable_without_gh_cli(watchtower_dep
     assert '_publish=dispatched' in workflow
 
 
-def test_watchtower_requires_release_label_before_dispatch(watchtower_deploy_workflow: str):
+def test_release_runlevel_is_the_publication_trigger(watchtower_deploy_workflow: str):
     workflow = watchtower_deploy_workflow
+    deploy = workflow.split("- name: Reconcile certified package publisher handoff", 1)[1]
 
-    assert "_publish=not_requested" in workflow
-    assert "/commits/{release['sha']}/pulls" in workflow
-    assert 'label.get("name") == "release"' in workflow
+    assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 3" in deploy
+    assert "_publish=not_requested" not in deploy
+    assert "/commits/{release['sha']}/pulls" not in deploy
+    assert 'label.get("name") == "release"' not in deploy
 
 
 def test_arthexis_deploy_uses_current_gway_main(watchtower_workflow) -> None:
