@@ -17,7 +17,13 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.ocpp.simulator.evidence import create_session_evidence
 from apps.ocpp.simulator.network import LiveSimulatorConfig, LiveSimulatorError
+from apps.ocpp.simulator.profile import (
+    ChargerProfile,
+    JsonChargerProfileSource,
+    load_profile,
+)
 from apps.ocpp.simulator.worker import (
     DEFAULT_IDLE_TIMEOUT,
     active_session,
@@ -217,12 +223,28 @@ class Command(BaseCommand):
         if legacy_url:
             parser.add_argument("--url", required=True)
         else:
-            parser.add_argument("endpoint")
+            parser.add_argument("endpoint", nargs="?")
             parser.add_argument("--url", help=argparse.SUPPRESS)
+        parser.add_argument("--profile")
         parser.add_argument("--charger")
-        parser.add_argument("--vendor", default="Arthexis")
-        parser.add_argument("--model", default="Gway Simulator")
-        parser.add_argument("--timeout", type=float, default=30.0)
+        parser.add_argument("--protocol", choices=("ocpp1.6", "ocpp1.6j"))
+        parser.add_argument("--vendor")
+        parser.add_argument("--model")
+        parser.add_argument("--serial")
+        parser.add_argument("--firmware-version")
+        parser.add_argument("--timeout", type=float)
+        parser.add_argument("--authorization-timeout", type=float)
+        parser.add_argument(
+            "--clock-mode",
+            choices=("host", "offset", "fixed", "frozen", "advancing"),
+        )
+        parser.add_argument("--clock-offset-seconds", type=float)
+        parser.add_argument("--clock-start-time")
+        parser.set_defaults(heartbeat=None, reconnect=None)
+        parser.add_argument("--heartbeat", action="store_true", dest="heartbeat")
+        parser.add_argument("--no-heartbeat", action="store_false", dest="heartbeat")
+        parser.add_argument("--reconnect", action="store_true", dest="reconnect")
+        parser.add_argument("--no-reconnect", action="store_false", dest="reconnect")
         parser.add_argument(
             "--idle-timeout",
             type=float,
@@ -279,18 +301,82 @@ class Command(BaseCommand):
             failure.write_text(str(exc))
             raise CommandError(str(exc)) from exc
 
+    @staticmethod
+    def _profile_overrides(options, endpoint: str | None) -> dict[str, object]:
+        overrides: dict[str, object] = {}
+        if options.get("charger"):
+            overrides["identity"] = options["charger"]
+        if options.get("protocol"):
+            overrides["protocol"] = options["protocol"]
+
+        target: dict[str, object] = {}
+        if endpoint:
+            target["url"] = endpoint
+        if options.get("timeout") is not None:
+            target["timeout_seconds"] = options["timeout"]
+        if options.get("allow_insecure_ws"):
+            target["allow_insecure_ws"] = True
+        if target:
+            overrides["target"] = target
+
+        boot: dict[str, object] = {}
+        for option, key in (
+            ("vendor", "vendor"),
+            ("model", "model"),
+            ("serial", "serial"),
+            ("firmware_version", "firmware_version"),
+        ):
+            if options.get(option) is not None:
+                boot[key] = options[option]
+        if boot:
+            overrides["boot"] = boot
+
+        behavior: dict[str, object] = {}
+        if options.get("authorization_timeout") is not None:
+            behavior["authorization_timeout_seconds"] = options[
+                "authorization_timeout"
+            ]
+        if options.get("heartbeat") is not None:
+            behavior["heartbeat"] = options["heartbeat"]
+        if options.get("reconnect") is not None:
+            behavior["reconnect"] = options["reconnect"]
+        if behavior:
+            overrides["behavior"] = behavior
+
+        clock: dict[str, object] = {}
+        if options.get("clock_mode") is not None:
+            clock["mode"] = options["clock_mode"]
+        if options.get("clock_offset_seconds") is not None:
+            clock["offset_seconds"] = options["clock_offset_seconds"]
+        if options.get("clock_start_time") is not None:
+            clock["start_time"] = options["clock_start_time"]
+        if clock:
+            overrides["clock"] = clock
+        return overrides
+
     def _open(self, options) -> None:
-        charger = options.get("charger") or self._default_charger_identity()
-        endpoint = options.get("endpoint") or options.get("url")
+        endpoint_override = options.get("endpoint") or options.get("url")
+        source = None
+        source_payload: dict[str, object] = {}
+        if options.get("profile"):
+            source = JsonChargerProfileSource(Path(options["profile"]))
+            source_payload = source.load()
+
+        profile = load_profile(
+            source,
+            base={"identity": self._default_charger_identity()},
+            overrides=self._profile_overrides(options, endpoint_override),
+        )
+        endpoint = str(profile.target.get("url") or "").strip()
         if not endpoint:
-            raise CommandError("boot requires a CSMS endpoint")
+            raise CommandError("boot requires a CSMS endpoint or profile target.url")
 
         current = active_session()
         if current is not None:
             active_charger = str(current.get("charger"))
             active_endpoint = str(current.get("url"))
-            if active_charger == charger and active_endpoint == endpoint:
-                raise CommandError(f"simulator {charger!r} is already booted")
+            if active_charger == profile.identity and active_endpoint == endpoint:
+                raise CommandError(f"simulator {profile.identity!r} is already booted")
             raise CommandError(
                 f"simulator is already active as {active_charger!r} at "
                 f"{active_endpoint!r}; stop it before booting another charger"
@@ -299,20 +385,46 @@ class Command(BaseCommand):
         if options["idle_timeout"] < 0:
             raise CommandError("--idle-timeout must be zero or greater")
 
-        allow_insecure_ws = options["allow_insecure_ws"] or self._allow_local_insecure_ws(
-            endpoint
+        effective_mapping = profile.as_dict()
+        if self._allow_local_insecure_ws(endpoint):
+            effective_mapping["target"]["allow_insecure_ws"] = True
+            profile = ChargerProfile.from_mapping(effective_mapping)
+
+        if not source_payload:
+            source_payload = profile.as_dict()
+        evidence = create_session_evidence(
+            profile.identity,
+            source_profile=source_payload,
+            effective_profile=profile.as_dict(),
         )
+
         config = LiveSimulatorConfig(
             url=endpoint,
-            charger=charger,
-            vendor=options["vendor"],
-            model=options["model"],
-            timeout=options["timeout"],
-            allow_insecure_ws=allow_insecure_ws,
+            charger=profile.identity,
+            vendor=str(profile.boot.get("vendor") or "Arthexis"),
+            model=str(profile.boot.get("model") or "Gway Simulator"),
+            serial=(
+                str(profile.boot["serial"]) if profile.boot.get("serial") else None
+            ),
+            firmware_version=(
+                str(profile.boot["firmware_version"])
+                if profile.boot.get("firmware_version")
+                else None
+            ),
+            timeout=float(profile.target["timeout_seconds"]),
+            allow_insecure_ws=bool(profile.target["allow_insecure_ws"]),
+            protocol=profile.protocol,
+            authorization_timeout=float(
+                profile.behavior["authorization_timeout_seconds"]
+            ),
+            heartbeat=bool(profile.behavior["heartbeat"]),
+            reconnect_enabled=bool(profile.behavior["reconnect"]),
+            clock=dict(profile.clock),
+            evidence_dir=str(evidence),
         )
         _ = config.endpoint
 
-        cleanup_session_artifacts(charger)
+        cleanup_session_artifacts(profile.identity)
         manage_path = Path(settings.BASE_DIR) / "manage.py"
         process = subprocess.Popen(
             [
@@ -333,34 +445,39 @@ class Command(BaseCommand):
             env=os.environ.copy(),
         )
 
-        deadline = time.monotonic() + options["timeout"]
-        ready = session_path(charger)
-        failure = error_path(charger)
+        deadline = time.monotonic() + config.timeout
+        ready = session_path(profile.identity)
+        failure = error_path(profile.identity)
         while not ready.exists():
             if failure.exists():
                 message = failure.read_text().strip() or "simulator worker failed"
-                self._stop_starting_worker(process, charger)
+                self._stop_starting_worker(process, profile.identity)
                 raise CommandError(message)
             if process.poll() is not None:
-                self._stop_starting_worker(process, charger)
+                self._stop_starting_worker(process, profile.identity)
                 raise CommandError("simulator worker exited before becoming ready")
             if time.monotonic() >= deadline:
-                self._stop_starting_worker(process, charger)
+                self._stop_starting_worker(process, profile.identity)
                 raise CommandError(
                     "simulator worker did not become ready before timeout"
                 )
             time.sleep(0.05)
 
-        metadata = load_session(charger)
+        metadata = load_session(profile.identity)
         self.stdout.write(
             json.dumps(
                 {
-                    "charger": charger,
+                    "charger": profile.identity,
                     "endpoint": endpoint,
                     "open": True,
                     "boot": metadata.get("boot"),
                     "idle_timeout": options["idle_timeout"],
                     "lifecycle": "on-demand",
+                    "profile": str(evidence / "profile.json"),
+                    "effective_profile": str(evidence / "effective-profile.json"),
+                    "clock": metadata.get("clock"),
+                    "charger_time": metadata.get("charger_time"),
+                    "csms_time": metadata.get("csms_time"),
                 },
                 sort_keys=True,
             )
