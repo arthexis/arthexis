@@ -32,7 +32,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           deploy=true
-          stage="arthexis"
+          stage="2-remote"
           timing="queued"
 
           if [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] &&
@@ -41,10 +41,6 @@ jobs:
             deploy=false
           fi
 
-          labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
-          if grep -Fxq remote-only <<<"$labels"; then
-            stage="remote-only"
-          fi
 
           run_name="$(git show -s --format=%s "$AFTER_SHA")"
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"

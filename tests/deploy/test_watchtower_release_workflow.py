@@ -51,12 +51,14 @@ def test_watchtower_release_handoff_is_recoverable_without_gh_cli(watchtower_dep
     assert '_publish=dispatched' in workflow
 
 
-def test_watchtower_requires_release_label_before_dispatch(watchtower_deploy_workflow: str):
+def test_release_runlevel_is_the_publication_trigger(watchtower_deploy_workflow: str):
     workflow = watchtower_deploy_workflow
+    deploy = workflow.split("- name: Reconcile certified package publisher handoff", 1)[1]
 
-    assert "_publish=not_requested" in workflow
-    assert "/commits/{release['sha']}/pulls" in workflow
-    assert 'label.get("name") == "release"' in workflow
+    assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 3" in deploy
+    assert "_publish=not_requested" not in deploy
+    assert "/commits/{release['sha']}/pulls" not in deploy
+    assert 'label.get("name") == "release"' not in deploy
 
 
 def test_arthexis_deploy_uses_current_gway_main(watchtower_workflow) -> None:
@@ -97,9 +99,44 @@ def test_watchtower_release_obeys_queue_timing(watchtower_workflow) -> None:
     gate = watchtower_workflow.job("queue-gate")
     deploy = watchtower_workflow.job("deploy")
 
-    assert 'needs.classify.outputs.stage == "release"' not in gate
     assert "forced_by_release_or_deploy_label" not in gate
-    assert "needs.classify.outputs.stage == 'remote-only' || needs.queue-gate.outputs.deploy == 'true'" in deploy
+    assert "needs.queue-gate.outputs.deploy == 'true'" in deploy
+
+
+def test_watchtower_stages_are_cumulative_runlevels(watchtower_deploy_workflow: str) -> None:
+    workflow = watchtower_deploy_workflow
+    dispatch = workflow.split("workflow_dispatch:", 1)[1].split("concurrency:", 1)[0]
+
+    assert "default: 2-remote" in dispatch
+    assert "- 0-gway" in dispatch
+    assert "- 1-arthexis" in dispatch
+    assert "- 2-remote" in dispatch
+    assert "- 3-release" in dispatch
+    assert "remote-only" not in workflow
+    assert "stage_level: ${{ steps.change.outputs.stage_level }}" in workflow
+    assert "0-gway) stage_level=0" in workflow
+    assert "1-arthexis) stage_level=1" in workflow
+    assert "2-remote) stage_level=2" in workflow
+    assert "3-release) stage_level=3" in workflow
+
+
+def test_watchtower_stage_gates_are_cumulative(watchtower_deploy_workflow: str) -> None:
+    workflow = watchtower_deploy_workflow
+
+    assert "- name: Install exact canonical Gway\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0" in workflow
+    assert "- name: Deploy Arthexis through Gway system scope\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1" in workflow
+    assert "- name: Converge Watchtower Remote stage\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
+    assert "- name: Verify Watchtower Wire capability\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
+    assert "- name: Record accepted Watchtower deployment\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
+    assert "- name: Reconcile certified package publisher handoff\n        if: fromJSON(env.WATCHTOWER_LEVEL) >= 3" in workflow
+
+
+def test_release_stage_uses_current_candidate_pair(watchtower_workflow) -> None:
+    pair = watchtower_workflow.step("Resolve exact deployment pair")
+
+    assert "accepted-release" not in pair
+    assert "Manual release requires a valid accepted" not in pair
+    assert 'gway_sha="$current_gway"' in pair
 
 
 def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workflow) -> None:
@@ -112,30 +149,6 @@ def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workfl
     assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in gate
     assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in gate
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
-
-
-def test_manual_release_pins_both_packages_to_accepted_manifest(watchtower_workflow):
-    pair = watchtower_workflow.step("Resolve exact deployment pair")
-    release_branch = pair.split(
-        'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
-    )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
-
-    assert 'arthexis_sha="$previous_arthexis"' in release_branch
-    assert 'gway_sha="$previous_gway"' in release_branch
-    assert 'source="accepted-release"' in release_branch
-    assert 'requested_arthexis=' not in release_branch
-    assert 'current_arthexis' not in release_branch
-    assert 'current_gway' not in release_branch
-
-
-def test_manual_release_requires_valid_accepted_pair(watchtower_workflow):
-    pair = watchtower_workflow.step("Resolve exact deployment pair")
-    release_branch = pair.split(
-        'if [[ "$RELEASE_INTENT" == "manual" ]]; then', 1
-    )[1].split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[0]
-
-    assert "Manual release requires a valid accepted Arthexis SHA." in release_branch
-    assert "Manual release requires a valid accepted Gway SHA." in release_branch
 
 
 def test_watchtower_acceptance_does_not_mutate_product_repositories(

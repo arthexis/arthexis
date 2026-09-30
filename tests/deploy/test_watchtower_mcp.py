@@ -124,22 +124,21 @@ def test_remote_recipe_installs_builtin_remote_auth_service_on_loopback() -> Non
 
 
 @pytest.mark.workflow
-def test_base_watchtower_stage_keeps_remote_provisioning_as_a_phase(watchtower_workflow) -> None:
+def test_remote_runlevel_keeps_remote_provisioning_as_a_phase(watchtower_workflow) -> None:
     workflow = watchtower_workflow.text
     preflight = watchtower_workflow.step("Preflight Watchtower Remote stage")
     converge = watchtower_workflow.step("Converge Watchtower Remote stage")
     verify = watchtower_workflow.step("Verify Watchtower Remote stage")
 
-    assert "default: arthexis" in workflow
+    assert "default: 2-remote" in workflow
     for step in (preflight, converge, verify):
-        assert "env.WATCHTOWER_STAGE == 'arthexis'" in step
+        assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in step
 
 
 @pytest.mark.workflow
-def test_watchtower_deploy_accepts_remote_only_as_repair_stage() -> None:
+def test_watchtower_remote_stage_is_cumulative_not_repair_only() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "          - remote-only" in workflow
-    assert 'grep -Fxq remote-only <<<"$labels"' in workflow
+    assert "remote-only" not in workflow
     assert "- name: Preflight Watchtower Remote stage" in workflow
     assert "- name: Converge Watchtower Remote stage" in workflow
     assert "- name: Verify Watchtower Remote stage" in workflow
@@ -377,10 +376,10 @@ def test_watchtower_readiness_uses_arthexis_product_runtime() -> None:
 
 
 @pytest.mark.workflow
-def test_remote_verifier_runs_in_full_and_remote_only_stages() -> None:
+def test_remote_verifier_runs_at_remote_runlevel_and_above() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
-    assert "env.WATCHTOWER_STAGE == 'remote-only'" in workflow
+    assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
+    assert "remote-only" not in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
@@ -405,7 +404,7 @@ def test_watchtower_restores_previous_gway_runtime_on_failed_deploy(watchtower_w
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
     assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
     assert (
-        "failure() && env.WATCHTOWER_STAGE == 'arthexis' "
+        "failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 "
         "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
         "&& env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'"
     ) in rollback
@@ -450,7 +449,7 @@ def test_full_ci_does_not_rerun_for_label_only_changes() -> None:
 @pytest.mark.workflow
 def test_gway_dispatch_coalesces_with_current_arthexis_main(watchtower_workflow) -> None:
     pair = watchtower_workflow.step("Resolve exact deployment pair")
-    dispatch = pair.split('elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
+    dispatch = pair.split('if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then', 1)[1]
     dispatch = dispatch.split('else\n            requested_arthexis=', 1)[0]
 
     assert 'arthexis_sha="$current_arthexis"' in dispatch

@@ -49,13 +49,12 @@ def test_base_watchtower_stage_includes_remote_acceptance() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "stage:" in workflow
-    assert "default: arthexis" in workflow
-    assert "default: arthexis" in workflow
+    assert "default: 2-remote" in workflow
     assert "- name: Preflight Watchtower Remote stage" in workflow
     assert "- name: Converge Watchtower Remote stage" in workflow
     assert "- name: Verify Watchtower Remote stage" in workflow
-    assert "env.WATCHTOWER_STAGE == 'arthexis'" in workflow
-    assert "env.WATCHTOWER_STAGE == 'remote-only'" in workflow
+    assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
+    assert "remote-only" not in workflow
     assert "gway --recipe deploy/remote.rx" in workflow
     assert "gway --recipe deploy/remote-expose.rx" in workflow
     assert "verify_remote_deployment.py local" in workflow
