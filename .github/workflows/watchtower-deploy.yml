@@ -967,26 +967,8 @@ jobs:
               package = release["package"]
               version = release["version"]
 
-              # Release intent can come from durable PR metadata or from a manually
-              # certified Watchtower release run. Both remain rediscoverable on retry.
-              _, pulls = request(
-                  "GET",
-                  f"{api}/repos/{release['repository']}/commits/{release['sha']}/pulls",
-              )
-              release_prs = [
-                  pull
-                  for pull in (pulls or [])
-                  if pull.get("merge_commit_sha") == release["sha"]
-                  and any(
-                      label.get("name") == "release"
-                      for label in pull.get("labels", [])
-                  )
-              ]
-              manual_release = os.environ.get("WATCHTOWER_RELEASE_INTENT") == "manual"
-              if not release_prs and not manual_release:
-                  print(f"{package}_publish=not_requested")
-                  continue
-
+              # Reaching stage 3 is the release intent. Lower runlevels never execute
+              # this handoff, so no secondary PR-label gate is required here.
               target = f".watchtower/releases/{package}/{version}.json"
               status, body = request(
                   "GET",
