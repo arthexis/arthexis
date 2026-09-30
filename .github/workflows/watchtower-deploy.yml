@@ -898,13 +898,25 @@ jobs:
             sudo -n journalctl -u gway-mcp-server.service -u gway-remote-auth.service -n 80 --no-pager || true
           }
 
-          sudo -n systemctl is-active --quiet gway-mcp-server.service
-          sudo -n systemctl is-active --quiet gway-remote-auth.service
           cd /opt/arthexis
 
           # The local acceptance helper owns listener readiness. It retries both
           # ports after service restart, avoiding a one-shot probe racing systemd.
           if ! sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py local; then
+            remote_diagnostics
+            exit 1
+          fi
+
+          # Once listener readiness has succeeded, both units must also have
+          # converged to active. Wrap these checks so failures emit diagnostics
+          # instead of leaking systemctl's opaque exit code 3.
+          if ! sudo -n systemctl is-active --quiet gway-mcp-server.service; then
+            echo "gway_mcp_server_active=failed"
+            remote_diagnostics
+            exit 1
+          fi
+          if ! sudo -n systemctl is-active --quiet gway-remote-auth.service; then
+            echo "gway_remote_auth_active=failed"
             remote_diagnostics
             exit 1
           fi
