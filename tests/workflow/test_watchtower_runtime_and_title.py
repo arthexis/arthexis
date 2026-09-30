@@ -25,7 +25,7 @@ def test_watchtower_push_dispatch_uses_subject_only_for_run_name():
 def test_arthexis_candidate_dispatch_converges_with_current_gway():
     deploy = DEPLOY.read_text(encoding="utf-8")
     start = deploy.index('elif [[ "$EVENT_TYPE" == "arthexis-candidate" ]]')
-    end = deploy.index("          else", start)
+    end = deploy.index('echo "Unsupported repository dispatch type: $EVENT_TYPE"', start)
     block = deploy[start:end]
 
     assert 'arthexis_sha="$REQUESTED_ARTHEXIS_SHA"' in block
