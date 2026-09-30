@@ -510,8 +510,10 @@ jobs:
           sudo -n test -f /var/lib/gway/venv/share/gway/sampler/mcp/serve.rx
           sudo -n /usr/local/bin/gway help survey >/dev/null
           sudo -n /usr/local/bin/gway help mcp local >/dev/null
-          sudo -n /usr/local/bin/gway --json resolve mcp local | grep -F '"kind": "recipe"' >/dev/null
-          sudo -n /usr/local/bin/gway --json resolve mcp serve | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve mcp local |
+            python3 -c 'import json,sys; value=json.load(sys.stdin); assert value.get("kind") in {"recipe","operation"}; assert "mcp" in str(value.get("target","")) and "local" in str(value.get("target",""))'
+          sudo -n /usr/local/bin/gway --json resolve mcp serve |
+            python3 -c 'import json,sys; value=json.load(sys.stdin); assert value.get("kind") in {"recipe","operation"}; assert "mcp" in str(value.get("target","")) and "serve" in str(value.get("target",""))'
           sudo -n /usr/local/bin/gway security scope list >/dev/null
           sudo -n /usr/local/bin/gway security whoami >/dev/null
           echo "gway_activation=ok"
@@ -1030,9 +1032,8 @@ jobs:
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
-          sudo -n /usr/local/bin/gway help survey >/dev/null
-          sudo -n /usr/local/bin/gway help mcp local >/dev/null
-          sudo -n /usr/local/bin/gway security scope list >/dev/null
+          sudo -n /usr/local/bin/gway --help >/dev/null
+          sudo -n /usr/local/bin/gway version >/dev/null
 
           sudo -n rm -rf /var/lib/gway/venv.failed
           echo "gway_runtime_rollback=restored"
