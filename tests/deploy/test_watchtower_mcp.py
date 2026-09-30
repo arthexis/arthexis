@@ -394,27 +394,27 @@ def test_ready_recipe_executes_product_runtime_externally() -> None:
 
 
 @pytest.mark.workflow
-def test_watchtower_restores_previous_gway_runtime_on_failed_deploy(watchtower_workflow) -> None:
+def test_watchtower_restores_only_uncertified_gway_runtime_on_failed_deploy(watchtower_workflow) -> None:
     deploy = watchtower_workflow.job("deploy")
     install = watchtower_workflow.step("Install exact canonical Gway")
-    accepted = watchtower_workflow.step("Record accepted Watchtower deployment")
+    accepted = watchtower_workflow.step("Record accepted Gway stage")
     rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
 
     assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in install
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
-    assert 'echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
+    assert 'echo "GWAY_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
     assert (
         "failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 "
         "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
-        "&& env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'"
+        "&& env.GWAY_DEPLOYMENT_ACCEPTED != 'true'"
     ) in rollback
     assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in rollback
     assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in rollback
-    assert "systemctl restart gway-mcp-server.service" in rollback
-    assert "systemctl restart gway-remote-auth.service" in rollback
-    assert "systemctl is-active --quiet gway-mcp-server.service" in rollback
-    assert "systemctl is-active --quiet gway-remote-auth.service" in rollback
-    assert 'for port in 8000 8001; do' in rollback
+    assert "/usr/local/bin/gway help survey" in rollback
+    assert "/usr/local/bin/gway help mcp local" in rollback
+    assert "/usr/local/bin/gway security scope list" in rollback
+    assert "systemctl restart gway-mcp-server.service" not in rollback
+    assert "systemctl restart gway-remote-auth.service" not in rollback
     assert 'gway_runtime_rollback=restored' in rollback
     assert deploy.index(accepted) < deploy.index(rollback)
 

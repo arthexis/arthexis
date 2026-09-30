@@ -194,7 +194,7 @@ jobs:
       WATCHTOWER_RELEASE_INTENT: ${{ needs.classify.outputs.stage == '3-release' && 'manual' || '' }}
     steps:
       - name: Clean privileged Python bytecode from runner workspace
-        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -474,7 +474,7 @@ jobs:
           fi
 
       - name: Install canonical Watchtower Gway admin launcher
-        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -499,6 +499,108 @@ jobs:
           sudo -n test -f /var/lib/gway/cache/security/state.sqlite
           echo "canonical_gway_user=ok"
           echo "canonical_gway_admin=ok"
+
+      - name: Activate and verify canonical Gway
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo -n test -f /var/lib/gway/venv/share/gway/sampler/survey/__main__.rx
+          sudo -n test -f /var/lib/gway/venv/share/gway/sampler/mcp/local.rx
+          sudo -n test -f /var/lib/gway/venv/share/gway/sampler/mcp/serve.rx
+          sudo -n /usr/local/bin/gway help survey >/dev/null
+          sudo -n /usr/local/bin/gway help mcp local >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve mcp local | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway --json resolve mcp serve | grep -F '"kind": "recipe"' >/dev/null
+          sudo -n /usr/local/bin/gway security scope list >/dev/null
+          sudo -n /usr/local/bin/gway security whoami >/dev/null
+          echo "gway_activation=ok"
+          echo "gway_sampler_survey=ok"
+          echo "gway_mcp_local=ok"
+          echo "gway_security_registry=ok"
+
+      - name: Record accepted Gway stage
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          api = os.environ["GITHUB_API_URL"].rstrip("/")
+          token = os.environ["GH_TOKEN"]
+          state_branch = "watchtower-state"
+          state_path = ".watchtower/gway-accepted.json"
+
+          manifest = {
+              "gway_sha": os.environ["GWAY_EXPECTED_SHA"],
+              "gway_version": os.environ["GWAY_EXPECTED_VERSION"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "run_url": (
+                  f'{os.environ["GITHUB_SERVER_URL"]}/{repository}/actions/runs/'
+                  f'{os.environ["GITHUB_RUN_ID"]}'
+              ),
+              "accepted_at": datetime.now(timezone.utc).isoformat(),
+              "stages": ["0-gway"],
+          }
+
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  f"{api}/repos/{repository}/{path}",
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, None
+                  raise
+
+          status, _ = request("GET", f"git/ref/heads/{state_branch}")
+          if status == 404:
+              request(
+                  "POST",
+                  "git/refs",
+                  {"ref": f"refs/heads/{state_branch}", "sha": os.environ["GITHUB_SHA"]},
+              )
+
+          status, existing = request(
+              "GET", f"contents/{state_path}?ref={state_branch}"
+          )
+          payload = {
+              "message": (
+                  "Record accepted Gway stage "
+                  f'{manifest["gway_sha"][:12]}'
+              ),
+              "content": base64.b64encode(
+                  (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+              ).decode(),
+              "branch": state_branch,
+          }
+          if status != 404:
+              payload["sha"] = existing["sha"]
+
+          request("PUT", f"contents/{state_path}", payload)
+          print(json.dumps(manifest, sort_keys=True))
+          PY
+          echo "GWAY_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Validate baseline Nginx configuration
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
@@ -906,7 +1008,7 @@ jobs:
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Restore previous Gway runtime after failed deployment
-        if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
+        if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.GWAY_DEPLOYMENT_ACCEPTED != 'true' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -928,33 +1030,9 @@ jobs:
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
-          sudo -n systemctl daemon-reload
-          sudo -n systemctl restart gway-mcp-server.service
-          sudo -n systemctl restart gway-remote-auth.service
-          sudo -n systemctl is-active --quiet gway-mcp-server.service
-          sudo -n systemctl is-active --quiet gway-remote-auth.service
-
-          for port in 8000 8001; do
-            ready=false
-            for attempt in $(seq 1 20); do
-              if python3 - "$port" <<'PY'
-          import socket
-          import sys
-
-          with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
-              pass
-          PY
-              then
-                ready=true
-                break
-              fi
-              sleep 1
-            done
-            if [[ "$ready" != "true" ]]; then
-              echo "gway_runtime_rollback=service_port_failed port=$port" >&2
-              exit 1
-            fi
-          done
+          sudo -n /usr/local/bin/gway help survey >/dev/null
+          sudo -n /usr/local/bin/gway help mcp local >/dev/null
+          sudo -n /usr/local/bin/gway security scope list >/dev/null
 
           sudo -n rm -rf /var/lib/gway/venv.failed
           echo "gway_runtime_rollback=restored"
