@@ -24,7 +24,11 @@ class FakeSimulator:
         self.connected = False
 
     async def boot(self):
-        return SimpleNamespace(status="Accepted", interval=0)
+        return SimpleNamespace(
+            status="Accepted",
+            interval=0,
+            current_time="2026-09-30T12:00:00Z",
+        )
 
 
 def test_default_lifecycle_has_no_idle_shutdown():
@@ -106,5 +110,8 @@ def test_status_reports_on_demand_lifecycle():
         response = await worker.dispatch({"action": "status"})
         assert response["lifecycle"] == "on-demand"
         assert response["idle_timeout"] == 0.0
+        assert response["csms_time"] == "2026-09-30T12:00:00Z"
+        assert response["clock"]["mode"] == "host"
+        assert response["clock"]["charger_time"] != response["csms_time"]
 
     asyncio.run(exercise())
