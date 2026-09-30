@@ -16,11 +16,20 @@ database_path="${ARTHEXIS_DATABASE_PATH:-$data_dir/db.sqlite3}"
 venv_dir="$root_dir/.venv"
 
 mkdir -p "$data_dir"
+venv_created=false
 if [[ ! -x "$venv_dir/bin/python" ]]; then
     python3 -m venv "$venv_dir"
+    venv_created=true
 fi
 
-"$venv_dir/bin/python" -m pip install --requirement "$root_dir/requirements.txt"
+if "$venv_dir/bin/python" -m pip --version >/dev/null 2>&1; then
+    "$venv_dir/bin/python" -m pip install --requirement "$root_dir/requirements.txt"
+elif [[ "$venv_created" == true ]]; then
+    echo "New Arthexis virtual environment does not provide pip." >&2
+    exit 1
+else
+    echo "Using externally managed Arthexis virtual environment; dependency installation already converged."
+fi
 "$venv_dir/bin/python" -c "from pathlib import Path; from arthexis.reconciliation.source import classify_database; import sys; status = classify_database(Path(sys.argv[1])); print(f'Database classification: {status}'); raise SystemExit(0 if status in {'fresh', 'v2'} else 2)" "$database_path"
 ARTHEXIS_DATA_DIR="$data_dir" ARTHEXIS_DATABASE_PATH="$database_path" \
     "$venv_dir/bin/python" "$root_dir/manage.py" migrate --noinput
