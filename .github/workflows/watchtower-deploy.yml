@@ -500,18 +500,59 @@ jobs:
           echo "canonical_gway_user=ok"
           echo "canonical_gway_admin=ok"
 
-      - name: Validate baseline Nginx configuration
+      - name: Validate and recover baseline Nginx configuration
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
-          if ! output="$(sudo -n /usr/sbin/nginx -t 2>&1)"; then
+
+          check_nginx() {
+            sudo -n /usr/sbin/nginx -t 2>&1
+          }
+
+          if output="$(check_nginx)"; then
+            printf '%s\n' "$output"
+            echo "nginx_baseline=ok"
+            exit 0
+          fi
+
+          printf '%s\n' "$output" >&2
+          echo "nginx_baseline=invalid"
+
+          enabled_path="$(sed -nE 's#.* in (/etc/nginx/sites-enabled/[^: ]+):[0-9]+.*#\1#p' <<<"$output" | head -n 1)"
+          if [[ -z "$enabled_path" ]] || ! sudo -n test -L "$enabled_path"; then
+            echo "nginx_recovery=unowned_or_unresolved" >&2
+            exit 1
+          fi
+
+          target="$(sudo -n readlink -f "$enabled_path")"
+          expected="/etc/nginx/sites-available/$(basename "$enabled_path")"
+          if [[ "$target" != "$expected" ]]; then
+            echo "nginx_recovery=unexpected_target target=$target" >&2
+            exit 1
+          fi
+
+          if sudo -n /usr/local/bin/gway recover path "$target"; then
+            echo "nginx_recovery=journal_restored path=$target"
+          elif [[ "$(basename "$enabled_path")" == "register-arthexis-com" ]]; then
+            # Compatibility cleanup for the one known corrupt artifact created by
+            # the pre-recovery Watchtower bootstrap. Preserve it for inspection.
+            quarantine="/etc/nginx/sites-available/.register-arthexis-com.corrupt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            sudo -n mv "$target" "$quarantine"
+            sudo -n rm -f "$enabled_path"
+            echo "nginx_recovery=legacy_quarantined path=$quarantine"
+          else
+            echo "nginx_recovery=no_proven_managed_state path=$target" >&2
+            exit 1
+          fi
+
+          if ! output="$(check_nginx)"; then
             printf '%s\n' "$output" >&2
-            echo "nginx_baseline=invalid" >&2
+            echo "nginx_recovery=failed" >&2
             exit 1
           fi
           printf '%s\n' "$output"
-          echo "nginx_baseline=ok"
+          echo "nginx_baseline=recovered"
 
       - name: Converge public Gway bootstrap
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
