@@ -74,7 +74,7 @@ class ChargerProfile:
     configuration: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_mapping(cls, mapping: dict[str, Any]) -> "ChargerProfile":
+    def from_mapping(cls, mapping: dict[str, Any]) -> ChargerProfile:
         merged = _deep_merge(copy.deepcopy(DEFAULT_PROFILE), mapping)
         identity = str(merged.get("identity") or "").strip()
         if not identity:
