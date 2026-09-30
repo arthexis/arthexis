@@ -16,6 +16,10 @@ MAX_READ_BYTES = 1024 * 1024
 MAX_JOURNAL_LINES = 400
 MAX_RAW_SNAPSHOTS = 20
 
+AUTH_HEADER = re.compile(
+    r"(?i)\\b(authorization|proxy[-_]?authorization)\\s*:\\s*.*$"
+)
+
 SENSITIVE_ASSIGNMENT = re.compile(
     r"(?i)\b(authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?key|"
     r"secret(?:[-_]?key)?|client[-_]?secret|token|password|passwd|cookie|"
