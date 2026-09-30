@@ -815,6 +815,42 @@ jobs:
           fi
           echo "service=active_independent_of_gway"
 
+      - name: Verify satellite bootstrap offline
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sandbox="$(mktemp -d)"
+          trap 'rm -rf "$sandbox"' EXIT
+
+          bootstrap=/var/lib/gway/venv/share/gway/sampler/bootstrap/arthexis.sh
+          test -f "$bootstrap"
+
+          uv_cache="${UV_CACHE_DIR:-${HOME}/.cache/uv}"
+          mkdir -p "$sandbox/home" "$sandbox/cache"
+
+          HOME="$sandbox/home" \
+          XDG_CACHE_HOME="$sandbox/cache" \
+          UV_CACHE_DIR="$uv_cache" \
+          UV_OFFLINE=1 \
+          PIP_NO_INDEX=1 \
+          GWAY_BOOTSTRAP_GWAY=/usr/local/bin/gway \
+          ARTHEXIS_BOOTSTRAP_SOURCE="$GITHUB_WORKSPACE" \
+          ARTHEXIS_BOOTSTRAP_SHA="$ARTHEXIS_EXPECTED_SHA" \
+          ARTHEXIS_BOOTSTRAP_HOME="$sandbox/home/.local/opt/arthexis" \
+          ARTHEXIS_BOOTSTRAP_VERIFY_ONLY=1 \
+            sh "$bootstrap"
+
+          test -s "$sandbox/home/.local/opt/arthexis/var/db.sqlite3"
+          test -x "$sandbox/home/.local/opt/arthexis/.venv/bin/python"
+
+          {
+            echo "SATELLITE_BOOTSTRAP_TESTED_GWAY_SHA=$GWAY_EXPECTED_SHA"
+            echo "SATELLITE_BOOTSTRAP_TESTED_ARTHEXIS_SHA=$ARTHEXIS_EXPECTED_SHA"
+          } >> "$GITHUB_ENV"
+
+          echo "satellite_bootstrap_offline=ok"
+
       - name: Preflight Watchtower Remote stage
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
@@ -862,25 +898,13 @@ jobs:
             sudo -n journalctl -u gway-mcp-server.service -u gway-remote-auth.service -n 80 --no-pager || true
           }
 
+          sudo -n systemctl is-active --quiet gway-mcp-server.service
+          sudo -n systemctl is-active --quiet gway-remote-auth.service
           cd /opt/arthexis
 
           # The local acceptance helper owns listener readiness. It retries both
           # ports after service restart, avoiding a one-shot probe racing systemd.
           if ! sudo -n /var/lib/gway/venv/bin/python scripts/verify_remote_deployment.py local; then
-            remote_diagnostics
-            exit 1
-          fi
-
-          # Once listener readiness has succeeded, both units must also have
-          # converged to active. Wrap these checks so failures emit diagnostics
-          # instead of leaking systemctl's opaque exit code 3.
-          if ! sudo -n systemctl is-active --quiet gway-mcp-server.service; then
-            echo "gway_mcp_server_active=failed"
-            remote_diagnostics
-            exit 1
-          fi
-          if ! sudo -n systemctl is-active --quiet gway-remote-auth.service; then
-            echo "gway_remote_auth_active=failed"
             remote_diagnostics
             exit 1
           fi
@@ -890,6 +914,39 @@ jobs:
           fi
           echo "remote_services=active"
           echo "remote_acceptance=ok"
+
+      - name: Verify public satellite package identity
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${SATELLITE_BOOTSTRAP_TESTED_GWAY_SHA:-}"
+          test -n "${SATELLITE_BOOTSTRAP_TESTED_ARTHEXIS_SHA:-}"
+          test "$SATELLITE_BOOTSTRAP_TESTED_GWAY_SHA" = "$GWAY_EXPECTED_SHA"
+          test "$SATELLITE_BOOTSTRAP_TESTED_ARTHEXIS_SHA" = "$ARTHEXIS_EXPECTED_SHA"
+
+          satellite="$(mktemp)"
+          gway_bootstrap="$(mktemp)"
+          trap 'rm -f "$satellite" "$gway_bootstrap"' EXIT
+
+          curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            https://install.arthexis.com/satellite --output "$satellite"
+          curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            https://install.arthexis.com/gway --output "$gway_bootstrap"
+
+          grep -F 'GWAY_BOOTSTRAP_GWAY' "$satellite" >/dev/null
+          grep -F 'ARTHEXIS_BOOTSTRAP_SHA' "$satellite" >/dev/null
+          grep -F 'ARTHEXIS_BOOTSTRAP_VERIFY_ONLY' "$satellite" >/dev/null
+          grep -Fx '# GWAY_BOOTSTRAP_V1' "$gway_bootstrap" >/dev/null
+
+          gway_archive="https://github.com/arthexis/gway/archive/$GWAY_EXPECTED_SHA.tar.gz"
+          arthexis_archive="https://github.com/arthexis/arthexis/archive/$ARTHEXIS_EXPECTED_SHA.tar.gz"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 1 --retry-all-errors \
+            --range 0-0 "$gway_archive" >/dev/null
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 1 --retry-all-errors \
+            --range 0-0 "$arthexis_archive" >/dev/null
+
+          echo "satellite_public_package_identity=ok"
 
       - name: Preflight Watchtower Wire capability
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
