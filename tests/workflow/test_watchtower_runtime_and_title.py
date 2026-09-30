@@ -16,7 +16,7 @@ def test_watchtower_push_dispatch_uses_subject_only_for_run_name():
 
     assert 'run_name="$(git show -s --format=%s "$AFTER_SHA")"' in candidate
     assert "-f event_type='arthexis-candidate'" in candidate
-    assert "-f client_payload[run_name]="$RUN_NAME"" in candidate
+    assert '-f client_payload[run_name]="$RUN_NAME"' in candidate
     assert "types: [gway-candidate, arthexis-candidate]" in deploy
     assert "github.event.head_commit.message" not in deploy
     assert "push:" not in deploy.split("on:", 1)[1].split("permissions:", 1)[0]
