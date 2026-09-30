@@ -139,16 +139,21 @@ def test_release_stage_uses_current_candidate_pair(watchtower_workflow) -> None:
     assert 'gway_sha="$current_gway"' in pair
 
 
-def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workflow) -> None:
+def test_watchtower_normal_queue_counts_runnable_non_hold_prs(watchtower_workflow) -> None:
     gate = watchtower_workflow.job("queue-gate")
     assert "for repository in arthexis/arthexis arthexis/gway; do" in gate
-    assert "pulls?state=open&per_page=100" in gate
-    assert '. == "on-hold"' in gate
-    assert '. == "on hold"' in gate
+    assert "gh pr list --repo" in gate
+    assert "|on-hold|" in gate
+    assert "|on hold|" in gate
+    assert "|needs-watchtower|" in gate
+    assert "waiting-merge" in gate
+    assert "waiting-watchtower" in gate
+    assert "watchtower_dependency.py" in gate
     assert "draft" not in gate.lower()
     assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in gate
     assert 'echo "deploy=true" >> "$GITHUB_OUTPUT"' in gate
     assert "watchtower_deploy=coalesced_active_pr_queue" in gate
+    assert "watchtower_deploy=dependency_unblock_or_queue_drained" in gate
 
 
 def test_watchtower_acceptance_does_not_mutate_product_repositories(
