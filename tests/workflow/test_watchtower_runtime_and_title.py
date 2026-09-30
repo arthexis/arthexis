@@ -99,3 +99,28 @@ def test_remote_services_remain_remote_stage_concerns():
     assert "gway-mcp-server.service" not in stage_zero
     assert "gway-remote-auth.service" in remote
     assert "gway-mcp-server.service" in remote
+
+
+def test_stage_zero_accepts_recipe_or_operation_resolution_for_mcp_capabilities():
+    deploy = DEPLOY.read_text(encoding="utf-8")
+    activate = deploy.index("      - name: Activate and verify canonical Gway")
+    certify = deploy.index("      - name: Record accepted Gway stage")
+    block = deploy[activate:certify]
+
+    assert 'value.get("kind") in {"recipe","operation"}' in block
+    assert 'value.get("target","")' in block
+    assert '"mcp"' in block
+    assert '"local"' in block
+    assert '"serve"' in block
+    assert 'grep -F \'"kind": "recipe"\'' not in block
+
+
+def test_gway_rollback_checks_baseline_runtime_health_not_new_candidate_features():
+    deploy = DEPLOY.read_text(encoding="utf-8")
+    rollback = deploy.index("      - name: Restore previous Gway runtime after failed deployment")
+    block = deploy[rollback:rollback + 2600]
+
+    assert "/usr/local/bin/gway --help" in block
+    assert "/usr/local/bin/gway version" in block
+    assert "/usr/local/bin/gway help survey" not in block
+    assert "/usr/local/bin/gway help mcp local" not in block
