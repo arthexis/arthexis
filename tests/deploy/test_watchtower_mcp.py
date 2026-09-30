@@ -502,6 +502,11 @@ def test_watchtower_validates_nginx_before_bootstrap_mutation(watchtower_workflo
     assert "sudo -n /usr/sbin/nginx -t" in baseline
     assert "nginx_baseline=invalid" in baseline
     assert "nginx_baseline=ok" in baseline
+    assert 'gway recover path "$target"' in baseline
+    assert "nginx_recovery=journal_restored" in baseline
+    assert "nginx_recovery=no_proven_managed_state" in baseline
+    assert "register-arthexis-com" in baseline
+    assert "nginx_baseline=recovered" in baseline
     assert deploy.index(baseline) < deploy.index(bootstrap)
 
 
