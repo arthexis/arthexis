@@ -41,9 +41,20 @@ class LiveSimulatorConfig:
     evidence_dir: str | None = None
 
     @property
+    def subprotocol(self) -> str:
+        protocol = self.protocol.strip().lower()
+        if protocol not in {"ocpp1.6", "ocpp1.6j"}:
+            raise LiveSimulatorError(f"unsupported simulator protocol: {self.protocol!r}")
+        # OCPP 1.6 JSON uses the standard WebSocket subprotocol token below.
+        return "ocpp1.6"
+
+    @property
     def endpoint(self) -> str:
-        base = self.url.rstrip("/")
-        scheme = urlsplit(base).scheme.lower()
+        raw = self.url.strip()
+        if not raw:
+            raise LiveSimulatorError("simulator URL is required")
+        parsed = urlsplit(raw)
+        scheme = parsed.scheme.lower()
         if scheme not in {"ws", "wss"}:
             raise LiveSimulatorError("simulator URL must use ws:// or wss://")
         if scheme == "ws" and not self.allow_insecure_ws:
@@ -51,7 +62,17 @@ class LiveSimulatorConfig:
                 "plaintext ws:// is disabled; pass --allow-insecure-ws "
                 "for trusted local testing"
             )
-        return f"{base}/ocpp/{quote(self.charger, safe='')}"
+
+        encoded = quote(self.charger, safe="")
+        if "{charger}" in raw:
+            return raw.replace("{charger}", encoded)
+
+        # Preserve the historical Arthexis base-URL behavior when no path is
+        # supplied. A non-root path is treated as an exact third-party CSMS
+        # WebSocket endpoint rather than forcing Arthexis's /ocpp/<id> route.
+        if parsed.path and parsed.path != "/":
+            return raw
+        return f"{raw.rstrip('/')}/ocpp/{encoded}"
 
 
 @dataclass(frozen=True)
@@ -63,8 +84,6 @@ class BootResult:
 
 class LiveOcpp16Simulator:
     """Own one live OCPP 1.6J WebSocket and correlate charger calls."""
-
-    subprotocol = "ocpp1.6"
 
     def __init__(
         self,
@@ -88,18 +107,19 @@ class LiveOcpp16Simulator:
         try:
             connection = await self.connection_factory(
                 self.config.endpoint,
-                subprotocols=[self.subprotocol],
+                subprotocols=[self.config.subprotocol],
                 open_timeout=self.config.timeout,
             )
         except (WebSocketException, OSError, ValueError) as exc:
             raise LiveSimulatorError(f"failed to connect to CSMS: {exc}") from exc
 
         negotiated = getattr(connection, "subprotocol", None)
-        if negotiated not in {self.subprotocol, "ocpp1.6j"}:
+        if negotiated not in {self.config.subprotocol, "ocpp1.6j"}:
             with contextlib.suppress(WebSocketException, OSError):
                 await connection.close()
             raise LiveSimulatorError(
-                f"CSMS did not negotiate OCPP 1.6J (received {negotiated!r})"
+                "CSMS did not negotiate OCPP 1.6J "
+                f"(requested {self.config.subprotocol!r}, received {negotiated!r})"
             )
 
         self._connection = connection
