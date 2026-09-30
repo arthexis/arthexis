@@ -20,6 +20,14 @@ on:
           - arthexis
           - remote-only
           - release
+      timing:
+        description: "Deployment timing"
+        required: true
+        default: queued
+        type: choice
+        options:
+          - queued
+          - immediate
 
 concurrency:
   group: watchtower-deploy-main
@@ -36,7 +44,7 @@ jobs:
     outputs:
       deploy: ${{ steps.change.outputs.deploy }}
       stage: ${{ steps.change.outputs.stage }}
-      force_deploy: ${{ steps.change.outputs.force_deploy }}
+      timing: ${{ steps.change.outputs.timing }}
     steps:
       - uses: actions/checkout@v7
         if: github.event_name != 'repository_dispatch'
@@ -58,25 +66,25 @@ jobs:
           set -Eeuo pipefail
           deploy=true
           stage="arthexis"
-          force_deploy=false
+          timing="queued"
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stage="${{ inputs.stage }}"
+            timing="${{ inputs.timing }}"
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             stage="${{ github.event.client_payload.stage || 'arthexis' }}"
-            if [[ "${{ github.event.client_payload.force_deploy || 'false' }}" == "true" ]]; then
-              force_deploy=true
-            fi
+            timing="${{ github.event.client_payload.timing || 'queued' }}"
           elif [[ "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
             if grep -Fxq remote-only <<<"$labels"; then
               stage="remote-only"
             fi
-            if grep -Fxq deploy <<<"$labels"; then
-              force_deploy=true
-            fi
           fi
           if [[ "$stage" != "arthexis" && "$stage" != "remote-only" && "$stage" != "release" ]]; then
             echo "Unsupported deployment stage: $stage" >&2
+            exit 1
+          fi
+          if [[ "$timing" != "queued" && "$timing" != "immediate" ]]; then
+            echo "Unsupported deployment timing: $timing" >&2
             exit 1
           fi
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]] &&
@@ -91,8 +99,8 @@ jobs:
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
           echo "stage=$stage" >> "$GITHUB_OUTPUT"
-          echo "force_deploy=$force_deploy" >> "$GITHUB_OUTPUT"
-          echo "deploy=$deploy stage=$stage force_deploy=$force_deploy"
+          echo "timing=$timing" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy stage=$stage timing=$timing"
 
 
   queue-gate:
@@ -108,14 +116,14 @@ jobs:
         id: queue
         env:
           GH_TOKEN: ${{ github.token }}
-          FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}
+          TIMING: ${{ needs.classify.outputs.timing }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then
-            echo "watchtower_deploy=forced_by_release_or_deploy_label"
+          if [[ "$TIMING" == "immediate" ]]; then
+            echo "watchtower_deploy=immediate"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
-            echo "reason=forced" >> "$GITHUB_OUTPUT"
+            echo "reason=immediate" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           active=0
@@ -144,7 +152,7 @@ jobs:
     needs: [classify, queue-gate]
     if: >-
       needs.classify.outputs.deploy == 'true' &&
-      needs.classify.outputs.stage == 'arthexis' &&
+      (needs.classify.outputs.stage == 'arthexis' || needs.classify.outputs.stage == 'release') &&
       needs.queue-gate.outputs.deploy == 'false'
     runs-on: ubuntu-latest
     steps:
@@ -168,7 +176,7 @@ jobs:
     if: >-
       always() &&
       needs.classify.outputs.deploy == 'true' &&
-      (needs.classify.outputs.stage == 'release' || needs.classify.outputs.stage != 'arthexis' || needs.queue-gate.outputs.deploy == 'true') &&
+      (needs.classify.outputs.stage == 'remote-only' || needs.queue-gate.outputs.deploy == 'true') &&
       github.repository == 'arthexis/arthexis' &&
       (github.event_name == 'repository_dispatch' ||
        github.event_name == 'workflow_dispatch')
