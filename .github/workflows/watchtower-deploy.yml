@@ -500,7 +500,7 @@ jobs:
           echo "canonical_gway_user=ok"
           echo "canonical_gway_admin=ok"
 
-      - name: Validate and recover baseline Nginx configuration
+      - name: Validate baseline Nginx configuration
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
