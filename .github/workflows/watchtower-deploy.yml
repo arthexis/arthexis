@@ -1137,9 +1137,9 @@ jobs:
             exit 1
           fi
           for repository in arthexis/arthexis arthexis/gway; do
-            gh api --method POST "repos/$repository/dispatches" \
-              -f event_type=watchtower-accepted \
-              -F client_payload[run_id]="$GITHUB_RUN_ID"
+            printf '{"event_type":"watchtower-accepted","client_payload":{"run_id":"%s"}}\n' \
+              "$GITHUB_RUN_ID" | \
+              gh api --method POST "repos/$repository/dispatches" --input -
           done
 
       - name: Restore previous Gway runtime after failed Gway stage

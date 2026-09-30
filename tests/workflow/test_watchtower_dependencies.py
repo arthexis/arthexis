@@ -27,6 +27,9 @@ def test_successful_watchtower_acceptance_wakes_dependency_reconcilers():
     assert "watchtower-accepted" in text
     assert "arthexis/arthexis arthexis/gway" in text
     assert "RELEASE_AUTOMATION_TOKEN" in text
+    assert '"client_payload":{"run_id":"%s"}' in text
+    assert 'gh api --method POST "repos/$repository/dispatches" --input -' in text
+    assert "client_payload[run_id]" not in text
 
 
 def test_dependency_reconciler_parks_and_releases_native_auto_merge():
