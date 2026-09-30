@@ -32,7 +32,9 @@ from apps.ocpp.simulator.network import (
     LiveSimulatorError,
 )
 
-DEFAULT_IDLE_TIMEOUT = 300.0
+# Zero means the on-demand simulator remains alive until explicitly stopped.
+# A positive value remains available for tests/temporary sessions.
+DEFAULT_IDLE_TIMEOUT = 0.0
 MAX_REPLAY_ACTIONS_IN_RESPONSE = 1000
 
 
@@ -98,6 +100,37 @@ def load_session(charger: str) -> dict[str, Any]:
     return metadata
 
 
+def active_sessions() -> list[dict[str, Any]]:
+    """Return live simulator sessions and discard stale runtime metadata."""
+    sessions = []
+    for path in runtime_dir().glob("charger-*.json"):
+        try:
+            metadata = json.loads(path.read_text())
+            charger = str(metadata["charger"])
+        except (OSError, KeyError, json.JSONDecodeError):
+            path.unlink(missing_ok=True)
+            continue
+        try:
+            sessions.append(load_session(charger))
+        except LiveSimulatorError:
+            continue
+    return sessions
+
+
+def active_session() -> dict[str, Any] | None:
+    """Return the sole live simulator session, enforcing singleton operation."""
+    sessions = active_sessions()
+    if not sessions:
+        return None
+    if len(sessions) > 1:
+        identities = ", ".join(sorted(str(item.get("charger")) for item in sessions))
+        raise LiveSimulatorError(
+            "multiple live simulator sessions found; stop them before continuing: "
+            + identities
+        )
+    return sessions[0]
+
+
 async def send_control(charger: str, request: dict[str, Any]) -> dict[str, Any]:
     metadata = load_session(charger)
     try:
@@ -132,8 +165,8 @@ class LiveSimulatorWorker:
     )
 
     def __post_init__(self) -> None:
-        if self.idle_timeout <= 0:
-            raise ValueError("idle_timeout must be greater than zero")
+        if self.idle_timeout < 0:
+            raise ValueError("idle_timeout must be zero or greater")
         self._last_control_activity = time.monotonic()
         self._stop = asyncio.Event()
         self._simulator = self.simulator_factory(self.config)
@@ -166,11 +199,13 @@ class LiveSimulatorWorker:
                         "socket": str(sock),
                         "idle_timeout": self.idle_timeout,
                         "boot": self._boot.status,
+                        "lifecycle": "on-demand",
                     }
                 )
             )
             self._last_control_activity = time.monotonic()
-            idle_task = asyncio.create_task(self._idle_watch())
+            if self.idle_timeout > 0:
+                idle_task = asyncio.create_task(self._idle_watch())
             heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             async with server:
                 await self._stop.wait()
@@ -266,6 +301,8 @@ class LiveSimulatorWorker:
                 "idle_seconds": max(
                     0.0, time.monotonic() - self._last_control_activity
                 ),
+                "idle_timeout": self.idle_timeout,
+                "lifecycle": "on-demand",
             }
         if action == "authorize":
             id_tag = str(request.get("id_tag", ""))
