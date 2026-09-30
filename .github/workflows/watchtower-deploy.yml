@@ -78,7 +78,6 @@ jobs:
             if grep -Fxq remote-only <<<"$labels"; then
               stage="remote-only"
             fi
-            # The deploy label marks deployment intent only. Queue timing is explicit.
           fi
           if [[ "$stage" != "arthexis" && "$stage" != "remote-only" && "$stage" != "release" ]]; then
             echo "Unsupported deployment stage: $stage" >&2
