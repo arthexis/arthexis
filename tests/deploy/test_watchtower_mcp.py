@@ -491,3 +491,27 @@ def test_watchtower_bootstrap_smoke_checks_installer_root_ui(watchtower_workflow
     assert "https://install.arthexis.com/" in bootstrap
     assert 'grep -F \'id="installer"\'' in bootstrap
     assert 'grep -F \'id="command"\'' in bootstrap
+
+
+@pytest.mark.workflow
+def test_watchtower_validates_nginx_before_bootstrap_mutation(watchtower_workflow) -> None:
+    deploy = watchtower_workflow.job("deploy")
+    baseline = watchtower_workflow.step("Validate baseline Nginx configuration")
+    bootstrap = watchtower_workflow.step("Converge public Gway bootstrap")
+
+    assert "sudo -n /usr/sbin/nginx -t" in baseline
+    assert "nginx_baseline=invalid" in baseline
+    assert "nginx_baseline=ok" in baseline
+    assert deploy.index(baseline) < deploy.index(bootstrap)
+
+
+@pytest.mark.workflow
+def test_watchtower_revalidates_nginx_after_gway_recipe_rollback(watchtower_workflow) -> None:
+    bootstrap = watchtower_workflow.step("Converge public Gway bootstrap")
+
+    assert 'bootstrap_output="$(sudo -n /usr/local/bin/gway --recipe' in bootstrap
+    assert "gway_bootstrap=failed" in bootstrap
+    assert 'rollback_output="$(sudo -n /usr/sbin/nginx -t 2>&1)"' in bootstrap
+    assert "nginx_rollback=restored" in bootstrap
+    assert "nginx_rollback=invalid" in bootstrap
+    assert "nginx_candidate=ok" in bootstrap
