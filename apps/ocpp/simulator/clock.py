@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 
 
 UTC = timezone.utc
@@ -48,7 +49,7 @@ class ChargerClock:
             raise ValueError(f"charger clock start_time is required for {self.mode}")
 
     @classmethod
-    def from_profile(cls, config: dict[str, Any]) -> "ChargerClock":
+    def from_profile(cls, config: dict[str, Any]) -> ChargerClock:
         return cls(
             mode=str(config.get("mode", "host")),
             offset_seconds=float(config.get("offset_seconds", 0.0)),
