@@ -253,7 +253,7 @@ def test_public_remote_verifier_exercises_query_and_mcp_product_contract() -> No
         '"mutation_not_allowed"',
         '"method": "initialize"',
         '"method": "tools/list"',
-        "if set(tools) != expected_tools:",
+        "missing_tools = expected_tools - set(tools)",
         'expected_tools={"query", "tail"}',
         'expected_tools={"gway", "query", "tail"}',
         'annotations.get("readOnlyHint") is not True',

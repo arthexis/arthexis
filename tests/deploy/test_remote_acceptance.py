@@ -67,6 +67,8 @@ def test_remote_acceptance_validates_projected_mcp_tool_sets() -> None:
     assert 'expected_tools={"query", "tail"}' in script
     assert 'query_command="log sources"' in script
     assert 'expected_tools={"gway", "query", "tail"}' in script
+    assert "missing_tools = expected_tools - set(tools)" in script
+    assert "if set(tools) != expected_tools:" not in script
     assert 'if "gway" in tools:' in script
     assert 'MCP gway tool is not advertised mutating' in script
 
