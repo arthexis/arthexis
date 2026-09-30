@@ -132,7 +132,7 @@ jobs:
           fi
           active=0
           for repository in arthexis/arthexis arthexis/gway; do
-            prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold")) | not) | [.number, .title] | @tsv')"
+            prs="$(gh api --paginate "repos/$repository/pulls?state=open&per_page=100" --jq '.[] | select(([.labels[].name | ascii_downcase] | any(. == "on-hold" or . == "on hold" or . == "needs-watchtower")) | not) | [.number, .title] | @tsv')"
             if [[ -n "$prs" ]]; then
               echo "active_prs[$repository]=begin"
               printf '%s\n' "$prs"
@@ -1008,6 +1008,27 @@ jobs:
           print(json.dumps(manifest, sort_keys=True))
           PY
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
+
+      - name: Reconcile PRs waiting on Watchtower
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "${WATCHTOWER_DEPLOYMENT_ACCEPTED:-false}" != "true" ]]; then
+            echo "Watchtower acceptance was not recorded; dependency reconciliation is skipped."
+            exit 0
+          fi
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "RELEASE_AUTOMATION_TOKEN is required to reconcile cross-repository Watchtower dependencies." >&2
+            exit 1
+          fi
+          for repository in arthexis/arthexis arthexis/gway; do
+            gh api --method POST "repos/$repository/dispatches" \
+              -f event_type=watchtower-accepted \
+              -F client_payload[run_id]="$GITHUB_RUN_ID"
+          done
 
       - name: Restore previous Gway runtime after failed Gway stage
         if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.GWAY_DEPLOYMENT_ACCEPTED != 'true' }}
