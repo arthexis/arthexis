@@ -1,5 +1,6 @@
 # CI refresh: evaluate rollover authentication against current workflow set
 name: Watchtower Deploy
+run-name: ${{ github.event.client_payload.run_name || github.event.head_commit.message || github.workflow }}
 
 on:
   push:
