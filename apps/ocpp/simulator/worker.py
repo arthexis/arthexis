@@ -18,6 +18,7 @@ from apps.ocpp.simulator.authorization import (
     authorization_policy_scenario,
     run_live_authorization_scenario,
 )
+from apps.ocpp.simulator.clock import ChargerClock
 from apps.ocpp.simulator.database_replay import (
     ReplayMetrics,
     ReplayPacing,
@@ -25,12 +26,12 @@ from apps.ocpp.simulator.database_replay import (
     iter_v16_transaction_replay,
     run_v16_live_replay_events,
 )
-from apps.ocpp.simulator.sources import resolve_replay_database
 from apps.ocpp.simulator.network import (
     LiveOcpp16Simulator,
     LiveSimulatorConfig,
     LiveSimulatorError,
 )
+from apps.ocpp.simulator.sources import resolve_replay_database
 
 # Zero means the on-demand simulator remains alive until explicitly stopped.
 # A positive value remains available for tests/temporary sessions.
@@ -173,6 +174,7 @@ class LiveSimulatorWorker:
         self._boot = None
         self._reconnects = 0
         self._transport_lock = asyncio.Lock()
+        self._clock = ChargerClock.from_profile(self.config.clock)
 
     async def run(self) -> None:
         sock = socket_path(self.config.charger)
@@ -200,13 +202,19 @@ class LiveSimulatorWorker:
                         "idle_timeout": self.idle_timeout,
                         "boot": self._boot.status,
                         "lifecycle": "on-demand",
+                        "evidence_dir": self.config.evidence_dir,
+                        "clock": self.config.clock,
+                        "charger_time": self._clock.isoformat(),
+                        "csms_time": self._boot.current_time,
+                        "authorization_timeout": self.config.authorization_timeout,
                     }
                 )
             )
             self._last_control_activity = time.monotonic()
             if self.idle_timeout > 0:
                 idle_task = asyncio.create_task(self._idle_watch())
-            heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            if self.config.heartbeat:
+                heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             async with server:
                 await self._stop.wait()
         finally:
@@ -236,6 +244,8 @@ class LiveSimulatorWorker:
 
     async def reconnect(self) -> None:
         """Replace the charger transport and require an accepted re-boot."""
+        if not self.config.reconnect_enabled:
+            raise LiveSimulatorError("reconnect is disabled by the charger profile")
         async with self._transport_lock:
             await self._simulator.reconnect()
             self._boot = await self._simulator.boot()
@@ -303,6 +313,11 @@ class LiveSimulatorWorker:
                 ),
                 "idle_timeout": self.idle_timeout,
                 "lifecycle": "on-demand",
+                "protocol": self.config.protocol,
+                "clock": self._clock.describe(),
+                "csms_time": self._boot.current_time if self._boot else None,
+                "authorization_timeout": self.config.authorization_timeout,
+                "evidence_dir": self.config.evidence_dir,
             }
         if action == "authorize":
             id_tag = str(request.get("id_tag", ""))
