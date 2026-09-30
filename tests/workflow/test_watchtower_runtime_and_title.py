@@ -77,11 +77,15 @@ def test_stage_zero_activates_and_certifies_gway_without_arthexis_convergence():
 
 def test_certified_gway_is_not_rolled_back_by_later_stage_failure():
     deploy = DEPLOY.read_text(encoding="utf-8")
-    rollback = deploy.index("      - name: Restore previous Gway runtime after failed deployment")
+    accepted = deploy.index("      - name: Record accepted Gway stage")
+    rollback = deploy.index("      - name: Restore previous Gway runtime after failed Gway stage")
     condition = deploy[rollback:rollback + 420]
 
+    assert accepted < rollback
+    assert 'echo "GWAY_DEPLOYMENT_ACCEPTED=true"' in deploy[accepted:rollback]
     assert "env.GWAY_DEPLOYMENT_ACCEPTED != 'true'" in condition
     assert "env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'" not in condition
+    assert "failed Gway stage" in deploy[rollback:rollback + 120]
 
 
 def test_remote_services_remain_remote_stage_concerns():
@@ -117,7 +121,7 @@ def test_stage_zero_accepts_recipe_or_operation_resolution_for_mcp_capabilities(
 
 def test_gway_rollback_checks_baseline_runtime_health_not_new_candidate_features():
     deploy = DEPLOY.read_text(encoding="utf-8")
-    rollback = deploy.index("      - name: Restore previous Gway runtime after failed deployment")
+    rollback = deploy.index("      - name: Restore previous Gway runtime after failed Gway stage")
     block = deploy[rollback:rollback + 2600]
 
     assert "/usr/local/bin/gway --help" in block
