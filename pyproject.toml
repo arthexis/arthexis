@@ -40,7 +40,7 @@ cache_dir = "/var/lib/gway/cache"
 
 [tool.gway.scopes.arthexis-read]
 operations = [
-    "watch",
+    "survey",
     "arthexis.fleet",
     "arthexis.ocpp_status",
     "arthexis.ocpp_matrix",
@@ -116,7 +116,7 @@ operations = [
 ]
 environment = []
 
-[[tool.gway.watch]]
+[[tool.gway.survey]]
 section = "arthexis"
 command = ["arthexis", "ocpp", "status"]
 
