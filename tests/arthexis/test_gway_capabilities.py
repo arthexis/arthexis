@@ -9,7 +9,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_arthexis_publishes_gway_security_scopes_and_watch():
+def test_arthexis_publishes_gway_security_scopes_and_survey():
     with (ROOT / "pyproject.toml").open("rb") as stream:
         document = tomllib.load(stream)
 
@@ -17,15 +17,17 @@ def test_arthexis_publishes_gway_security_scopes_and_watch():
     scopes = gway["scopes"]
 
     assert set(scopes) == {"arthexis-read", "arthexis-write"}
-    assert "watch" in scopes["arthexis-read"]["operations"]
+    assert "survey" in scopes["arthexis-read"]["operations"]
+    assert "watch" not in scopes["arthexis-read"]["operations"]
     assert "arthexis.ocpp_status" in scopes["arthexis-read"]["operations"]
     assert "ocpp.charger.start" in scopes["arthexis-write"]["operations"]
     assert scopes["arthexis-read"]["environment"] == []
     assert scopes["arthexis-write"]["environment"] == []
 
-    assert gway["watch"] == [
+    assert gway["survey"] == [
         {
             "section": "arthexis",
             "command": ["arthexis", "ocpp", "status"],
         }
     ]
+    assert "watch" not in gway
