@@ -191,7 +191,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       WATCHTOWER_STAGE: ${{ needs.classify.outputs.stage }}
       WATCHTOWER_LEVEL: ${{ needs.classify.outputs.stage_level }}
-      RELEASE_INTENT: ${{ needs.classify.outputs.stage == '3-release' && 'manual' || '' }}
+      WATCHTOWER_RELEASE_INTENT: ${{ needs.classify.outputs.stage == '3-release' && 'manual' || '' }}
     steps:
       - name: Clean privileged Python bytecode from runner workspace
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
@@ -249,7 +249,6 @@ jobs:
           fi
 
           if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-
             if [[ "$EVENT_TYPE" == "gway-candidate" ]]; then
               [[ "$REQUESTED_GWAY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
                 echo "gway-candidate dispatch must provide a full Gway SHA." >&2
@@ -351,9 +350,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "deployment_pair source=$source arthexis=$arthexis_sha gway=$gway_sha"
-          if [[ "$WATCHTOWER_STAGE" == "3-release" ]]; then
-            echo "WATCHTOWER_RELEASE_INTENT=manual" >> "$GITHUB_ENV"
-          fi
 
       - name: Checkout exact Arthexis deployment SHA
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
