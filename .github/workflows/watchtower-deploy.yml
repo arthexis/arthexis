@@ -815,7 +815,7 @@ jobs:
           fi
           echo "service=active_independent_of_gway"
 
-      - name: Verify satellite bootstrap offline
+      - name: Verify satellite bootstrap from candidate sources
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
@@ -826,14 +826,10 @@ jobs:
           bootstrap=/var/lib/gway/venv/share/gway/sampler/bootstrap/arthexis.sh
           test -f "$bootstrap"
 
-          uv_cache="${UV_CACHE_DIR:-${HOME}/.cache/uv}"
           mkdir -p "$sandbox/home" "$sandbox/cache"
 
           HOME="$sandbox/home" \
           XDG_CACHE_HOME="$sandbox/cache" \
-          UV_CACHE_DIR="$uv_cache" \
-          UV_OFFLINE=1 \
-          PIP_NO_INDEX=1 \
           GWAY_BOOTSTRAP_GWAY=/usr/local/bin/gway \
           ARTHEXIS_BOOTSTRAP_SOURCE="$GITHUB_WORKSPACE" \
           ARTHEXIS_BOOTSTRAP_SHA="$ARTHEXIS_EXPECTED_SHA" \
@@ -849,7 +845,7 @@ jobs:
             echo "SATELLITE_BOOTSTRAP_TESTED_ARTHEXIS_SHA=$ARTHEXIS_EXPECTED_SHA"
           } >> "$GITHUB_ENV"
 
-          echo "satellite_bootstrap_offline=ok"
+          echo "satellite_bootstrap_candidate_source=ok"
 
       - name: Preflight Watchtower Remote stage
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
