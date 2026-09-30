@@ -77,11 +77,15 @@ def test_stage_zero_activates_and_certifies_gway_without_arthexis_convergence():
 
 def test_certified_gway_is_not_rolled_back_by_later_stage_failure():
     deploy = DEPLOY.read_text(encoding="utf-8")
-    rollback = deploy.index("      - name: Restore previous Gway runtime after failed deployment")
+    accepted = deploy.index("      - name: Record accepted Gway stage")
+    rollback = deploy.index("      - name: Restore previous Gway runtime after failed Gway stage")
     condition = deploy[rollback:rollback + 420]
 
+    assert accepted < rollback
+    assert 'echo "GWAY_DEPLOYMENT_ACCEPTED=true"' in deploy[accepted:rollback]
     assert "env.GWAY_DEPLOYMENT_ACCEPTED != 'true'" in condition
     assert "env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true'" not in condition
+    assert "failed Gway stage" in deploy[rollback:rollback + 120]
 
 
 def test_remote_services_remain_remote_stage_concerns():
@@ -99,3 +103,28 @@ def test_remote_services_remain_remote_stage_concerns():
     assert "gway-mcp-server.service" not in stage_zero
     assert "gway-remote-auth.service" in remote
     assert "gway-mcp-server.service" in remote
+
+
+def test_stage_zero_accepts_recipe_or_operation_resolution_for_mcp_capabilities():
+    deploy = DEPLOY.read_text(encoding="utf-8")
+    activate = deploy.index("      - name: Activate and verify canonical Gway")
+    certify = deploy.index("      - name: Record accepted Gway stage")
+    block = deploy[activate:certify]
+
+    assert 'value.get("kind") in {"recipe","operation"}' in block
+    assert 'value.get("target","")' in block
+    assert '"mcp"' in block
+    assert '"local"' in block
+    assert '"serve"' in block
+    assert 'grep -F \'"kind": "recipe"\'' not in block
+
+
+def test_gway_rollback_checks_baseline_runtime_health_not_new_candidate_features():
+    deploy = DEPLOY.read_text(encoding="utf-8")
+    rollback = deploy.index("      - name: Restore previous Gway runtime after failed Gway stage")
+    block = deploy[rollback:rollback + 2600]
+
+    assert "/usr/local/bin/gway --help" in block
+    assert "/usr/local/bin/gway version" in block
+    assert "/usr/local/bin/gway help survey" not in block
+    assert "/usr/local/bin/gway help mcp local" not in block

@@ -398,7 +398,7 @@ def test_watchtower_restores_only_uncertified_gway_runtime_on_failed_deploy(watc
     deploy = watchtower_workflow.job("deploy")
     install = watchtower_workflow.step("Install exact canonical Gway")
     accepted = watchtower_workflow.step("Record accepted Gway stage")
-    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
+    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed Gway stage")
 
     assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in install
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
@@ -410,9 +410,9 @@ def test_watchtower_restores_only_uncertified_gway_runtime_on_failed_deploy(watc
     ) in rollback
     assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in rollback
     assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in rollback
-    assert "/usr/local/bin/gway help survey" in rollback
-    assert "/usr/local/bin/gway help mcp local" in rollback
-    assert "/usr/local/bin/gway security scope list" in rollback
+    assert "/usr/local/bin/gway --help" in rollback
+    assert "/usr/local/bin/gway version" in rollback
+    assert "/usr/local/bin/gway help survey" not in rollback
     assert "systemctl restart gway-mcp-server.service" not in rollback
     assert "systemctl restart gway-remote-auth.service" not in rollback
     assert 'gway_runtime_rollback=restored' in rollback
@@ -466,7 +466,7 @@ def test_watchtower_gway_runtime_and_launcher_support_user_and_admin_contexts(
 ) -> None:
     install = watchtower_workflow.step("Install exact canonical Gway")
     launcher = watchtower_workflow.step("Install canonical Watchtower Gway admin launcher")
-    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed deployment")
+    rollback = watchtower_workflow.step("Restore previous Gway runtime after failed Gway stage")
 
     for step in (install, rollback):
         assert "chmod 0711 /var/lib/gway" in step
