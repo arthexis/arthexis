@@ -104,6 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.queue.outputs.deploy }}
+      reason: ${{ steps.queue.outputs.reason }}
     steps:
       - name: Skip superseded deployment while PRs remain
         id: queue
@@ -116,6 +117,7 @@ jobs:
           if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then
             echo "watchtower_deploy=forced_by_release_or_deploy_label"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "reason=forced" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           active=0
@@ -131,11 +133,36 @@ jobs:
           if [[ "$active" == 1 ]]; then
             echo "watchtower_deploy=coalesced_active_pr_queue"
             echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "reason=active-pr-queue" >> "$GITHUB_OUTPUT"
           else
             echo "watchtower_deploy=queue_drained"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "reason=queue-drained" >> "$GITHUB_OUTPUT"
           fi
 
+
+  deployment-deferred:
+    name: Deployment deferred — active PR queue
+    needs: [classify, queue-gate]
+    if: >-
+      needs.classify.outputs.deploy == 'true' &&
+      needs.classify.outputs.stage == 'arthexis' &&
+      needs.queue-gate.outputs.deploy == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain deferred certification
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "::notice title=Watchtower deployment deferred::No deployment or certification occurred because active PRs remained in the queue. A later queue-draining merge will retry the current pair."
+          {
+            echo "## Watchtower deployment deferred"
+            echo
+            echo "No deployment or certification occurred in this run."
+            echo
+            echo "- Reason: active PR queue"
+            echo "- The current candidate pair will be reconsidered when the queue drains."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Watchtower Deploy
@@ -391,8 +418,9 @@ jobs:
           fi
 
           if ! sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >"${install_log}" 2>&1; then
-            echo "arthexis_product_install=failed"
-            cat "${install_log}"
+            sudo -n python3 scripts/watchtower_diagnostics.py               --input "${install_log}"               --run-id "${GITHUB_RUN_ID}"               --attempt "${GITHUB_RUN_ATTEMPT}"               --step "arthexis-product-install"
+            rm -f "${install_log}"
+            echo "arthexis_product_install=failed diagnostic_source=recipe/watchtower-deploy"
             if [[ -n "${stale_product}" ]] &&
                ! sudo -n test -e /opt/arthexis &&
                sudo -n test -e "${stale_product}"; then
@@ -401,6 +429,7 @@ jobs:
             fi
             exit 1
           fi
+          rm -f "${install_log}"
 
           if [[ -n "${stale_product}" ]]; then
             sudo -n rm -rf "${stale_product}"
@@ -414,8 +443,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          runtime_log="${RUNNER_TEMP}/arthexis-runtime-install.log"
           sudo -n mkdir -p "${ARTHEXIS_DATA_DIR}"
-          sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/install.sh >/dev/null 2>&1
+          if ! sudo -n env ARTHEXIS_DATA_DIR="${ARTHEXIS_DATA_DIR}" /opt/arthexis/install.sh >"${runtime_log}" 2>&1; then
+            sudo -n python3 scripts/watchtower_diagnostics.py               --input "${runtime_log}"               --run-id "${GITHUB_RUN_ID}"               --attempt "${GITHUB_RUN_ATTEMPT}"               --step "prepare-arthexis-runtime"
+            rm -f "${runtime_log}"
+            echo "arthexis_runtime=failed diagnostic_source=recipe/watchtower-deploy"
+            exit 1
+          fi
+          rm -f "${runtime_log}"
           if /opt/arthexis/.venv/bin/python -c 'import gway' >/dev/null 2>&1; then
             echo "Arthexis product venv must not contain GWAY" >&2
             exit 1
