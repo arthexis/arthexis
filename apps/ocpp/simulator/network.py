@@ -6,8 +6,8 @@ import asyncio
 import contextlib
 import json
 import uuid
-from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -23,7 +23,7 @@ class LiveSimulatorError(RuntimeError):
 
 @dataclass(frozen=True)
 class LiveSimulatorConfig:
-    """Connection settings for a live simulated OCPP 1.6J charge point."""
+    """Connection and charger-profile settings for a live OCPP 1.6J charge point."""
 
     url: str
     charger: str
@@ -31,6 +31,14 @@ class LiveSimulatorConfig:
     model: str = "Gway Simulator"
     timeout: float = 30.0
     allow_insecure_ws: bool = False
+    protocol: str = "ocpp1.6j"
+    serial: str | None = None
+    firmware_version: str | None = None
+    authorization_timeout: float = 60.0
+    heartbeat: bool = True
+    reconnect_enabled: bool = True
+    clock: dict[str, Any] = field(default_factory=dict)
+    evidence_dir: str | None = None
 
     @property
     def endpoint(self) -> str:
@@ -143,13 +151,15 @@ class LiveOcpp16Simulator:
             self._pending.pop(unique_id, None)
 
     async def boot(self) -> BootResult:
-        response = await self.call(
-            "BootNotification",
-            {
-                "chargePointVendor": self.config.vendor,
-                "chargePointModel": self.config.model,
-            },
-        )
+        payload: dict[str, object] = {
+            "chargePointVendor": self.config.vendor,
+            "chargePointModel": self.config.model,
+        }
+        if self.config.serial:
+            payload["chargePointSerialNumber"] = self.config.serial
+        if self.config.firmware_version:
+            payload["firmwareVersion"] = self.config.firmware_version
+        response = await self.call("BootNotification", payload)
         status = response.get("status")
         current_time = response.get("currentTime")
         interval = response.get("interval")
