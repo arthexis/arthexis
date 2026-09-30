@@ -41,6 +41,7 @@ def sanitize_line(line: str) -> str:
     """Redact common secret forms while retaining useful diagnostic context."""
     if PRIVATE_KEY.search(line):
         return "[REDACTED PRIVATE KEY MATERIAL]"
+    line = AUTH_HEADER.sub(r"\\1: [REDACTED]", line)
     line = URL_USERINFO.sub(r"\1[REDACTED]@", line)
     line = BEARER.sub("Bearer [REDACTED]", line)
     line = SENSITIVE_QUERY.sub(r"\1[REDACTED]", line)
