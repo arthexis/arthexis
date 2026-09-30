@@ -1,12 +1,10 @@
 # CI refresh: evaluate rollover authentication against current workflow set
 name: Watchtower Deploy
-run-name: ${{ github.event.client_payload.run_name || github.event.head_commit.message || github.workflow }}
+run-name: ${{ github.event.client_payload.run_name || github.workflow }}
 
 on:
-  push:
-    branches: [main]
   repository_dispatch:
-    types: [gway-candidate]
+    types: [gway-candidate, arthexis-candidate]
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -172,8 +170,7 @@ jobs:
       needs.classify.outputs.deploy == 'true' &&
       (needs.classify.outputs.stage == 'release' || needs.classify.outputs.stage != 'arthexis' || needs.queue-gate.outputs.deploy == 'true') &&
       github.repository == 'arthexis/arthexis' &&
-      (github.event_name == 'push' ||
-       github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'repository_dispatch' ||
        github.event_name == 'workflow_dispatch')
     runs-on: [self-hosted, Linux, X64, arthexis-ci]
     timeout-minutes: 45
@@ -201,7 +198,8 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_GWAY_SHA: ${{ github.event.client_payload.gway_sha || '' }}
-          REQUESTED_ARTHEXIS_SHA: ${{ inputs.candidate_sha || '' }}
+          REQUESTED_ARTHEXIS_SHA: ${{ github.event.client_payload.arthexis_sha || inputs.candidate_sha || '' }}
+          EVENT_TYPE: ${{ github.event.action || '' }}
         run: |
           set -Eeuo pipefail
 
@@ -252,30 +250,52 @@ jobs:
             source="accepted-release"
             echo "release_pair=accepted_manifest arthexis=$arthexis_sha gway=$gway_sha"
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            [[ "$REQUESTED_GWAY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "repository_dispatch must provide a full Gway SHA." >&2
-              exit 1
-            }
-            if [[ "$REQUESTED_GWAY_SHA" == "$current_gway" ]]; then
-              gway_sha="$REQUESTED_GWAY_SHA"
-              source="gway"
-            else
-              compare_status="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
-                "https://api.github.com/repos/arthexis/gway/compare/$REQUESTED_GWAY_SHA...$current_gway" |
-                python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')"
-              if [[ "$compare_status" != "ahead" ]]; then
-                echo "Gway candidate is not an ancestor of current main: requested=$REQUESTED_GWAY_SHA current=$current_gway status=$compare_status" >&2
+            if [[ "$EVENT_TYPE" == "gway-candidate" ]]; then
+              [[ "$REQUESTED_GWAY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "gway-candidate dispatch must provide a full Gway SHA." >&2
                 exit 1
+              }
+              if [[ "$REQUESTED_GWAY_SHA" == "$current_gway" ]]; then
+                gway_sha="$REQUESTED_GWAY_SHA"
+                source="gway"
+              else
+                compare_status="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+                  "https://api.github.com/repos/arthexis/gway/compare/$REQUESTED_GWAY_SHA...$current_gway" |
+                  python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')"
+                if [[ "$compare_status" != "ahead" ]]; then
+                  echo "Gway candidate is not an ancestor of current main: requested=$REQUESTED_GWAY_SHA current=$current_gway status=$compare_status" >&2
+                  exit 1
+                fi
+                echo "watchtower_resolution=superseded requested=$REQUESTED_GWAY_SHA current=$current_gway"
+                gway_sha="$current_gway"
+                source="gway-coalesced"
               fi
-              echo "watchtower_resolution=superseded requested=$REQUESTED_GWAY_SHA current=$current_gway"
+              arthexis_sha="$current_arthexis"
+            elif [[ "$EVENT_TYPE" == "arthexis-candidate" ]]; then
+              [[ "$REQUESTED_ARTHEXIS_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "arthexis-candidate dispatch must provide a full Arthexis SHA." >&2
+                exit 1
+              }
+              if [[ "$REQUESTED_ARTHEXIS_SHA" == "$current_arthexis" ]]; then
+                arthexis_sha="$REQUESTED_ARTHEXIS_SHA"
+                source="arthexis"
+              else
+                compare_status="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+                  "https://api.github.com/repos/arthexis/arthexis/compare/$REQUESTED_ARTHEXIS_SHA...$current_arthexis" |
+                  python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))')"
+                if [[ "$compare_status" != "ahead" ]]; then
+                  echo "Arthexis candidate is not an ancestor of current main: requested=$REQUESTED_ARTHEXIS_SHA current=$current_arthexis status=$compare_status" >&2
+                  exit 1
+                fi
+                echo "watchtower_resolution=superseded requested=$REQUESTED_ARTHEXIS_SHA current=$current_arthexis"
+                arthexis_sha="$current_arthexis"
+                source="arthexis-coalesced"
+              fi
               gway_sha="$current_gway"
-              source="gway-coalesced"
+            else
+              echo "Unsupported repository dispatch type: $EVENT_TYPE" >&2
+              exit 1
             fi
-            # A Gway-triggered deploy is the queue-draining convergence point.
-            # Pair it with current Arthexis main, not the previously accepted SHA,
-            # so cross-repo changes that were coalesced while PRs were open land
-            # together as one candidate pair.
-            arthexis_sha="$current_arthexis"
           else
             requested_arthexis="${REQUESTED_ARTHEXIS_SHA:-${GITHUB_SHA}}"
             [[ "$requested_arthexis" =~ ^[0-9a-f]{40}$ ]]
