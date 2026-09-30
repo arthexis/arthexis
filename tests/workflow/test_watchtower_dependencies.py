@@ -13,7 +13,10 @@ RESOLVER = Path(".github/scripts/watchtower_dependency.py")
 def test_queue_ignores_prs_waiting_for_watchtower():
     text = DEPLOY.read_text(encoding="utf-8")
 
-    assert '. == "needs-watchtower"' in text
+    assert "|needs-watchtower|" in text
+    assert "waiting-watchtower" in text
+    assert "waiting-merge" in text
+    assert "dependency-unblock-or-queue-drained" in text
     assert "Coalesce active PR queue" in text
 
 
