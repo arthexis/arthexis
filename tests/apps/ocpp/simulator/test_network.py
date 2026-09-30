@@ -49,10 +49,78 @@ def test_endpoint_uses_current_ocpp_route_and_encoded_identity():
     assert config.endpoint == "ws://example.test:9000/ocpp/CP%2001"
 
 
+def test_endpoint_accepts_exact_third_party_websocket_path():
+    config = LiveSimulatorConfig(
+        url="wss://vendor.example/ws/charge-point/alpha",
+        charger="CP01",
+    )
+
+    assert config.endpoint == "wss://vendor.example/ws/charge-point/alpha"
+
+
+def test_endpoint_template_substitutes_encoded_charger_identity():
+    config = LiveSimulatorConfig(
+        url="wss://vendor.example/stations/{charger}/ocpp",
+        charger="CP 01/A",
+    )
+
+    assert config.endpoint == "wss://vendor.example/stations/CP%2001%2FA/ocpp"
+
+
+def test_supported_protocol_maps_to_ocpp16_websocket_token():
+    assert LiveSimulatorConfig(
+        url="wss://vendor.example/ws",
+        charger="CP01",
+        protocol="ocpp1.6j",
+    ).subprotocol == "ocpp1.6"
+    assert LiveSimulatorConfig(
+        url="wss://vendor.example/ws",
+        charger="CP01",
+        protocol="ocpp1.6",
+    ).subprotocol == "ocpp1.6"
+
+
+def test_unsupported_protocol_is_rejected():
+    config = LiveSimulatorConfig(
+        url="wss://vendor.example/ws",
+        charger="CP01",
+        protocol="ocpp2.0.1",
+    )
+    with pytest.raises(LiveSimulatorError, match="unsupported simulator protocol"):
+        _ = config.subprotocol
+
+
 def test_plaintext_websocket_requires_explicit_opt_in():
     config = LiveSimulatorConfig(url="ws://example.test:9000", charger="CP01")
     with pytest.raises(LiveSimulatorError, match="allow-insecure-ws"):
         _ = config.endpoint
+
+
+def test_connect_uses_resolved_endpoint_and_protocol():
+    observed = {}
+
+    async def factory(endpoint, **kwargs):
+        observed["endpoint"] = endpoint
+        observed.update(kwargs)
+        return ScriptedConnection(lambda message: [3, message[1], {}])
+
+    async def exercise():
+        simulator = LiveOcpp16Simulator(
+            LiveSimulatorConfig(
+                url="wss://vendor.example/stations/{charger}/socket",
+                charger="CP 01",
+                timeout=12,
+            ),
+            connection_factory=factory,
+        )
+        await simulator.connect()
+        await simulator.close()
+
+    asyncio.run(exercise())
+
+    assert observed["endpoint"] == "wss://vendor.example/stations/CP%2001/socket"
+    assert observed["subprotocols"] == ["ocpp1.6"]
+    assert observed["open_timeout"] == 12
 
 
 def test_boot_and_authorize_validate_real_csms_payloads():
