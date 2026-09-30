@@ -64,8 +64,26 @@ def test_base_watchtower_stage_includes_remote_acceptance() -> None:
 def test_remote_acceptance_validates_projected_mcp_tool_sets() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
 
-    assert 'expected_tools={"query"}' in script
+    assert 'expected_tools={"query", "tail"}' in script
     assert 'query_command="log sources"' in script
-    assert 'expected_tools={"gway", "query"}' in script
+    assert 'expected_tools={"gway", "query", "tail"}' in script
     assert 'if "gway" in tools:' in script
     assert 'MCP gway tool is not advertised mutating' in script
+
+
+@pytest.mark.workflow
+def test_remote_acceptance_waits_for_listeners_before_systemd_active_checks() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    start = workflow.index("      - name: Verify Watchtower Remote stage")
+    end = workflow.index("      - name: Preflight Watchtower Wire capability", start)
+    block = workflow[start:end]
+
+    listener = block.index("verify_remote_deployment.py local")
+    mcp_active = block.index("systemctl is-active --quiet gway-mcp-server.service")
+    auth_active = block.index("systemctl is-active --quiet gway-remote-auth.service")
+
+    assert listener < mcp_active
+    assert listener < auth_active
+    assert "gway_mcp_server_active=failed" in block
+    assert "gway_remote_auth_active=failed" in block
+    assert "remote_diagnostics" in block
