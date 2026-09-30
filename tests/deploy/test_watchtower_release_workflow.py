@@ -68,16 +68,38 @@ def test_arthexis_deploy_uses_current_gway_main(watchtower_workflow) -> None:
 
 
 
-def test_watchtower_deploy_label_bypasses_shared_queue(watchtower_workflow) -> None:
+def test_watchtower_timing_controls_shared_queue(watchtower_workflow) -> None:
     classify = watchtower_workflow.job("classify")
     gate = watchtower_workflow.job("queue-gate")
 
-    assert "force_deploy: ${{ steps.change.outputs.force_deploy }}" in classify
-    assert 'grep -Fxq deploy <<<"$labels"' in classify
-    assert "github.event.client_payload.force_deploy || 'false'" in classify
-    assert "FORCE_DEPLOY: ${{ needs.classify.outputs.force_deploy }}" in gate
-    assert 'if [[ "$FORCE_DEPLOY" == "true" || "${{ needs.classify.outputs.stage }}" == "release" ]]; then' in gate
-    assert "watchtower_deploy=forced_by_release_or_deploy_label" in gate
+    assert "timing: ${{ steps.change.outputs.timing }}" in classify
+    assert "force_deploy" not in classify
+    assert "github.event.client_payload.timing || 'queued'" in classify
+    assert 'timing="${{ inputs.timing }}"' in classify
+    assert '[[ "$timing" != "queued" && "$timing" != "immediate" ]]' in classify
+    assert "TIMING: ${{ needs.classify.outputs.timing }}" in gate
+    assert 'if [[ "$TIMING" == "immediate" ]]; then' in gate
+    assert "watchtower_deploy=immediate" in gate
+    assert "forced_by_release_or_deploy_label" not in gate
+
+
+def test_watchtower_manual_dispatch_exposes_timing_choice(watchtower_deploy_workflow: str) -> None:
+    workflow = watchtower_deploy_workflow
+    dispatch = workflow.split("workflow_dispatch:", 1)[1].split("concurrency:", 1)[0]
+
+    assert "timing:" in dispatch
+    assert "default: queued" in dispatch
+    assert "- queued" in dispatch
+    assert "- immediate" in dispatch
+
+
+def test_watchtower_release_obeys_queue_timing(watchtower_workflow) -> None:
+    gate = watchtower_workflow.job("queue-gate")
+    deploy = watchtower_workflow.job("deploy")
+
+    assert 'needs.classify.outputs.stage == "release"' not in gate
+    assert "forced_by_release_or_deploy_label" not in gate
+    assert "needs.classify.outputs.stage == 'remote-only' || needs.queue-gate.outputs.deploy == 'true'" in deploy
 
 
 def test_watchtower_normal_queue_still_counts_all_non_hold_prs(watchtower_workflow) -> None:
