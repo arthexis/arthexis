@@ -12,14 +12,15 @@ on:
         required: false
         type: string
       stage:
-        description: "Watchtower deployment stage"
+        description: "Highest cumulative certification stage"
         required: true
-        default: arthexis
+        default: 2-remote
         type: choice
         options:
-          - arthexis
-          - remote-only
-          - release
+          - 0-gway
+          - 1-arthexis
+          - 2-remote
+          - 3-release
       timing:
         description: "Deployment timing"
         required: true
@@ -44,6 +45,7 @@ jobs:
     outputs:
       deploy: ${{ steps.change.outputs.deploy }}
       stage: ${{ steps.change.outputs.stage }}
+      stage_level: ${{ steps.change.outputs.stage_level }}
       timing: ${{ steps.change.outputs.timing }}
     steps:
       - uses: actions/checkout@v7
@@ -65,13 +67,13 @@ jobs:
         run: |
           set -Eeuo pipefail
           deploy=true
-          stage="arthexis"
+          stage="2-remote"
           timing="queued"
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stage="${{ inputs.stage }}"
             timing="${{ inputs.timing }}"
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            stage="${{ github.event.client_payload.stage || 'arthexis' }}"
+            stage="${{ github.event.client_payload.stage || '2-remote' }}"
             timing="${{ github.event.client_payload.timing || 'queued' }}"
           elif [[ "$AFTER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${AFTER_SHA}/pulls" --jq '[.[] | select(.merge_commit_sha == "'"$AFTER_SHA"'") | .labels[].name] | unique | .[]')"
@@ -79,10 +81,16 @@ jobs:
               stage="remote-only"
             fi
           fi
-          if [[ "$stage" != "arthexis" && "$stage" != "remote-only" && "$stage" != "release" ]]; then
-            echo "Unsupported deployment stage: $stage" >&2
-            exit 1
-          fi
+          case "$stage" in
+            0-gway) stage_level=0 ;;
+            1-arthexis) stage_level=1 ;;
+            2-remote) stage_level=2 ;;
+            3-release) stage_level=3 ;;
+            *)
+              echo "Unsupported certification stage: $stage" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$timing" != "queued" && "$timing" != "immediate" ]]; then
             echo "Unsupported deployment timing: $timing" >&2
             exit 1
@@ -99,14 +107,15 @@ jobs:
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
           echo "stage=$stage" >> "$GITHUB_OUTPUT"
+          echo "stage_level=$stage_level" >> "$GITHUB_OUTPUT"
           echo "timing=$timing" >> "$GITHUB_OUTPUT"
-          echo "deploy=$deploy stage=$stage timing=$timing"
+          echo "deploy=$deploy stage=$stage stage_level=$stage_level timing=$timing"
 
 
   queue-gate:
     name: Coalesce active PR queue
     needs: classify
-    if: needs.classify.outputs.deploy == 'true' && (needs.classify.outputs.stage == 'arthexis' || needs.classify.outputs.stage == 'release')
+    if: needs.classify.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.queue.outputs.deploy }}
@@ -152,7 +161,6 @@ jobs:
     needs: [classify, queue-gate]
     if: >-
       needs.classify.outputs.deploy == 'true' &&
-      (needs.classify.outputs.stage == 'arthexis' || needs.classify.outputs.stage == 'release') &&
       needs.queue-gate.outputs.deploy == 'false'
     runs-on: ubuntu-latest
     steps:
@@ -176,7 +184,7 @@ jobs:
     if: >-
       always() &&
       needs.classify.outputs.deploy == 'true' &&
-      (needs.classify.outputs.stage == 'remote-only' || needs.queue-gate.outputs.deploy == 'true') &&
+      needs.queue-gate.outputs.deploy == 'true' &&
       github.repository == 'arthexis/arthexis' &&
       (github.event_name == 'repository_dispatch' ||
        github.event_name == 'workflow_dispatch')
@@ -187,10 +195,11 @@ jobs:
       ARTHEXIS_ALLOWED_HOSTS: arthexis.com
       PYTHONDONTWRITEBYTECODE: '1'
       WATCHTOWER_STAGE: ${{ needs.classify.outputs.stage }}
-      RELEASE_INTENT: ${{ needs.classify.outputs.stage == 'release' && 'manual' || '' }}
+      WATCHTOWER_LEVEL: ${{ needs.classify.outputs.stage_level }}
+      RELEASE_INTENT: ${{ needs.classify.outputs.stage == '3-release' && 'manual' || '' }}
     steps:
       - name: Clean privileged Python bytecode from runner workspace
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -200,7 +209,7 @@ jobs:
           fi
 
       - name: Resolve exact deployment pair
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         id: pair
         shell: bash
         env:
@@ -244,20 +253,8 @@ jobs:
             previous_gway="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("gway_sha", ""))' "$previous_manifest")"
           fi
 
-          if [[ "$RELEASE_INTENT" == "manual" ]]; then
-            [[ "$previous_arthexis" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "Manual release requires a valid accepted Arthexis SHA." >&2
-              exit 1
-            }
-            [[ "$previous_gway" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "Manual release requires a valid accepted Gway SHA." >&2
-              exit 1
-            }
-            arthexis_sha="$previous_arthexis"
-            gway_sha="$previous_gway"
-            source="accepted-release"
-            echo "release_pair=accepted_manifest arthexis=$arthexis_sha gway=$gway_sha"
-          elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+
             if [[ "$EVENT_TYPE" == "gway-candidate" ]]; then
               [[ "$REQUESTED_GWAY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
                 echo "gway-candidate dispatch must provide a full Gway SHA." >&2
@@ -359,12 +356,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "deployment_pair source=$source arthexis=$arthexis_sha gway=$gway_sha"
-          if [[ "$RELEASE_INTENT" == "manual" ]]; then
+          if [[ "$WATCHTOWER_STAGE" == "3-release" ]]; then
             echo "WATCHTOWER_RELEASE_INTENT=manual" >> "$GITHUB_ENV"
           fi
 
       - name: Checkout exact Arthexis deployment SHA
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ steps.pair.outputs.arthexis_sha }}
@@ -373,7 +370,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify trusted invocation
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -382,7 +379,7 @@ jobs:
           sudo -n true
 
       - name: Install exact canonical Gway
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -410,7 +407,7 @@ jobs:
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
       - name: Verify exact deployment pair before mutation
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -419,7 +416,7 @@ jobs:
           echo "deployment_pair=stable_before_mutation"
 
       - name: Deploy Arthexis through Gway system scope
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -467,7 +464,7 @@ jobs:
           sudo -n test -f /opt/arthexis/install.sh
 
       - name: Prepare persistent Arthexis runtime
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -486,7 +483,7 @@ jobs:
           fi
 
       - name: Install canonical Watchtower Gway admin launcher
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -513,7 +510,7 @@ jobs:
           echo "canonical_gway_admin=ok"
 
       - name: Converge public Gway bootstrap
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -548,7 +545,7 @@ jobs:
           echo "gway_bootstrap=public_ready"
 
       - name: Install and start Arthexis systemd service
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -625,7 +622,7 @@ jobs:
           echo "service=active_independent_of_gway"
 
       - name: Preflight Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -644,7 +641,7 @@ jobs:
           echo "remote_listeners=end"
 
       - name: Converge Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -660,7 +657,7 @@ jobs:
             --public-ipv4 "${public_ipv4}"
 
       - name: Verify Watchtower Remote stage
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -689,7 +686,7 @@ jobs:
           echo "remote_acceptance=ok"
 
       - name: Preflight Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -710,7 +707,7 @@ jobs:
           echo "wire_listener=end"
 
       - name: Converge Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         env:
           ARTHEXIS_CERTBOT_EMAIL: ${{ secrets.ARTHEXIS_CERTBOT_EMAIL }}
@@ -724,7 +721,7 @@ jobs:
             --public-address "${public_ipv4}"
 
       - name: Verify Watchtower Wire capability
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'remote-only' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -742,7 +739,7 @@ jobs:
           echo "wire_public_health=ok"
 
       - name: Verify deployed Arthexis
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -755,7 +752,7 @@ jobs:
 
 
       - name: Revalidate deployment pair before attestation
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -764,7 +761,7 @@ jobs:
           echo "deployment_pair=stable_for_attestation"
 
       - name: Record accepted Watchtower deployment
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 2
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -797,7 +794,7 @@ jobs:
               ),
               "accepted_at": datetime.now(timezone.utc).isoformat(),
               "release_intent": os.environ.get("WATCHTOWER_RELEASE_INTENT") or None,
-              "stages": ["arthexis", "remote"],
+              "stages": ["0-gway", "1-arthexis", "2-remote"],
           }
 
           def request(method, path, payload=None):
@@ -850,7 +847,7 @@ jobs:
           echo "WATCHTOWER_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"
 
       - name: Restore previous Gway runtime after failed deployment
-        if: ${{ failure() && env.WATCHTOWER_STAGE == 'arthexis' && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
+        if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.WATCHTOWER_DEPLOYMENT_ACCEPTED != 'true' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -904,7 +901,7 @@ jobs:
           echo "gway_runtime_rollback=restored"
 
       - name: Reconcile certified package publisher handoff
-        if: env.WATCHTOWER_STAGE == 'arthexis' || env.WATCHTOWER_STAGE == 'release'
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 3
         shell: bash
         env:
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
