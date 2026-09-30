@@ -17,13 +17,13 @@ MAX_JOURNAL_LINES = 400
 MAX_RAW_SNAPSHOTS = 20
 
 AUTH_HEADER = re.compile(
-    r"(?i)\\b(authorization|proxy[-_]?authorization)\\s*:\\s*.*$"
+    r"(?i)\b(authorization|proxy[-_]?authorization)\s*:\s*.*$"
 )
 
 SENSITIVE_ASSIGNMENT = re.compile(
-    r"(?i)\b(authorization|proxy[-_]?authorization|api[-_]?key|access[-_]?key|"
-    r"secret(?:[-_]?key)?|client[-_]?secret|token|password|passwd|cookie|"
-    r"set-cookie|signature|credential)\b(\s*[:=]\s*|\s+)([^\s,;]+)"
+    r"(?i)\b(api[-_]?key|access[-_]?key|secret(?:[-_]?key)?|"
+    r"client[-_]?secret|token|password|passwd|cookie|set-cookie|"
+    r"signature|credential)\b(\s*[:=]\s*|\s+)([^\s,;&#]+)"
 )
 SENSITIVE_QUERY = re.compile(
     r"(?i)([?&](?:access_token|api_key|apikey|auth|authorization|credential|"
@@ -45,7 +45,7 @@ def sanitize_line(line: str) -> str:
     """Redact common secret forms while retaining useful diagnostic context."""
     if PRIVATE_KEY.search(line):
         return "[REDACTED PRIVATE KEY MATERIAL]"
-    line = AUTH_HEADER.sub(r"\\1: [REDACTED]", line)
+    line = AUTH_HEADER.sub(r"\1: [REDACTED]", line)
     line = URL_USERINFO.sub(r"\1[REDACTED]@", line)
     line = BEARER.sub("Bearer [REDACTED]", line)
     line = SENSITIVE_QUERY.sub(r"\1[REDACTED]", line)
