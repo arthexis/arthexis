@@ -261,12 +261,12 @@ def _verify_authenticated_public_surfaces() -> None:
         _verify_public_mutation_ceiling(mutate_bearer)
         _verify_public_mcp(
             read_bearer,
-            expected_tools={"query"},
+            expected_tools={"query", "tail"},
             query_command="log sources",
         )
         _verify_public_mcp(
             mutate_bearer,
-            expected_tools={"gway", "query"},
+            expected_tools={"gway", "query", "tail"},
         )
     finally:
         tokens.remove(read_token_name)
