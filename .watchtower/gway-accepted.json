@@ -1,10 +1,10 @@
 {
-  "accepted_at": "2026-09-30T18:55:23.589116+00:00",
+  "accepted_at": "2026-09-30T19:20:11.003444+00:00",
   "gway_sha": "a91199870bc0aef3043509247499d9923af0cd92",
   "gway_version": "1.1.6",
   "run_attempt": "1",
-  "run_id": "36761908807",
-  "run_url": "https://github.com/arthexis/arthexis/actions/runs/36761908807",
+  "run_id": "36764858326",
+  "run_url": "https://github.com/arthexis/arthexis/actions/runs/36764858326",
   "stages": [
     "0-gway"
   ]
