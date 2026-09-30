@@ -500,6 +500,19 @@ jobs:
           echo "canonical_gway_user=ok"
           echo "canonical_gway_admin=ok"
 
+      - name: Validate baseline Nginx configuration
+        if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! output="$(sudo -n /usr/sbin/nginx -t 2>&1)"; then
+            printf '%s\n' "$output" >&2
+            echo "nginx_baseline=invalid" >&2
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          echo "nginx_baseline=ok"
+
       - name: Converge public Gway bootstrap
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 1
         shell: bash
@@ -512,9 +525,23 @@ jobs:
           test -n "${public_ipv4}"
           recipe=/var/lib/gway/venv/share/gway/sampler/bootstrap/watchtower.rx
           sudo -n test -f "${recipe}"
-          sudo -n /usr/local/bin/gway --recipe "${recipe}" \
+          if ! bootstrap_output="$(sudo -n /usr/local/bin/gway --recipe "${recipe}" \
             --email "${ARTHEXIS_CERTBOT_EMAIL}" \
-            --public-ipv4 "${public_ipv4}"
+            --public-ipv4 "${public_ipv4}" 2>&1)"; then
+            printf '%s\n' "$bootstrap_output" >&2
+            echo "gway_bootstrap=failed" >&2
+            if rollback_output="$(sudo -n /usr/sbin/nginx -t 2>&1)"; then
+              printf '%s\n' "$rollback_output"
+              echo "nginx_rollback=restored"
+            else
+              printf '%s\n' "$rollback_output" >&2
+              echo "nginx_rollback=invalid" >&2
+            fi
+            exit 1
+          fi
+          printf '%s\n' "$bootstrap_output"
+          sudo -n /usr/sbin/nginx -t
+          echo "nginx_candidate=ok"
 
           bootstrap="$(mktemp)"
           trap 'rm -f "${bootstrap}"' EXIT
