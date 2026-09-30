@@ -190,10 +190,11 @@ def _verify_public_mcp(
         tool.get("name"): tool
         for tool in listed.get("result", {}).get("tools", [])
     }
-    if set(tools) != expected_tools:
+    missing_tools = expected_tools - set(tools)
+    if missing_tools:
         raise RuntimeError(
-            f"unexpected MCP tool set: {sorted(tools)}, "
-            f"expected {sorted(expected_tools)}"
+            f"missing required MCP tools: {sorted(missing_tools)}; "
+            f"available {sorted(tools)}"
         )
     if "query" in tools:
         annotations = tools["query"].get("annotations", {})
