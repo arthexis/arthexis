@@ -216,7 +216,9 @@ class GwaySimulatorServiceController:
         repr=False,
     )
     gway: str | None = None
+    sudo: str | None = None
     service_user: str | None = None
+    runtime_root: Path | None = None
     timeout: float = SERVICE_START_TIMEOUT
 
     def __post_init__(self) -> None:
@@ -226,8 +228,16 @@ class GwaySimulatorServiceController:
                 or shutil.which("gway")
                 or "/usr/local/bin/gway"
             )
+        if self.sudo is None:
+            self.sudo = shutil.which("sudo") or "/usr/bin/sudo"
         if self.service_user is None:
             self.service_user = self._default_service_user()
+        if self.runtime_root is None:
+            self.runtime_root = runtime_dir().resolve()
+        else:
+            self.runtime_root = Path(self.runtime_root).expanduser().resolve()
+        self.runtime_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.runtime_root.chmod(0o700)
 
     @staticmethod
     def _default_service_user() -> str:
@@ -248,11 +258,23 @@ class GwaySimulatorServiceController:
             "_service",
         ]
         if self.service_user and self.service_user != "root":
-            return ["sudo", "-n", "-u", self.service_user, "--", *command]
+            return [
+                str(self.sudo),
+                "-n",
+                "-u",
+                self.service_user,
+                "--",
+                *command,
+            ]
         return command
 
+    @property
+    def service_socket(self) -> Path:
+        assert self.runtime_root is not None
+        return self.runtime_root / "service.sock"
+
     def _prefix(self) -> list[str]:
-        return [] if os.geteuid() == 0 else ["sudo", "-n"]
+        return [] if os.geteuid() == 0 else [str(self.sudo), "-n"]
 
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
         command = [*self._prefix(), str(self.gway), *args]
@@ -272,6 +294,7 @@ class GwaySimulatorServiceController:
             ) from exc
 
     def provision(self) -> None:
+        assert self.runtime_root is not None
         self._run(
             "service",
             "install",
@@ -281,6 +304,8 @@ class GwaySimulatorServiceController:
             "--name",
             GWAY_SERVICE_NAME,
             "--no-enable",
+            "--environment",
+            f"OCPP_SIMULATOR_RUNTIME_DIR={self.runtime_root}",
             "--",
             *self.service_command,
         )
@@ -318,8 +343,7 @@ class GwaySimulatorServiceController:
         self.provision()
         self.start()
         deadline = time.monotonic() + self.timeout
-        sock = service_socket_path()
-        while not sock.exists():
+        while not self.service_socket.exists():
             if time.monotonic() >= deadline:
                 self.stop()
                 raise LiveSimulatorError(
