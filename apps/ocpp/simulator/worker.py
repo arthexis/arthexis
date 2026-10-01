@@ -31,10 +31,9 @@ from apps.ocpp.simulator.network import (
     LiveSimulatorConfig,
     LiveSimulatorError,
 )
+from apps.ocpp.simulator.requests import RequestJournal
 from apps.ocpp.simulator.sources import resolve_replay_database
 
-# Zero means the on-demand simulator remains alive until explicitly stopped.
-# A positive value remains available for tests/temporary sessions.
 DEFAULT_IDLE_TIMEOUT = 0.0
 MAX_REPLAY_ACTIONS_IN_RESPONSE = 1000
 
@@ -102,7 +101,6 @@ def load_session(charger: str) -> dict[str, Any]:
 
 
 def active_sessions() -> list[dict[str, Any]]:
-    """Return live simulator sessions and discard stale runtime metadata."""
     sessions = []
     for path in runtime_dir().glob("charger-*.json"):
         try:
@@ -119,7 +117,6 @@ def active_sessions() -> list[dict[str, Any]]:
 
 
 def active_session() -> dict[str, Any] | None:
-    """Return the sole live simulator session, enforcing singleton operation."""
     sessions = active_sessions()
     if not sessions:
         return None
@@ -175,6 +172,9 @@ class LiveSimulatorWorker:
         self._reconnects = 0
         self._transport_lock = asyncio.Lock()
         self._clock = ChargerClock.from_profile(self.config.clock)
+        self._requests = RequestJournal(self.config.evidence_dir)
+        self._request_tasks: set[asyncio.Task] = set()
+        self._request_events: dict[str, asyncio.Event] = {}
 
     async def run(self) -> None:
         sock = socket_path(self.config.charger)
@@ -221,7 +221,9 @@ class LiveSimulatorWorker:
             for task in (idle_task, heartbeat_task):
                 if task is not None:
                     task.cancel()
-            for task in (idle_task, heartbeat_task):
+            for task in tuple(self._request_tasks):
+                task.cancel()
+            for task in (idle_task, heartbeat_task, *tuple(self._request_tasks)):
                 if task is not None:
                     with contextlib.suppress(asyncio.CancelledError):
                         await task
@@ -232,7 +234,6 @@ class LiveSimulatorWorker:
             cleanup_session_artifacts(self.config.charger)
 
     async def connect_and_boot(self) -> None:
-        """Connect the charger transport and require an accepted boot."""
         async with self._transport_lock:
             await self._simulator.connect()
             self._boot = await self._simulator.boot()
@@ -243,7 +244,6 @@ class LiveSimulatorWorker:
             )
 
     async def reconnect(self) -> None:
-        """Replace the charger transport and require an accepted re-boot."""
         if not self.config.reconnect_enabled:
             raise LiveSimulatorError("reconnect is disabled by the charger profile")
         async with self._transport_lock:
@@ -251,8 +251,7 @@ class LiveSimulatorWorker:
             self._boot = await self._simulator.boot()
         if self._boot.status != "Accepted":
             raise LiveSimulatorError(
-                f"BootNotification was not accepted after reconnect: "
-                f"{self._boot.status}"
+                f"BootNotification was not accepted after reconnect: {self._boot.status}"
             )
         self._reconnects += 1
 
@@ -294,12 +293,91 @@ class LiveSimulatorWorker:
         await writer.wait_closed()
 
     async def heartbeat(self) -> None:
-        """Send one heartbeat without racing another transport operation."""
         async with self._transport_lock:
             await self._simulator.call("Heartbeat", {})
 
+    async def _run_authorize(self, request_id: str, id_tag: str) -> None:
+        try:
+            async with self._transport_lock:
+                status = await self._simulator.authorize(id_tag)
+            self._requests.completed(
+                request_id,
+                charger=self.config.charger,
+                authorization=status,
+                charger_time=self._clock.isoformat(),
+            )
+        except Exception as exc:
+            self._requests.completed(
+                request_id,
+                charger=self.config.charger,
+                error=str(exc),
+                charger_time=self._clock.isoformat(),
+            )
+        finally:
+            event = self._request_events.get(request_id)
+            if event is not None:
+                event.set()
+
+    def _submit_authorize(self, id_tag: str) -> dict[str, Any]:
+        if not id_tag:
+            raise LiveSimulatorError("authorize requires an idTag")
+        request_id = self._requests.new_request_id()
+        self._requests.submitted(
+            request_id,
+            charger=self.config.charger,
+            id_tag=id_tag,
+            charger_time=self._clock.isoformat(),
+        )
+        self._request_events[request_id] = asyncio.Event()
+        task = asyncio.create_task(self._run_authorize(request_id, id_tag))
+        self._request_tasks.add(task)
+        task.add_done_callback(self._request_tasks.discard)
+        return {
+            "ok": True,
+            "charger": self.config.charger,
+            "request_id": request_id,
+            "submitted": True,
+            "completed": False,
+        }
+
+    async def _request_result(
+        self,
+        request_id: str,
+        *,
+        wait: bool,
+        timeout: float | None,
+    ) -> dict[str, Any]:
+        result = self._requests.result(request_id)
+        if result is None and wait:
+            event = self._request_events.get(request_id)
+            if event is None:
+                raise LiveSimulatorError(f"unknown simulator request: {request_id}")
+            try:
+                if timeout is None:
+                    await event.wait()
+                else:
+                    await asyncio.wait_for(event.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                return {
+                    "ok": True,
+                    "charger": self.config.charger,
+                    "request_id": request_id,
+                    "completed": False,
+                    "timed_out": True,
+                }
+            result = self._requests.result(request_id)
+        if result is None:
+            if request_id not in self._request_events:
+                raise LiveSimulatorError(f"unknown simulator request: {request_id}")
+            return {
+                "ok": True,
+                "charger": self.config.charger,
+                "request_id": request_id,
+                "completed": False,
+            }
+        return {"ok": True, "completed": True, **result}
+
     async def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Handle one local control request against the persistent connection."""
         action = request.get("action")
         if action == "status":
             return {
@@ -320,15 +398,20 @@ class LiveSimulatorWorker:
                 "evidence_dir": self.config.evidence_dir,
             }
         if action == "authorize":
-            id_tag = str(request.get("id_tag", ""))
-            async with self._transport_lock:
-                status = await self._simulator.authorize(id_tag)
-            return {
-                "ok": True,
-                "charger": self.config.charger,
-                "boot": self._boot.status if self._boot else None,
-                "authorization": status,
-            }
+            return self._submit_authorize(str(request.get("id_tag", "")))
+        if action in {"result", "wait-result"}:
+            request_id = str(request.get("request_id", ""))
+            if not request_id:
+                raise LiveSimulatorError("request result requires request_id")
+            timeout_raw = request.get("timeout")
+            timeout = float(timeout_raw) if timeout_raw is not None else None
+            if timeout is not None and timeout < 0:
+                raise ValueError("request timeout must be zero or greater")
+            return await self._request_result(
+                request_id,
+                wait=action == "wait-result",
+                timeout=timeout,
+            )
         if action == "authorize-scenario":
             scenario = authorization_policy_scenario(
                 policy_context=str(request.get("policy_context", "")),
