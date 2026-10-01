@@ -8,10 +8,11 @@ from apps.ocpp.simulator.transaction_worker import TransactionalLiveSimulatorWor
 
 
 class FakeMultiConnectorSimulator:
-    def __init__(self):
+    def __init__(self, *, yield_on_start=False):
         self.connected = False
         self.calls = []
         self.next_transaction_id = 100
+        self.yield_on_start = yield_on_start
 
     async def connect(self):
         self.connected = True
@@ -32,6 +33,8 @@ class FakeMultiConnectorSimulator:
     async def call(self, action, payload):
         self.calls.append((action, dict(payload)))
         if action == "StartTransaction":
+            if self.yield_on_start:
+                await asyncio.sleep(0)
             transaction_id = self.next_transaction_id
             self.next_transaction_id += 1
             return {
@@ -74,6 +77,21 @@ def test_start_without_connector_uses_lowest_available_connector(tmp_path):
 
         with pytest.raises(LiveSimulatorError, match="no available connector"):
             await current.dispatch({"action": "transaction-start", "id_tag": "C"})
+
+    asyncio.run(exercise())
+
+
+def test_concurrent_automatic_starts_reserve_distinct_connectors(tmp_path):
+    async def exercise():
+        fake = FakeMultiConnectorSimulator(yield_on_start=True)
+        current = worker(tmp_path, fake)
+        first, second = await asyncio.gather(
+            current.dispatch({"action": "transaction-start", "id_tag": "A"}),
+            current.dispatch({"action": "transaction-start", "id_tag": "B"}),
+        )
+        assert {first["connector"], second["connector"]} == {1, 2}
+        starts = [payload for action, payload in fake.calls if action == "StartTransaction"]
+        assert {payload["connectorId"] for payload in starts} == {1, 2}
 
     asyncio.run(exercise())
 
