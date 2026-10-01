@@ -4,6 +4,10 @@ import pytest
 from django.core.management import CommandError, call_command
 
 
+def _active(timeout=30.0):
+    return {"charger": "GW001", "authorization_timeout": timeout}
+
+
 def test_authorize_returns_submission_without_wait(monkeypatch, capsys):
     seen = []
 
@@ -19,7 +23,7 @@ def test_authorize_returns_submission_without_wait(monkeypatch, capsys):
 
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.active_session",
-        lambda: {"charger": "GW001", "authorization_timeout": 30.0},
+        lambda: _active(),
     )
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.send_control",
@@ -59,7 +63,7 @@ def test_authorize_wait_uses_profile_timeout(monkeypatch, capsys):
 
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.active_session",
-        lambda: {"charger": "GW001", "authorization_timeout": 17.5},
+        lambda: _active(17.5),
     )
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.send_control",
@@ -105,7 +109,7 @@ def test_authorize_wait_explicit_timeout_overrides_profile(monkeypatch, capsys):
 
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.active_session",
-        lambda: {"charger": "GW001", "authorization_timeout": 60.0},
+        lambda: _active(60.0),
     )
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.send_control",
@@ -131,10 +135,71 @@ def test_authorize_wait_explicit_timeout_overrides_profile(monkeypatch, capsys):
     assert output["submitted"] is True
 
 
+def test_result_reads_late_completion_by_request_id(monkeypatch, capsys):
+    seen = []
+
+    async def fake_send_control(charger, request):
+        seen.append((charger, request))
+        return {
+            "ok": True,
+            "charger": charger,
+            "request_id": "req-late",
+            "completed": True,
+            "authorization": "Accepted",
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.active_session",
+        lambda: _active(),
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command("ocpp_simulator", "result", "req-late")
+
+    assert seen == [
+        ("GW001", {"action": "result", "request_id": "req-late"})
+    ]
+    assert json.loads(capsys.readouterr().out)["authorization"] == "Accepted"
+
+
+def test_result_wait_uses_profile_timeout(monkeypatch, capsys):
+    seen = []
+
+    async def fake_send_control(charger, request):
+        seen.append(request)
+        return {
+            "ok": True,
+            "charger": charger,
+            "request_id": "req-pending",
+            "completed": False,
+            "timed_out": True,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.active_session",
+        lambda: _active(9.0),
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator.send_control",
+        fake_send_control,
+    )
+
+    call_command("ocpp_simulator", "result", "req-pending", "--wait")
+
+    assert seen == [
+        {"action": "wait-result", "request_id": "req-pending", "timeout": 9.0}
+    ]
+    assert json.loads(capsys.readouterr().out)["timed_out"] is True
+
+
 def test_authorize_timeout_requires_wait(monkeypatch):
     monkeypatch.setattr(
         "apps.ocpp.management.commands.ocpp_simulator.active_session",
-        lambda: {"charger": "GW001", "authorization_timeout": 30.0},
+        lambda: _active(),
     )
 
     with pytest.raises(CommandError, match="--timeout requires --wait"):
