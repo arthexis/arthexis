@@ -37,6 +37,51 @@ class RequestJournal:
     def id_tag_fingerprint(id_tag: str) -> str:
         return hashlib.sha256(id_tag.encode("utf-8")).hexdigest()
 
+    def event(
+        self,
+        *,
+        action: str,
+        state: str,
+        charger: str,
+        charger_time: str,
+        request_id: str | None = None,
+        **fields: Any,
+    ) -> dict[str, Any]:
+        payload = {
+            "action": action,
+            "state": state,
+            "charger": charger,
+            "charger_time": charger_time,
+            "host_time": time.time(),
+            **fields,
+        }
+        if request_id:
+            payload["request_id"] = request_id
+        self._append(self.events_path, payload)
+        return payload
+
+    def complete(
+        self,
+        request_id: str,
+        *,
+        action: str,
+        charger: str,
+        charger_time: str,
+        **fields: Any,
+    ) -> dict[str, Any]:
+        result = {
+            "request_id": request_id,
+            "action": action,
+            "state": "completed",
+            "charger": charger,
+            "charger_time": charger_time,
+            "host_time": time.time(),
+            **fields,
+        }
+        self._append(self.results_path, result)
+        self._results[request_id] = result
+        return result
+
     def submitted(
         self,
         request_id: str,
@@ -45,17 +90,14 @@ class RequestJournal:
         id_tag: str,
         charger_time: str,
     ) -> dict[str, Any]:
-        event = {
-            "request_id": request_id,
-            "action": "Authorize",
-            "state": "submitted",
-            "charger": charger,
-            "charger_time": charger_time,
-            "host_time": time.time(),
-            "id_tag_sha256": self.id_tag_fingerprint(id_tag),
-        }
-        self._append(self.events_path, event)
-        return event
+        return self.event(
+            request_id=request_id,
+            action="Authorize",
+            state="submitted",
+            charger=charger,
+            charger_time=charger_time,
+            id_tag_sha256=self.id_tag_fingerprint(id_tag),
+        )
 
     def completed(
         self,
@@ -66,22 +108,29 @@ class RequestJournal:
         error: str | None = None,
         charger_time: str,
     ) -> dict[str, Any]:
-        result = {
-            "request_id": request_id,
-            "action": "Authorize",
-            "state": "completed",
-            "charger": charger,
-            "charger_time": charger_time,
-            "host_time": time.time(),
-            "authorization": authorization,
-            "error": error,
-        }
-        self._append(self.results_path, result)
-        self._results[request_id] = result
-        return result
+        return self.complete(
+            request_id,
+            action="Authorize",
+            charger=charger,
+            charger_time=charger_time,
+            authorization=authorization,
+            error=error,
+        )
 
     def result(self, request_id: str) -> dict[str, Any] | None:
         return self._results.get(request_id)
+
+    def latest_event(self, action: str) -> dict[str, Any] | None:
+        if not self.events_path.exists():
+            return None
+        latest = None
+        for line in self.events_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if payload.get("action") == action:
+                latest = payload
+        return latest
 
     def _load_results(self) -> None:
         if not self.results_path.exists():
