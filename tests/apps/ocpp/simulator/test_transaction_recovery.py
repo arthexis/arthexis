@@ -109,13 +109,15 @@ def test_worker_recovers_active_transaction_without_raw_id_tag(tmp_path):
 
         replacement_fake = FakeSimulator()
         recovered = make_worker(tmp_path, replacement_fake)
-        status = recovered._transaction_status()
+        connector = recovered._connectors[1]
+        status = recovered._transaction_status(connector)
         assert status["transaction_id"] == 77
         assert status["status"] == "Charging"
         assert status["meter_wh"] == 475
         assert status["power_w"] == 7000
         assert status["voltage_v"] == 240
-        assert recovered._transaction.id_tag is None
+        assert connector.transaction is not None
+        assert connector.transaction.id_tag is None
 
         await recovered.connect_and_boot()
         assert replacement_fake.calls[-1][0] == "StatusNotification"
@@ -143,7 +145,7 @@ def test_completed_stop_recovers_as_idle(tmp_path):
         await first.dispatch({"action": "transaction-stop", "meter_stop": 20})
 
         recovered = make_worker(tmp_path, FakeSimulator())
-        status = recovered._transaction_status()
+        status = recovered._transaction_status(recovered._connectors[1])
         assert status["transaction_id"] is None
         assert status["status"] == "Available"
         assert status["meter_wh"] == 20
