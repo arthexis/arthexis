@@ -5,6 +5,7 @@ def test_profile_overrides_only_include_explicit_cli_values():
     options = {
         "charger": "GW001-CLI",
         "protocol": None,
+        "connectors": None,
         "timeout": None,
         "allow_insecure_ws": False,
         "vendor": None,
@@ -29,3 +30,7 @@ def test_profile_overrides_only_include_explicit_cli_values():
         },
         "clock": {"mode": "offset", "offset_seconds": -120.0},
     }
+
+
+def test_profile_overrides_include_explicit_connector_count():
+    assert Command._profile_overrides({"connectors": 2}, None) == {"connectors": 2}

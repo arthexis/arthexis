@@ -121,15 +121,31 @@ class RequestJournal:
         return self._results.get(request_id)
 
     def latest_event(self, action: str) -> dict[str, Any] | None:
-        if not self.events_path.exists():
+        latest = self.latest_events(action)
+        if not latest:
             return None
-        latest = None
+        return next(reversed(latest.values()))
+
+    def latest_events(
+        self,
+        action: str,
+        *,
+        key: str | None = None,
+    ) -> dict[object, dict[str, Any]]:
+        """Return latest matching events, optionally grouped by one payload key."""
+        if not self.events_path.exists():
+            return {}
+        latest: dict[object, dict[str, Any]] = {}
+        sequence = 0
         for line in self.events_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             payload = json.loads(line)
-            if payload.get("action") == action:
-                latest = payload
+            if payload.get("action") != action:
+                continue
+            sequence += 1
+            group = payload.get(key) if key else sequence
+            latest[group] = payload
         return latest
 
     def _load_results(self) -> None:

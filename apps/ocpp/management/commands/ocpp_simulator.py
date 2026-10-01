@@ -299,6 +299,11 @@ class Command(BaseCommand):
         parser.add_argument("--profile")
         parser.add_argument("--charger")
         parser.add_argument("--protocol", choices=("ocpp1.6", "ocpp1.6j"))
+        parser.add_argument(
+            "--connectors",
+            type=int,
+            help="Number of physical charging connectors exposed by this charger.",
+        )
         parser.add_argument("--vendor")
         parser.add_argument("--model")
         parser.add_argument("--serial")
@@ -380,6 +385,8 @@ class Command(BaseCommand):
             overrides["identity"] = options["charger"]
         if options.get("protocol"):
             overrides["protocol"] = options["protocol"]
+        if options.get("connectors") is not None:
+            overrides["connectors"] = options["connectors"]
 
         target: dict[str, object] = {}
         if endpoint:
@@ -491,6 +498,7 @@ class Command(BaseCommand):
             ),
             heartbeat=bool(profile.behavior["heartbeat"]),
             reconnect_enabled=bool(profile.behavior["reconnect"]),
+            connectors=profile.connectors,
             clock=dict(profile.clock),
             evidence_dir=str(evidence),
         )
@@ -516,6 +524,7 @@ class Command(BaseCommand):
 
         result.update(
             {
+                "connectors": profile.connectors,
                 "profile": str(evidence / "profile.json"),
                 "effective_profile": str(evidence / "effective-profile.json"),
             }

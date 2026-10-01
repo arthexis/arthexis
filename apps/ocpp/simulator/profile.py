@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 DEFAULT_PROFILE: dict[str, Any] = {
     "protocol": "ocpp1.6j",
+    "connectors": 1,
     "target": {
         "url": None,
         "allow_insecure_ws": False,
@@ -67,6 +68,7 @@ class ChargerProfile:
 
     identity: str
     protocol: str = "ocpp1.6j"
+    connectors: int = 1
     target: dict[str, Any] = field(default_factory=dict)
     boot: dict[str, Any] = field(default_factory=dict)
     behavior: dict[str, Any] = field(default_factory=dict)
@@ -82,6 +84,9 @@ class ChargerProfile:
         protocol = str(merged.get("protocol") or "").strip().lower()
         if protocol not in {"ocpp1.6", "ocpp1.6j"}:
             raise ValueError("charger profile protocol must be ocpp1.6j")
+        connectors = int(merged.get("connectors", 1))
+        if connectors <= 0:
+            raise ValueError("charger profile connectors must be a positive integer")
 
         target = _object(merged, "target")
         boot = _object(merged, "boot")
@@ -119,6 +124,7 @@ class ChargerProfile:
         return cls(
             identity=identity,
             protocol="ocpp1.6j",
+            connectors=connectors,
             target=target,
             boot=boot,
             behavior=behavior,
@@ -130,6 +136,7 @@ class ChargerProfile:
         return {
             "identity": self.identity,
             "protocol": self.protocol,
+            "connectors": self.connectors,
             "target": copy.deepcopy(self.target),
             "boot": copy.deepcopy(self.boot),
             "behavior": copy.deepcopy(self.behavior),
