@@ -9,11 +9,15 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.ocpp.management.commands.ocpp_simulator import Command as SimulatorCommand
 from apps.ocpp.simulator.network import LiveSimulatorError
+from apps.ocpp.simulator.transaction_scenario import (
+    SingleTransactionScenario,
+    run_single_transaction_scenario,
+)
 from apps.ocpp.simulator.worker import send_control
 
 
 class Command(BaseCommand):
-    help = "Start, meter, or stop a transaction on the active simulated charger."
+    help = "Start, meter, stop, or run a transaction on the active simulated charger."
 
     def add_arguments(self, parser) -> None:
         actions = parser.add_subparsers(dest="action", required=True)
@@ -37,6 +41,23 @@ class Command(BaseCommand):
         stop.add_argument("--meter-stop", type=int)
         stop.add_argument("--reason")
 
+        run = actions.add_parser(
+            "run",
+            help="Run one authorize/start/meter/stop charging session.",
+        )
+        run.add_argument("id_tag_value", nargs="?")
+        run.add_argument("--id-tag")
+        run.add_argument("--charger")
+        run.add_argument("--duration", type=float, default=60.0)
+        run.add_argument("--meter-interval", type=float, default=30.0)
+        run.add_argument("--connector", type=int, default=1)
+        run.add_argument("--meter-start", type=int)
+        run.add_argument("--power-w", type=float, default=0.0)
+        run.add_argument("--current-a", type=float)
+        run.add_argument("--voltage-v", type=float)
+        run.add_argument("--reason")
+        run.add_argument("--authorization-timeout", type=float)
+
     @staticmethod
     def _require_nonnegative(options, *names: str) -> None:
         for name in names:
@@ -48,6 +69,26 @@ class Command(BaseCommand):
         try:
             charger = SimulatorCommand._resolve_active_charger(options.get("charger"))
             action = options["action"]
+            if action == "run":
+                id_tag = options.get("id_tag") or options.get("id_tag_value")
+                if not id_tag:
+                    raise CommandError("transaction run requires an idTag")
+                scenario = SingleTransactionScenario(
+                    duration_seconds=options["duration"],
+                    meter_interval_seconds=options["meter_interval"],
+                    connector_id=options["connector"],
+                    meter_start=options.get("meter_start"),
+                    power_w=options["power_w"],
+                    current_a=options.get("current_a"),
+                    voltage_v=options.get("voltage_v"),
+                    stop_reason=options.get("reason"),
+                    authorization_timeout=options.get("authorization_timeout"),
+                )
+                result = asyncio.run(
+                    run_single_transaction_scenario(charger, id_tag, scenario)
+                )
+                self.stdout.write(json.dumps(result, sort_keys=True))
+                return
             if action == "start":
                 id_tag = options.get("id_tag") or options.get("id_tag_value")
                 if not id_tag:
