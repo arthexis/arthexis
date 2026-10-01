@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import time
+import warnings
+from collections import Counter
 from pathlib import Path
+from typing import TextIO
 
 from django.conf import settings
 
@@ -35,6 +39,84 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _emit(stream: TextIO | None, message: str = "") -> None:
+    if stream is not None:
+        print(message, file=stream, flush=True)
+
+
+def _warning_key(message: str) -> str:
+    """Normalize repeated framework warnings without exposing row-specific values."""
+
+    message = re.sub(
+        r"received a naive datetime \([^)]*\)",
+        "received a naive datetime (…) ",
+        message,
+    ).strip()
+    return " ".join(message.split())
+
+
+def _write_warning_receipt(
+    fixture: Path,
+    captured: list[warnings.WarningMessage],
+) -> tuple[Path | None, Counter[str]]:
+    counts: Counter[str] = Counter()
+    if not captured:
+        return None, counts
+
+    examples: dict[str, dict[str, str]] = {}
+    for item in captured:
+        key = _warning_key(str(item.message))
+        counts[key] += 1
+        examples.setdefault(
+            key,
+            {
+                "category": item.category.__name__,
+                "message": key,
+            },
+        )
+
+    path = fixture / "reconciliation-warnings.json"
+    payload = {
+        "format": RECONCILIATION_WORKSPACE_FORMAT,
+        "status": "warnings",
+        "warnings": [
+            {
+                **examples[key],
+                "count": count,
+            }
+            for key, count in counts.most_common()
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path, counts
+
+
+def _print_progress_summary(
+    stream: TextIO | None,
+    report: ReconciliationReport,
+    warning_counts: Counter[str],
+    warning_receipt: Path | None,
+) -> None:
+    transactions = report.imported.get("ocpp_transactions", 0)
+    if transactions:
+        _emit(stream, "Transactions:")
+        for offset in range(0, transactions, 80):
+            _emit(stream, "." * min(80, transactions - offset))
+
+    imported = sum(report.imported.values())
+    warning_total = sum(warning_counts.values())
+    _emit(
+        stream,
+        f"{imported} imported · {transactions} transactions · {warning_total} warnings",
+    )
+    if warning_counts:
+        _emit(stream, "Issues:")
+        for message, count in warning_counts.most_common():
+            _emit(stream, f"  {count} × {message}")
+    if warning_receipt is not None:
+        _emit(stream, f"Details: {warning_receipt}")
 
 
 def verify_fixture_source(path: Path) -> tuple[dict[str, object], Path]:
@@ -69,11 +151,13 @@ def reconcile_fixture(
     destination_database: Path,
     *,
     batch_size: int = 250,
+    progress_stream: TextIO | None = sys.stderr,
 ) -> tuple[ReconciliationReport, Path]:
     """Import a verified fixture into the configured fresh 2.0 destination."""
 
     fixture = fixture_path.expanduser().resolve()
     destination = destination_database.expanduser().resolve()
+    _emit(progress_stream, "Inspecting source...")
     metadata, source_database = verify_fixture_source(fixture)
     source_sha_before = _sha256(source_database)
 
@@ -83,13 +167,20 @@ def reconcile_fixture(
             "Configured Arthexis destination database does not match requested output."
         )
 
+    _emit(progress_stream, "Replaying reconciliation...")
     started = time.monotonic()
-    report = reconcile(source_database, batch_size=batch_size)
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        report = reconcile(source_database, batch_size=batch_size)
     elapsed_seconds = round(time.monotonic() - started, 3)
+    warning_receipt, warning_counts = _write_warning_receipt(fixture, captured)
+    _print_progress_summary(progress_stream, report, warning_counts, warning_receipt)
+
     source_sha_after = _sha256(source_database)
     if source_sha_after != source_sha_before:
         raise RuntimeError("Reconciliation modified the fixture source database.")
 
+    _emit(progress_stream, "Verifying destination...")
     output_inspection = inspect_source(destination)
     if output_inspection.classification != "v2":
         raise RuntimeError(
@@ -111,6 +202,10 @@ def reconcile_fixture(
             "integrity": output_inspection.integrity,
         },
         "reconciliation": report.as_dict(),
+        "warnings": {
+            "count": sum(warning_counts.values()),
+            "report": warning_receipt.name if warning_receipt is not None else None,
+        },
         "resource_policy": {
             "batch_size": batch_size,
         },
