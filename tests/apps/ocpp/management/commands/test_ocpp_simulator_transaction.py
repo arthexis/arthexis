@@ -107,3 +107,63 @@ def test_transaction_stop_forwards_meter_and_reason(monkeypatch, capsys):
         )
     ]
     assert json.loads(capsys.readouterr().out)["status"] == "Charging"
+
+
+def test_transaction_run_builds_single_session_scenario(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator_transaction.SimulatorCommand._resolve_active_charger",
+        lambda requested: "GW001",
+    )
+
+    async def fake_run(charger, id_tag, scenario):
+        seen.append((charger, id_tag, scenario))
+        return {
+            "ok": True,
+            "charger": charger,
+            "run_id": "run-1",
+            "completed": True,
+            "transaction_id": 41,
+            "meter_samples": 5,
+        }
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.commands.ocpp_simulator_transaction.run_single_transaction_scenario",
+        fake_run,
+    )
+
+    call_command(
+        "ocpp_simulator_transaction",
+        "run",
+        "CARD-1",
+        "--duration",
+        "120",
+        "--meter-interval",
+        "30",
+        "--meter-start",
+        "1000",
+        "--power-w",
+        "7200",
+        "--current-a",
+        "30",
+        "--voltage-v",
+        "240",
+        "--reason",
+        "Local",
+        "--authorization-timeout",
+        "12",
+    )
+
+    assert len(seen) == 1
+    charger, id_tag, scenario = seen[0]
+    assert charger == "GW001"
+    assert id_tag == "CARD-1"
+    assert scenario.duration_seconds == 120
+    assert scenario.meter_interval_seconds == 30
+    assert scenario.meter_start == 1000
+    assert scenario.power_w == 7200
+    assert scenario.current_a == 30
+    assert scenario.voltage_v == 240
+    assert scenario.stop_reason == "Local"
+    assert scenario.authorization_timeout == 12
+    assert json.loads(capsys.readouterr().out)["run_id"] == "run-1"
