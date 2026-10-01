@@ -142,12 +142,13 @@ def test_watchtower_remote_stage_is_cumulative_not_repair_only() -> None:
     assert "- name: Preflight Watchtower Remote stage" in workflow
     assert "- name: Converge Watchtower Remote stage" in workflow
     assert "- name: Verify Watchtower Remote stage" in workflow
-    assert "gway --recipe deploy/remote.rx" in workflow
-    assert "gway --recipe deploy/remote-expose.rx" in workflow
+    assert "gway -t --recipe deploy/remote.rx" in workflow
+    assert "gway -t --recipe deploy/remote-expose.rx" in workflow
     assert "systemctl is-active --quiet gway-mcp-server.service" in workflow
     assert "systemctl is-active --quiet gway-remote-auth.service" in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
+
 
 def test_remote_recipe_uses_semantic_gway_cache_root() -> None:
     project = Path("pyproject.toml").read_text(encoding="utf-8")
@@ -155,6 +156,7 @@ def test_remote_recipe_uses_semantic_gway_cache_root() -> None:
     assert "[tool.gway.variables]" in project
     assert 'cache_dir = "/var/lib/gway/cache"' in project
     assert "GWAY_CACHE_DIR" not in remote
+
 
 def test_remote_dns_recipe_stays_credential_free() -> None:
     recipe = Path("deploy/remote-dns.rx").read_text(encoding="utf-8")
@@ -383,6 +385,7 @@ def test_remote_verifier_runs_at_remote_runlevel_and_above() -> None:
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
+
 def test_ready_recipe_executes_product_runtime_externally() -> None:
     recipe = Path("deploy/ready.rx").read_text(encoding="utf-8")
 
@@ -458,8 +461,6 @@ def test_gway_dispatch_coalesces_with_current_arthexis_main(watchtower_workflow)
     assert 'source="gway-coalesced"' in dispatch or 'source="gway"' in dispatch
 
 
-
-
 @pytest.mark.workflow
 def test_watchtower_gway_runtime_and_launcher_support_user_and_admin_contexts(
     watchtower_workflow,
@@ -471,11 +472,8 @@ def test_watchtower_gway_runtime_and_launcher_support_user_and_admin_contexts(
     for step in (install, rollback):
         assert "chmod 0711 /var/lib/gway" in step
         assert "chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin" in step
-        assert (
-            'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" '
-            "/var/lib/gway/venv/bin/python -m gway version"
-            in step
-        )
+        assert 'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' in step
+        assert "/var/lib/gway/venv/bin/python -m gway version" in step
 
     assert 'if [ "$(id -u)" -eq 0 ]; then' in launcher
     assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in launcher
@@ -514,7 +512,7 @@ def test_watchtower_validates_nginx_before_bootstrap_mutation(watchtower_workflo
 def test_watchtower_revalidates_nginx_after_gway_recipe_rollback(watchtower_workflow) -> None:
     bootstrap = watchtower_workflow.step("Converge public Gway bootstrap")
 
-    assert 'bootstrap_output="$(sudo -n /usr/local/bin/gway --recipe' in bootstrap
+    assert 'bootstrap_output="$(sudo -n /usr/local/bin/gway -t --recipe' in bootstrap
     assert "gway_bootstrap=failed" in bootstrap
     assert 'rollback_output="$(sudo -n /usr/sbin/nginx -t 2>&1)"' in bootstrap
     assert "nginx_rollback=restored" in bootstrap
