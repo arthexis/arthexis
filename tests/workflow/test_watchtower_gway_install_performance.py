@@ -17,24 +17,30 @@ def test_watchtower_installs_gway_candidate_once():
     package = "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}"
     assert text.count(package) == 1
     assert '${RUNNER_TEMP}/gway-venv' not in text
-    assert '/var/lib/gway/venv.next/bin/python -m pip install' in text
+    assert 'runtime_root=/var/lib/gway/venvs' in text
+    assert 'candidate="${runtime_root}/${GWAY_EXPECTED_SHA}"' in text
+    assert 'sudo -n "${candidate}/bin/python" -m pip install' in text
 
 
 def test_watchtower_verifies_exact_gway_provenance_before_swap():
     text = workflow_text()
     provenance = 'distribution.read_text("direct_url.json")'
-    swap = 'sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv'
+    swap = 'sudo -n mv -Tf "${link_next}" "${link}"'
     assert provenance in text
     assert 'commit_id != expected' in text
+    assert 'sudo -n "${candidate}/bin/gway" --help >/dev/null' in text
     assert text.index(provenance) < text.index(swap)
 
 
 def test_watchtower_retains_atomic_gway_rollback():
     text = workflow_text()
-    assert 'sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous' in text
+    assert 'GWAY_RUNTIME_PREVIOUS_TARGET=${previous_target}' in text
     assert 'GWAY_RUNTIME_ROLLBACK_AVAILABLE=true' in text
+    assert 'GWAY_RUNTIME_SWITCH_STARTED=true' in text
     assert 'GWAY_RUNTIME_SWAPPED=true' in text
-    assert 'sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv' in text
+    assert 'sudo -n ln -s "${previous_target}" "${rollback_link}"' in text
+    assert 'sudo -n mv -Tf "${rollback_link}" /var/lib/gway/venv' in text
+    assert 'sudo -n /var/lib/gway/venv/bin/gway --help >/dev/null' in text
 
 
 def test_watchtower_emits_canonical_gway_subphase_timings():
