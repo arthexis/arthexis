@@ -55,8 +55,8 @@ def test_base_watchtower_stage_includes_remote_acceptance() -> None:
     assert "- name: Verify Watchtower Remote stage" in workflow
     assert "if: fromJSON(env.WATCHTOWER_LEVEL) >= 2" in workflow
     assert "remote-only" not in workflow
-    assert "gway --recipe deploy/remote.rx" in workflow
-    assert "gway --recipe deploy/remote-expose.rx" in workflow
+    assert "gway -t --recipe deploy/remote.rx" in workflow
+    assert "gway -t --recipe deploy/remote-expose.rx" in workflow
     assert "verify_remote_deployment.py local" in workflow
     assert "verify_remote_deployment.py public" in workflow
 
