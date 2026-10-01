@@ -18,6 +18,14 @@ class ManualClock:
     def isoformat(self):
         return self.current.isoformat().replace("+00:00", "Z")
 
+    def describe(self):
+        return {
+            "mode": "manual",
+            "offset_seconds": 0.0,
+            "start_time": "2026-10-01T02:00:00Z",
+            "charger_time": self.isoformat(),
+        }
+
     def advance(self, seconds):
         self.current += timedelta(seconds=seconds)
 
