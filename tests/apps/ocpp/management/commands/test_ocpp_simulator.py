@@ -1,11 +1,9 @@
 import json
-from unittest.mock import Mock
 
 import pytest
 from django.core.management import CommandError, call_command
 
 from apps.ocpp.management.commands.ocpp_simulator import Command
-from apps.ocpp.simulator.worker import error_path, session_path, socket_path
 
 
 def replay_args(*, stream="transactions"):
@@ -66,26 +64,6 @@ def test_open_rejects_plaintext_without_opt_in(tmp_path, monkeypatch):
             "--charger",
             "GWAY001",
         )
-
-
-def test_startup_failure_terminates_worker_and_cleans_artifacts(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
-    charger = "GWAY001"
-    for path in (session_path(charger), socket_path(charger), error_path(charger)):
-        path.write_text("stale")
-
-    process = Mock()
-    process.poll.return_value = None
-    Command._stop_starting_worker(process, charger)
-
-    process.terminate.assert_called_once_with()
-    process.wait.assert_called_once_with(timeout=5)
-    process.kill.assert_not_called()
-    assert not session_path(charger).exists()
-    assert not socket_path(charger).exists()
-    assert not error_path(charger).exists()
 
 
 def test_authorize_scenario_passes_operator_matrix_and_formats_human_output(
@@ -266,7 +244,6 @@ def test_replay_command_selects_inbound_stream(monkeypatch, capsys):
     assert payload["actions"] == ["Authorize"]
 
 
-
 def test_start_uses_endpoint_and_local_identity(monkeypatch):
     seen = {}
 
@@ -358,23 +335,3 @@ def test_session_replay_uses_default_identity_and_positional_source(monkeypatch,
     assert seen["request"]["source"] == "reconciled.sqlite3"
     assert seen["request"]["pacing"] == "maximum"
     assert json.loads(capsys.readouterr().out)["events_completed"] == 0
-
-
-def test_stop_maps_to_close_for_default_session(monkeypatch, capsys):
-    seen = {}
-
-    async def fake_send_control(charger, request):
-        seen["charger"] = charger
-        seen["request"] = request
-        return {"ok": True, "charger": charger, "closed": True}
-
-    monkeypatch.setenv("ARTHEXIS_OCPP_SIMULATOR_IDENTITY", "GW001")
-    monkeypatch.setattr(
-        "apps.ocpp.management.commands.ocpp_simulator.send_control",
-        fake_send_control,
-    )
-
-    call_command("ocpp_simulator", "stop")
-
-    assert seen == {"charger": "GW001", "request": {"action": "close"}}
-    assert json.loads(capsys.readouterr().out)["closed"] is True

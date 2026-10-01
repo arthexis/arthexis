@@ -8,9 +8,6 @@ import ipaddress
 import json
 import os
 import socket
-import subprocess
-import sys
-import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -24,14 +21,17 @@ from apps.ocpp.simulator.profile import (
     JsonChargerProfileSource,
     load_profile,
 )
+from apps.ocpp.simulator.service import (
+    GwaySimulatorServiceController,
+    SimulatorService,
+    send_service_control,
+)
 from apps.ocpp.simulator.worker import (
     DEFAULT_IDLE_TIMEOUT,
     active_session,
     cleanup_session_artifacts,
     error_path,
-    load_session,
     send_control,
-    session_path,
 )
 
 
@@ -120,13 +120,14 @@ class Command(BaseCommand):
                 action_parser.add_argument("--id-tag")
 
         stop_parser = actions.add_parser(
-            "stop", help="Stop the existing live simulator session."
+            "stop", help="Stop the existing live simulator session and service."
         )
         stop_parser.add_argument("--charger")
 
         worker_parser = actions.add_parser("_worker", help=argparse.SUPPRESS)
         worker_parser.add_argument("--config", required=True)
         worker_parser.add_argument("--idle-timeout", type=float, required=True)
+        actions.add_parser("_service", help=argparse.SUPPRESS)
 
     def handle(self, *args, **options):
         action = options["action"]
@@ -134,13 +135,18 @@ class Command(BaseCommand):
             if action == "_worker":
                 self._run_worker(options)
                 return
+            if action == "_service":
+                asyncio.run(SimulatorService().run())
+                return
             if action in {"boot", "open", "start"}:
                 self._open(options)
                 return
+            if action == "stop":
+                self._stop(options)
+                return
 
             charger = self._resolve_active_charger(options.get("charger"))
-            request_action = "close" if action == "stop" else action
-            request = {"action": request_action}
+            request = {"action": action}
             if action == "authorize":
                 id_tag = options.get("id_tag") or options.get("id_tag_value")
                 if not id_tag:
@@ -285,6 +291,7 @@ class Command(BaseCommand):
         return "\n".join(lines)
 
     def _run_worker(self, options) -> None:
+        """Compatibility entry point for pre-service direct worker launches."""
         from apps.ocpp.simulator.worker import LiveSimulatorWorker
 
         config = LiveSimulatorConfig(**json.loads(options["config"]))
@@ -425,71 +432,51 @@ class Command(BaseCommand):
         _ = config.endpoint
 
         cleanup_session_artifacts(profile.identity)
-        manage_path = Path(settings.BASE_DIR) / "manage.py"
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                str(manage_path),
-                "ocpp_simulator",
-                "_worker",
-                "--config",
-                json.dumps(config.__dict__),
-                "--idle-timeout",
-                str(options["idle_timeout"]),
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            cwd=str(settings.BASE_DIR),
-            env=os.environ.copy(),
-        )
-
-        deadline = time.monotonic() + config.timeout
-        ready = session_path(profile.identity)
-        failure = error_path(profile.identity)
-        while not ready.exists():
-            if failure.exists():
-                message = failure.read_text().strip() or "simulator worker failed"
-                self._stop_starting_worker(process, profile.identity)
-                raise CommandError(message)
-            if process.poll() is not None:
-                self._stop_starting_worker(process, profile.identity)
-                raise CommandError("simulator worker exited before becoming ready")
-            if time.monotonic() >= deadline:
-                self._stop_starting_worker(process, profile.identity)
-                raise CommandError(
-                    "simulator worker did not become ready before timeout"
+        controller = self._service_controller()
+        try:
+            controller.ensure_started()
+            result = asyncio.run(
+                send_service_control(
+                    {
+                        "action": "boot",
+                        "config": config.__dict__,
+                        "idle_timeout": options["idle_timeout"],
+                    }
                 )
-            time.sleep(0.05)
-
-        metadata = load_session(profile.identity)
-        self.stdout.write(
-            json.dumps(
-                {
-                    "charger": profile.identity,
-                    "endpoint": endpoint,
-                    "open": True,
-                    "boot": metadata.get("boot"),
-                    "idle_timeout": options["idle_timeout"],
-                    "lifecycle": "on-demand",
-                    "profile": str(evidence / "profile.json"),
-                    "effective_profile": str(evidence / "effective-profile.json"),
-                    "clock": metadata.get("clock"),
-                    "charger_time": metadata.get("charger_time"),
-                    "csms_time": metadata.get("csms_time"),
-                },
-                sort_keys=True,
             )
+        except Exception:
+            controller.stop()
+            cleanup_session_artifacts(profile.identity)
+            raise
+
+        result.update(
+            {
+                "profile": str(evidence / "profile.json"),
+                "effective_profile": str(evidence / "effective-profile.json"),
+            }
         )
+        self.stdout.write(json.dumps(result, sort_keys=True))
+
+    def _stop(self, options) -> None:
+        controller = self._service_controller()
+        requested = options.get("charger")
+        try:
+            result = asyncio.run(
+                send_service_control({"action": "stop", "charger": requested})
+            )
+        except LiveSimulatorError as service_error:
+            current = active_session()
+            if current is None:
+                controller.stop()
+                raise service_error
+            charger = self._resolve_active_charger(requested)
+            result = asyncio.run(send_control(charger, {"action": "close"}))
+        finally:
+            controller.stop()
+        self.stdout.write(json.dumps(result, sort_keys=True))
 
     @staticmethod
-    def _stop_starting_worker(process: subprocess.Popen, charger: str) -> None:
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-        cleanup_session_artifacts(charger)
+    def _service_controller() -> GwaySimulatorServiceController:
+        return GwaySimulatorServiceController(
+            manage_path=Path(settings.BASE_DIR) / "manage.py",
+        )
