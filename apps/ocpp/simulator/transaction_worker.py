@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from apps.ocpp.simulator.network import LiveSimulatorError
@@ -19,20 +20,29 @@ class ActiveTransaction:
 
 
 class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
-    """Add one-connector transaction state to the generic persistent worker."""
+    """Add one-connector transaction and deterministic meter state."""
 
     def __post_init__(self) -> None:
         super().__post_init__()
         self._connector_id = 1
         self._connector_status = "Available"
-        self._meter_wh = 0
+        self._meter_wh_exact = 0.0
+        self._power_w = 0.0
+        self._current_a: float | None = None
+        self._voltage_v: float | None = None
+        self._meter_anchor: datetime = self._clock.now()
         self._transaction: ActiveTransaction | None = None
+
+    @property
+    def _meter_wh(self) -> int:
+        return int(self._meter_wh_exact)
 
     async def connect_and_boot(self) -> None:
         await super().connect_and_boot()
         async with self._transport_lock:
             await self._send_status("Available")
         self._connector_status = "Available"
+        self._meter_anchor = self._clock.now()
 
     async def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
         action = request.get("action")
@@ -40,9 +50,12 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             return await self._start_transaction(request)
         if action == "transaction-stop":
             return await self._stop_transaction(request)
+        if action == "meter":
+            return await self._meter(request)
 
         result = await super().dispatch(request)
         if action == "status":
+            self._accumulate_meter()
             result.update(self._transaction_status())
         return result
 
@@ -53,6 +66,9 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             "status": self._connector_status,
             "transaction_id": current.transaction_id if current else None,
             "meter_wh": self._meter_wh,
+            "power_w": self._power_w,
+            "current_a": self._current_a,
+            "voltage_v": self._voltage_v,
             "started_at": current.started_at if current else None,
         }
 
@@ -68,11 +84,96 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         )
 
     @staticmethod
-    def _meter_value(raw: object, *, name: str) -> int:
-        value = int(raw)
+    def _nonnegative(raw: object, *, name: str) -> float:
+        value = float(raw)
         if value < 0:
             raise ValueError(f"{name} must be zero or greater")
         return value
+
+    @classmethod
+    def _meter_value(cls, raw: object, *, name: str) -> int:
+        return int(cls._nonnegative(raw, name=name))
+
+    def _accumulate_meter(self) -> None:
+        """Accumulate energy using elapsed simulated charger time and active power."""
+        now = self._clock.now()
+        elapsed_seconds = max(0.0, (now - self._meter_anchor).total_seconds())
+        if self._transaction is not None and self._power_w > 0 and elapsed_seconds > 0:
+            self._meter_wh_exact += self._power_w * elapsed_seconds / 3600.0
+        self._meter_anchor = now
+
+    def _set_meter_energy(self, energy_wh: object) -> None:
+        value = self._nonnegative(energy_wh, name="energy_wh")
+        if self._transaction is not None and value < self._transaction.meter_start:
+            raise LiveSimulatorError("energy_wh cannot be below meter_start")
+        if value < self._meter_wh_exact:
+            raise LiveSimulatorError("energy_wh cannot decrease the cumulative meter")
+        self._meter_wh_exact = value
+
+    def _set_electrical_state(self, request: dict[str, Any]) -> None:
+        if request.get("power_w") is not None:
+            self._power_w = self._nonnegative(request["power_w"], name="power_w")
+        if request.get("current_a") is not None:
+            self._current_a = self._nonnegative(request["current_a"], name="current_a")
+        if request.get("voltage_v") is not None:
+            self._voltage_v = self._nonnegative(request["voltage_v"], name="voltage_v")
+
+    def _meter_values_payload(self, timestamp: str) -> dict[str, object]:
+        current = self._transaction
+        if current is None:
+            raise LiveSimulatorError("connector 1 has no active transaction")
+        sampled: list[dict[str, str]] = [
+            {
+                "value": str(self._meter_wh),
+                "measurand": "Energy.Active.Import.Register",
+                "unit": "Wh",
+            },
+            {
+                "value": str(self._power_w),
+                "measurand": "Power.Active.Import",
+                "unit": "W",
+            },
+        ]
+        if self._current_a is not None:
+            sampled.append(
+                {
+                    "value": str(self._current_a),
+                    "measurand": "Current.Import",
+                    "unit": "A",
+                }
+            )
+        if self._voltage_v is not None:
+            sampled.append(
+                {
+                    "value": str(self._voltage_v),
+                    "measurand": "Voltage",
+                    "unit": "V",
+                }
+            )
+        return {
+            "connectorId": self._connector_id,
+            "transactionId": current.transaction_id,
+            "meterValue": [{"timestamp": timestamp, "sampledValue": sampled}],
+        }
+
+    async def _meter(self, request: dict[str, Any]) -> dict[str, Any]:
+        if self._transaction is None:
+            raise LiveSimulatorError("connector 1 has no active transaction")
+        self._accumulate_meter()
+        if request.get("energy_wh") is not None:
+            self._set_meter_energy(request["energy_wh"])
+        self._set_electrical_state(request)
+        timestamp = self._clock.isoformat()
+        payload = self._meter_values_payload(timestamp)
+        async with self._transport_lock:
+            await self._simulator.call("MeterValues", payload)
+        return {
+            "ok": True,
+            "charger": self.config.charger,
+            "metered": True,
+            "timestamp": timestamp,
+            **self._transaction_status(),
+        }
 
     async def _start_transaction(self, request: dict[str, Any]) -> dict[str, Any]:
         if self._transaction is not None:
@@ -86,9 +187,12 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         connector_id = int(request.get("connector_id", 1))
         if connector_id != 1:
             raise LiveSimulatorError("simulator currently supports connector 1 only")
+        self._accumulate_meter()
         meter_start = self._meter_value(
             request.get("meter_start", self._meter_wh), name="meter_start"
         )
+        if meter_start < self._meter_wh:
+            raise LiveSimulatorError("meter_start cannot decrease the cumulative meter")
         started_at = self._clock.isoformat()
 
         async with self._transport_lock:
@@ -160,7 +264,8 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                 meter_start=meter_start,
                 started_at=started_at,
             )
-            self._meter_wh = meter_start
+            self._meter_wh_exact = float(meter_start)
+            self._meter_anchor = self._clock.now()
             self._connector_status = "Charging"
             await self._send_status("Charging")
 
@@ -176,9 +281,13 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         current = self._transaction
         if current is None:
             raise LiveSimulatorError("connector 1 has no active transaction")
-        meter_stop = self._meter_value(
-            request.get("meter_stop", self._meter_wh), name="meter_stop"
-        )
+        self._accumulate_meter()
+        if request.get("meter_stop") is not None:
+            meter_stop = self._meter_value(request["meter_stop"], name="meter_stop")
+            if meter_stop < self._meter_wh:
+                raise LiveSimulatorError("meter_stop cannot decrease the cumulative meter")
+            self._meter_wh_exact = float(meter_stop)
+        meter_stop = self._meter_wh
         if meter_stop < current.meter_start:
             raise LiveSimulatorError("meter_stop cannot be below meter_start")
         stopped_at = self._clock.isoformat()
@@ -208,14 +317,13 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             info = response.get("idTagInfo")
             authorization = info.get("status") if isinstance(info, dict) else None
             transaction_id = current.transaction_id
-            self._meter_wh = meter_stop
             self._transaction = None
+            self._power_w = 0.0
+            self._meter_anchor = self._clock.now()
             try:
                 await self._send_status("Available")
                 self._connector_status = "Available"
             except Exception:
-                # The CSMS accepted StopTransaction, so never resurrect the local
-                # transaction merely because the final status notification failed.
                 raise
 
         return {
