@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import os
+import pwd
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from apps.ocpp.simulator.worker import (
 )
 
 SERVICE_NAME = "arthexis-simulator"
+GWAY_SERVICE_NAME = "simulator"
 SERVICE_START_TIMEOUT = 40.0
 
 
@@ -58,7 +60,7 @@ async def send_service_control(request: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass
 class SimulatorService:
-    """Own at most one live worker and expose a stable machine-local control socket."""
+    """Own at most one live worker behind a stable machine-local control socket."""
 
     worker_factory: Callable[..., LiveSimulatorWorker] = field(
         default=LiveSimulatorWorker,
@@ -214,34 +216,60 @@ class GwaySimulatorServiceController:
         repr=False,
     )
     gway: str | None = None
+    service_user: str | None = None
     timeout: float = SERVICE_START_TIMEOUT
 
     def __post_init__(self) -> None:
         if self.gway is None:
-            self.gway = os.environ.get("GWAY_BIN") or shutil.which("gway") or "/usr/local/bin/gway"
+            self.gway = (
+                os.environ.get("GWAY_BIN")
+                or shutil.which("gway")
+                or "/usr/local/bin/gway"
+            )
+        if self.service_user is None:
+            self.service_user = self._default_service_user()
+
+    @staticmethod
+    def _default_service_user() -> str:
+        configured = os.environ.get("ARTHEXIS_SIMULATOR_USER", "").strip()
+        if configured:
+            return configured
+        sudo_user = os.environ.get("SUDO_USER", "").strip()
+        if sudo_user and sudo_user != "root":
+            return sudo_user
+        return pwd.getpwuid(os.getuid()).pw_name
 
     @property
     def service_command(self) -> list[str]:
-        return [
+        command = [
             self.python,
             str(self.manage_path),
             "ocpp_simulator",
             "_service",
         ]
+        if self.service_user and self.service_user != "root":
+            return ["sudo", "-n", "-u", self.service_user, "--", *command]
+        return command
 
     def _prefix(self) -> list[str]:
         return [] if os.geteuid() == 0 else ["sudo", "-n"]
 
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
         command = [*self._prefix(), str(self.gway), *args]
-        return self.runner(
-            command,
-            cwd=str(self.manage_path.parent),
-            check=check,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        try:
+            return self.runner(
+                command,
+                cwd=str(self.manage_path.parent),
+                check=check,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or "").strip()
+            raise LiveSimulatorError(
+                detail or f"GWAY service operation failed: {' '.join(command)}"
+            ) from exc
 
     def provision(self) -> None:
         self._run(
@@ -251,7 +279,7 @@ class GwaySimulatorServiceController:
             "systemd",
             "--system",
             "--name",
-            SERVICE_NAME,
+            GWAY_SERVICE_NAME,
             "--no-enable",
             "--",
             *self.service_command,
@@ -263,7 +291,7 @@ class GwaySimulatorServiceController:
             "start",
             "--system",
             "--name",
-            SERVICE_NAME,
+            GWAY_SERVICE_NAME,
             "--timeout",
             str(self.timeout),
             "--",
@@ -276,7 +304,7 @@ class GwaySimulatorServiceController:
             "stop",
             "--system",
             "--name",
-            SERVICE_NAME,
+            GWAY_SERVICE_NAME,
             "--timeout",
             str(self.timeout),
             "--",
