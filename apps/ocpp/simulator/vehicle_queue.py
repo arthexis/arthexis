@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
 from apps.ocpp.simulator.transaction_scenario import (
@@ -82,17 +83,18 @@ async def run_vehicle_queue(
         pending.put_nowait((index, vehicle))
     results: list[dict[str, Any] | None] = [None] * len(normalized)
 
-    async def consume() -> None:
+    async def consume(connector_id: int) -> None:
         while True:
             try:
                 index, vehicle = pending.get_nowait()
             except asyncio.QueueEmpty:
                 return
             try:
+                scenario = replace(vehicle_scenario(vehicle), connector_id=connector_id)
                 result = await run_single_transaction_scenario(
                     charger,
                     str(vehicle["id_tag"]),
-                    vehicle_scenario(vehicle),
+                    scenario,
                     send=send,
                 )
                 results[index] = {
@@ -111,7 +113,10 @@ async def run_vehicle_queue(
             finally:
                 pending.task_done()
 
-    workers = [asyncio.create_task(consume()) for _ in range(connector_count)]
+    workers = [
+        asyncio.create_task(consume(connector_id))
+        for connector_id in range(1, connector_count + 1)
+    ]
     await asyncio.gather(*workers)
     completed = [item for item in results if item is not None]
     return {
