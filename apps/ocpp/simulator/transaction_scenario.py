@@ -6,9 +6,10 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from apps.ocpp.simulator.network import LiveSimulatorError
 from apps.ocpp.simulator.requests import RequestJournal
