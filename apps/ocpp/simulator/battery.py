@@ -44,8 +44,8 @@ class BatterySession:
             raise ValueError("max_power_w must be positive")
         if self.meter_interval_seconds <= 0:
             raise ValueError("meter_interval_seconds must be positive")
-        if not self.start_soc < self.taper_start_soc <= 100:
-            raise ValueError("taper_start_soc must be above start_soc and at most 100")
+        if not 0 <= self.taper_start_soc <= 100:
+            raise ValueError("taper_start_soc must be between 0 and 100")
         if not 0 < self.minimum_power_fraction <= 1:
             raise ValueError("minimum_power_fraction must be in (0, 1]")
         if not 0 <= self.delivery_variation < 1:
