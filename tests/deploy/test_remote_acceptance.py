@@ -88,3 +88,4 @@ def test_remote_acceptance_waits_for_listeners_before_systemd_active_checks() ->
     assert listener < auth_active
     assert "gway_mcp_server_active=failed" in block
     assert "gway_remote_auth_active=failed" in block
+    assert "remote_diagnostics" in block
