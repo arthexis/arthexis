@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import warnings
+from collections import Counter
 from pathlib import Path
 
 from arthexis.reconciliation.importer import ReconciliationReport
@@ -60,7 +61,7 @@ def test_progress_summary_is_compact_and_reports_details(tmp_path: Path) -> None
     _print_progress_summary(
         stream,
         report,
-        {"DateTimeField warning": 7},
+        Counter({"DateTimeField warning": 7}),
         details,
     )
 
