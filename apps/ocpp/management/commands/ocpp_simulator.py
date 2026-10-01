@@ -108,7 +108,7 @@ class Command(BaseCommand):
         replay_parser.add_argument("--reconnect-after", type=int)
 
         for name, help_text in (
-            ("authorize", "Send Authorize on the existing live connection."),
+            ("authorize", "Submit Authorize on the existing live connection."),
             ("status", "Report the existing live simulator state."),
             ("reconnect", "Reconnect and BootNotification the same charger."),
             ("close", "Close the existing live simulator."),
@@ -118,6 +118,29 @@ class Command(BaseCommand):
             if name == "authorize":
                 action_parser.add_argument("id_tag_value", nargs="?")
                 action_parser.add_argument("--id-tag")
+                action_parser.add_argument(
+                    "--wait",
+                    action="store_true",
+                    help="Wait for the correlated Authorize result.",
+                )
+                action_parser.add_argument(
+                    "--timeout",
+                    type=float,
+                    help=(
+                        "Maximum seconds to wait. Defaults to the active charger "
+                        "profile authorization timeout."
+                    ),
+                )
+
+        result_parser = actions.add_parser(
+            "result", help="Read a correlated asynchronous simulator request result."
+        )
+        result_parser.add_argument("request_id")
+        result_parser.add_argument("--charger")
+        result_parser.add_argument(
+            "--wait", action="store_true", help="Wait if the request is still pending."
+        )
+        result_parser.add_argument("--timeout", type=float)
 
         stop_parser = actions.add_parser(
             "stop", help="Stop the existing live simulator session and service."
@@ -151,7 +174,29 @@ class Command(BaseCommand):
                 id_tag = options.get("id_tag") or options.get("id_tag_value")
                 if not id_tag:
                     raise CommandError("authorize requires an idTag")
+                if options.get("timeout") is not None and not options.get("wait"):
+                    raise CommandError("--timeout requires --wait")
+                if options.get("timeout") is not None and options["timeout"] < 0:
+                    raise CommandError("--timeout must be zero or greater")
                 request["id_tag"] = id_tag
+            elif action == "result":
+                if options.get("timeout") is not None and not options.get("wait"):
+                    raise CommandError("--timeout requires --wait")
+                if options.get("timeout") is not None and options["timeout"] < 0:
+                    raise CommandError("--timeout must be zero or greater")
+                request = {
+                    "action": "wait-result" if options.get("wait") else "result",
+                    "request_id": options["request_id"],
+                }
+                if options.get("wait"):
+                    timeout = options.get("timeout")
+                    if timeout is None:
+                        current = active_session() or {}
+                        configured_timeout = current.get("authorization_timeout")
+                        if configured_timeout is not None:
+                            timeout = float(configured_timeout)
+                    if timeout is not None:
+                        request["timeout"] = timeout
             elif action == "authorize-scenario":
                 request.update(
                     {
@@ -179,6 +224,26 @@ class Command(BaseCommand):
                     }
                 )
             result = asyncio.run(send_control(charger, request))
+            if action == "authorize" and options.get("wait"):
+                request_id = result.get("request_id")
+                if not request_id:
+                    raise LiveSimulatorError(
+                        "simulator did not return an authorization request_id"
+                    )
+                timeout = options.get("timeout")
+                if timeout is None:
+                    current = active_session() or {}
+                    configured_timeout = current.get("authorization_timeout")
+                    if configured_timeout is not None:
+                        timeout = float(configured_timeout)
+                wait_request = {
+                    "action": "wait-result",
+                    "request_id": request_id,
+                }
+                if timeout is not None:
+                    wait_request["timeout"] = timeout
+                result = asyncio.run(send_control(charger, wait_request))
+                result.setdefault("submitted", True)
             if action == "authorize-scenario" and not options["json_output"]:
                 self.stdout.write(self._format_authorization_scenario(result))
             else:
