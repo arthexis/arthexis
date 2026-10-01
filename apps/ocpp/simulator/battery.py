@@ -97,7 +97,7 @@ class BatteryDeliveryModel:
 
     def _unit(self, label: str, index: int) -> float:
         digest = hashlib.sha256(
-            f"{self.session.seed}:{label}:{index}".encode("utf-8")
+            f"{self.session.seed}:{label}:{index}".encode()
         ).digest()
         return int.from_bytes(digest[:8], "big") / float(2**64 - 1)
 
