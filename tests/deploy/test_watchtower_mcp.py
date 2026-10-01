@@ -404,15 +404,16 @@ def test_watchtower_restores_only_uncertified_gway_runtime_on_failed_deploy(watc
     rollback = watchtower_workflow.step("Restore previous Gway runtime after failed Gway stage")
 
     assert 'echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"' in install
+    assert 'echo "GWAY_RUNTIME_SWITCH_STARTED=true" >> "$GITHUB_ENV"' in install
     assert 'echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"' in install
     assert 'echo "GWAY_DEPLOYMENT_ACCEPTED=true" >> "$GITHUB_ENV"' in accepted
-    assert (
-        "failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 "
-        "&& env.GWAY_RUNTIME_SWAPPED == 'true' "
-        "&& env.GWAY_DEPLOYMENT_ACCEPTED != 'true'"
-    ) in rollback
-    assert "mv /var/lib/gway/venv /var/lib/gway/venv.failed" in rollback
-    assert "mv /var/lib/gway/venv.previous /var/lib/gway/venv" in rollback
+    assert "failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0" in rollback
+    assert "env.GWAY_RUNTIME_SWAPPED == 'true'" in rollback
+    assert "env.GWAY_RUNTIME_SWITCH_STARTED == 'true'" in rollback
+    assert "env.GWAY_DEPLOYMENT_ACCEPTED != 'true'" in rollback
+    assert 'sudo -n ln -s "${previous_target}" "${rollback_link}"' in rollback
+    assert 'sudo -n mv -Tf "${rollback_link}" /var/lib/gway/venv' in rollback
+    assert 'sudo -n /var/lib/gway/venv/bin/gway --help >/dev/null' in rollback
     assert "/usr/local/bin/gway --help" in rollback
     assert "/usr/local/bin/gway version" in rollback
     assert "/usr/local/bin/gway help survey" not in rollback
@@ -469,11 +470,17 @@ def test_watchtower_gway_runtime_and_launcher_support_user_and_admin_contexts(
     launcher = watchtower_workflow.step("Install canonical Watchtower Gway admin launcher")
     rollback = watchtower_workflow.step("Restore previous Gway runtime after failed Gway stage")
 
-    for step in (install, rollback):
-        assert "chmod 0711 /var/lib/gway" in step
-        assert "chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin" in step
-        assert 'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' in step
-        assert "/var/lib/gway/venv/bin/python -m gway version" in step
+    assert "chmod 0711 /var/lib/gway" in install
+    assert 'chmod 0755 "${candidate}" "${candidate}/bin"' in install
+    assert 'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' in install
+    assert '"${link}/bin/python" -m gway version' in install
+    assert '"${link}/bin/gway" --help' in install
+
+    assert "chmod 0711 /var/lib/gway" in rollback
+    assert 'chmod 0755 "${previous_target}" "${previous_target}/bin"' in rollback
+    assert 'GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway"' in rollback
+    assert "/var/lib/gway/venv/bin/python -m gway version" in rollback
+    assert "/var/lib/gway/venv/bin/gway --help" in rollback
 
     assert 'if [ "$(id -u)" -eq 0 ]; then' in launcher
     assert "export GWAY_CACHE_DIR=/var/lib/gway/cache" in launcher

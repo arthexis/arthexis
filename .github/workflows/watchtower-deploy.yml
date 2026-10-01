@@ -420,25 +420,54 @@ jobs:
               "$phase" "$((elapsed / 1000000000))" "$(((elapsed / 1000000) % 1000))"
           }
 
-          sudo -n rm -rf /var/lib/gway/venv.next
+          runtime_root=/var/lib/gway/venvs
+          candidate="${runtime_root}/${GWAY_EXPECTED_SHA}"
+          link=/var/lib/gway/venv
+          link_next=/var/lib/gway/venv.next
+          previous_target=""
+          legacy_directory=false
+
+          sudo -n install -d -m 0755 "${runtime_root}"
+          sudo -n rm -rf "${link_next}"
+
+          if sudo -n test -L "${link}"; then
+            current_target="$(sudo -n readlink -f "${link}")"
+            if [[ "${current_target}" == "${candidate}" ]]; then
+              echo "GWAY_RUNTIME_CANDIDATE_TARGET=${candidate}" >> "$GITHUB_ENV"
+              echo "GWAY_RUNTIME_PREVIOUS_TARGET=" >> "$GITHUB_ENV"
+              echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=false" >> "$GITHUB_ENV"
+              echo "GWAY_RUNTIME_SWITCH_STARTED=false" >> "$GITHUB_ENV"
+              echo "GWAY_RUNTIME_SWAPPED=false" >> "$GITHUB_ENV"
+              sudo -n "${link}/bin/python" -m gway --help >/dev/null
+              sudo -n "${link}/bin/gway" --help >/dev/null
+              GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" \
+                "${link}/bin/python" -m gway version >/dev/null
+              echo "canonical_gway_runtime=reused target=${candidate}"
+              exit 0
+            fi
+          fi
+
+          if sudo -n test -e "${candidate}"; then
+            sudo -n rm -rf "${candidate}"
+          fi
 
           started="$(timing_start)"
-          sudo -n python3 -m venv /var/lib/gway/venv.next
+          sudo -n python3 -m venv "${candidate}"
           timing_end canonical-gway-venv "$started"
 
           started="$(timing_start)"
-          sudo -n /var/lib/gway/venv.next/bin/python -m pip install --upgrade pip >/dev/null 2>&1
+          sudo -n "${candidate}/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
           timing_end canonical-gway-pip "$started"
 
           started="$(timing_start)"
-          sudo -n /var/lib/gway/venv.next/bin/python -m pip install \
+          sudo -n "${candidate}/bin/python" -m pip install \
             "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" \
             >/dev/null 2>&1
           timing_end canonical-gway-install "$started"
 
           started="$(timing_start)"
           sudo -n env GWAY_EXPECTED_SHA="$GWAY_EXPECTED_SHA" \
-            /var/lib/gway/venv.next/bin/python - <<'PY'
+            "${candidate}/bin/python" - <<'PY'
           import importlib.metadata
           import json
           import os
@@ -455,29 +484,53 @@ jobs:
                   f"Gway provenance mismatch: installed={commit_id!r} expected={expected!r}"
               )
           PY
-          sudo -n /var/lib/gway/venv.next/bin/python -m gway --help >/dev/null
+          sudo -n "${candidate}/bin/python" -m gway --help >/dev/null
+          sudo -n "${candidate}/bin/gway" --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" \
-            /var/lib/gway/venv.next/bin/python -m gway version >/dev/null
+            "${candidate}/bin/python" -m gway version >/dev/null
           timing_end canonical-gway-pre-swap-verify "$started"
 
           started="$(timing_start)"
-          sudo -n rm -rf /var/lib/gway/venv.previous
-          if sudo -n test -d /var/lib/gway/venv; then
-            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous
+          if sudo -n test -L "${link}"; then
+            previous_target="$(sudo -n readlink -f "${link}")"
+          elif sudo -n test -d "${link}"; then
+            previous_target="${runtime_root}/legacy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            legacy_directory=true
+          fi
+
+          echo "GWAY_RUNTIME_CANDIDATE_TARGET=${candidate}" >> "$GITHUB_ENV"
+          echo "GWAY_RUNTIME_PREVIOUS_TARGET=${previous_target}" >> "$GITHUB_ENV"
+          if [[ -n "${previous_target}" ]]; then
             echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=true" >> "$GITHUB_ENV"
           else
             echo "GWAY_RUNTIME_ROLLBACK_AVAILABLE=false" >> "$GITHUB_ENV"
           fi
-          sudo -n mv /var/lib/gway/venv.next /var/lib/gway/venv
+          echo "GWAY_RUNTIME_SWITCH_STARTED=true" >> "$GITHUB_ENV"
+
+          if [[ "${legacy_directory}" == true ]]; then
+            sudo -n rm -rf "${previous_target}"
+            sudo -n mv "${link}" "${previous_target}"
+          fi
+
+          sudo -n ln -s "${candidate}" "${link_next}"
+          if sudo -n test -L "${link}"; then
+            sudo -n mv -Tf "${link_next}" "${link}"
+          else
+            sudo -n mv "${link_next}" "${link}"
+          fi
           sudo -n chmod 0711 /var/lib/gway
-          sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
+          sudo -n chmod 0755 "${candidate}" "${candidate}/bin"
+
           echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
           timing_end canonical-gway-swap "$started"
 
           started="$(timing_start)"
-          sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+          sudo -n test -L "${link}"
+          test "$(sudo -n readlink -f "${link}")" = "${candidate}"
+          sudo -n "${link}/bin/python" -m gway --help >/dev/null
+          sudo -n "${link}/bin/gway" --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" \
-            /var/lib/gway/venv/bin/python -m gway version >/dev/null
+            "${link}/bin/python" -m gway version >/dev/null
           timing_end canonical-gway-post-swap-verify "$started"
 
       - name: Verify exact deployment pair before mutation
@@ -1192,33 +1245,61 @@ jobs:
           done
 
       - name: Restore previous Gway runtime after failed Gway stage
-        if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && env.GWAY_RUNTIME_SWAPPED == 'true' && env.GWAY_DEPLOYMENT_ACCEPTED != 'true' }}
+        if: ${{ failure() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 && (env.GWAY_RUNTIME_SWAPPED == 'true' || env.GWAY_RUNTIME_SWITCH_STARTED == 'true') && env.GWAY_DEPLOYMENT_ACCEPTED != 'true' }}
         shell: bash
         run: |
           set -Eeuo pipefail
 
+          previous_target="${GWAY_RUNTIME_PREVIOUS_TARGET:-}"
+          candidate_target="${GWAY_RUNTIME_CANDIDATE_TARGET:-}"
           if [[ "${GWAY_RUNTIME_ROLLBACK_AVAILABLE:-false}" != "true" ]] ||
-             ! sudo -n test -d /var/lib/gway/venv.previous; then
+             [[ -z "${previous_target}" ]] ||
+             ! sudo -n test -d "${previous_target}"; then
             echo "gway_runtime_rollback=unavailable"
             exit 0
           fi
 
-          echo "gway_runtime_rollback=starting"
-          sudo -n rm -rf /var/lib/gway/venv.failed
-          if sudo -n test -d /var/lib/gway/venv; then
-            sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.failed
+          echo "gway_runtime_rollback=starting target=${previous_target}"
+          rollback_link=/var/lib/gway/venv.rollback
+          sudo -n rm -rf "${rollback_link}"
+          sudo -n ln -s "${previous_target}" "${rollback_link}"
+          if sudo -n test -d /var/lib/gway/venv && ! sudo -n test -L /var/lib/gway/venv; then
+            sudo -n rm -rf /var/lib/gway/venv
           fi
-          sudo -n mv /var/lib/gway/venv.previous /var/lib/gway/venv
+          sudo -n mv -Tf "${rollback_link}" /var/lib/gway/venv
           sudo -n chmod 0711 /var/lib/gway
-          sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
+          sudo -n chmod 0755 "${previous_target}" "${previous_target}/bin"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
+          sudo -n /var/lib/gway/venv/bin/gway --help >/dev/null
           GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
 
           sudo -n /usr/local/bin/gway --help >/dev/null
           sudo -n /usr/local/bin/gway version >/dev/null
 
-          sudo -n rm -rf /var/lib/gway/venv.failed
+          if [[ -n "${candidate_target}" && "${candidate_target}" != "${previous_target}" ]]; then
+            sudo -n rm -rf "${candidate_target}"
+          fi
           echo "gway_runtime_rollback=restored"
+
+      - name: Finalize canonical Gway runtime
+        if: ${{ success() && fromJSON(env.WATCHTOWER_LEVEL) >= 0 }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          runtime_root=/var/lib/gway/venvs
+          current_target="$(sudo -n readlink -f /var/lib/gway/venv)"
+          sudo -n test -d "${current_target}"
+          sudo -n /var/lib/gway/venv/bin/gway --help >/dev/null
+          if sudo -n test -d "${runtime_root}"; then
+            while IFS= read -r path; do
+              [[ -n "${path}" ]] || continue
+              resolved="$(sudo -n readlink -f "${path}")"
+              if [[ "${resolved}" != "${current_target}" ]]; then
+                sudo -n rm -rf "${path}"
+              fi
+            done < <(sudo -n find "${runtime_root}" -mindepth 1 -maxdepth 1 -print)
+          fi
+          echo "gway_runtime_finalized target=${current_target}"
 
       - name: Reconcile certified package publisher handoff
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 3
