@@ -199,9 +199,17 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                     f"connector {state.connector_id} already has transaction "
                     f"{state.transaction.transaction_id}"
                 )
+            if state.status != "Available":
+                raise LiveSimulatorError(
+                    f"connector {state.connector_id} is not available ({state.status})"
+                )
+            state.status = "Preparing"
             return state
         for state in self._connectors.values():
             if state.transaction is None and state.status == "Available":
+                # Reserve synchronously before the first await in _start_transaction
+                # so concurrent automatic starts cannot select the same connector.
+                state.status = "Preparing"
                 return state
         if self.config.connectors == 1:
             current = self._connectors[1].transaction
@@ -342,8 +350,12 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             connector=state.connector_id,
         )
         try:
-            self._accumulate_meter(state)
-            if request.get("energy_wh") is not None:
+            if request.get("energy_wh") is None:
+                self._accumulate_meter(state)
+            else:
+                # Explicit cumulative energy is an authoritative logical sample.
+                # Reset the wall-clock anchor without adding an extra fraction.
+                state.meter_anchor = self._clock.now()
                 self._set_meter_energy(state, request["energy_wh"])
             self._set_electrical_state(state, request)
             timestamp = self._clock.isoformat()
@@ -373,10 +385,10 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         }
 
     async def _start_transaction(self, request: dict[str, Any]) -> dict[str, Any]:
-        state = self._connector_for_start(request)
         id_tag = str(request.get("id_tag", "")).strip()
         if not id_tag:
             raise LiveSimulatorError("transaction start requires an idTag")
+        state = self._connector_for_start(request)
         request_id = self._begin_request(
             "StartTransaction",
             connector=state.connector_id,
@@ -393,7 +405,6 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
 
             async with self._transport_lock:
                 await self._send_status(state, "Preparing")
-                state.status = "Preparing"
                 try:
                     response = await self._simulator.call(
                         "StartTransaction",
@@ -475,6 +486,8 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                 state.status = "Charging"
                 await self._send_status(state, "Charging")
         except Exception as exc:
+            if state.transaction is None:
+                state.status = "Available"
             self._complete_request(request_id, "StartTransaction", error=str(exc))
             self._persist_transaction_state(state)
             raise
