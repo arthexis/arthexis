@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from apps.ocpp.simulator.network import LiveSimulatorConfig, LiveSimulatorError
+from apps.ocpp.simulator.transaction_worker import TransactionalLiveSimulatorWorker
 from apps.ocpp.simulator.worker import (
     LiveSimulatorWorker,
     active_session,
@@ -63,7 +64,7 @@ class SimulatorService:
     """Own at most one live worker behind a stable machine-local control socket."""
 
     worker_factory: Callable[..., LiveSimulatorWorker] = field(
-        default=LiveSimulatorWorker,
+        default=TransactionalLiveSimulatorWorker,
         repr=False,
     )
 
