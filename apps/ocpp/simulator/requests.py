@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -14,10 +15,15 @@ class RequestJournal:
     """Append privacy-safe request events and results to one simulator session."""
 
     def __init__(self, evidence_dir: str | Path | None):
-        if not evidence_dir:
-            raise ValueError("asynchronous requests require a simulator evidence directory")
-        self.root = Path(evidence_dir)
+        if evidence_dir:
+            self.root = Path(evidence_dir)
+        else:
+            runtime = Path(
+                os.environ.get("OCPP_SIMULATOR_RUNTIME_DIR", ".arthexis/ocpp-simulators")
+            )
+            self.root = runtime / "requests"
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.root.chmod(0o700)
         self.events_path = self.root / "events.jsonl"
         self.results_path = self.root / "results.jsonl"
         self._results: dict[str, dict[str, Any]] = {}
