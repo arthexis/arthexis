@@ -132,6 +132,16 @@ class Command(BaseCommand):
                     ),
                 )
 
+        result_parser = actions.add_parser(
+            "result", help="Read a correlated asynchronous simulator request result."
+        )
+        result_parser.add_argument("request_id")
+        result_parser.add_argument("--charger")
+        result_parser.add_argument(
+            "--wait", action="store_true", help="Wait if the request is still pending."
+        )
+        result_parser.add_argument("--timeout", type=float)
+
         stop_parser = actions.add_parser(
             "stop", help="Stop the existing live simulator session and service."
         )
@@ -169,6 +179,24 @@ class Command(BaseCommand):
                 if options.get("timeout") is not None and options["timeout"] < 0:
                     raise CommandError("--timeout must be zero or greater")
                 request["id_tag"] = id_tag
+            elif action == "result":
+                if options.get("timeout") is not None and not options.get("wait"):
+                    raise CommandError("--timeout requires --wait")
+                if options.get("timeout") is not None and options["timeout"] < 0:
+                    raise CommandError("--timeout must be zero or greater")
+                request = {
+                    "action": "wait-result" if options.get("wait") else "result",
+                    "request_id": options["request_id"],
+                }
+                if options.get("wait"):
+                    timeout = options.get("timeout")
+                    if timeout is None:
+                        current = active_session() or {}
+                        configured_timeout = current.get("authorization_timeout")
+                        if configured_timeout is not None:
+                            timeout = float(configured_timeout)
+                    if timeout is not None:
+                        request["timeout"] = timeout
             elif action == "authorize-scenario":
                 request.update(
                     {
