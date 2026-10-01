@@ -37,15 +37,19 @@ class LiveSimulatorConfig:
     authorization_timeout: float = 60.0
     heartbeat: bool = True
     reconnect_enabled: bool = True
+    connectors: int = 1
     clock: dict[str, Any] = field(default_factory=dict)
     evidence_dir: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.connectors <= 0:
+            raise ValueError("simulator connectors must be a positive integer")
 
     @property
     def subprotocol(self) -> str:
         protocol = self.protocol.strip().lower()
         if protocol not in {"ocpp1.6", "ocpp1.6j"}:
             raise LiveSimulatorError(f"unsupported simulator protocol: {self.protocol!r}")
-        # OCPP 1.6 JSON uses the standard WebSocket subprotocol token below.
         return "ocpp1.6"
 
     @property
@@ -66,10 +70,6 @@ class LiveSimulatorConfig:
         encoded = quote(self.charger, safe="")
         if "{charger}" in raw:
             return raw.replace("{charger}", encoded)
-
-        # Preserve the historical Arthexis base-URL behavior when no path is
-        # supplied. A non-root path is treated as an exact third-party CSMS
-        # WebSocket endpoint rather than forcing Arthexis's /ocpp/<id> route.
         if parsed.path and parsed.path != "/":
             return raw
         return f"{raw.rstrip('/')}/ocpp/{encoded}"

@@ -243,6 +243,10 @@ class LiveSimulatorWorker:
                 f"BootNotification was not accepted: {self._boot.status}"
             )
 
+    async def disconnect(self) -> None:
+        async with self._transport_lock:
+            await self._simulator.close()
+
     async def reconnect(self) -> None:
         if not self.config.reconnect_enabled:
             raise LiveSimulatorError("reconnect is disabled by the charger profile")
@@ -485,6 +489,13 @@ class LiveSimulatorWorker:
                 "pacing": pacing.mode,
                 "reconnect_after": reconnect_after,
                 "metrics": metrics.as_dict(),
+            }
+        if action == "disconnect":
+            await self.disconnect()
+            return {
+                "ok": True,
+                "charger": self.config.charger,
+                "connected": False,
             }
         if action == "reconnect":
             await self.reconnect()
