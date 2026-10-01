@@ -30,7 +30,7 @@ class FakeSimulator:
         self.connected = True
 
     async def boot(self):
-        return SimpleNamespace(status="Accepted", interval=60)
+        return SimpleNamespace(status="Accepted", interval=60, current_time="now")
 
     async def authorize(self, id_tag):
         self.calls.append(("Authorize", id_tag))
@@ -51,17 +51,31 @@ def worker_with(fake):
     )
 
 
-def test_worker_authorize_reuses_live_connection():
+def test_worker_authorize_submits_and_correlates_result(tmp_path, monkeypatch):
     async def exercise():
+        monkeypatch.setenv("OCPP_SIMULATOR_RUNTIME_DIR", str(tmp_path))
         fake = FakeSimulator(authorization="Invalid")
         worker = worker_with(fake)
         await worker.connect_and_boot()
 
-        response = await worker.dispatch(
+        submitted = await worker.dispatch(
             {"action": "authorize", "id_tag": "UNKNOWN001"}
         )
+        assert submitted["submitted"] is True
+        assert submitted["completed"] is False
+        assert submitted["request_id"]
 
-        assert response["authorization"] == "Invalid"
+        completed = await worker.dispatch(
+            {
+                "action": "wait-result",
+                "request_id": submitted["request_id"],
+                "timeout": 1.0,
+            }
+        )
+
+        assert completed["completed"] is True
+        assert completed["authorization"] == "Invalid"
+        assert completed["request_id"] == submitted["request_id"]
         assert fake.calls == [("Authorize", "UNKNOWN001")]
 
     asyncio.run(exercise())
