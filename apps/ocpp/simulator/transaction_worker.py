@@ -95,7 +95,6 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         return int(cls._nonnegative(raw, name=name))
 
     def _accumulate_meter(self) -> None:
-        """Accumulate energy using elapsed simulated charger time and active power."""
         now = self._clock.now()
         elapsed_seconds = max(0.0, (now - self._meter_anchor).total_seconds())
         if self._transaction is not None and self._power_w > 0 and elapsed_seconds > 0:
@@ -136,19 +135,11 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         ]
         if self._current_a is not None:
             sampled.append(
-                {
-                    "value": str(self._current_a),
-                    "measurand": "Current.Import",
-                    "unit": "A",
-                }
+                {"value": str(self._current_a), "measurand": "Current.Import", "unit": "A"}
             )
         if self._voltage_v is not None:
             sampled.append(
-                {
-                    "value": str(self._voltage_v),
-                    "measurand": "Voltage",
-                    "unit": "V",
-                }
+                {"value": str(self._voltage_v), "measurand": "Voltage", "unit": "V"}
             )
         return {
             "connectorId": self._connector_id,
@@ -224,9 +215,7 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                     await self._send_status("Available")
                 except Exception:
                     pass
-                raise LiveSimulatorError(
-                    "StartTransaction response requires idTagInfo.status"
-                )
+                raise LiveSimulatorError("StartTransaction response requires idTagInfo.status")
             authorization = info.get("status")
             if not isinstance(authorization, str) or not authorization:
                 self._connector_status = "Available"
@@ -234,9 +223,7 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                     await self._send_status("Available")
                 except Exception:
                     pass
-                raise LiveSimulatorError(
-                    "StartTransaction response requires idTagInfo.status"
-                )
+                raise LiveSimulatorError("StartTransaction response requires idTagInfo.status")
             if authorization != "Accepted":
                 self._connector_status = "Available"
                 await self._send_status("Available")
@@ -253,9 +240,7 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
                     await self._send_status("Available")
                 except Exception:
                     pass
-                raise LiveSimulatorError(
-                    "StartTransaction response requires integer transactionId"
-                )
+                raise LiveSimulatorError("StartTransaction response requires integer transactionId")
 
             self._transaction = ActiveTransaction(
                 transaction_id=transaction_id,
@@ -282,6 +267,7 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
         if current is None:
             raise LiveSimulatorError("connector 1 has no active transaction")
         self._accumulate_meter()
+        accumulated_meter = self._meter_wh_exact
         if request.get("meter_stop") is not None:
             meter_stop = self._meter_value(request["meter_stop"], name="meter_stop")
             if meter_stop < self._meter_wh:
@@ -307,6 +293,7 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             try:
                 response = await self._simulator.call("StopTransaction", payload)
             except Exception:
+                self._meter_wh_exact = accumulated_meter
                 self._connector_status = "Charging"
                 try:
                     await self._send_status("Charging")
@@ -320,11 +307,8 @@ class TransactionalLiveSimulatorWorker(LiveSimulatorWorker):
             self._transaction = None
             self._power_w = 0.0
             self._meter_anchor = self._clock.now()
-            try:
-                await self._send_status("Available")
-                self._connector_status = "Available"
-            except Exception:
-                raise
+            await self._send_status("Available")
+            self._connector_status = "Available"
 
         return {
             "ok": True,
