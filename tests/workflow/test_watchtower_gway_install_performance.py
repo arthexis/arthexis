@@ -10,8 +10,8 @@ def workflow_text():
 
 def test_watchtower_installs_gway_candidate_once():
     text = workflow_text()
-    install = 'pip install \\\n            "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}"'
-    assert text.count(install) == 1
+    package = "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}"
+    assert text.count(package) == 1
     assert '${RUNNER_TEMP}/gway-venv' not in text
     assert '/var/lib/gway/venv.next/bin/python -m pip install' in text
 
