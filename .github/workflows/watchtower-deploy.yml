@@ -405,15 +405,62 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          python3 -m venv "${RUNNER_TEMP}/gway-venv"
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install --upgrade pip >/dev/null 2>&1
-          "${RUNNER_TEMP}/gway-venv/bin/python" -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
-          "${RUNNER_TEMP}/gway-venv/bin/gway" --help >/dev/null
+
+          timing_start() {
+            date +%s%N
+          }
+
+          timing_end() {
+            local phase="$1"
+            local started="$2"
+            local ended elapsed
+            ended="$(date +%s%N)"
+            elapsed=$((ended - started))
+            printf 'watchtower_timing phase=%s seconds=%d.%03d\n' \
+              "$phase" "$((elapsed / 1000000000))" "$(((elapsed / 1000000) % 1000))"
+          }
 
           sudo -n rm -rf /var/lib/gway/venv.next
+
+          started="$(timing_start)"
           sudo -n python3 -m venv /var/lib/gway/venv.next
+          timing_end canonical-gway-venv "$started"
+
+          started="$(timing_start)"
           sudo -n /var/lib/gway/venv.next/bin/python -m pip install --upgrade pip >/dev/null 2>&1
-          sudo -n /var/lib/gway/venv.next/bin/python -m pip install "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" >/dev/null 2>&1
+          timing_end canonical-gway-pip "$started"
+
+          started="$(timing_start)"
+          sudo -n /var/lib/gway/venv.next/bin/python -m pip install \
+            "gway[toml] @ git+https://github.com/arthexis/gway.git@${GWAY_EXPECTED_SHA}" \
+            >/dev/null 2>&1
+          timing_end canonical-gway-install "$started"
+
+          started="$(timing_start)"
+          sudo -n env GWAY_EXPECTED_SHA="$GWAY_EXPECTED_SHA" \
+            /var/lib/gway/venv.next/bin/python - <<'PY'
+          import importlib.metadata
+          import json
+          import os
+
+          distribution = importlib.metadata.distribution("gway")
+          direct_url = distribution.read_text("direct_url.json")
+          if not direct_url:
+              raise SystemExit("Gway installation has no direct_url.json provenance")
+          payload = json.loads(direct_url)
+          commit_id = payload.get("vcs_info", {}).get("commit_id")
+          expected = os.environ["GWAY_EXPECTED_SHA"]
+          if commit_id != expected:
+              raise SystemExit(
+                  f"Gway provenance mismatch: installed={commit_id!r} expected={expected!r}"
+              )
+          PY
+          sudo -n /var/lib/gway/venv.next/bin/python -m gway --help >/dev/null
+          GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" \
+            /var/lib/gway/venv.next/bin/python -m gway version >/dev/null
+          timing_end canonical-gway-pre-swap-verify "$started"
+
+          started="$(timing_start)"
           sudo -n rm -rf /var/lib/gway/venv.previous
           if sudo -n test -d /var/lib/gway/venv; then
             sudo -n mv /var/lib/gway/venv /var/lib/gway/venv.previous
@@ -425,8 +472,13 @@ jobs:
           sudo -n chmod 0711 /var/lib/gway
           sudo -n chmod 0755 /var/lib/gway/venv /var/lib/gway/venv/bin
           echo "GWAY_RUNTIME_SWAPPED=true" >> "$GITHUB_ENV"
+          timing_end canonical-gway-swap "$started"
+
+          started="$(timing_start)"
           sudo -n /var/lib/gway/venv/bin/python -m gway --help >/dev/null
-          GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" /var/lib/gway/venv/bin/python -m gway version >/dev/null
+          GWAY_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gway" \
+            /var/lib/gway/venv/bin/python -m gway version >/dev/null
+          timing_end canonical-gway-post-swap-verify "$started"
 
       - name: Verify exact deployment pair before mutation
         if: fromJSON(env.WATCHTOWER_LEVEL) >= 0
@@ -464,7 +516,7 @@ jobs:
             echo "arthexis_product_quarantine=${stale_product}"
           fi
 
-          if ! sudo -n "${RUNNER_TEMP}/gway-venv/bin/gway" install . --system --force >"${install_log}" 2>&1; then
+          if ! sudo -n /var/lib/gway/venv/bin/gway -t install . --system --force >"${install_log}" 2>&1; then
             sudo -n python3 scripts/watchtower_diagnostics.py               --input "${install_log}"               --run-id "${GITHUB_RUN_ID}"               --attempt "${GITHUB_RUN_ATTEMPT}"               --step "arthexis-product-install"
             rm -f "${install_log}"
             echo "arthexis_product_install=failed diagnostic_source=recipe/watchtower-deploy"
@@ -476,7 +528,8 @@ jobs:
             fi
             exit 1
           fi
-          rm -f "${install_log}"
+          cat "$install_log"
+          rm -f "$install_log"
 
           if [[ -n "${stale_product}" ]]; then
             sudo -n rm -rf "${stale_product}"
@@ -701,7 +754,7 @@ jobs:
           test -n "${public_ipv4}"
           recipe=/var/lib/gway/venv/share/gway/sampler/bootstrap/watchtower.rx
           sudo -n test -f "${recipe}"
-          if ! bootstrap_output="$(sudo -n /usr/local/bin/gway --recipe "${recipe}" \
+          if ! bootstrap_output="$(sudo -n /usr/local/bin/gway -t --recipe "${recipe}" \
             --email "${ARTHEXIS_CERTBOT_EMAIL}" \
             --public-ipv4 "${public_ipv4}" 2>&1)"; then
             printf '%s\n' "$bootstrap_output" >&2
@@ -755,13 +808,13 @@ jobs:
 
           sudo -n /var/lib/gway/venv/bin/python /opt/arthexis/scripts/retire_legacy_web_service.py
 
-          if ! (cd /opt/arthexis && sudo -n /usr/local/bin/gway service install --backend systemd --system --name arthexis.com -- /opt/arthexis/.venv/bin/python -c 'from arthexis.server import main; main(host="127.0.0.1", port=8888, data_dir="/var/lib/arthexis", allowed_hosts="arthexis.com")'); then
+          if ! (cd /opt/arthexis && sudo -n /usr/local/bin/gway -t service install --backend systemd --system --name arthexis.com -- /opt/arthexis/.venv/bin/python -c 'from arthexis.server import main; main(host="127.0.0.1", port=8888, data_dir="/var/lib/arthexis", allowed_hosts="arthexis.com")'); then
             echo "arthexis_service_install=failed"
             service_diagnostics
             exit 1
           fi
 
-          if ! (cd /opt/arthexis && sudo -n /usr/local/bin/gway service restart --system --name arthexis.com --timeout 40 -- /opt/arthexis/.venv/bin/python -c 'from arthexis.server import main; main(host="127.0.0.1", port=8888, data_dir="/var/lib/arthexis", allowed_hosts="arthexis.com")'); then
+          if ! (cd /opt/arthexis && sudo -n /usr/local/bin/gway -t service restart --system --name arthexis.com --timeout 40 -- /opt/arthexis/.venv/bin/python -c 'from arthexis.server import main; main(host="127.0.0.1", port=8888, data_dir="/var/lib/arthexis", allowed_hosts="arthexis.com")'); then
             echo "arthexis_service_restart=failed"
             service_diagnostics
             exit 1
@@ -877,8 +930,8 @@ jobs:
           public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
           test -n "${public_ipv4}"
           cd /opt/arthexis
-          sudo -n /usr/local/bin/gway --recipe deploy/remote.rx
-          sudo -n /usr/local/bin/gway --recipe deploy/remote-expose.rx \
+          sudo -n /usr/local/bin/gway -t --recipe deploy/remote.rx
+          sudo -n /usr/local/bin/gway -t --recipe deploy/remote-expose.rx \
             --email "${ARTHEXIS_CERTBOT_EMAIL}" \
             --public-ipv4 "${public_ipv4}"
 
@@ -987,7 +1040,7 @@ jobs:
           test -n "${ARTHEXIS_CERTBOT_EMAIL}"
           public_ipv4="$(getent ahostsv4 arthexis.com | awk 'NR == 1 {print $1}')"
           test -n "${public_ipv4}"
-          sudo -n /usr/local/bin/gway wire watchtower \
+          sudo -n /usr/local/bin/gway -t wire watchtower \
             --email "${ARTHEXIS_CERTBOT_EMAIL}" \
             --public-address "${public_ipv4}"
 
