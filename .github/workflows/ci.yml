@@ -38,6 +38,9 @@ jobs:
       - name: Ansible appliance syntax
         run: ansible-playbook -i ansible/inventory.ini ansible/appliance.yml --syntax-check
 
+      - name: Project tests
+        run: python -m pytest tests/project
+
       - name: Dashboard tests
         run: python -m pytest tests/dashboard
 
