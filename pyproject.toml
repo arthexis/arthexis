@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arthexis"
+version = "3.0.0.dev0"
+description = "Arthexis dashboard and business suite"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.2,<5.3",
+    "ansible>=11,<12",
+]
+
+[tool.setuptools]
+packages = ["arthexis"]
