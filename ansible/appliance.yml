@@ -7,6 +7,7 @@
   vars:
     ocpp_csms_repo: "{{ lookup('env', 'OCPP_CSMS_REPO') | default('../ocpp-csms', true) }}"
     ocpp_csms_playbook: ansible/playbooks/satellite.yml
+    ocpp_csms_inventory: "{{ lookup('env', 'OCPP_CSMS_INVENTORY') | default('', true) }}"
   tasks:
     - name: Verify OCPP CSMS checkout exists
       ansible.builtin.stat:
@@ -25,9 +26,9 @@
 
     - name: Run OCPP CSMS-owned Ansible deployment
       ansible.builtin.command:
-        argv:
-          - ansible-playbook
-          - "{{ ocpp_csms_playbook }}"
+        argv: >-
+          {{ ['ansible-playbook', ocpp_csms_playbook]
+             + (['-i', ocpp_csms_inventory] if ocpp_csms_inventory else []) }}
       args:
         chdir: "{{ ocpp_csms_repo }}"
       changed_when: true
