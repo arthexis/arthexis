@@ -13,4 +13,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["arthexis"]
+packages = ["arthexis", "dashboard"]
