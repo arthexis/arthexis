@@ -1,0 +1,33 @@
+---
+- import_playbook: site.yml
+
+- name: Configure OCPP CSMS component
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ocpp_csms_repo: "{{ lookup('env', 'OCPP_CSMS_REPO') | default('../ocpp-csms', true) }}"
+    ocpp_csms_playbook: ansible/playbooks/satellite.yml
+  tasks:
+    - name: Verify OCPP CSMS checkout exists
+      ansible.builtin.stat:
+        path: "{{ ocpp_csms_repo }}/{{ ocpp_csms_playbook }}"
+      register: ocpp_csms_playbook_file
+
+    - name: Require OCPP CSMS checkout
+      ansible.builtin.assert:
+        that:
+          - ocpp_csms_playbook_file.stat.exists
+          - ocpp_csms_playbook_file.stat.isreg
+        fail_msg: >-
+          OCPP CSMS playbook not found at
+          {{ ocpp_csms_repo }}/{{ ocpp_csms_playbook }}.
+          Set OCPP_CSMS_REPO or pass -e ocpp_csms_repo=/path/to/ocpp-csms.
+
+    - name: Run OCPP CSMS-owned Ansible deployment
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - "{{ ocpp_csms_playbook }}"
+      args:
+        chdir: "{{ ocpp_csms_repo }}"
+      changed_when: true
