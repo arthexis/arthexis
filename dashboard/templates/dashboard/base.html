@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Arthexis{% endblock %}</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.7"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@6/dist/echarts.min.js"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 antialiased">
+  <div x-data="{ sidebarOpen: false }" class="min-h-full">
+    <aside class="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-white/10 bg-slate-950/95 px-5 py-6 backdrop-blur lg:block">
+      <a href="/" class="flex items-center gap-3 px-2">
+        <div class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-400 font-black text-slate-950">A</div>
+        <div>
+          <div class="font-bold tracking-wide text-white">ARTHEXIS</div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-slate-500">Operations</div>
+        </div>
+      </a>
+      <nav class="mt-10 space-y-1 text-sm">
+        <a class="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-2.5 font-medium text-white" href="/">Overview</a>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Sites</a>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Chargers</a>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Sessions</a>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Energy</a>
+        <div class="my-4 border-t border-white/10"></div>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Clients</a>
+        <a class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-slate-400 hover:bg-white/5 hover:text-white" href="#">Billing</a>
+      </nav>
+      <div class="absolute bottom-6 left-5 right-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div class="text-xs uppercase tracking-wider text-slate-500">Platform</div>
+        <div class="mt-1 flex items-center gap-2 text-sm text-slate-300"><span class="h-2 w-2 rounded-full bg-emerald-400"></span> Systems nominal</div>
+      </div>
+    </aside>
+    <main class="lg:pl-64">
+      <header class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/10 bg-slate-950/80 px-5 backdrop-blur md:px-8">
+        <div>
+          <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Current site</div>
+          <div class="font-semibold text-white">{% block site_name %}All sites{% endblock %}</div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="hidden text-right sm:block">
+            <div class="text-sm font-medium text-slate-200">Operations</div>
+            <div class="text-xs text-slate-500">Arthexis 3.0</div>
+          </div>
+          <div class="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold">A</div>
+        </div>
+      </header>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
