@@ -4,6 +4,20 @@ Arthexis is the dashboard and business suite for the Arthexis platform.
 
 Arthexis 3.0 deliberately contains no OCPP protocol or CSMS logic. Charger protocol handling belongs in the separate `ocpp-csms` service; Arthexis consumes business and operational data without becoming the charge-point protocol endpoint.
 
+## UI stack
+
+Arthexis uses a server-rendered Django UI rather than a separate SPA:
+
+- Django templates for pages and reusable fragments
+- HTMX for polling, partial updates, filters, and server-driven interactions
+- Alpine.js for small local browser interactions
+- Tailwind CSS for the visual system
+- Apache ECharts for charger, energy, utilization, and business visualizations
+
+The initial dashboard is available at `/`. The current charger and energy values are illustrative placeholders until the business and OCPP-CSMS integration models are added.
+
+The browser libraries are CDN-backed during the bootstrap phase to keep the project free of a Node/npm build requirement. They can be vendored or compiled later without changing the server-rendered architecture.
+
 ## Bootstrap
 
 Requires Python 3.11 or newer.
