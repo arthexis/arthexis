@@ -12,5 +12,16 @@ dependencies = [
     "ansible>=11,<12",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-django>=4.9,<5",
+]
+
 [tool.setuptools]
 packages = ["arthexis", "dashboard"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "arthexis.settings"
+testpaths = ["tests"]
+addopts = "--durations=0 --durations-min=0.01"
