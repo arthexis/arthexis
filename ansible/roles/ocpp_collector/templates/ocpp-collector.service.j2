@@ -1,0 +1,21 @@
+[Unit]
+Description=OCPP Collector PostgREST service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ ocpp_collector_service_user }}
+Group={{ ocpp_collector_service_group }}
+ExecStart={{ ocpp_collector_postgrest_binary }} {{ ocpp_collector_config_path }}
+ExecReload=/bin/kill -SIGUSR1 $MAINPID
+Restart=always
+RestartSec=5
+LimitNOFILE=10000
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
