@@ -20,7 +20,7 @@ The browser libraries are CDN-backed during the bootstrap phase to keep the proj
 
 ## Bootstrap
 
-Requires Python 3.11 or newer.
+Requires Python 3.10 or newer. Ubuntu 22.04's system Python 3.10 is supported.
 
 ```bash
 python -m venv .venv
