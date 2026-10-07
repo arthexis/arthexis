@@ -6,10 +6,18 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ocpp_collector_anon') THEN
         CREATE ROLE ocpp_collector_anon NOLOGIN;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ocpp_forwarder') THEN
+        CREATE ROLE ocpp_forwarder NOLOGIN;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arthexis_reader') THEN
+        CREATE ROLE arthexis_reader NOLOGIN;
+    END IF;
 END
-$$;
+$;
 
 GRANT ocpp_collector_anon TO {{ ocpp_collector_db_role }};
+GRANT ocpp_forwarder TO {{ ocpp_collector_db_role }};
+GRANT arthexis_reader TO {{ ocpp_collector_db_role }};
 {% if ocpp_collector_db_password | length > 0 %}
 ALTER ROLE {{ ocpp_collector_db_role }} PASSWORD :'collector_password';
 {% endif %}
