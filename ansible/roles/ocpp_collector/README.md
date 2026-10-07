@@ -59,3 +59,52 @@ When `ocpp_collector_tls_certificate` and
 `ocpp_collector_tls_certificate_key` are supplied, the nginx site listens
 with TLS. When they are omitted, the role creates the HTTP virtual host so an
 existing external TLS layer or certificate workflow can own termination.
+
+## Authentication and satellite enrollment
+
+PostgREST requires JWT authentication. Supply a signing secret of at least 32
+characters through Vault or host variables:
+
+```yaml
+ocpp_collector_jwt_secret: "{{ vault_ocpp_collector_jwt_secret }}"
+ocpp_collector_satellites:
+  - id: gway-004
+  - id: gway-007
+```
+
+The enrollment list is authoritative. Satellites omitted from the next
+convergence are retained historically but marked disabled, so their existing
+JWTs can no longer write data. A satellite's JWT identity is its stable
+`satellite_id`; the CSMS `source_id` remains a separate data-store epoch.
+
+The role creates two authenticated API roles:
+
+- `ocpp_forwarder`: SELECT/INSERT/UPDATE only, restricted by PostgreSQL RLS to
+  the JWT's enabled `satellite_id`.
+- `arthexis_reader`: fleet-wide SELECT only.
+
+Anonymous users receive no table privileges.
+
+### Issuing tokens
+
+The role installs `/usr/local/bin/ocpp-collector-token`. Keep the signing
+secret out of shell history by supplying it through the environment or a
+secret-management wrapper.
+
+Issue a Forwarder token:
+
+```bash
+OCPP_COLLECTOR_JWT_SECRET="$SECRET" \
+  ocpp-collector-token forwarder gway-004
+```
+
+Issue an Arthexis read-only token:
+
+```bash
+OCPP_COLLECTOR_JWT_SECRET="$SECRET" \
+  ocpp-collector-token reader
+```
+
+Tokens expire after 90 days by default; override `--ttl` when a different
+lifetime is required. Disabling a satellite in Ansible takes effect at the
+database policy layer independently of token expiration.
