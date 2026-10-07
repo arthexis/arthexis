@@ -32,11 +32,17 @@ jobs:
       - name: Django system check
         run: python manage.py check
 
-      - name: Ansible site syntax
-        run: ansible-playbook -i ansible/inventory.ini ansible/site.yml --syntax-check
+      - name: Ansible Arthexis syntax
+        run: ansible-playbook ansible/playbooks/arthexis.yml --syntax-check
+
+      - name: Ansible OCPP Collector syntax
+        run: ansible-playbook ansible/playbooks/ocpp-collector.yml --syntax-check
+
+      - name: Ansible Watchtower syntax
+        run: ansible-playbook ansible/playbooks/watchtower.yml --syntax-check
 
       - name: Ansible appliance syntax
-        run: ansible-playbook -i ansible/inventory.ini ansible/appliance.yml --syntax-check
+        run: ansible-playbook ansible/appliance.yml --syntax-check
 
       - name: Project tests
         run: python -m pytest tests/project
