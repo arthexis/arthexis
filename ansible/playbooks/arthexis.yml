@@ -1,0 +1,7 @@
+---
+- name: Configure Arthexis
+  hosts: arthexis
+  gather_facts: true
+  tasks:
+    - name: Confirm target is reachable
+      ansible.builtin.ping:
