@@ -41,6 +41,9 @@ jobs:
       - name: Project tests
         run: python -m pytest tests/project
 
+      - name: Integration tests
+        run: python -m pytest tests/integrations
+
       - name: Dashboard tests
         run: python -m pytest tests/dashboard
 

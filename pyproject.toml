@@ -19,7 +19,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["arthexis", "dashboard"]
+packages = ["arthexis", "dashboard", "integrations", "integrations.ocpp_csms"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "arthexis.settings"
