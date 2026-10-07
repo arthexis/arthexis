@@ -1,4 +1,14 @@
 <div class="grid gap-3">
+  {% if not integration_available %}
+  <div class="rounded-2xl border border-rose-400/20 bg-rose-400/5 px-4 py-4 text-sm text-rose-200">
+    OCPP-CSMS status is unavailable.
+  </div>
+  {% elif not chargers %}
+  <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-slate-400">
+    No chargers have been observed.
+  </div>
+  {% endif %}
+
   {% for charger in chargers %}
   <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
     <div class="flex items-center gap-3">
