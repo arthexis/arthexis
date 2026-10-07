@@ -1,14 +1,21 @@
 CREATE SCHEMA IF NOT EXISTS api AUTHORIZATION {{ ocpp_collector_db_role }};
-GRANT USAGE ON SCHEMA api TO ocpp_collector_anon;
+CREATE SCHEMA IF NOT EXISTS collector_private AUTHORIZATION {{ ocpp_collector_db_role }};
+
+REVOKE ALL ON SCHEMA api FROM PUBLIC;
+REVOKE ALL ON SCHEMA collector_private FROM PUBLIC;
+GRANT USAGE ON SCHEMA api TO ocpp_forwarder, arthexis_reader;
 
 CREATE TABLE IF NOT EXISTS api.satellites (
     satellite_id text PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT true,
     current_source_id uuid,
     last_cursor bigint NOT NULL DEFAULT 0,
     last_upload_at timestamptz,
     software_version text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE api.satellites
+    ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS api.chargers (
     satellite_id text NOT NULL,
@@ -83,8 +90,114 @@ CREATE INDEX IF NOT EXISTS idx_ocpp_collector_energy_charger_time
     ON api.energy_samples (satellite_id, charger_id, at);
 
 ALTER SCHEMA api OWNER TO {{ ocpp_collector_db_role }};
+ALTER SCHEMA collector_private OWNER TO {{ ocpp_collector_db_role }};
 ALTER TABLE api.satellites OWNER TO {{ ocpp_collector_db_role }};
 ALTER TABLE api.chargers OWNER TO {{ ocpp_collector_db_role }};
 ALTER TABLE api.events OWNER TO {{ ocpp_collector_db_role }};
 ALTER TABLE api.transactions OWNER TO {{ ocpp_collector_db_role }};
 ALTER TABLE api.energy_samples OWNER TO {{ ocpp_collector_db_role }};
+
+CREATE OR REPLACE FUNCTION collector_private.jwt_satellite_id()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT NULLIF(
+        current_setting('request.jwt.claims', true)::jsonb ->> 'satellite_id',
+        ''
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION collector_private.satellite_is_enabled(candidate text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, api
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM api.satellites
+        WHERE satellite_id = candidate
+          AND enabled
+    );
+$$;
+
+REVOKE ALL ON FUNCTION collector_private.jwt_satellite_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION collector_private.satellite_is_enabled(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION collector_private.jwt_satellite_id() TO ocpp_forwarder;
+GRANT EXECUTE ON FUNCTION collector_private.satellite_is_enabled(text) TO ocpp_forwarder;
+
+GRANT SELECT, UPDATE (
+    current_source_id,
+    last_cursor,
+    last_upload_at,
+    software_version
+) ON api.satellites TO ocpp_forwarder;
+GRANT SELECT, INSERT, UPDATE ON api.chargers TO ocpp_forwarder;
+GRANT SELECT, INSERT, UPDATE ON api.events TO ocpp_forwarder;
+GRANT SELECT, INSERT, UPDATE ON api.transactions TO ocpp_forwarder;
+GRANT SELECT, INSERT, UPDATE ON api.energy_samples TO ocpp_forwarder;
+
+GRANT SELECT ON
+    api.satellites,
+    api.chargers,
+    api.events,
+    api.transactions,
+    api.energy_samples
+TO arthexis_reader;
+
+ALTER TABLE api.satellites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api.chargers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api.energy_samples ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ocpp_forwarder_satellite_self ON api.satellites;
+CREATE POLICY ocpp_forwarder_satellite_self
+ON api.satellites
+FOR SELECT
+TO ocpp_forwarder
+USING (
+    satellite_id = collector_private.jwt_satellite_id()
+    AND collector_private.satellite_is_enabled(satellite_id)
+);
+
+DROP POLICY IF EXISTS ocpp_forwarder_satellite_update ON api.satellites;
+CREATE POLICY ocpp_forwarder_satellite_update
+ON api.satellites
+FOR UPDATE
+TO ocpp_forwarder
+USING (
+    satellite_id = collector_private.jwt_satellite_id()
+    AND collector_private.satellite_is_enabled(satellite_id)
+)
+WITH CHECK (
+    satellite_id = collector_private.jwt_satellite_id()
+    AND collector_private.satellite_is_enabled(satellite_id)
+);
+
+{% for table in ['chargers', 'events', 'transactions', 'energy_samples'] %}
+DROP POLICY IF EXISTS ocpp_forwarder_{{ table }}_own ON api.{{ table }};
+CREATE POLICY ocpp_forwarder_{{ table }}_own
+ON api.{{ table }}
+FOR ALL
+TO ocpp_forwarder
+USING (
+    satellite_id = collector_private.jwt_satellite_id()
+    AND collector_private.satellite_is_enabled(satellite_id)
+)
+WITH CHECK (
+    satellite_id = collector_private.jwt_satellite_id()
+    AND collector_private.satellite_is_enabled(satellite_id)
+);
+{% endfor %}
+
+{% for table in ['satellites', 'chargers', 'events', 'transactions', 'energy_samples'] %}
+DROP POLICY IF EXISTS arthexis_reader_{{ table }} ON api.{{ table }};
+CREATE POLICY arthexis_reader_{{ table }}
+ON api.{{ table }}
+FOR SELECT
+TO arthexis_reader
+USING (true);
+{% endfor %}
