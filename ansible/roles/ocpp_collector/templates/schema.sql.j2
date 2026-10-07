@@ -1,0 +1,90 @@
+CREATE SCHEMA IF NOT EXISTS api AUTHORIZATION {{ ocpp_collector_db_role }};
+GRANT USAGE ON SCHEMA api TO ocpp_collector_anon;
+
+CREATE TABLE IF NOT EXISTS api.satellites (
+    satellite_id text PRIMARY KEY,
+    current_source_id uuid,
+    last_cursor bigint NOT NULL DEFAULT 0,
+    last_upload_at timestamptz,
+    software_version text,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS api.chargers (
+    satellite_id text NOT NULL,
+    source_id uuid NOT NULL,
+    charger_id text NOT NULL,
+    connected boolean,
+    connected_at timestamptz,
+    last_seen timestamptz,
+    protocol text,
+    status text,
+    error_code text,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (satellite_id, source_id, charger_id)
+);
+
+CREATE TABLE IF NOT EXISTS api.events (
+    satellite_id text NOT NULL,
+    source_id uuid NOT NULL,
+    source_event_id bigint NOT NULL,
+    at timestamptz NOT NULL,
+    charger_id text,
+    connector_id integer,
+    transaction_id bigint,
+    rfid text,
+    kind text NOT NULL,
+    action text,
+    status text,
+    error_code text,
+    event jsonb NOT NULL,
+    PRIMARY KEY (satellite_id, source_id, source_event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ocpp_collector_events_charger_time
+    ON api.events (satellite_id, charger_id, at);
+CREATE INDEX IF NOT EXISTS idx_ocpp_collector_events_transaction
+    ON api.events (satellite_id, source_id, transaction_id);
+
+CREATE TABLE IF NOT EXISTS api.transactions (
+    satellite_id text NOT NULL,
+    source_id uuid NOT NULL,
+    transaction_id bigint NOT NULL,
+    charger_id text NOT NULL,
+    connector_id integer,
+    rfid text,
+    state text,
+    active boolean NOT NULL DEFAULT false,
+    started_at timestamptz,
+    stopped_at timestamptz,
+    meter_start_wh bigint,
+    meter_stop_wh bigint,
+    energy_wh bigint,
+    last_activity_at timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (satellite_id, source_id, transaction_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ocpp_collector_transactions_charger
+    ON api.transactions (satellite_id, charger_id, started_at);
+
+CREATE TABLE IF NOT EXISTS api.energy_samples (
+    satellite_id text NOT NULL,
+    source_id uuid NOT NULL,
+    source_event_id bigint NOT NULL,
+    sample_index integer NOT NULL,
+    at timestamptz NOT NULL,
+    charger_id text NOT NULL,
+    connector_id integer,
+    transaction_id bigint,
+    power_w double precision,
+    energy_wh double precision,
+    PRIMARY KEY (satellite_id, source_id, source_event_id, sample_index)
+);
+CREATE INDEX IF NOT EXISTS idx_ocpp_collector_energy_charger_time
+    ON api.energy_samples (satellite_id, charger_id, at);
+
+ALTER SCHEMA api OWNER TO {{ ocpp_collector_db_role }};
+ALTER TABLE api.satellites OWNER TO {{ ocpp_collector_db_role }};
+ALTER TABLE api.chargers OWNER TO {{ ocpp_collector_db_role }};
+ALTER TABLE api.events OWNER TO {{ ocpp_collector_db_role }};
+ALTER TABLE api.transactions OWNER TO {{ ocpp_collector_db_role }};
+ALTER TABLE api.energy_samples OWNER TO {{ ocpp_collector_db_role }};
