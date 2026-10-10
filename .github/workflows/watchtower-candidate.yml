@@ -1,69 +1,17 @@
-name: Watchtower candidate
+# Disabled during Arthexis 3.0 migration.
+# Deployment and release orchestration are superseded by arthexis/gway-remote.
+# The previous workflow is recoverable from Git history.
+name: Disabled legacy watchtower-candidate
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  classify:
-    name: Classify Arthexis main change
-    runs-on: ubuntu-latest
-    outputs:
-      deploy: ${{ steps.change.outputs.deploy }}
-      stage: ${{ steps.change.outputs.stage }}
-      timing: ${{ steps.change.outputs.timing }}
-      run_name: ${{ steps.change.outputs.run_name }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Classify candidate
-        id: change
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE_SHA: ${{ github.event.before || '' }}
-          AFTER_SHA: ${{ github.sha }}
-        run: |
-          set -Eeuo pipefail
-          deploy=true
-          stage="2-remote"
-          timing="queued"
-
-          if [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] &&
-             [[ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] &&
-             python .github/scripts/is_version_only_rollover.py "$BEFORE_SHA" "$AFTER_SHA"; then
-            deploy=false
-          fi
-
-
-          run_name="$(git show -s --format=%s "$AFTER_SHA")"
-          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-          echo "stage=$stage" >> "$GITHUB_OUTPUT"
-          echo "timing=$timing" >> "$GITHUB_OUTPUT"
-          echo "run_name=$run_name" >> "$GITHUB_OUTPUT"
-          echo "deploy=$deploy stage=$stage timing=$timing run_name=$run_name"
-
-  notify:
-    name: Request Watchtower deployment
-    needs: classify
-    if: needs.classify.outputs.deploy == 'true'
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch exact Arthexis candidate
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ARTHEXIS_SHA: ${{ github.sha }}
-          WATCHTOWER_STAGE: ${{ needs.classify.outputs.stage }}
-          TIMING: ${{ needs.classify.outputs.timing }}
-          RUN_NAME: ${{ needs.classify.outputs.run_name }}
-        run: |
-          set -Eeuo pipefail
-          [[ "$ARTHEXIS_SHA" =~ ^[0-9a-f]{40}$ ]]
-          gh api             --method POST             -H "Accept: application/vnd.github+json"             /repos/arthexis/arthexis/dispatches             -f event_type='arthexis-candidate'             -F client_payload[arthexis_sha]="$ARTHEXIS_SHA"             -F client_payload[stage]="$WATCHTOWER_STAGE"             -F client_payload[timing]="$TIMING"             -f client_payload[run_name]="$RUN_NAME"
+      - run: echo "Legacy automation disabled; use gway-remote."
