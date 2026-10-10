@@ -108,7 +108,9 @@ def test_forwarder_rls_binds_rows_to_jwt_satellite_and_enabled_enrollment():
 def test_arthexis_reader_rls_is_fleet_wide_but_select_only():
     sql = read(SCHEMA)
 
-    assert "CREATE POLICY arthexis_reader_events" in sql
+    assert "CREATE POLICY arthexis_reader_{{ table }}" in sql
+    assert "{% for table in" in sql
+    assert "events" in sql
     assert "FOR SELECT" in sql
     assert "TO arthexis_reader" in sql
     assert "USING (true)" in sql
