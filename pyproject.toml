@@ -148,6 +148,7 @@ addopts = [
 # Retired Watchtower deployment contract tests: gway-remote owns deployment.
 # Keep the historical tests in Git until the legacy main archive is complete.
     "--ignore=tests/deploy/test_remote_acceptance.py",
+    "--deselect=tests/arthexis/test_server.py::test_watchtower_uses_accepted_build_compatible_arthexis_server_callable",
     "--ignore=tests/deploy/test_watchtower_bootstrap_workflow.py",
     "--ignore=tests/deploy/test_watchtower_mcp.py",
     "--ignore=tests/deploy/test_watchtower_public_root.py",
