@@ -38,15 +38,31 @@ python manage.py createsuperuser
 
 ## Ansible
 
-Ansible is a default project dependency. The Arthexis-only playbook currently does nothing beyond validating that the configured target is reachable:
+Arthexis owns the central Watchtower deployment. Component playbooks live under
+`ansible/playbooks/`:
+
+- `arthexis.yml` — Arthexis application component
+- `ocpp-collector.yml` — OCPP Collector component
+- `watchtower.yml` — combined Watchtower deployment
+
+Run the normal central deployment with:
 
 ```bash
-ansible-playbook -i ansible/inventory.ini ansible/site.yml
+ansible-playbook ansible/playbooks/watchtower.yml
 ```
+
+OCPP component naming is intentionally consistent across repositories and
+deployment surfaces: OCPP CSMS, OCPP Forwarder, and OCPP Collector use the
+`ocpp_` prefix for Python/Ansible identifiers and `ocpp-` for service and
+playbook filenames.
 
 ### Appliance composition
 
-Arthexis owns composition of the complete appliance, while each repository continues to own its own deployment implementation. `ansible/appliance.yml` first runs the Arthexis playbook and then invokes the OCPP-CSMS-owned `ansible/playbooks/satellite.yml` from inside the OCPP-CSMS checkout. This preserves the OCPP-CSMS repository's own `ansible.cfg`, roles, inventory defaults, and deployment behavior.
+The older appliance composition remains available for development/integration.
+`ansible/appliance.yml` runs the Arthexis playbook and then invokes the
+OCPP-CSMS-owned `ansible/playbooks/satellite.yml` from inside the OCPP-CSMS
+checkout. This preserves the OCPP-CSMS repository's own `ansible.cfg`, roles,
+inventory defaults, and deployment behavior.
 
 With the repositories checked out as siblings:
 
@@ -59,13 +75,13 @@ Repos/
 run:
 
 ```bash
-ansible-playbook -i ansible/inventory.ini ansible/appliance.yml
+ansible-playbook ansible/appliance.yml
 ```
 
 The sibling `../ocpp-csms` checkout is the default. Override it either with an extra variable:
 
 ```bash
-ansible-playbook -i ansible/inventory.ini ansible/appliance.yml \
+ansible-playbook ansible/appliance.yml \
   -e ocpp_csms_repo=/path/to/ocpp-csms
 ```
 
@@ -74,7 +90,7 @@ or with the `OCPP_CSMS_REPO` environment variable.
 OCPP-CSMS keeps control of its own inventory. Its default field inventory is empty, so appliance composition does not target a field host unless one is supplied. To choose an OCPP-CSMS inventory explicitly, set `OCPP_CSMS_INVENTORY` or pass `ocpp_csms_inventory`:
 
 ```bash
-ansible-playbook -i ansible/inventory.ini ansible/appliance.yml \
+ansible-playbook ansible/appliance.yml \
   -e ocpp_csms_inventory=ansible/inventory/my-host.yml
 ```
 

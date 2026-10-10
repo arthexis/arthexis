@@ -1,5 +1,5 @@
 ---
-- import_playbook: site.yml
+- import_playbook: playbooks/arthexis.yml
 
 - name: Configure OCPP CSMS component
   hosts: localhost

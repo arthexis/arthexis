@@ -1,0 +1,6 @@
+---
+- name: Configure OCPP Collector
+  hosts: arthexis
+  gather_facts: true
+  roles:
+    - role: ocpp_collector

@@ -1,0 +1,38 @@
+---
+ocpp_collector_hostname: "ocpp-collector.arthexis.com"
+ocpp_collector_listen_host: "127.0.0.1"
+ocpp_collector_listen_port: 3100
+
+# PostgreSQL is an external dependency of this role. An empty host means:
+# detect and reuse a local PostgreSQL instance. Set host (or a Unix-socket
+# directory) explicitly to disable detection.
+ocpp_collector_pg_host: ""
+ocpp_collector_pg_port: 5432
+ocpp_collector_pg_admin_user: "postgres"
+ocpp_collector_pg_admin_database: "postgres"
+ocpp_collector_pg_admin_password: ""
+ocpp_collector_database: "ocpp_collector"
+ocpp_collector_db_role: "ocpp_collector"
+ocpp_collector_db_password: ""
+ocpp_collector_pg_local_socket_dir: "/var/run/postgresql"
+
+ocpp_collector_postgrest_version: "16.4"
+ocpp_collector_postgrest_prefix: "/usr/local/lib/ocpp-collector"
+ocpp_collector_postgrest_binary: "/usr/local/bin/postgrest"
+ocpp_collector_postgrest_x86_64_sha256: "b47ecc82fce1dcebbbc4183d839e52f07f7630c9d7ad0f54db753d1939299354"
+ocpp_collector_postgrest_aarch64_sha256: "bf544f94f305a1ff37d82f5ef1298d584f1f98b51dfd8182d1437a02073d8731"
+
+ocpp_collector_service_user: "ocpp_collector"
+ocpp_collector_service_group: "ocpp_collector"
+ocpp_collector_config_dir: "/etc/ocpp-collector"
+ocpp_collector_config_path: "{{ ocpp_collector_config_dir }}/postgrest.conf"
+ocpp_collector_service_name: "ocpp-collector.service"
+
+# auto: use an already-installed nginx; fail clearly if none is found.
+# nginx: require nginx and configure a server block.
+# none: leave reverse-proxy/TLS termination to infrastructure outside this role.
+ocpp_collector_proxy_mode: "auto"
+ocpp_collector_nginx_site_path: "/etc/nginx/sites-available/ocpp-collector"
+ocpp_collector_nginx_site_link: "/etc/nginx/sites-enabled/ocpp-collector"
+ocpp_collector_tls_certificate: ""
+ocpp_collector_tls_certificate_key: ""
