@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 
+pytestmark = pytest.mark.workflow
+
+
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 RETIRED = (
     "watchtower-candidate.yml",
