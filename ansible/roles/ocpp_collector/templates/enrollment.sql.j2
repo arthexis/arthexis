@@ -1,0 +1,14 @@
+-- Ansible owns the authoritative set of satellites allowed to forward data.
+-- Existing rows are retained for history, but omitted satellites are disabled.
+UPDATE api.satellites
+SET enabled = false;
+
+{% for satellite in ocpp_collector_satellites %}
+INSERT INTO api.satellites (satellite_id, enabled)
+VALUES (
+    '{{ satellite.id }}',
+    {{ 'true' if satellite.enabled | default(true) | bool else 'false' }}
+)
+ON CONFLICT (satellite_id) DO UPDATE
+SET enabled = EXCLUDED.enabled;
+{% endfor %}

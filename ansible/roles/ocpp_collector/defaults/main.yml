@@ -36,3 +36,10 @@ ocpp_collector_nginx_site_path: "/etc/nginx/sites-available/ocpp-collector"
 ocpp_collector_nginx_site_link: "/etc/nginx/sites-enabled/ocpp-collector"
 ocpp_collector_tls_certificate: ""
 ocpp_collector_tls_certificate_key: ""
+
+# Collector API authentication. The JWT signing secret must be supplied through
+# Vault/host vars/environment-backed inventory and must never be committed.
+ocpp_collector_jwt_secret: ""
+ocpp_collector_jwt_ttl_seconds: 7776000
+ocpp_collector_satellites: []
+ocpp_collector_token_dir: "{{ ocpp_collector_config_dir }}/tokens"

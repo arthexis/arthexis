@@ -11,11 +11,23 @@
       - ocpp_collector_database is match('^[a-z_][a-z0-9_]*$')
       - ocpp_collector_db_role is match('^[a-z_][a-z0-9_]*$')
       - ocpp_collector_proxy_mode in ['auto', 'nginx', 'none']
+      - ocpp_collector_jwt_secret | length >= 32
+      - ocpp_collector_jwt_ttl_seconds | int >= 1
+      - (ocpp_collector_satellites | map(attribute='id') | list | unique | list | length) == (ocpp_collector_satellites | length)
       - not (ocpp_collector_pg_host | length == 0) or ocpp_collector_db_role == ocpp_collector_service_user
       - (ocpp_collector_tls_certificate | length == 0) == (ocpp_collector_tls_certificate_key | length == 0)
     fail_msg: >-
       OCPP Collector requires a Debian-family x86_64/ARM64 host and valid,
       conservative database/proxy configuration.
+
+- name: Validate OCPP Collector satellite enrollment identifiers
+  ansible.builtin.assert:
+    that:
+      - item.id is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+    fail_msg: "Invalid OCPP Collector satellite id: {{ item.id | default('') }}"
+  loop: "{{ ocpp_collector_satellites }}"
+  loop_control:
+    label: "{{ item.id | default('invalid') }}"
 
 - name: Install OCPP Collector runtime prerequisites
   become: true
@@ -173,6 +185,48 @@
   changed_when: false
   no_log: "{{ ocpp_collector_pg_admin_password | length > 0 }}"
 
+- name: Render OCPP Collector enrollment SQL
+  become: true
+  ansible.builtin.template:
+    src: enrollment.sql.j2
+    dest: "{{ ocpp_collector_config_dir }}/enrollment.sql"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Converge OCPP Collector satellite enrollment
+  become: "{{ ocpp_collector_pg_autodetected | bool }}"
+  become_user: "{{ ocpp_collector_pg_admin_user }}"
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -X
+      - -v
+      - ON_ERROR_STOP=1
+      - -h
+      - "{{ ocpp_collector_resolved_pg_host }}"
+      - -p
+      - "{{ ocpp_collector_pg_port | string }}"
+      - -U
+      - "{{ ocpp_collector_pg_admin_user }}"
+      - -d
+      - "{{ ocpp_collector_database }}"
+      - -f
+      - "{{ ocpp_collector_config_dir }}/enrollment.sql"
+  environment:
+    PGPASSWORD: "{{ ocpp_collector_pg_admin_password }}"
+  changed_when: false
+  no_log: "{{ ocpp_collector_pg_admin_password | length > 0 }}"
+
+- name: Install OCPP Collector token utility
+  become: true
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../tools/ocpp_collector_token.py"
+    dest: /usr/local/bin/ocpp-collector-token
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Resolve PostgREST release architecture
   ansible.builtin.set_fact:
     ocpp_collector_postgrest_arch: >-
@@ -243,7 +297,7 @@
     group: "{{ ocpp_collector_service_group }}"
     mode: "0640"
   notify: Restart OCPP Collector
-  no_log: "{{ ocpp_collector_db_password | length > 0 }}"
+  no_log: true
 
 - name: Render OCPP Collector systemd unit
   become: true
