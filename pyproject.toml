@@ -142,7 +142,26 @@ ignore = ["I001"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "arthexis.settings"
 testpaths = ["tests"]
-addopts = ["--strict-config", "--strict-markers"]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+# Retired Watchtower deployment contract tests: gway-remote owns deployment.
+# Keep the historical tests in Git until the legacy main archive is complete.
+    "--ignore=tests/deploy/test_remote_acceptance.py",
+    "--deselect=tests/arthexis/test_server.py::test_watchtower_uses_accepted_build_compatible_arthexis_server_callable",
+    "--ignore=tests/deploy/test_watchtower_bootstrap_workflow.py",
+    "--ignore=tests/deploy/test_watchtower_mcp.py",
+    "--ignore=tests/deploy/test_watchtower_public_root.py",
+    "--ignore=tests/deploy/test_watchtower_recovery.py",
+    "--ignore=tests/deploy/test_watchtower_release_workflow.py",
+    "--ignore=tests/workflow/test_remote_verification.py",
+    "--ignore=tests/workflow/test_satellite_bootstrap_certification.py",
+    "--ignore=tests/workflow/test_watchtower_candidate_coalescing.py",
+    "--ignore=tests/workflow/test_watchtower_dependencies.py",
+    "--ignore=tests/workflow/test_watchtower_deploy_diagnostics.py",
+    "--ignore=tests/workflow/test_watchtower_gway_install_performance.py",
+    "--ignore=tests/workflow/test_watchtower_runtime_and_title.py",
+]
 markers = [
     "reconciliation_e2e: slow end-to-end legacy reconciliation acceptance",
     "workflow: CI and GitHub Actions workflow contract validation",
